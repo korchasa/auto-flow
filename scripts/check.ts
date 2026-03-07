@@ -85,9 +85,18 @@ console.log("=== auto-flow: Full Check ===");
 await run("deno", ["fmt", "--check"], "Formatting Check");
 await run("deno", ["lint"], "Linting");
 // Allow test failure when no test files exist yet
-const hasTests = await hasTestFiles(".");
-if (hasTests) {
-  await run("deno", ["test", "-A", "--no-check"], "Tests");
+// Scope tests to project dirs (exclude .claude/skills/ which may need network)
+const testDirs = ["scripts", ".sdlc"];
+const testableDir = (await Promise.all(
+  testDirs.map(async (d) => ({ d, has: await hasTestFiles(d) })),
+)).filter((x) => x.has).map((x) => x.d);
+
+if (testableDir.length > 0) {
+  await run(
+    "deno",
+    ["test", "-A", "--no-check", ...testableDir],
+    "Tests",
+  );
 } else {
   console.log("\n--- Tests ---");
   console.log("No test files found, skipping.");
