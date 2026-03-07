@@ -3,6 +3,7 @@
     "check": "deno run -A scripts/check.ts",
     "test": "deno test -A --no-check",
     "test:lib": "deno test -A --no-check .sdlc/scripts/lib_test.ts",
+    "test:pm": "deno test -A --no-check .sdlc/scripts/stage-1-pm_test.ts",
     "fmt": "deno fmt",
     "dev": "echo 'No dev server for pipeline project'",
     "prod": "echo 'No prod mode for pipeline project'"
