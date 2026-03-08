@@ -1,9 +1,17 @@
 {
   "tasks": {
     "check": "deno run -A scripts/check.ts",
-    "test": "deno test -A --no-check",
+    "test": "deno test -A --no-check --ignore=.claude/",
     "test:lib": "deno test -A --no-check .sdlc/scripts/lib_test.ts",
     "test:pm": "deno test -A --no-check .sdlc/scripts/stage-1-pm_test.ts",
+    "test:tech-lead": "deno test -A --no-check .sdlc/scripts/stage-2-tech-lead_test.ts",
+    "test:reviewer": "deno test -A --no-check .sdlc/scripts/stage-3-reviewer_test.ts",
+    "test:architect": "deno test -A --no-check .sdlc/scripts/stage-4-architect_test.ts",
+    "test:sds-update": "deno test -A --no-check .sdlc/scripts/stage-5-sds-update_test.ts",
+    "test:executor": "deno test -A --no-check .sdlc/scripts/stage-6-executor_test.ts",
+    "test:qa": "deno test -A --no-check .sdlc/scripts/stage-7-qa_test.ts",
+    "test:presenter": "deno test -A --no-check .sdlc/scripts/stage-8-presenter_test.ts",
+    "test:meta-agent": "deno test -A --no-check .sdlc/scripts/stage-9-meta-agent_test.ts",
     "fmt": "deno fmt",
     "dev": "echo 'No dev server for pipeline project'",
     "prod": "echo 'No prod mode for pipeline project'"
