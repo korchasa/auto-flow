@@ -9,7 +9,9 @@
 
 ## 2. Arch
 
-- **Diagram:**
+- **Diagrams:**
+
+### 2.1 Legacy: GitHub Actions Pipeline (Shell Scripts)
 
 ```mermaid
 graph LR
@@ -29,14 +31,47 @@ graph LR
     end
 ```
 
+### 2.2 Current: Configurable Node Engine (Deno/TypeScript)
+
+```mermaid
+graph TD
+    CLI["CLI<br/>deno task run"] --> Engine
+    Engine --> Config["Config Loader<br/>.sdlc/pipeline.yaml"]
+    Engine --> DAG["DAG Builder<br/>toposort → levels"]
+    Engine --> State["State Manager<br/>state.json"]
+
+    DAG --> L1["Level 1<br/>(parallel nodes)"]
+    DAG --> L2["Level 2<br/>(parallel nodes)"]
+    DAG --> LN["Level N<br/>(parallel nodes)"]
+
+    L1 --> Dispatch
+    L2 --> Dispatch
+    LN --> Dispatch
+
+    subgraph Dispatch["Node Dispatcher"]
+        Agent["agent<br/>Claude CLI"]
+        Loop["loop<br/>iterative body"]
+        Human["human<br/>terminal prompt"]
+        Merge["merge<br/>combine outputs"]
+    end
+
+    Dispatch --> Validate["Validation<br/>file checks"]
+    Dispatch --> Git["Git<br/>commit per node"]
+    Dispatch --> Output["Output<br/>3 verbosity levels"]
+```
+
 - **Subsystems:**
-  - **Pipeline Orchestrator**: GitHub Actions workflow + stage shell scripts
+  - **Pipeline Engine** (`.sdlc/engine/`): Deno/TypeScript DAG-based executor
+    with YAML config, template interpolation, parallel levels, loop nodes,
+    human nodes, resume support
   - **Agent Runtime**: Claude Code CLI invocations with role-specific prompts
-  - **Artifact Store**: Git-tracked Markdown files in `.sdlc/pipeline/`
-  - **Validation Engine**: Stage-specific checks (artifact existence,
-    `deno task check`, diff safety)
+  - **Artifact Store**: Git-tracked files in `.sdlc/runs/<run-id>/<node-id>/`
+  - **Validation Engine**: Rule-based checks (file_exists, file_not_empty,
+    contains_section, custom_script)
   - **Continuation Engine**: `--resume` based re-invocation on validation
     failure
+  - **Legacy Shell Scripts** (`.sdlc/scripts/`): Preserved for backward
+    compatibility, superseded by engine
 
 ## 3. Components
 
@@ -73,7 +108,34 @@ graph LR
 - **Interfaces:** Markdown files consumed by `claude --system-prompt`.
 - **Deps:** None (static content, versioned in git).
 
-### 3.5 GitHub Actions Workflow
+### 3.5 Pipeline Engine (`.sdlc/engine/`)
+
+- **Purpose:** Configurable DAG-based pipeline executor. Replaces hardcoded
+  shell script orchestration with YAML-driven node graph.
+- **Modules:**
+  - `types.ts` — type declarations
+  - `template.ts` — `{{var}}` interpolation for prompts/paths
+  - `config.ts` — YAML parsing, schema validation, defaults merge
+  - `dag.ts` — topological sort, cycle detection, level grouping
+  - `validate.ts` — artifact validation rules (file_exists, not_empty, etc.)
+  - `state.ts` — RunState persistence to `state.json`, resume logic
+  - `agent.ts` — Claude CLI invocation, continuation loop, retry
+  - `loop.ts` — loop node execution with condition extraction
+  - `human.ts` — terminal user input, abort logic
+  - `git.ts` — commit per node, diff safety checks
+  - `output.ts` — terminal output manager (quiet/normal/verbose)
+  - `engine.ts` — main executor: level iteration, parallel dispatch
+  - `cli.ts` — CLI entry point: argument parsing, .env loading
+  - `mod.ts` — public API re-exports
+- **Interfaces:**
+  - CLI: `deno task run --issue <N> [--config <path>] [--resume <run-id>]
+    [--dry-run] [-v|-q] [--env KEY=VAL] [--skip nodes] [--only nodes]`
+  - Config: `.sdlc/pipeline.yaml` (YAML, version "1")
+  - State: `.sdlc/runs/<run-id>/state.json` (JSON)
+- **Node types:** `agent`, `merge`, `loop`, `human`
+- **Deps:** `claude` CLI, `deno`, `git`, `jsr:@std/yaml`.
+
+### 3.6 GitHub Actions Workflow (Legacy)
 
 - **Purpose:** Trigger pipeline on issue label, run stages sequentially.
 - **Interfaces:** `issues.labeled` event trigger. Sequential jobs using same
@@ -84,33 +146,33 @@ graph LR
 
 - **Entities:**
   - Handoff Artifact: Structured Markdown (01-spec.md through 07-meta-report.md)
-  - Agent Log: Full session transcript (`.sdlc/pipeline/<issue>/logs/`)
+  - Agent Log: Claude CLI JSON output (`.sdlc/runs/<run-id>/logs/<node-id>.json`)
   - Agent Prompt: System prompt Markdown (`.sdlc/agents/<role>.md`)
+  - Run State: JSON (`.sdlc/runs/<run-id>/state.json`)
+  - Pipeline Config: YAML (`.sdlc/pipeline.yaml`)
 - **ERD:** N/A (file-based, no database).
 - **Migration:** N/A.
 
-### 4.1 Inter-Stage Data Flow
+### 4.1 Inter-Node Data Flow
 
-- **Mechanism:** Filesystem-based. Each agent reads input files directly from
-  `.sdlc/pipeline/<issue>/` and `documents/`. No manifest or registry.
-- **Validation:** Stage scripts validate output artifacts (exist, non-empty)
-  before committing. Agent is responsible for producing correct artifacts;
-  script is responsible for verifying they exist.
+- **Mechanism:** Filesystem-based. Each node reads input via `{{input.<node-id>}}`
+  template variable pointing to predecessor's output directory. No manifest.
+- **Directory structure:** `.sdlc/runs/<run-id>/<node-id>/` per node output.
+- **Validation:** Engine validates output via configurable rules (file_exists,
+  file_not_empty, contains_section, custom_script) after each node.
 - **Context management:** Claude CLI auto-compression handles large input sets.
-  No manual context window management needed.
+- **Template variables:** `{{node_dir}}`, `{{input.*}}`, `{{run_dir}}`,
+  `{{run_id}}`, `{{args.*}}`, `{{env.*}}`, `{{loop.iteration}}`.
 
 ### 4.2 Commit Strategy
 
-- **Branch:** All work on `agent/<issue-number>`. Created at Stage 1 start,
-  reused on re-run.
-- **Commit cadence:** One commit + push per successful stage.
-- **Commit format:** `sdlc(<role>): <issue-number> — <description>`.
-- **Commit scope:** Stage artifact(s) + updated project docs (if any) + stage
-  log.
-- **Failure behavior:** Failed stages (after exhausting continuations) produce
-  no commits. Failure reported on issue via `gh`.
-- **Branch lifecycle:** Created -> stages commit sequentially -> PR created by
-  Presenter -> merged to `main`.
+- **Branch:** Feature branch, specified externally or current branch.
+- **Commit cadence:** Engine commits after each successful node.
+- **Commit format:** `sdlc(<node-id>): <run-id> — <node label>`.
+- **Commit scope:** All changes since last commit (node output + modified docs).
+- **Failure behavior:** Failed nodes produce no commits. On_error: "fail" stops
+  pipeline; "continue" proceeds to next nodes.
+- **Resume:** `--resume <run-id>` skips completed nodes per state.json.
 
 ## 5. Logic
 

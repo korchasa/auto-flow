@@ -1,0 +1,188 @@
+# Default pipeline configuration — reproduces the current 9-stage SDLC flow.
+# See: documents/requirements.md for stage specifications.
+
+name: "auto-flow-sdlc"
+version: "1"
+
+defaults:
+  max_parallel: 2
+  max_continuations: 3
+  timeout_seconds: 1800
+  max_retries: 3
+  retry_delay_seconds: 5
+
+nodes:
+  # Stage 1: Project Manager — specification
+  pm:
+    type: agent
+    label: "Project Manager — Specification"
+    prompt: ".sdlc/agents/pm.md"
+    task_template: |
+      Read GitHub issue #{{args.issue}} and produce a specification.
+      Output:
+        - {{node_dir}}/01-spec.md (problem, affected requirements, SRS changes, scope)
+        - Update documents/requirements.md with new/modified requirements
+    validate:
+      - type: file_exists
+        path: "{{node_dir}}/01-spec.md"
+      - type: file_not_empty
+        path: "{{node_dir}}/01-spec.md"
+      - type: contains_section
+        path: "{{node_dir}}/01-spec.md"
+        value: "Problem Statement"
+      - type: contains_section
+        path: "{{node_dir}}/01-spec.md"
+        value: "Scope"
+    allowed_paths:
+      - "documents/requirements.md"
+      - ".sdlc/runs/"
+
+  # Stage 2: Tech Lead — plan with variants
+  tech-lead:
+    type: agent
+    label: "Tech Lead — Implementation Plan"
+    inputs: [pm]
+    prompt: ".sdlc/agents/tech-lead.md"
+    task_template: |
+      Read the specification at {{input.pm}}/01-spec.md.
+      Read documents/requirements.md and documents/design.md.
+      Produce an implementation plan with 2-3 variants.
+      Output: {{node_dir}}/02-plan.md
+    validate:
+      - type: file_exists
+        path: "{{node_dir}}/02-plan.md"
+      - type: file_not_empty
+        path: "{{node_dir}}/02-plan.md"
+    allowed_paths:
+      - ".sdlc/runs/"
+
+  # Stage 3: Reviewer — critique and revision
+  reviewer:
+    type: agent
+    label: "Tech Lead Reviewer — Critique & Revision"
+    inputs: [tech-lead]
+    prompt: ".sdlc/agents/tech-lead-reviewer.md"
+    task_template: |
+      Review the plan at {{input.tech-lead}}/02-plan.md.
+      Read the spec at {{input.pm}}/01-spec.md.
+      Produce a revised plan with critique and recommendation.
+      Output: {{node_dir}}/03-revised-plan.md
+    validate:
+      - type: file_exists
+        path: "{{node_dir}}/03-revised-plan.md"
+      - type: file_not_empty
+        path: "{{node_dir}}/03-revised-plan.md"
+    allowed_paths:
+      - ".sdlc/runs/"
+
+  # Stage 4: Architect — variant selection and task breakdown
+  architect:
+    type: agent
+    label: "Architect — Decision & Task Breakdown"
+    inputs: [reviewer]
+    prompt: ".sdlc/agents/architect.md"
+    task_template: |
+      Read the revised plan at {{input.reviewer}}/03-revised-plan.md.
+      Read the spec at {{input.pm}}/01-spec.md.
+      Select a variant and produce a task breakdown with YAML frontmatter.
+      Output: {{node_dir}}/04-decision.md
+    validate:
+      - type: file_exists
+        path: "{{node_dir}}/04-decision.md"
+      - type: file_not_empty
+        path: "{{node_dir}}/04-decision.md"
+    allowed_paths:
+      - ".sdlc/runs/"
+
+  # Stage 5: SDS Update
+  sds-update:
+    type: agent
+    label: "Tech Lead — SDS Update"
+    inputs: [architect]
+    prompt: ".sdlc/agents/tech-lead-sds.md"
+    task_template: |
+      Read the decision at {{input.architect}}/04-decision.md.
+      Update documents/design.md with the selected variant's design details.
+      Output: updated documents/design.md
+    after: "cd {{run_dir}} && git diff documents/design.md > {{node_dir}}/04a-sds-diff.md || true"
+    allowed_paths:
+      - "documents/design.md"
+      - ".sdlc/runs/"
+
+  # Stages 6-7: Executor + QA loop
+  executor:
+    type: agent
+    label: "Executor — Implementation"
+    inputs: [sds-update]
+    prompt: ".sdlc/agents/executor.md"
+    task_template: |
+      Read the decision at {{input.architect}}/04-decision.md.
+      Read documents/requirements.md and documents/design.md.
+      Implement the changes following the task breakdown.
+      This is iteration {{loop.iteration}}.
+    after: "deno task check"
+
+  qa:
+    type: agent
+    label: "QA — Verification"
+    inputs: [executor]
+    prompt: ".sdlc/agents/qa.md"
+    task_template: |
+      Verify the implementation against the spec at {{input.pm}}/01-spec.md.
+      Check the decision at {{input.architect}}/04-decision.md.
+      Run deno task check and verify all acceptance criteria.
+      Output: {{node_dir}}/05-qa-report.md with YAML frontmatter containing verdict: PASS or FAIL
+    validate:
+      - type: file_exists
+        path: "{{node_dir}}/05-qa-report.md"
+      - type: file_not_empty
+        path: "{{node_dir}}/05-qa-report.md"
+
+  impl-loop:
+    type: loop
+    label: "Executor+QA Implementation Loop"
+    inputs: [sds-update]
+    body: [executor, qa]
+    condition_node: qa
+    condition_field: verdict
+    exit_value: PASS
+    max_iterations: 3
+
+  # Stage 8: Presenter — change summary
+  presenter:
+    type: agent
+    label: "Presenter — Change Summary"
+    inputs: [impl-loop]
+    prompt: ".sdlc/agents/presenter.md"
+    task_template: |
+      Create a summary of all changes made during the pipeline.
+      Read the spec at {{input.pm}}/01-spec.md.
+      Read the decision at {{input.architect}}/04-decision.md.
+      Create a PR targeting main and post a comment on issue #{{args.issue}}.
+      Output: {{node_dir}}/06-summary.md
+    validate:
+      - type: file_exists
+        path: "{{node_dir}}/06-summary.md"
+      - type: file_not_empty
+        path: "{{node_dir}}/06-summary.md"
+    allowed_paths:
+      - ".sdlc/runs/"
+
+  # Stage 9: Meta-Agent — prompt optimization
+  meta-agent:
+    type: agent
+    label: "Meta-Agent — Prompt Analysis"
+    inputs: [presenter]
+    prompt: ".sdlc/agents/meta-agent.md"
+    task_template: |
+      Analyze all logs and artifacts from run {{run_id}} at {{run_dir}}.
+      Produce a meta-report with prompt improvement suggestions.
+      Output: {{node_dir}}/07-meta-report.md
+    settings:
+      on_error: continue
+    validate:
+      - type: file_exists
+        path: "{{node_dir}}/07-meta-report.md"
+    allowed_paths:
+      - ".sdlc/agents/"
+      - ".sdlc/runs/"
