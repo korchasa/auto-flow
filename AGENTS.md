@@ -53,17 +53,24 @@ Tech Lead, Architect, Executor, QA, Presenter, Meta-Agent).
 
 ## Architecture
 
-- **Pattern:** Multi-agent pipeline with sequential stages and iterative loops
-- **Stage orchestration:** Shell scripts in `.sdlc/scripts/` invoke `claude` CLI
-  with role-specific prompts from `.sdlc/agents/`
-- **Inter-agent communication:** Structured Markdown artifacts in
-  `.sdlc/pipeline/<issue-number>/`
+- **Pattern:** Configurable DAG-based multi-agent pipeline with parallel levels,
+  loop nodes, and human interaction nodes
+- **Pipeline Engine:** Deno/TypeScript engine (`.sdlc/engine/`) driven by YAML
+  config (`.sdlc/pipeline.yaml`). Entry: `deno task run --issue <N>`
+- **Node types:** `agent` (Claude CLI), `merge` (combine outputs), `loop`
+  (iterative body with exit condition), `human` (terminal prompt)
+- **Inter-agent communication:** Structured artifacts in
+  `.sdlc/runs/<run-id>/<node-id>/`, linked via `{{input.<node-id>}}` templates
+- **Parallel execution:** DAG topological sort into levels; nodes in same level
+  run concurrently (configurable `max_parallel`)
 - **Continuation mechanism:** `--resume` flag for re-invoking agents within same
-  session on validation failure
-- **Executor+QA loop:** Iterative implementation/verification cycle (max 3
-  iterations)
-- **Meta-Agent:** Post-run analysis agent for prompt optimization (runs on both
-  success and failure)
+  session on validation failure (max N per node)
+- **Resume:** Failed/interrupted runs resumable via `--resume <run-id>`;
+  completed nodes skipped based on `state.json`
+- **Observability:** 3 verbosity levels (`-q`/default/`-v`); status lines with
+  timestamps; final summary
+- **Legacy:** Shell scripts in `.sdlc/scripts/` preserved for backward
+  compatibility, superseded by engine
 - **Docker image:** Single image with claude CLI, deno, git, gh — all stages use
   same image
 
@@ -74,8 +81,11 @@ Tech Lead, Architect, Executor, QA, Presenter, Meta-Agent).
 - Pipeline is project-agnostic (designed for any repo, not just news-digester)
 - Meta-Agent suggests prompt improvements but does NOT auto-modify prompts
 - Diff-based safety checks in Executor stage (prevent scope creep, secret leaks)
-- Shell scripts handle orchestration; Deno for validation/utilities
-- Artifacts overwritten on re-run; git history preserves previous versions
+- Deno/TypeScript engine replaced shell script orchestration (configurable,
+  parallel, resumable)
+- YAML pipeline config defines node graph; no hardcoded stage order
+- Artifacts stored in `.sdlc/runs/<run-id>/` (per-run isolation)
+- Git commit per successful node (engine-managed)
 
 ## Planning Rules
 

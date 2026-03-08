@@ -12,6 +12,9 @@
     "test:qa": "deno test -A --no-check .sdlc/scripts/stage-7-qa_test.ts",
     "test:presenter": "deno test -A --no-check .sdlc/scripts/stage-8-presenter_test.ts",
     "test:meta-agent": "deno test -A --no-check .sdlc/scripts/stage-9-meta-agent_test.ts",
+    "run": "deno run -A --no-check .sdlc/engine/cli.ts",
+    "run:validate": "deno check .sdlc/engine/mod.ts",
+    "test:engine": "deno test -A --no-check .sdlc/engine/",
     "fmt": "deno fmt",
     "dev": "echo 'No dev server for pipeline project'",
     "prod": "echo 'No prod mode for pipeline project'"
