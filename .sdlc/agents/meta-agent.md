@@ -37,9 +37,9 @@ Required sections:
 
 - **Evidence-based:** Every suggestion must reference a specific log excerpt.
 - **Actionable changes:** Each improvement includes concrete prompt diff, not
-   vague advice.
+  vague advice.
 - **Auto-apply:** Commit prompt improvements to `.sdlc/agents/*.md` on the
-   feature branch. Changes are reviewed at PR merge.
+  feature branch. Changes are reviewed at PR merge.
 - **Post summary:** Use `gh issue comment` to post key findings on the issue.
 - **Previous reports:** Check `.sdlc/pipeline/*/07-meta-report.md` for patterns.
 

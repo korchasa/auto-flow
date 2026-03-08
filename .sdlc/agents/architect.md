@@ -36,6 +36,7 @@ tasks:
 ```
 
 Fields:
+
 - `variant` (required, string): Name of the selected variant.
 - `tasks` (required, array): Ordered by dependency (blocking tasks first).
   Each task object:
@@ -66,6 +67,7 @@ tasks:
 ## Justification
 
 Variant A selected because:
+
 - **Technical fit:** Minimal change surface, builds on existing handler.
 - **Vision alignment:** Supports the goal of incremental, testable changes
   (AGENTS.md: "prefer small, atomic commits").
@@ -74,11 +76,13 @@ Variant A selected because:
 ## Task Breakdown
 
 ### Task 1: Add input validation to handler
+
 - Files: `src/handler.ts`, `src/handler_test.ts`
 - Add validation for the new input field.
 - Write tests first (TDD).
 
 ### Task 2: Update config schema for new field
+
 - Files: `src/config.ts`, `src/config_test.ts`
 - Add new config option.
 - Depends on Task 1 (handler uses new config).
@@ -91,7 +95,7 @@ Variant A selected because:
 - **Tasks ordered by dependency:** Blocking tasks first.
 - **Each task atomic:** Achievable in a single commit.
 - **Vision reference:** Justification MUST reference at least one point from
-   `AGENTS.md`.
+  `AGENTS.md`.
 - **Compressed style:** Concise, no fluff.
 
 ## Allowed File Modifications

@@ -23,7 +23,13 @@ role-specific промптом.
 - SRS: полностью описан (`documents/requirements.md`, 470 строк, 16 FR)
 - SDS: полностью описан (`documents/design.md`, 148 строк)
 - Инфраструктура: `scripts/check.ts`, `deno.json`, `.claude/` workspace
-- Реализация stages: **0%** — ни одного shell-скрипта, Dockerfile, GHA workflow
+- Agent prompts: **100%** — все 9 ролей (`.sdlc/agents/*.md`)
+- lib.sh: **100%** — shared-функции (log, run_agent, validate_artifact, continuation_loop, commit_artifacts, safety_check_diff, retry_with_backoff)
+- Stage scripts 1-9: **100%** — все 9 shell-скриптов оркестрации
+- Тесты: **100%** — 10 Deno test-файлов, 107 pass (9 skip: shellcheck not in sandbox)
+- Dockerfile: **100%** — `.sdlc/Dockerfile` (claude CLI, deno, git, gh, gitleaks, yq)
+- GHA workflow: **100%** — `.github/workflows/agent-pipeline.yml` + `build-image.yml`
+- **Следующий шаг:** merge в main, build Docker image, первый тестовый issue
 
 ### Constraints
 

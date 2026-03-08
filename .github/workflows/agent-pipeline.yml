@@ -1,0 +1,286 @@
+# SDLC Agent Pipeline — triggered by labeling an issue with "agent-pipeline".
+# See: documents/requirements.md FR-1, FR-11, FR-12, FR-14, FR-15, FR-16.
+# See: documents/design.md §3.5.
+#
+# Architecture:
+#   - Sequential jobs: stages 1-8 run in order, each in same Docker image.
+#   - Meta-Agent (stage 9) runs with `if: always()` on success or failure.
+#   - Concurrency guard prevents parallel pipelines for the same issue.
+#   - Each stage script receives the issue number as its sole argument.
+
+name: Agent Pipeline
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: agent-pipeline-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+env:
+  ISSUE_NUMBER: ${{ github.event.issue.number }}
+  # FR-15: Pipeline configuration defaults (can be overridden per job)
+  SDLC_MAX_CONTINUATIONS: "3"
+  SDLC_MAX_QA_ITERATIONS: "3"
+  SDLC_STAGE_TIMEOUT_MINUTES: "30"
+  SDLC_RETRY_MAX_ATTEMPTS: "3"
+  SDLC_RETRY_INITIAL_DELAY: "5"
+  SDLC_RETRY_BACKOFF_MULTIPLIER: "2"
+
+jobs:
+  # Gate: only run when the label is "agent-pipeline"
+  gate:
+    if: github.event.label.name == 'agent-pipeline'
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for already-merged PR (FR-1 re-run guard)
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MERGED=$(gh pr list \
+            --head "agent/${{ env.ISSUE_NUMBER }}" \
+            --state merged \
+            --json number \
+            --jq 'length')
+          if [ "$MERGED" -gt 0 ]; then
+            gh issue comment "${{ env.ISSUE_NUMBER }}" \
+              --body "Pipeline already completed for this issue. Close this issue and create a new one for further changes."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ── Stage 1: Project Manager ──────────────────────────────
+  stage-1-pm:
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 30
+    outputs:
+      failed_stage: ${{ steps.run.outputs.failed_stage }}
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Stage 1
+        id: run
+        run: |
+          chmod +x .sdlc/scripts/stage-1-pm.sh
+          .sdlc/scripts/stage-1-pm.sh "${{ env.ISSUE_NUMBER }}" || \
+            echo "failed_stage=1" >> "$GITHUB_OUTPUT"
+
+  # ── Stage 2: Tech Lead ────────────────────────────────────
+  stage-2-tech-lead:
+    needs: stage-1-pm
+    if: "!needs.stage-1-pm.outputs.failed_stage"
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 30
+    outputs:
+      failed_stage: ${{ steps.run.outputs.failed_stage }}
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/${{ env.ISSUE_NUMBER }}
+      - name: Run Stage 2
+        id: run
+        run: |
+          chmod +x .sdlc/scripts/stage-2-tech-lead.sh
+          .sdlc/scripts/stage-2-tech-lead.sh "${{ env.ISSUE_NUMBER }}" || \
+            echo "failed_stage=2" >> "$GITHUB_OUTPUT"
+
+  # ── Stage 3: Reviewer ─────────────────────────────────────
+  stage-3-reviewer:
+    needs: stage-2-tech-lead
+    if: "!needs.stage-2-tech-lead.outputs.failed_stage"
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 30
+    outputs:
+      failed_stage: ${{ steps.run.outputs.failed_stage }}
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/${{ env.ISSUE_NUMBER }}
+      - name: Run Stage 3
+        id: run
+        run: |
+          chmod +x .sdlc/scripts/stage-3-reviewer.sh
+          .sdlc/scripts/stage-3-reviewer.sh "${{ env.ISSUE_NUMBER }}" || \
+            echo "failed_stage=3" >> "$GITHUB_OUTPUT"
+
+  # ── Stage 4: Architect ────────────────────────────────────
+  stage-4-architect:
+    needs: stage-3-reviewer
+    if: "!needs.stage-3-reviewer.outputs.failed_stage"
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 30
+    outputs:
+      failed_stage: ${{ steps.run.outputs.failed_stage }}
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/${{ env.ISSUE_NUMBER }}
+      - name: Run Stage 4
+        id: run
+        run: |
+          chmod +x .sdlc/scripts/stage-4-architect.sh
+          .sdlc/scripts/stage-4-architect.sh "${{ env.ISSUE_NUMBER }}" || \
+            echo "failed_stage=4" >> "$GITHUB_OUTPUT"
+
+  # ── Stage 5: SDS Update ───────────────────────────────────
+  stage-5-sds-update:
+    needs: stage-4-architect
+    if: "!needs.stage-4-architect.outputs.failed_stage"
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 30
+    outputs:
+      failed_stage: ${{ steps.run.outputs.failed_stage }}
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/${{ env.ISSUE_NUMBER }}
+      - name: Run Stage 5
+        id: run
+        run: |
+          chmod +x .sdlc/scripts/stage-5-sds-update.sh
+          .sdlc/scripts/stage-5-sds-update.sh "${{ env.ISSUE_NUMBER }}" || \
+            echo "failed_stage=5" >> "$GITHUB_OUTPUT"
+
+  # ── Stage 6-7: Executor + QA Loop ─────────────────────────
+  stage-6-executor:
+    needs: stage-5-sds-update
+    if: "!needs.stage-5-sds-update.outputs.failed_stage"
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 60
+    outputs:
+      failed_stage: ${{ steps.run.outputs.failed_stage }}
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/${{ env.ISSUE_NUMBER }}
+      - name: Run Stage 6 (Executor + QA loop)
+        id: run
+        run: |
+          chmod +x .sdlc/scripts/stage-6-executor.sh .sdlc/scripts/stage-7-qa.sh
+          .sdlc/scripts/stage-6-executor.sh "${{ env.ISSUE_NUMBER }}" || \
+            echo "failed_stage=6" >> "$GITHUB_OUTPUT"
+
+  # ── Stage 8: Presenter ────────────────────────────────────
+  stage-8-presenter:
+    needs: stage-6-executor
+    if: "!needs.stage-6-executor.outputs.failed_stage"
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 30
+    outputs:
+      failed_stage: ${{ steps.run.outputs.failed_stage }}
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/${{ env.ISSUE_NUMBER }}
+      - name: Run Stage 8
+        id: run
+        run: |
+          chmod +x .sdlc/scripts/stage-8-presenter.sh
+          .sdlc/scripts/stage-8-presenter.sh "${{ env.ISSUE_NUMBER }}" || \
+            echo "failed_stage=8" >> "$GITHUB_OUTPUT"
+
+  # ── Stage 9: Meta-Agent (always runs) ─────────────────────
+  stage-9-meta-agent:
+    needs:
+      - stage-1-pm
+      - stage-2-tech-lead
+      - stage-3-reviewer
+      - stage-4-architect
+      - stage-5-sds-update
+      - stage-6-executor
+      - stage-8-presenter
+    if: always() && needs.gate.result == 'success'
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 30
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # FR-11: Pass failed stage info to Meta-Agent
+      SDLC_FAILED_STAGE: >-
+        ${{
+          needs.stage-1-pm.outputs.failed_stage ||
+          needs.stage-2-tech-lead.outputs.failed_stage ||
+          needs.stage-3-reviewer.outputs.failed_stage ||
+          needs.stage-4-architect.outputs.failed_stage ||
+          needs.stage-5-sds-update.outputs.failed_stage ||
+          needs.stage-6-executor.outputs.failed_stage ||
+          needs.stage-8-presenter.outputs.failed_stage ||
+          ''
+        }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/${{ env.ISSUE_NUMBER }}
+      - name: Run Stage 9 (Meta-Agent)
+        run: |
+          chmod +x .sdlc/scripts/stage-9-meta-agent.sh
+          .sdlc/scripts/stage-9-meta-agent.sh "${{ env.ISSUE_NUMBER }}"

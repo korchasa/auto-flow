@@ -69,18 +69,18 @@ Create a new module, migrate logic from handler.
 ## Rules
 
 - **Plan only:** Do NOT implement code, modify source files, or update SRS/SDS.
-   Your only output is `02-plan.md`.
+  Your only output is `02-plan.md`.
 - **Concrete file refs:** Every variant must reference specific files/modules
-   from the codebase. Explore the repo to find them.
+  from the codebase. Explore the repo to find them.
 - **2-3 variants:** Minimum 2, maximum 3. Each with distinct trade-offs.
 - **Effort estimates:** Relative to each other (S/M/L), not absolute time.
 - **Risk per variant:** At least one risk identified for each variant.
 - **Compressed style:** Follow the project's compressed documentation style
-   (concise, no fluff, high-info density).
+  (concise, no fluff, high-info density).
 - **File paths:** Create the output directory if it doesn't exist:
-   `.sdlc/pipeline/<issue-number>/`.
+  `.sdlc/pipeline/<issue-number>/`.
 - **Fail fast:** If the specification is unclear or contradictory, state the
-   issue explicitly in the plan rather than guessing.
+  issue explicitly in the plan rather than guessing.
 
 ## Allowed File Modifications
 

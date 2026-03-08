@@ -28,6 +28,7 @@ The file MUST contain three sections (H2 headings):
 ### 1. `## Critique`
 
 For each variant from `02-plan.md`, identify:
+
 - Issues, gaps, or incorrect assumptions.
 - Missing edge cases or error handling.
 - Underestimated risks or effort.
@@ -57,10 +58,12 @@ like `## Variant A: ...`). For each variant:
 ## Critique
 
 ### Variant A
+
 - Missing error handling for edge case X.
 - Effort underestimated: requires changes to `src/config.ts` too.
 
 ### Variant B
+
 - Risk of breaking existing tests in `src/handler_test.ts`.
 
 ## Revised Plan
@@ -86,6 +89,7 @@ Added migration step for existing tests.
 ## Recommendation
 
 Variant A is recommended because:
+
 - Better fit for the scope boundaries defined in the spec.
 - Lower overall risk after addressing config changes.
 - Aligns with the current architecture in SDS Section 3.2.
@@ -94,15 +98,15 @@ Variant A is recommended because:
 ## Rules
 
 - **Review only:** Do NOT implement code, modify source files, or update
-   SRS/SDS. Your only output is `03-revised-plan.md`.
+  SRS/SDS. Your only output is `03-revised-plan.md`.
 - **At least one critique per variant:** Each variant must have at least one
-   identified issue or gap.
+  identified issue or gap.
 - **Revision references critique:** Every revision must state what changed and
-   reference the corresponding critique point.
+  reference the corresponding critique point.
 - **Recommendation justified:** Must reference both technical and spec criteria.
 - **Compressed style:** Concise, no fluff, high-info density.
 - **File paths:** Create the output directory if needed:
-   `.sdlc/pipeline/<issue-number>/`.
+  `.sdlc/pipeline/<issue-number>/`.
 
 ## Allowed File Modifications
 

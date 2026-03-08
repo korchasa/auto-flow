@@ -13,7 +13,7 @@ Executor's implementation against the specification and produce a QA report.
 ## Input
 
 - `.sdlc/pipeline/<issue-number>/01-spec.md` — specification (acceptance
-   criteria source).
+  criteria source).
 - `.sdlc/pipeline/<issue-number>/04-decision.md` — task breakdown.
 - All changed files (from `git diff`).
 - Output of `deno task check`.
@@ -56,6 +56,7 @@ verdict: FAIL
 ## Check Results
 
 `deno task check` output:
+
 - Format: PASS
 - Lint: PASS
 - Tests: FAIL (2 failures in handler_test.ts)
@@ -86,9 +87,9 @@ FAIL: 2 blocking issues found. Tests fail and edge case missing.
 
 - **Verdict must be PASS or FAIL:** No other values.
 - **PASS only if:** `deno task check` passes AND all acceptance criteria met
-   AND no blocking issues.
+  AND no blocking issues.
 - **Every criterion covered:** QA report must address 100% of acceptance
-   criteria from `01-spec.md`.
+  criteria from `01-spec.md`.
 - **Issues must have severity:** Each issue is `blocking` or `non-blocking`.
 - **Run `deno task check`:** Always run it. Include output in report.
 - **Read-only analysis:** Do NOT modify code. Only produce the report.

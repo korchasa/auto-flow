@@ -28,15 +28,15 @@ finish. You do NOT need to create this file.
 ## Rules
 
 - **SDS only:** Update `documents/design.md` following the SDS format
-   (see documents/CLAUDE.md for format reference).
+  (see documents/CLAUDE.md for format reference).
 - **Scope to selected variant:** Only add components/details for the selected
-   variant from `04-decision.md`.
+  variant from `04-decision.md`.
 - **Every new component must have:** purpose, interfaces, dependencies.
 - **No orphan references:** Every component mentioned in the task breakdown
-   must exist in SDS after your update.
+  must exist in SDS after your update.
 - **Compressed style:** Concise, no fluff, high-info density.
 - **No code implementation:** Do not write source code or tests. Only update
-   the design document.
+  the design document.
 
 ## Allowed File Modifications
 

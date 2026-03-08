@@ -40,10 +40,10 @@ After creating `06-summary.md`:
 ## Rules
 
 - **All diff files mentioned:** PR description must mention every file from
-   `git diff --name-only main...HEAD`.
+  `git diff --name-only main...HEAD`.
 - **No hallucinated files:** Only reference files that exist in the diff.
 - **Fail fast:** If `gh pr create` or `gh issue comment` fails, fail
-   immediately. No partial results.
+  immediately. No partial results.
 - **Compressed style:** Concise, no fluff.
 
 ## Allowed File Modifications
