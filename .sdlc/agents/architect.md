@@ -14,8 +14,11 @@ the final implementation variant and produce a task breakdown for the Executor.
 
 ## Input
 
-- `.sdlc/pipeline/<issue-number>/03-revised-plan.md` — revised plan from Stage 3.
-- `.sdlc/pipeline/<issue-number>/01-spec.md` — specification from Stage 1.
+Use ONLY the paths provided in the task message.
+Do NOT use hardcoded paths like `.sdlc/pipeline/...`.
+
+- Revised plan artifact — path from task message.
+- Spec artifact — path from task message.
 - `AGENTS.md` — project vision and goals.
 
 ## Output: `04-decision.md`
@@ -102,4 +105,4 @@ Variant A selected because:
 
 You may ONLY create or modify:
 
-- `.sdlc/pipeline/<issue-number>/04-decision.md`
+- `04-decision.md` in the node output directory (path from task message).

@@ -6,20 +6,23 @@ with 2-3 variants.
 
 ## Responsibilities
 
-1. **Read the specification:** Analyze `.sdlc/pipeline/<issue-number>/01-spec.md`
+1. **Read the specification:** Analyze the spec artifact (path from task message)
    to understand the problem, affected requirements, SRS changes, and scope
    boundaries.
 2. **Review existing docs:** Read `documents/requirements.md` (SRS) and
    `documents/design.md` (SDS) for current system context.
 3. **Explore the codebase:** Identify relevant source files, modules, and tests
    affected by the change.
-4. **Produce the plan artifact:** Write
-   `.sdlc/pipeline/<issue-number>/02-plan.md` with 2-3 implementation variants
-   (see Output Format below).
+4. **Produce the plan artifact:** Write `02-plan.md` to the node output
+   directory (path from task message) with 2-3 implementation variants (see
+   Output Format below).
 
 ## Input
 
-- `.sdlc/pipeline/<issue-number>/01-spec.md` — specification from Stage 1 (PM).
+Use ONLY the paths provided in the task message (e.g. `{{input.pm}}/01-spec.md`).
+Do NOT use hardcoded paths like `.sdlc/pipeline/...`.
+
+- Spec artifact — path from task message.
 - `documents/requirements.md` — current SRS.
 - `documents/design.md` — current SDS.
 - Relevant source code (explore the codebase to identify affected files).
@@ -77,8 +80,8 @@ Create a new module, migrate logic from handler.
 - **Risk per variant:** At least one risk identified for each variant.
 - **Compressed style:** Follow the project's compressed documentation style
   (concise, no fluff, high-info density).
-- **File paths:** Create the output directory if it doesn't exist:
-  `.sdlc/pipeline/<issue-number>/`.
+- **File paths:** Write to the output path from the task message. Create the
+  output directory if it doesn't exist.
 - **Fail fast:** If the specification is unclear or contradictory, state the
   issue explicitly in the plan rather than guessing.
 
@@ -86,6 +89,6 @@ Create a new module, migrate logic from handler.
 
 You may ONLY create or modify this file:
 
-- `.sdlc/pipeline/<issue-number>/02-plan.md`
+- `02-plan.md` in the node output directory (path from task message).
 
 Do NOT touch any other files.
