@@ -1,130 +1,234 @@
-# Цикл разработки auto-flow: Догфудинг
+# Roadmap: FR Implementation Plan
 
 ## Goal
 
-Определить как разрабатывать auto-flow используя его же pipeline. Избежать
-chicken-and-egg проблемы. Получить рабочий цикл: issue → pipeline → PR → merge.
+Порядок реализации оставшихся FR. Учёт зависимостей, рост качества,
+стратегическая ценность. Привести SRS/SDS в актуальное состояние.
 
 ## Overview
 
-### Context
-
-auto-flow — multi-agent pipeline автоматизирующий SDLC. Состоит из 9 stages
-(PM → Tech Lead → Reviewer → Architect → Tech Lead SDS → Executor+QA →
-Presenter → Meta-Agent). Каждый stage — shell-скрипт вызывающий `claude` CLI с
-role-specific промптом.
-
-Проблема: pipeline ещё не реализован. Нужно одновременно создавать pipeline и
-тестировать его на реальных задачах. Решение: поэтапный догфудинг — сначала
-ручное выполнение stages, затем постепенная автоматизация.
-
 ### Current State
 
-- SRS: полностью описан (`documents/requirements.md`, 470 строк, 16 FR)
-- SDS: полностью описан (`documents/design.md`, 148 строк)
-- Инфраструктура: `scripts/check.ts`, `deno.json`, `.claude/` workspace
-- Реализация stages: **0%** — ни одного shell-скрипта, Dockerfile, GHA workflow
+- **SRS AC status:** 14 `[x]` / 28 `[ ]` (реальный прогресс выше — SRS
+  отстаёт от кода)
+- **Полностью реализовано (с evidence):** FR-10 (Agent Log Storage)
+- **Реализовано, SRS не обновлён:**
+  - FR-18 (Verbose Output) — merged PR #7, все 8 AC выполнены
+  - FR-8 (Continuation) — PR #8 open (agent/8), 6 AC закрыты.
+    Остаётся 1 AC: deletion check
+- **Работает де-факто, нет формальной верификации AC:**
+  - FR-2 (PM), FR-3 (Tech Lead), FR-4 (Reviewer), FR-5 (Architect),
+    FR-6 (SDS Update), FR-7 (Executor+QA), FR-9 (Presenter), FR-11 (Meta-Agent)
+- **Не реализовано:**
+  - FR-1 (Pipeline Trigger) — только `run:task` работает. `run:issue` и GH
+    pipeline **убираются из scope** (deferred). Остаются: `run:text`, `run:file`
+  - FR-17 (Directory Structure) — все 8 AC `[ ]`
+  - FR-NEW (Agents as Skills) — новое требование
+- **Частично:**
+  - FR-12 (Runtime Infra) — devcontainer OK, gitleaks нет
+  - FR-13, FR-14, FR-15, FR-16 — частично
+- **Meta-agent known bugs:**
+  - P-003: Нет логов loop body nodes — 3 occurrence
+  - P-007: Config drift pipeline.yaml ↔ pipeline-task.yaml
+  - P-008: sds-update after-hook пустой diff
+
+### Scope Changes
+
+1. **Убрать из SRS/SDS:**
+   - FR-1: `run:issue <N>`, GitHub Issue trigger, re-run guard
+   - FR-9: issue comment posting via `gh`
+   - FR-11: issue comment posting
+   - FR-12: GHA workflow
+   - FR-14: `agent/<issue-number>` branch naming (для issue mode)
+   - Все упоминания GH issue-based trigger
+   - Оставить: `run:task`, `run:text`, `run:file`
+
+2. **Новый FR — Agents as Skills:**
+   - Каждый агент pipeline = Claude Code project skill
+   - Структура: `./agents/<name>/SKILL.md` (основной файл)
+   - Связь: `.claude/skills/<name>` → symlink на `../../agents/<name>/`
+   - 9 агентов: pm, tech-lead, tech-lead-reviewer, architect, tech-lead-sds,
+     executor, qa, presenter, meta-agent
+   - Текущие `.sdlc/agents/*.md` → мигрируют в SKILL.md
+   - Engine использует SKILL.md через symlink
+   - Каждый скил вызывается standalone через `/agent-<name>`
+   - Формат: frontmatter (name, description, disable-model-invocation) +
+     markdown instructions
 
 ### Constraints
 
-- Стек: Deno, Shell/Bash, Docker, GHA, Claude CLI, `gh` CLI
-- Agents stateless — весь контекст из file artifacts
-- Sequential stages, no parallelism
-- Max 3 QA iterations, max 3 continuations per stage
+- Одна задача за раз (single pipeline execution)
+- FR-17 (restructure) ломает все пути — последним
+- SRS accuracy — фундамент для PM agent
+- Каждая фаза оставляет систему рабочей
 
-## Definition of Done
+## Roadmap
 
-- [x] Определён порядок реализации stages
-- [x] Определён формат "ручного" выполнения stages (пока pipeline не готов)
-- [x] Определены issues для первого прогона pipeline
-- [x] Определён критерий "pipeline работает" (переход на полный автомат)
-- [x] План зафиксирован в whiteboard, одобрен пользователем
+### Фаза 0: Scope Cleanup + SRS Sync
 
-## Solution
+**Цель:** SRS/SDS в актуальном состоянии. Deferred scope убран.
 
-### Фаза 0: Bootstrapping (ручной режим)
+- Merge PR #8 (FR-8)
+- Убрать из SRS/SDS: `run:issue`, GH issue trigger, issue comments, GHA,
+  `agent/<N>` branching
+- Обновить SRS маркеры: FR-8 (6 AC → `[x]`), FR-18 (8 AC → `[x]`)
+- Удалить task files: fr-8.md, fr-10-agent-log-storage.md
+- Добавить новый FR (Agents as Skills) в SRS
 
-Порядок реализации stages определяется зависимостями. Первые stages можно
-запускать вручную через `claude` CLI ещё до написания shell-скриптов.
+**Зависимости:** нет
+**Результат:** SRS точен, ~14 → ~28 `[x]`
 
-**Порядок реализации:**
+---
 
-1. **lib.sh** — shared функции (log, run_agent, validate_artifact и др.)
-   - Фундамент: все stage-скрипты зависят от него
-2. **Stage 1 (PM)** — вход: issue text, выход: specification.md
-   - Самый простой stage, нет зависимостей от предыдущих stages
-3. **Stage 2 (Tech Lead)** — вход: specification.md, выход: plan.md
-4. **Stage 3 (Reviewer)** — вход: plan.md, выход: ревизия plan.md
-5. **Stage 4 (Architect)** — вход: plan.md, выход: decision (variant selection)
-6. **Stage 5 (Tech Lead SDS)** — вход: plan+decision, выход: обновлённый SDS
-7. **Stages 6-7 (Executor+QA)** — ядро: implementation loop
-8. **Stage 8 (Presenter)** — PR creation
-9. **Stage 9 (Meta-Agent)** — prompt optimization
-10. **Dockerfile** — сборка image
-11. **GHA workflow** — trigger по label, оркестрация stages
+### Фаза 1: Agents as Skills (FR-NEW)
 
-**Ручной прогон (до готовности shell-скриптов):**
+**Цель:** Каждый агент = локальный скил, standalone + pipeline.
 
-```bash
-# Создать pipeline директорию
-mkdir -p .sdlc/pipeline/1
+- Создать `./agents/` с 9 подпапками, каждая с SKILL.md
+- Мигрировать `.sdlc/agents/*.md` → SKILL.md с frontmatter
+- Symlinks: `.claude/skills/agent-pm` → `../../agents/pm/` и т.д.
+- Engine: обновить `prompt:` пути в pipeline.yaml
+- Удалить `.sdlc/agents/` после миграции
+- Тесты: `deno task check` + pipeline dry-run
 
-# Stage 1: PM
-claude --append-system-prompt-file .sdlc/agents/pm.md \
-  --output-format json \
-  -p "Issue #1: <issue text>" > .sdlc/pipeline/1/specification.md
+**Зависимости:** Фаза 0
+**Результат:** `/agent-pm`, `/agent-qa` работают standalone. Pipeline
+использует те же файлы.
+**Качество:** Двойное использование: pipeline + интерактивно
 
-# Stage 2: Tech Lead (после готовности Stage 1)
-claude --append-system-prompt-file .sdlc/agents/tech-lead.md \
-  --output-format json \
-  -p "$(cat .sdlc/pipeline/1/specification.md)" > .sdlc/pipeline/1/plan.md
+---
 
-# ... и так далее
+### Фаза 2: FR-1 Trigger Modes (без issue)
+
+**Цель:** Полный набор trigger modes (кроме issue).
+
+- `deno task run:text "..."` — inline text
+- `deno task run:file <path>` — файл (эволюция `run:task`)
+- Единые engine flags для всех subcommands
+
+**Зависимости:** Фаза 0
+**Результат:** Гибкий CLI
+
+---
+
+### Фаза 3: Observability Gaps
+
+**Цель:** Логи для всех nodes, корректные артефакты.
+
+- P-003: Логи loop body nodes (executor, qa)
+- P-008: sds-update after-hook (`git diff HEAD~1 --`)
+- P-007: Верификация fix config drift
+
+**Зависимости:** FR-10 (done)
+**Результат:** Meta-agent анализирует 100% nodes
+
+---
+
+### Фаза 4: FR-12 + FR-16 + FR-8 (Safety Net)
+
+**Цель:** Полноценные проверки безопасности.
+
+- Gitleaks в devcontainer (Dockerfile)
+- FR-8: deletion check в safetyCheckDiff
+- FR-16: no hardcoded secrets
+- Shellcheck для legacy scripts
+
+**Зависимости:** FR-8 (done)
+**Результат:** Security: regex → production-grade
+
+---
+
+### Фаза 5: AC Verification (FR-2–7, FR-9, FR-11)
+
+**Цель:** Все agent stages верифицированы с evidence в SRS.
+
+- Pipeline на 3+ реальных задачах
+- Каждый AC → evidence
+- FR-13, FR-14 — попутно
+
+**Зависимости:** Фазы 1-4
+**Результат:** ~42/42 AC с evidence
+
+---
+
+### Фаза 6: FR-15 + FR-13 (Config + Versioning)
+
+**Цель:** Конфигурируемость, предсказуемый re-run.
+
+- FR-15: env vars → engine, fallback to defaults
+- FR-13: overwrite on re-run, iteration suffix
+
+**Зависимости:** Фаза 5
+
+---
+
+### Фаза 7: FR-17 — Directory Restructure
+
+**Цель:** Стандартная IDE-friendly структура.
+
+- `.sdlc/engine/` → `src/engine/`
+- `agents/` уже на месте (Фаза 1)
+- `.sdlc/pipeline.yaml` → root/config
+- `.sdlc/runs/` → `runs/` (gitignored)
+- `.sdlc/scripts/` → `scripts/`
+- deno.json, imports, тесты, SDS
+
+**Зависимости:** Все предыдущие (высокий риск)
+
+---
+
+## Зависимости
+
+```mermaid
+graph TD
+    P0["Фаза 0: Scope Cleanup<br/>+ SRS Sync"]
+    P1["Фаза 1: Agents<br/>as Skills"]
+    P2["Фаза 2: FR-1<br/>Trigger Modes"]
+    P3["Фаза 3: Observability"]
+    P4["Фаза 4: Safety Net"]
+    P5["Фаза 5: AC<br/>Verification"]
+    P6["Фаза 6: Config<br/>+ Versioning"]
+    P7["Фаза 7: Restructure"]
+
+    P0 --> P1
+    P0 --> P2
+    P0 --> P3
+    P0 --> P4
+    P1 --> P5
+    P2 --> P5
+    P3 --> P5
+    P4 --> P5
+    P5 --> P6
+    P6 --> P7
+
+    style P0 fill:#4caf50,color:#fff
+    style P1 fill:#ff9800,color:#fff
+    style P2 fill:#ff9800,color:#fff
+    style P3 fill:#ff9800,color:#fff
+    style P4 fill:#ff9800,color:#fff
+    style P5 fill:#2196f3,color:#fff
+    style P6 fill:#2196f3,color:#fff
+    style P7 fill:#9c27b0,color:#fff
 ```
 
-### Фаза 1: Первые issues для догфудинга
+## Параллелизм
 
-Issues для тестирования pipeline (от простых к сложным):
+Фазы 1, 2, 3, 4 — **параллельно** после Фазы 0:
+- Skills — `./agents/`, `.claude/skills/`, engine paths
+- Triggers — engine/cli.ts
+- Observability — engine/loop.ts, engine.ts, git.ts
+- Safety — Dockerfile, engine/git.ts
 
-1. **Issue: "Создать lib.sh с функцией log()"**
-   - Тривиальная задача, 1 файл, 1 функция
-   - Идеально для проверки Stage 1-2 (PM + Tech Lead)
-2. **Issue: "Добавить функцию validate_artifact() в lib.sh"**
-   - Немного сложнее: нужна валидация файлов, тесты
-   - Проверяет Executor+QA loop
-3. **Issue: "Создать stage-1-pm.sh"**
-   - Первый полноценный stage-скрипт
-   - Зависит от lib.sh — проверяет архитектурные решения
-4. **Issue: "Создать Dockerfile"**
-   - Интеграционная задача: docker build + тесты
+Фазы 5, 6, 7 — **последовательно**.
 
-### Фаза 2: Замыкание цикла
+## Оценка
 
-Когда stages 1-8 работают через shell-скрипты:
-
-1. Создать GHA workflow
-2. Повесить label на issue в GitHub
-3. Pipeline запускается автоматически
-4. PR создаётся ботом
-5. Human review → merge
-
-**Критерий "pipeline работает":** 3 consecutive issues обработаны
-автоматически, PR прошли review без критических замечаний.
-
-### Фаза 3: Полный догфудинг
-
-Все новые фичи auto-flow разрабатываются через pipeline:
-- Issue с label → автоматический pipeline → PR → review → merge
-- Meta-Agent (Stage 9) оптимизирует промпты после каждого прогона
-- Ручное вмешательство только на этапе PR review
-
-### Риски и митигация
-
-- **Рекурсивная поломка:** pipeline ломает код auto-flow → pipeline перестаёт
-  работать
-  - Митигация: PR review как единственный human gate. Не мержить PR, ломающие
-    pipeline
-  - Митигация: CI проверяет `deno task check` ДО merge
-- **Complexity ceiling:** pipeline не справляется со сложными issues auto-flow
-  - Митигация: декомпозировать сложные issues на простые
-  - Митигация: Meta-Agent улучшает промпты итеративно
+- Фаза 0: ручная (~1h)
+- Фаза 1: ~1 pipeline run
+- Фаза 2: ~1 pipeline run
+- Фаза 3: ~1 pipeline run
+- Фаза 4: ~1 pipeline run
+- Фаза 5: ~3 pipeline runs
+- Фаза 6: ~1 pipeline run
+- Фаза 7: ~1 pipeline run
+- **Итого: ~10-12 pipeline runs**
