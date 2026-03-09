@@ -210,7 +210,9 @@ interface InvokeResult {
 }
 
 /** Invoke claude CLI with retry logic. */
-async function invokeClaudeCli(opts: InvokeOptions): Promise<InvokeResult> {
+export async function invokeClaudeCli(
+  opts: InvokeOptions,
+): Promise<InvokeResult> {
   const args = buildClaudeArgs(opts);
   let lastError = "";
 

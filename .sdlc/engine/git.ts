@@ -104,16 +104,25 @@ export async function safetyCheckDiff(
     }
   }
 
-  // Check for secret-like patterns in diff content
-  try {
-    const diffContent = await runGit(["diff", "HEAD"]);
-    const secretPattern =
-      /(?:api[_-]?key|secret|token|password|credential)\s*[:=]\s*['"][^'"]{8,}/i;
-    if (secretPattern.test(diffContent)) {
-      violations.push("Potential secret detected in diff content");
+  // Check for secrets: gitleaks CLI primary, regex fallback
+  const gitleaksResult = await runGitleaks();
+  if (gitleaksResult.warning) {
+    console.warn(`[engine] ${gitleaksResult.warning}`);
+  }
+  if (gitleaksResult.detected) {
+    violations.push("Potential secret detected by gitleaks");
+  } else if (gitleaksResult.usedFallback) {
+    // Gitleaks not available — use regex fallback
+    try {
+      const diffContent = await runGit(["diff", "HEAD"]);
+      const secretPattern =
+        /(?:api[_-]?key|secret|token|password|credential)\s*[:=]\s*['"][^'"]{8,}/i;
+      if (secretPattern.test(diffContent)) {
+        violations.push("Potential secret detected in diff content");
+      }
+    } catch {
+      // Ignore diff read errors
     }
-  } catch {
-    // Ignore diff read errors
   }
 
   return {
@@ -155,6 +164,55 @@ export async function pushToOrigin(
   }
 
   throw new Error(`Git push failed after ${maxRetries} attempts: ${lastError}`);
+}
+
+/** Result of running gitleaks. */
+export interface GitleaksResult {
+  /** True if secrets were detected. */
+  detected: boolean;
+  /** True if gitleaks binary was not found and regex fallback should be used. */
+  usedFallback: boolean;
+  /** Warning message (e.g., binary not found). */
+  warning?: string;
+}
+
+/**
+ * Run gitleaks to detect secrets in staged changes.
+ * Returns structured result: detected flag, fallback flag, optional warning.
+ * On ENOENT (binary not found): returns usedFallback=true with warning.
+ */
+export async function runGitleaks(): Promise<GitleaksResult> {
+  try {
+    const cmd = new Deno.Command("gitleaks", {
+      args: ["detect", "--no-git", "--staged"],
+      stdout: "piped",
+      stderr: "piped",
+    });
+    const output = await cmd.output();
+
+    // Exit 0 = clean, non-zero = leak found
+    return {
+      detected: !output.success,
+      usedFallback: false,
+    };
+  } catch (err) {
+    if (err instanceof Deno.errors.NotFound) {
+      return {
+        detected: false,
+        usedFallback: true,
+        warning:
+          "gitleaks binary not found, falling back to regex secret detection",
+      };
+    }
+    // Other errors (permission, etc.) — fall back with warning
+    return {
+      detected: false,
+      usedFallback: true,
+      warning: `gitleaks failed: ${
+        (err as Error).message
+      }, falling back to regex`,
+    };
+  }
 }
 
 // --- Internal helpers ---

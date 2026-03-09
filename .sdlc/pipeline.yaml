@@ -122,7 +122,9 @@ nodes:
       Read documents/requirements.md and documents/design.md.
       Implement the changes following the task breakdown.
       This is iteration {{loop.iteration}}.
-    after: "deno task check"
+    validate:
+      - type: custom_script
+        path: "deno task check"
     allowed_paths:
       - ".sdlc/engine/"
       - ".sdlc/runs/"
@@ -179,12 +181,12 @@ nodes:
   meta-agent:
     type: agent
     label: "Meta-Agent — Prompt Analysis"
-    inputs: [presenter]
     prompt: ".sdlc/agents/meta-agent.md"
     task_template: |
       Analyze all logs and artifacts from run {{run_id}} at {{run_dir}}.
       Produce a meta-report with prompt improvement suggestions.
       Output: {{node_dir}}/07-meta-report.md
+    run_always: true
     settings:
       on_error: continue
     validate:

@@ -67,9 +67,9 @@ graph TD
   - **Agent Runtime**: Claude Code CLI invocations with role-specific prompts
   - **Artifact Store**: Git-tracked files in `.sdlc/runs/<run-id>/<node-id>/`
   - **Validation Engine**: Rule-based checks (file_exists, file_not_empty,
-    contains_section, custom_script)
+    contains_section, custom_script, frontmatter_field)
   - **Continuation Engine**: `--resume` based re-invocation on validation
-    failure
+    failure or safety-check violation (shared `max_continuations` budget)
   - **Legacy Shell Scripts** (`.sdlc/scripts/`): Preserved for backward
     compatibility, superseded by engine
 
@@ -113,16 +113,19 @@ graph TD
 - **Purpose:** Configurable DAG-based pipeline executor. Replaces hardcoded
   shell script orchestration with YAML-driven node graph.
 - **Modules:**
-  - `types.ts` — type declarations
+  - `types.ts` — type declarations (incl. `ValidationRule.type` union,
+    `NodeConfig.run_always`)
   - `template.ts` — `{{var}}` interpolation for prompts/paths
   - `config.ts` — YAML parsing, schema validation, defaults merge
   - `dag.ts` — topological sort, cycle detection, level grouping
-  - `validate.ts` — artifact validation rules (file_exists, not_empty, etc.)
+  - `validate.ts` — artifact validation rules (file_exists, not_empty,
+    contains_section, custom_script, frontmatter_field)
   - `state.ts` — RunState persistence to `state.json`, resume logic
   - `agent.ts` — Claude CLI invocation, continuation loop, retry
   - `loop.ts` — loop node execution with condition extraction
   - `human.ts` — terminal user input, abort logic
-  - `git.ts` — commit per node, diff safety checks, branch query
+  - `git.ts` — commit per node, diff safety checks (gitleaks CLI + regex
+    fallback), branch query
   - `output.ts` — terminal output manager (quiet/normal/verbose), verbose
     methods for detailed agent-node diagnostics
   - `engine.ts` — main executor: level iteration, parallel dispatch, verbose
@@ -135,6 +138,9 @@ graph TD
   - Config: `.sdlc/pipeline.yaml` (YAML, version "1")
   - State: `.sdlc/runs/<run-id>/state.json` (JSON)
 - **Node types:** `agent`, `merge`, `loop`, `human`
+- **Node flags:** `run_always?: boolean` — when `true`, node executes in a
+  post-levels step after all DAG levels complete (including on pipeline
+  failure). Used for Meta-Agent.
 - **Config requirement:** Executor-role agent nodes MUST have `allowed_paths`
   configured in `pipeline.yaml` for safety check verbose output (AC6) to fire.
   Empty `allowed_paths` skips safety check entirely.
@@ -196,6 +202,9 @@ graph TD
     (enriched for verbose output)
   - SafetyCheckResult: `{ violations[], checkedFiles: string[] }` (enriched for
     verbose output)
+  - ValidationRule: `{ type: "file_exists"|"file_not_empty"|"contains_section"|
+    "custom_script"|"frontmatter_field", path?, field?, allowed?, ... }`
+  - NodeConfig: `{ ..., run_always?: boolean }` — flag for post-levels execution
 - **ERD:** N/A (file-based, no database).
 - **Migration:** N/A.
 
@@ -205,7 +214,14 @@ graph TD
   template variable pointing to predecessor's output directory. No manifest.
 - **Directory structure:** `.sdlc/runs/<run-id>/<node-id>/` per node output.
 - **Validation:** Engine validates output via configurable rules (file_exists,
-  file_not_empty, contains_section, custom_script) after each node.
+  file_not_empty, contains_section, custom_script, frontmatter_field) after
+  each node. Validation failures trigger continuation (resume with error
+  context) rather than immediate node failure.
+  - `frontmatter_field`: Reads artifact file, extracts YAML frontmatter via
+    `^---\n([\s\S]*?)\n---` regex, parses target field, checks value against
+    allowed set. Config: `{ type: "frontmatter_field", path, field, allowed }`.
+  - Executor node uses `custom_script` validation rule (not `after` hook) for
+    `deno task check`, enabling continuation-on-failure for check errors.
 - **Context management:** Claude CLI auto-compression handles large input sets.
 - **Template variables:** `{{node_dir}}`, `{{input.*}}`, `{{run_dir}}`,
   `{{run_id}}`, `{{args.*}}`, `{{env.*}}`, `{{loop.iteration}}`.
@@ -224,12 +240,19 @@ graph TD
 
 - **Algos:**
   - **Continuation Loop**: invoke agent -> validate -> if fail: resume with
-    error context -> repeat (max N). If limit reached: fail stage, trigger
+    error context -> repeat (max N). Additionally, `safetyCheckDiff()` violations
+    after `runAgent()` trigger resume with violation details via
+    `resumeSessionId`. Safety and validation continuations share single
+    `max_continuations` counter. If limit reached: fail node, trigger
     Meta-Agent.
   - **Executor+QA Loop**: Executor implements -> QA verifies -> if FAIL:
     Executor reads QA report, fixes -> repeat (max 3).
   - **Diff Safety Check**: After Executor exit, check `git diff` for
     out-of-scope modifications, unauthorized deletions, secret patterns.
+    **Gitleaks integration:** Before regex fallback, spawn
+    `gitleaks detect --no-git --staged`; exit 0 = clean, non-zero = leak.
+    On binary not found (`ENOENT`): log warning, fall back to regex. No silent
+    suppression.
   - **Verbose Output Flow** (`-v` mode, agent nodes only): In
     `executeAgentNode()`: (1) resolve input artifact file paths+sizes from
     `ctx.input` dirs via `Deno.stat()` → `verboseInputs()`, (2) `runAgent()`
@@ -258,9 +281,13 @@ graph TD
       entirely when node has empty `allowed_paths`. No `verboseSafety()` call.
     - **Safety check with `allowed_paths` configured:** `safetyCheckDiff()`
       executes, `verboseSafety()` emits `checkedFiles` + any `violations`.
-  - **Meta-Agent Trigger**: Engine executes meta-agent as last DAG node
-    (`run_always: true`). On failure: reads failed node ID from `state.json`.
-    Runs meta-agent with failure context.
+  - **Meta-Agent Trigger**: Engine executes meta-agent via `run_always: true`
+    mechanism. After all DAG levels complete (success or failure), engine
+    collects nodes with `run_always: true` and executes them in a final
+    post-levels step — outside normal DAG level iteration. Meta-agent node
+    has no strict dependency on `presenter`, enabling execution even when
+    upstream nodes fail. On failure: reads failed node ID from `state.json`,
+    runs with failure context.
 - **Rules:**
   - Artifacts overwritten on re-run (git history preserves previous).
   - QA iteration numbering restarts on re-run.
@@ -273,7 +300,9 @@ graph TD
 - **Scale:** Single pipeline per issue. Sequential stages (no parallel agents).
 - **Fault:** Stage failure stops pipeline, Meta-Agent analyzes, failure reported
   on issue.
-- **Sec:** Diff-based safety checks. Agents run with local user's permissions.
+- **Sec:** Diff-based safety checks (gitleaks CLI primary, regex fallback).
+  Safety violations trigger continuation for self-correction. Agents run with
+  local user's permissions.
 - **Logs:** Full transcripts per stage in `.sdlc/runs/<run-id>/logs/`.
 
 ## 7. Constraints

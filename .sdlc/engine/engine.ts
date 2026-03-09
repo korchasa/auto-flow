@@ -25,7 +25,7 @@ import {
   markRunFailed,
   saveState,
 } from "./state.ts";
-import { runAgent } from "./agent.ts";
+import { invokeClaudeCli, runAgent } from "./agent.ts";
 import { saveAgentLog } from "./log.ts";
 import { runLoop } from "./loop.ts";
 import { runHuman, terminalInput } from "./human.ts";
@@ -93,30 +93,59 @@ export class Engine {
     await this.ensureRunDirs(levels);
     await saveState(this.state);
 
-    // Execute levels
+    // Identify run_always nodes (e.g., Meta-Agent) — execute after all levels
+    const runAlwaysNodeIds = collectRunAlwaysNodes(this.config.nodes);
+
+    // Filter run_always nodes out of regular DAG levels
+    const filteredLevels = levels
+      .map((level) => level.filter((id) => !runAlwaysNodeIds.includes(id)))
+      .filter((level) => level.length > 0);
+
+    // Ensure run_always node dirs exist
+    for (const nodeId of runAlwaysNodeIds) {
+      await Deno.mkdir(getNodeDir(this.state.run_id, nodeId), {
+        recursive: true,
+      });
+    }
+
+    // Execute regular levels
+    let pipelineSuccess = true;
     try {
-      for (const level of levels) {
+      for (const level of filteredLevels) {
         const success = await this.executeLevel(level);
         if (!success) {
-          markRunFailed(this.state);
-          await saveState(this.state);
-          this.printSummary();
-          return this.state;
+          pipelineSuccess = false;
+          break;
         }
       }
-
-      markRunCompleted(this.state);
-      await saveState(this.state);
-      this.printSummary();
-      return this.state;
     } catch (err) {
-      markRunFailed(this.state);
-      this.state.completed_at = new Date().toISOString();
-      await saveState(this.state);
+      pipelineSuccess = false;
       this.output.error((err as Error).message);
-      this.printSummary();
-      return this.state;
     }
+
+    // Execute run_always nodes (post-levels step, regardless of pipeline outcome)
+    if (runAlwaysNodeIds.length > 0) {
+      for (const nodeId of runAlwaysNodeIds) {
+        if (isNodeCompleted(this.state, nodeId)) continue;
+        try {
+          await this.executeNode(nodeId);
+        } catch (err) {
+          this.output.warn(
+            `run_always node ${nodeId} failed: ${(err as Error).message}`,
+          );
+        }
+      }
+    }
+
+    // Finalize run state
+    if (pipelineSuccess) {
+      markRunCompleted(this.state);
+    } else {
+      markRunFailed(this.state);
+    }
+    await saveState(this.state);
+    this.printSummary();
+    return this.state;
   }
 
   /** Execute a single level (set of independent nodes). */
@@ -275,7 +304,7 @@ export class Engine {
       await saveAgentLog(runDir, nodeId, result.output);
     }
 
-    // Safety check
+    // Safety check with continuation support
     if (node.allowed_paths && node.allowed_paths.length > 0) {
       const resolvedPaths = node.allowed_paths.map((p) => {
         try {
@@ -284,23 +313,86 @@ export class Engine {
           return p;
         }
       });
-      const safetyResult = await safetyCheckDiff(resolvedPaths);
 
-      // Verbose: show safety check results
-      this.output.verboseSafety(
-        nodeId,
-        safetyResult.checkedFiles,
-        safetyResult.violations,
-      );
+      let continuations = result.continuations;
+      const maxContinuations = settings.max_continuations;
+      let sessionId = result.session_id;
 
-      if (!safetyResult.safe) {
-        markNodeFailed(
-          this.state,
+      // Safety-continuation loop: re-invoke agent on violations
+      while (true) {
+        const safetyResult = await safetyCheckDiff(resolvedPaths);
+
+        // Verbose: show safety check results
+        this.output.verboseSafety(
           nodeId,
-          `Safety violations: ${safetyResult.violations.join("; ")}`,
+          safetyResult.checkedFiles,
+          safetyResult.violations,
         );
-        return false;
+
+        if (safetyResult.safe) break;
+
+        // Continuations exhausted — fail the node
+        if (continuations >= maxContinuations) {
+          markNodeFailed(
+            this.state,
+            nodeId,
+            `Safety violations after ${continuations} continuations: ${
+              safetyResult.violations.join("; ")
+            }`,
+          );
+          return false;
+        }
+
+        // No session to resume — fail
+        if (!sessionId) {
+          markNodeFailed(
+            this.state,
+            nodeId,
+            `Safety violations (no session_id for continuation): ${
+              safetyResult.violations.join("; ")
+            }`,
+          );
+          return false;
+        }
+
+        continuations++;
+        const resumePrompt =
+          `Safety check violations detected (continuation ${continuations}/${maxContinuations}):\n${
+            safetyResult.violations.join("\n")
+          }\nRevert the problematic changes and fix the issues.`;
+
+        // Verbose: show continuation context
+        this.output.verboseContinuation(
+          nodeId,
+          continuations,
+          maxContinuations,
+          safetyResult.violations,
+        );
+
+        const resumeResult = await invokeClaudeCli({
+          resumeSessionId: sessionId,
+          taskPrompt: resumePrompt,
+          claudeArgs: this.config.defaults?.claude_args,
+          timeoutSeconds: settings.timeout_seconds,
+          maxRetries: settings.max_retries,
+          retryDelaySeconds: settings.retry_delay_seconds,
+        });
+
+        if (resumeResult.error) {
+          markNodeFailed(
+            this.state,
+            nodeId,
+            `Safety continuation failed: ${resumeResult.error}`,
+          );
+          return false;
+        }
+
+        if (resumeResult.output?.session_id) {
+          sessionId = resumeResult.output.session_id;
+        }
       }
+
+      this.state.nodes[nodeId].continuations = continuations;
     }
 
     return true;
@@ -512,6 +604,18 @@ export async function resolveInputArtifacts(
     }
   }
   return result;
+}
+
+/**
+ * Collect node IDs with `run_always: true` from pipeline config.
+ * These nodes execute in a final post-levels step, regardless of pipeline outcome.
+ */
+export function collectRunAlwaysNodes(
+  nodes: Record<string, NodeConfig>,
+): string[] {
+  return Object.entries(nodes)
+    .filter(([_, node]) => node.run_always === true)
+    .map(([id]) => id);
 }
 
 /** Recursively copy a directory. */

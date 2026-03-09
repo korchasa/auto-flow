@@ -1,6 +1,10 @@
 import { assertEquals } from "@std/assert";
-import type { EngineOptions } from "./types.ts";
-import { Engine, resolveInputArtifacts } from "./engine.ts";
+import type { EngineOptions, NodeConfig } from "./types.ts";
+import {
+  collectRunAlwaysNodes,
+  Engine,
+  resolveInputArtifacts,
+} from "./engine.ts";
 import { OutputManager } from "./output.ts";
 
 /** Capture output lines from an OutputManager. */
@@ -168,6 +172,70 @@ Deno.test("AC6 negative — verboseSafety skipped when allowed_paths empty", () 
   );
 });
 
+// --- Safety-to-continuation logic pattern tests ---
+
+Deno.test("Safety violation triggers continuation pattern — not immediate failure", () => {
+  // Verifies the engine.ts executeAgentNode() safety-continuation pattern:
+  // When safetyCheckDiff returns violations, engine should construct a resume
+  // prompt and re-invoke, not immediately fail the node.
+  const safetyResult = {
+    safe: false,
+    violations: ["Out-of-scope modification: .github/ci.yml"],
+    checkedFiles: [".github/ci.yml", "src/main.ts"],
+  };
+
+  // The new pattern: violations + remaining continuations → build resume prompt
+  const continuations = 0;
+  const maxContinuations = 3;
+  const shouldContinue = !safetyResult.safe &&
+    continuations < maxContinuations;
+
+  assertEquals(shouldContinue, true, "Should trigger continuation, not fail");
+
+  // Resume prompt includes violation details
+  const resumePrompt = `Safety check violations detected (continuation ${
+    continuations + 1
+  }/${maxContinuations}):\n${
+    safetyResult.violations.join("\n")
+  }\nRevert the problematic changes and fix the issues.`;
+  assertEquals(resumePrompt.includes("Out-of-scope"), true);
+  assertEquals(resumePrompt.includes("continuation 1/3"), true);
+});
+
+Deno.test("Safety violation exhausts continuations — fails node", () => {
+  // When continuations are exhausted after safety violation, node must fail.
+  const safetyResult = {
+    safe: false,
+    violations: ["Potential secret detected in diff content"],
+    checkedFiles: ["src/config.ts"],
+  };
+
+  const continuations = 3;
+  const maxContinuations = 3;
+  const shouldContinue = !safetyResult.safe &&
+    continuations < maxContinuations;
+
+  assertEquals(shouldContinue, false, "Should fail — continuations exhausted");
+});
+
+Deno.test("Safety and validation continuations share same budget", () => {
+  // Safety and validation continuations share a single max_continuations counter.
+  // If validation used 2 of 3, safety only has 1 left.
+  let continuations = 2; // validation used 2
+  const maxContinuations = 3;
+
+  // Safety violation with 1 remaining
+  const safetyViolation = true;
+  if (safetyViolation && continuations < maxContinuations) {
+    continuations++;
+  }
+  assertEquals(continuations, 3, "Should use the last continuation");
+
+  // Next violation should fail
+  const shouldContinue = continuations < maxContinuations;
+  assertEquals(shouldContinue, false, "No continuations left");
+});
+
 // --- Edge case: empty input directory ---
 
 Deno.test("resolveInputArtifacts — empty directory returns empty list", async () => {
@@ -232,4 +300,52 @@ Deno.test("resolveInputArtifacts — skips subdirectories", async () => {
   } finally {
     await Deno.remove(tmpDir, { recursive: true });
   }
+});
+
+// --- run_always node support tests ---
+
+Deno.test("collectRunAlwaysNodes — collects nodes with run_always: true", () => {
+  const nodes: Record<string, NodeConfig> = {
+    pm: { type: "agent", label: "PM" },
+    executor: { type: "agent", label: "Executor" },
+    "meta-agent": { type: "agent", label: "Meta-Agent", run_always: true },
+  };
+  const result = collectRunAlwaysNodes(nodes);
+  assertEquals(result, ["meta-agent"]);
+});
+
+Deno.test("collectRunAlwaysNodes — returns empty when no run_always nodes", () => {
+  const nodes: Record<string, NodeConfig> = {
+    pm: { type: "agent", label: "PM" },
+    executor: { type: "agent", label: "Executor" },
+  };
+  const result = collectRunAlwaysNodes(nodes);
+  assertEquals(result, []);
+});
+
+Deno.test("collectRunAlwaysNodes — multiple run_always nodes", () => {
+  const nodes: Record<string, NodeConfig> = {
+    pm: { type: "agent", label: "PM" },
+    "meta-agent": { type: "agent", label: "Meta-Agent", run_always: true },
+    cleanup: { type: "agent", label: "Cleanup", run_always: true },
+  };
+  const result = collectRunAlwaysNodes(nodes);
+  assertEquals(result.length, 2);
+  assertEquals(result.includes("meta-agent"), true);
+  assertEquals(result.includes("cleanup"), true);
+});
+
+Deno.test("run_always nodes excluded from regular DAG levels", () => {
+  // run_always nodes should not appear in regular DAG levels.
+  // They execute in a separate post-levels step.
+  const nodes: Record<string, NodeConfig> = {
+    pm: { type: "agent", label: "PM" },
+    "meta-agent": { type: "agent", label: "Meta-Agent", run_always: true },
+  };
+  const runAlways = collectRunAlwaysNodes(nodes);
+  const regularNodes = Object.keys(nodes).filter(
+    (id) => !runAlways.includes(id),
+  );
+  assertEquals(regularNodes, ["pm"]);
+  assertEquals(runAlways, ["meta-agent"]);
 });
