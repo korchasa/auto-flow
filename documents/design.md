@@ -135,6 +135,9 @@ graph TD
   - Config: `.sdlc/pipeline.yaml` (YAML, version "1")
   - State: `.sdlc/runs/<run-id>/state.json` (JSON)
 - **Node types:** `agent`, `merge`, `loop`, `human`
+- **Config requirement:** Executor-role agent nodes MUST have `allowed_paths`
+  configured in `pipeline.yaml` for safety check verbose output (AC6) to fire.
+  Empty `allowed_paths` skips safety check entirely.
 - **Verbose Output (Direct Injection pattern):**
   - `output.ts` exposes 6 verbose-guarded methods on `OutputManager`:
     `verbosePrompt(nodeId, prompt)`,
@@ -241,6 +244,20 @@ graph TD
     Output: human-readable stderr lines with section headers. Loop body nodes
     get prompt/validation/continuation verbose only; safety/commit verbose
     deferred (loop body bypasses `executeAgentNode()`).
+  - **Verbose Edge Cases** (behavioral contracts verified by tests):
+    - **Default mode (no `-v`):** All 6 verbose methods produce zero stderr
+      output. `OutputManager` constructed with `verbose=false` suppresses all
+      verbose calls unconditionally.
+    - **Empty input dir:** `resolveInputArtifacts()` returns empty list →
+      `verboseInputs()` reports `0 files` without error. No `Deno.stat()` calls.
+    - **Missing file stat:** `Deno.stat()` failure on input artifact →
+      graceful skip, verbose output includes error detail for affected path.
+    - **Zero staged files at commit:** `commitNodeChanges()` detects no staged
+      files → `verboseCommit()` reports no-op commit. No git commit created.
+    - **Safety check with `allowed_paths: []`:** `safetyCheckDiff()` skipped
+      entirely when node has empty `allowed_paths`. No `verboseSafety()` call.
+    - **Safety check with `allowed_paths` configured:** `safetyCheckDiff()`
+      executes, `verboseSafety()` emits `checkedFiles` + any `violations`.
   - **Meta-Agent Trigger**: Engine executes meta-agent as last DAG node
     (`run_always: true`). On failure: reads failed node ID from `state.json`.
     Runs meta-agent with failure context.
