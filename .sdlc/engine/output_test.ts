@@ -169,3 +169,25 @@ Deno.test("verboseCommit — no-op in quiet mode", () => {
   out.verboseCommit("executor", ["src/main.ts"], "msg", "main");
   assertEquals(cap.lines.length, 0);
 });
+
+// --- AC8: Default mode (verbose=false) emits zero verbose output ---
+
+Deno.test("AC8 — default mode emits zero output from all 6 verbose methods", () => {
+  const cap = createCapture();
+  const out = new OutputManager("normal", cap.writer);
+
+  out.verbosePrompt("node1", "Some prompt text");
+  out.verboseInputs("node1", [
+    { path: "a.md", sizeBytes: 100 },
+    { path: "b.md", sizeBytes: 200 },
+  ]);
+  out.verboseValidation("node1", [
+    { rule: "file_exists", passed: true },
+    { rule: "file_not_empty", passed: false, detail: "empty" },
+  ]);
+  out.verboseContinuation("node1", 1, 3, ["validation failed"]);
+  out.verboseSafety("node1", ["src/main.ts"], ["Out-of-scope: .github/ci.yml"]);
+  out.verboseCommit("node1", ["src/main.ts"], "commit msg", "agent/42");
+
+  assertEquals(cap.lines.length, 0, "Default mode must produce zero verbose output");
+});
