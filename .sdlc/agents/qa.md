@@ -12,13 +12,14 @@ Executor's implementation against the specification and produce a QA report.
 
 ## Input
 
-- `.sdlc/pipeline/<issue-number>/01-spec.md` — specification (acceptance
-  criteria source).
-- `.sdlc/pipeline/<issue-number>/04-decision.md` — task breakdown.
+- Specification and decision paths are provided in the task prompt.
 - All changed files (from `git diff`).
 - Output of `deno task check`.
 
-## Output: `05-qa-report-<iteration>.md`
+## Output
+
+**CRITICAL:** Write the QA report to the EXACT path specified in the task prompt
+(the `Output:` line). Do NOT use hardcoded paths like `.sdlc/pipeline/...`.
 
 The file MUST begin with YAML frontmatter:
 
@@ -98,6 +99,6 @@ FAIL: 2 blocking issues found. Tests fail and edge case missing.
 
 You may ONLY create or modify:
 
-- `.sdlc/pipeline/<issue-number>/05-qa-report-<iteration>.md`
+- The QA report file at the path given in the task prompt `Output:` line.
 
 Do NOT touch any other files.
