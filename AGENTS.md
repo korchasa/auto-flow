@@ -20,7 +20,9 @@
   ASK USER FOR HELP.
 - IF ISSUE PERSISTS AFTER 2 ATTEMPTS: STOP. OUTPUT "STOP-ANALYSIS REPORT"
   (STATE, EXPECTED, 5-WHY CHAIN, ROOT CAUSE, HYPOTHESES). WAIT FOR USER HELP.
-- WHEN EDITING CI/CD, ALWAYS CHECK LOCALLY FIRST.
+- WHEN EDITING PIPELINE CONFIG, ALWAYS CHECK LOCALLY FIRST.
+- BEFORE RUNNING `deno task run:task`, COMMIT OR STASH ALL LOCAL CHANGES.
+  Engine's safety check treats uncommitted diffs as out-of-scope modifications.
 - BE PRECISE IN YOUR WORDING. USE A SCIENTIFIC APPROACH. ACCOMPANY HIGHLY
   SPECIALIZED TERMS AND ABBREVIATIONS WITH SHORT HINTS IN PARENTHESES
 - PROVIDE EVIDENCE FOR YOUR CLAIMS
@@ -37,16 +39,16 @@
 
 Automate the full software development lifecycle for feature requests: from
 GitHub Issue triage to merged, tested code — fully autonomous, no human gates
-between stages. A CI/CD-integrated system where a GitHub Issue triggers a chain
-of specialized AI agents (Claude Code CLI), each performing a distinct role (PM,
-Tech Lead, Architect, Executor, QA, Presenter, Meta-Agent).
+between stages. A locally-run system where a GitHub Issue triggers a chain of
+specialized AI agents (Claude Code CLI) via `deno task run --issue <N>`, each
+performing a distinct role (PM, Tech Lead, Architect, Executor, QA, Presenter,
+Meta-Agent).
 
 ## Project tooling Stack
 
-- Deno (scripting, utilities, validation, task runner)
-- Shell/Bash (stage orchestration scripts)
-- Docker (single runtime image for all stages)
-- GitHub Actions (CI/CD pipeline trigger and execution)
+- Deno (scripting, utilities, validation, task runner, pipeline engine)
+- Shell/Bash (legacy stage orchestration scripts)
+- Docker (devcontainer runtime environment)
 - Claude Code CLI (`claude`) (AI agent runtime)
 - `gh` CLI (GitHub API interaction: PRs, issue comments)
 - Git (version control, branch management, diff-based safety checks)

@@ -18,11 +18,30 @@ import {
   updateNodeState,
 } from "./state.ts";
 
-Deno.test("generateRunId — format YYYYMMDDTHHMMSS", () => {
+Deno.test("generateRunId — format YYYYMMDDTHHMMSS without label", () => {
   const id = generateRunId();
   assertEquals(id.length, 15); // YYYYMMDDTHHMMSS
   assertEquals(id[8], "T");
-  // Verify all characters are digits or T
+  assertEquals(/^\d{8}T\d{6}$/.test(id), true);
+});
+
+Deno.test("generateRunId — appends label as slug", () => {
+  const id = generateRunId("fr-18-verbose-output");
+  assertEquals(/^\d{8}T\d{6}-fr-18-verbose-output$/.test(id), true);
+});
+
+Deno.test("generateRunId — sanitizes label", () => {
+  const id = generateRunId("My Feature!!!  spaces");
+  assertEquals(/^\d{8}T\d{6}-my-feature-spaces$/.test(id), true);
+});
+
+Deno.test("generateRunId — issue number label", () => {
+  const id = generateRunId("42");
+  assertEquals(/^\d{8}T\d{6}-42$/.test(id), true);
+});
+
+Deno.test("generateRunId — empty label ignored", () => {
+  const id = generateRunId("");
   assertEquals(/^\d{8}T\d{6}$/.test(id), true);
 });
 

@@ -15,9 +15,9 @@ project's SRS (Software Requirements Specification).
    to reflect the issue. Every new requirement gets a status marker `[ ]`
    (pending). Modified requirements keep their existing marker unless
    re-implemented.
-4. **Produce the spec artifact:** Write
-   `.sdlc/pipeline/<issue-number>/01-spec.md` with exactly four sections (see
-   Output Format below).
+4. **Produce the spec artifact:** Write `01-spec.md` to the node output
+   directory (path from task message) with exactly four sections (see Output
+   Format below).
 
 ## Input
 
@@ -73,8 +73,8 @@ Define what is NOT included in this issue's scope:
 - **Status markers:** Every new requirement in the SRS must have `[ ]` status.
 - **Evidence references:** When referencing existing requirements, use their
   FR-* IDs.
-- **File paths:** Create the output directory if it doesn't exist:
-  `.sdlc/pipeline/<issue-number>/`.
+- **File paths:** Write to the output path from the task message. Create the
+  output directory if it doesn't exist.
 - **Fail fast:** If the issue is unclear, ambiguous, or contradicts existing
   requirements, state the contradiction explicitly in the spec rather than
   guessing.
@@ -84,6 +84,6 @@ Define what is NOT included in this issue's scope:
 You may ONLY create or modify these files:
 
 - `documents/requirements.md`
-- `.sdlc/pipeline/<issue-number>/01-spec.md`
+- `01-spec.md` in the node output directory (path from task message).
 
 Do NOT touch any other files.

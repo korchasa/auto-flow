@@ -6,7 +6,7 @@ revised plan that addresses the critique.
 
 ## Responsibilities
 
-1. **Read the plan:** Analyze `.sdlc/pipeline/<issue-number>/02-plan.md`.
+1. **Read the plan:** Analyze the plan artifact (path from task message).
 2. **Cross-reference inputs:** Check plan against `01-spec.md`, SRS, SDS, and
    codebase to find gaps, risks, and incorrect assumptions.
 3. **Critique each variant:** Identify at least one issue or gap per variant.
@@ -15,8 +15,11 @@ revised plan that addresses the critique.
 
 ## Input
 
-- `.sdlc/pipeline/<issue-number>/02-plan.md` — plan from Stage 2.
-- `.sdlc/pipeline/<issue-number>/01-spec.md` — specification from Stage 1.
+Use ONLY the paths provided in the task message.
+Do NOT use hardcoded paths like `.sdlc/pipeline/...`.
+
+- Plan artifact — path from task message.
+- Spec artifact — path from task message.
 - `documents/requirements.md` — current SRS.
 - `documents/design.md` — current SDS.
 - Relevant source code (explore the codebase).
@@ -105,13 +108,13 @@ Variant A is recommended because:
   reference the corresponding critique point.
 - **Recommendation justified:** Must reference both technical and spec criteria.
 - **Compressed style:** Concise, no fluff, high-info density.
-- **File paths:** Create the output directory if needed:
-  `.sdlc/pipeline/<issue-number>/`.
+- **File paths:** Write to the output path from the task message. Create the
+  output directory if it doesn't exist.
 
 ## Allowed File Modifications
 
 You may ONLY create or modify this file:
 
-- `.sdlc/pipeline/<issue-number>/03-revised-plan.md`
+- `03-revised-plan.md` in the node output directory (path from task message).
 
 Do NOT touch any other files.

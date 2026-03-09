@@ -5,7 +5,8 @@
  *
  * Options:
  *   --config <path>       Pipeline config file (default: .sdlc/pipeline.yaml)
- *   --issue <number>      Issue number (passed as args.issue)
+ *   --issue <number>      GitHub issue number (sets args.issue)
+ *   --task <file>         Task file path (sets args.task, args.task_id; mutually exclusive with --issue)
  *   --resume <run-id>     Resume a previous run from its state
  *   --dry-run             Print execution plan without running
  *   -v, --verbose         Show full streaming output
@@ -18,7 +19,7 @@
 import type { EngineOptions, Verbosity } from "./types.ts";
 import { Engine } from "./engine.ts";
 
-function parseArgs(args: string[]): EngineOptions {
+export function parseArgs(args: string[]): EngineOptions {
   let configPath = ".sdlc/pipeline.yaml";
   let runId: string | undefined;
   let resume = false;
@@ -39,6 +40,14 @@ function parseArgs(args: string[]): EngineOptions {
       case "--issue":
         cliArgs.issue = args[++i];
         break;
+      case "--task": {
+        const filePath = args[++i];
+        cliArgs.task = filePath;
+        // Extract stem: basename without extension
+        const base = filePath.split("/").pop() ?? filePath;
+        cliArgs.task_id = base.replace(/\.[^.]+$/, "");
+        break;
+      }
       case "--resume":
         resume = true;
         runId = args[++i];
@@ -85,6 +94,12 @@ function parseArgs(args: string[]): EngineOptions {
     }
   }
 
+  if (cliArgs.task && cliArgs.issue) {
+    throw new Error(
+      "--task and --issue are mutually exclusive: use one trigger at a time",
+    );
+  }
+
   return {
     config_path: configPath,
     run_id: runId,
@@ -107,7 +122,8 @@ Usage:
 
 Options:
   --config <path>       Pipeline config file (default: .sdlc/pipeline.yaml)
-  --issue <number>      Issue number (passed as args.issue)
+  --issue <number>      GitHub issue number (sets args.issue)
+  --task <file>         Task file path (sets args.task, args.task_id; mutually exclusive with --issue)
   --resume <run-id>     Resume a previous run
   --dry-run             Print execution plan without running
   -v, --verbose         Show full streaming output from agents
@@ -119,6 +135,7 @@ Options:
 
 Examples:
   deno task run --issue 42
+  deno task run:task --task .sdlc/tasks/my-feature.md
   deno task run --config custom.yaml --issue 42 -v
   deno task run --resume 20260308T143022
   deno task run --dry-run --issue 1

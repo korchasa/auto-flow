@@ -1,7 +1,10 @@
-# Default pipeline configuration — reproduces the current 9-stage SDLC flow.
-# See: documents/requirements.md for stage specifications.
+# Task-file pipeline configuration.
+# Trigger: deno task run:task --task <file>
+# Unlike pipeline.yaml, task input comes from a local file, not a GitHub Issue.
+# args.task     — path to the task file (e.g. .sdlc/tasks/my-feature.md)
+# args.task_id  — basename stem of the task file (e.g. "my-feature")
 
-name: "auto-flow-sdlc"
+name: "auto-flow-sdlc-task"
 version: "1"
 
 defaults:
@@ -20,7 +23,7 @@ nodes:
     label: "Project Manager — Specification"
     prompt: ".sdlc/agents/pm.md"
     task_template: |
-      Read GitHub issue #{{args.issue}} and produce a specification.
+      Read the task description at {{args.task}} (task ID: {{args.task_id}}) and produce a specification.
       Output:
         - {{node_dir}}/01-spec.md (problem, affected requirements, SRS changes, scope)
         - Update documents/requirements.md with new/modified requirements
@@ -123,11 +126,6 @@ nodes:
       Implement the changes following the task breakdown.
       This is iteration {{loop.iteration}}.
     after: "deno task check"
-    allowed_paths:
-      - ".sdlc/engine/"
-      - ".sdlc/runs/"
-      - ".sdlc/pipeline/"
-      - "documents/"
 
   qa:
     type: agent
@@ -155,7 +153,7 @@ nodes:
     exit_value: PASS
     max_iterations: 3
 
-  # Stage 8: Presenter — change summary
+  # Stage 8: Presenter — change summary (no GitHub issue comment in task mode)
   presenter:
     type: agent
     label: "Presenter — Change Summary"
@@ -165,7 +163,7 @@ nodes:
       Create a summary of all changes made during the pipeline.
       Read the spec at {{input.pm}}/01-spec.md.
       Read the decision at {{input.architect}}/04-decision.md.
-      Create a PR targeting main and post a comment on issue #{{args.issue}}.
+      Create a PR targeting main. Task ID: {{args.task_id}}.
       Output: {{node_dir}}/06-summary.md
     validate:
       - type: file_exists

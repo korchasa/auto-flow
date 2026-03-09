@@ -1,12 +1,30 @@
 import type { Verbosity } from "./types.ts";
 
+/** Input artifact descriptor for verbose output. */
+export interface VerboseInput {
+  path: string;
+  sizeBytes: number;
+}
+
+/** Validation result descriptor for verbose output. */
+export interface VerboseValidationResult {
+  rule: string;
+  passed: boolean;
+  detail?: string;
+}
+
 /** Terminal output manager with configurable verbosity levels. */
 export class OutputManager {
   private verbosity: Verbosity;
   private encoder = new TextEncoder();
+  private customWriter?: (text: string) => void;
 
-  constructor(verbosity: Verbosity = "normal") {
+  constructor(
+    verbosity: Verbosity = "normal",
+    writer?: (text: string) => void,
+  ) {
     this.verbosity = verbosity;
+    this.customWriter = writer;
   }
 
   /** Log a status line (shown in normal and verbose modes). */
@@ -85,6 +103,90 @@ export class OutputManager {
     this.write(`${"=".repeat(60)}\n`);
   }
 
+  // --- Verbose methods (no-op when verbosity !== "verbose") ---
+
+  /** Show the full interpolated prompt sent to an agent. */
+  verbosePrompt(nodeId: string, prompt: string): void {
+    if (this.verbosity !== "verbose") return;
+    this.write(`── ${nodeId}: PROMPT ──\n`);
+    this.write(`${prompt}\n`);
+    this.write(`── end prompt ──\n`);
+  }
+
+  /** Show resolved input artifacts with file paths and sizes. */
+  verboseInputs(nodeId: string, inputs: VerboseInput[]): void {
+    if (this.verbosity !== "verbose") return;
+    this.write(`── ${nodeId}: INPUTS (${inputs.length} files) ──\n`);
+    for (const input of inputs) {
+      this.write(`  ${input.path} (${input.sizeBytes} bytes)\n`);
+    }
+  }
+
+  /** Show validation rule results (pass/fail per rule). */
+  verboseValidation(
+    nodeId: string,
+    results: VerboseValidationResult[],
+  ): void {
+    if (this.verbosity !== "verbose") return;
+    this.write(`── ${nodeId}: VALIDATION ──\n`);
+    for (const r of results) {
+      const status = r.passed ? "PASS" : "FAIL";
+      const detail = r.detail ? ` — ${r.detail}` : "";
+      this.write(`  [${status}] ${r.rule}${detail}\n`);
+    }
+  }
+
+  /** Show continuation trigger context. */
+  verboseContinuation(
+    nodeId: string,
+    attempt: number,
+    max: number,
+    failures: string[],
+  ): void {
+    if (this.verbosity !== "verbose") return;
+    this.write(`── ${nodeId}: CONTINUATION ${attempt}/${max} ──\n`);
+    for (const f of failures) {
+      this.write(`  ${f}\n`);
+    }
+  }
+
+  /** Show safety check results: diffed files and any violations. */
+  verboseSafety(
+    nodeId: string,
+    files: string[],
+    violations: string[],
+  ): void {
+    if (this.verbosity !== "verbose") return;
+    this.write(`── ${nodeId}: SAFETY CHECK (${files.length} files) ──\n`);
+    for (const f of files) {
+      this.write(`  ${f}\n`);
+    }
+    if (violations.length > 0) {
+      this.write(`  VIOLATIONS:\n`);
+      for (const v of violations) {
+        this.write(`    ${v}\n`);
+      }
+    } else {
+      this.write(`  No violations\n`);
+    }
+  }
+
+  /** Show commit details: staged files, message, branch. */
+  verboseCommit(
+    nodeId: string,
+    files: string[],
+    message: string,
+    branchName: string,
+  ): void {
+    if (this.verbosity !== "verbose") return;
+    this.write(`── ${nodeId}: COMMIT (${branchName}) ──\n`);
+    this.write(`  message: ${message}\n`);
+    this.write(`  files (${files.length}):\n`);
+    for (const f of files) {
+      this.write(`    ${f}\n`);
+    }
+  }
+
   /** Print the dry-run execution plan. */
   dryRunPlan(levels: string[][], labels: Record<string, string>): void {
     this.write("\nExecution Plan (dry run):\n");
@@ -119,7 +221,11 @@ export class OutputManager {
   }
 
   private write(text: string): void {
-    Deno.stderr.writeSync(this.encoder.encode(text));
+    if (this.customWriter) {
+      this.customWriter(text);
+    } else {
+      Deno.stderr.writeSync(this.encoder.encode(text));
+    }
   }
 }
 

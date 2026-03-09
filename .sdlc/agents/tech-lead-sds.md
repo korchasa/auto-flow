@@ -13,17 +13,19 @@ breakdown from the Architect.
 
 ## Input
 
-- `.sdlc/pipeline/<issue-number>/04-decision.md` — decision from Stage 4.
-- `.sdlc/pipeline/<issue-number>/03-revised-plan.md` — revised plan from Stage 3.
+Use ONLY the paths provided in the task message.
+Do NOT use hardcoded paths like `.sdlc/pipeline/...`.
+
+- Decision artifact — path from task message.
+- Revised plan artifact — path from task message.
 - `documents/design.md` — current SDS.
 
 ## Output
 
 - Updated `documents/design.md`.
 
-Note: The stage script will automatically generate
-`.sdlc/pipeline/<issue-number>/04a-sds-diff.md` from the `git diff` after you
-finish. You do NOT need to create this file.
+Note: The engine automatically captures the SDS diff after you finish.
+You do NOT need to create a diff file.
 
 ## Rules
 

@@ -11,12 +11,12 @@
 
 - **Diagrams:**
 
-### 2.1 Legacy: GitHub Actions Pipeline (Shell Scripts)
+### 2.1 Legacy: Shell Script Pipeline
 
 ```mermaid
 graph LR
-    Issue["GitHub Issue<br/>(labeled)"] --> GHA["GitHub Actions<br/>Workflow"]
-    GHA --> S1["Stage 1: PM"]
+    Issue["GitHub Issue"] --> CLI["deno task run<br/>--issue N"]
+    CLI --> S1["Stage 1: PM"]
     S1 --> S2["Stage 2: Tech Lead"]
     S2 --> S3["Stage 3: Reviewer"]
     S3 --> S4["Stage 4: Architect"]
@@ -26,7 +26,7 @@ graph LR
     S8 --> S9["Stage 9: Meta-Agent"]
     S6 -->|"FAIL after max"| S9
 
-    subgraph Docker["Single Docker Image"]
+    subgraph Devcontainer["Devcontainer"]
         S1; S2; S3; S4; S5; S6; S8; S9
     end
 ```
@@ -122,25 +122,67 @@ graph TD
   - `agent.ts` — Claude CLI invocation, continuation loop, retry
   - `loop.ts` — loop node execution with condition extraction
   - `human.ts` — terminal user input, abort logic
-  - `git.ts` — commit per node, diff safety checks
-  - `output.ts` — terminal output manager (quiet/normal/verbose)
-  - `engine.ts` — main executor: level iteration, parallel dispatch
+  - `git.ts` — commit per node, diff safety checks, branch query
+  - `output.ts` — terminal output manager (quiet/normal/verbose), verbose
+    methods for detailed agent-node diagnostics
+  - `engine.ts` — main executor: level iteration, parallel dispatch, verbose
+    input resolution
   - `cli.ts` — CLI entry point: argument parsing, .env loading
   - `mod.ts` — public API re-exports
 - **Interfaces:**
-  - CLI: `deno task run --issue <N> [--config <path>] [--resume <run-id>]
+  - CLI: `deno task run:{issue|text|file} <arg> [--config <path>] [--resume <run-id>]
     [--dry-run] [-v|-q] [--env KEY=VAL] [--skip nodes] [--only nodes]`
   - Config: `.sdlc/pipeline.yaml` (YAML, version "1")
   - State: `.sdlc/runs/<run-id>/state.json` (JSON)
 - **Node types:** `agent`, `merge`, `loop`, `human`
+- **Config requirement:** Executor-role agent nodes MUST have `allowed_paths`
+  configured in `pipeline.yaml` for safety check verbose output (AC6) to fire.
+  Empty `allowed_paths` skips safety check entirely.
+- **Verbose Output (Direct Injection pattern):**
+  - `output.ts` exposes 6 verbose-guarded methods on `OutputManager`:
+    `verbosePrompt(nodeId, prompt)`,
+    `verboseInputs(nodeId, inputs: {path, sizeBytes}[])`,
+    `verboseValidation(nodeId, results: {rule, passed, detail?}[])`,
+    `verboseContinuation(nodeId, attempt, max, failures)`,
+    `verboseSafety(nodeId, files, violations)`,
+    `verboseCommit(nodeId, files, message, branch)`.
+    All no-op when `verbosity !== "verbose"`. Output: human-readable stderr with
+    section headers. Note: AC #5 (agent stdout streaming) already implemented
+    via existing `nodeOutput()` method — no new work needed.
+  - `agent.ts`: `AgentRunOptions` gains optional `output?: OutputManager` and
+    `nodeId?: string`. `runAgent()` calls `verbosePrompt()` after prompt
+    construction, `verboseValidation()` after each `runValidations()` call,
+    `verboseContinuation()` before resume invocation. Guarded by `if (output)`.
+  - `loop.ts`: `LoopRunOptions` gains optional `output?: OutputManager`.
+    Forwarded to `runAgent()` calls. Enables prompt/validation/continuation
+    verbose for loop body nodes. Safety/commit verbose for loop body nodes:
+    deferred (loop body bypasses `executeAgentNode()`).
+  - `git.ts`: No `OutputManager` dependency. Pure data enrichment only.
+    `commitNodeChanges()` runs `git diff --cached --name-only` after
+    `git add -A` to capture staged files. Returns enriched `CommitResult` with
+    `filesStaged: string[]` and `message: string`. `safetyCheckDiff()` returns
+    enriched `SafetyCheckResult` with `checkedFiles: string[]` (from
+    already-computed `changedFiles`). `branch()` helper: returns current branch
+    name via `git branch --show-current`. Verbose calls for safety/commit stay
+    in engine.
+  - `engine.ts`: `executeAgentNode()` resolves input artifact paths+sizes by
+    walking `ctx.input` directories via `Deno.stat()`; calls
+    `this.output.verboseInputs()` before `runAgent()`. Passes `this.output`
+    and `nodeId` to `runAgent()`. After `safetyCheckDiff()`, calls
+    `this.output.verboseSafety()` with `checkedFiles` and `violations`.
+    `commitIfNeeded()` (called from `executeNode()` after agent returns): after
+    `commitNodeChanges()` returns, calls `this.output.verboseCommit()` with
+    `filesStaged`, `message`, branch. Sequencing: inputs → agent
+    (prompt/validation/continuation verbose) → safety (verbose) → commit
+    (verbose via `commitIfNeeded()`).
+  - All existing callers pass no `output` arg — zero behavioral change.
 - **Deps:** `claude` CLI, `deno`, `git`, `jsr:@std/yaml`.
 
-### 3.6 GitHub Actions Workflow (Legacy)
+### 3.6 Pipeline Trigger (Legacy)
 
-- **Purpose:** Trigger pipeline on issue label, run stages sequentially.
-- **Interfaces:** `issues.labeled` event trigger. Sequential jobs using same
-  Docker image.
-- **Deps:** Docker image, GitHub secrets (API keys).
+- **Purpose:** Trigger pipeline on issue number, run stages sequentially.
+- **Interfaces:** CLI: `deno task run:issue <N>`. Fetches issue via `gh`.
+- **Deps:** Devcontainer, Claude CLI auth (OAuth or API key), `GITHUB_TOKEN`.
 
 ## 4. Data
 
@@ -150,6 +192,10 @@ graph TD
   - Agent Prompt: System prompt Markdown (`.sdlc/agents/<role>.md`)
   - Run State: JSON (`.sdlc/runs/<run-id>/state.json`)
   - Pipeline Config: YAML (`.sdlc/pipeline.yaml`)
+  - CommitResult: `{ commitHash, filesStaged: string[], message: string }`
+    (enriched for verbose output)
+  - SafetyCheckResult: `{ violations[], checkedFiles: string[] }` (enriched for
+    verbose output)
 - **ERD:** N/A (file-based, no database).
 - **Migration:** N/A.
 
@@ -184,10 +230,37 @@ graph TD
     Executor reads QA report, fixes -> repeat (max 3).
   - **Diff Safety Check**: After Executor exit, check `git diff` for
     out-of-scope modifications, unauthorized deletions, secret patterns.
-  - **Meta-Agent Trigger**: GHA Meta-Agent job uses `if: always()` +
-    `needs: [all-stage-jobs]`. On failure: reads `SDLC_FAILED_STAGE` from
-    upstream job outputs to identify failed stage. Runs
-    `stage-9-meta-agent.sh` with failure context.
+  - **Verbose Output Flow** (`-v` mode, agent nodes only): In
+    `executeAgentNode()`: (1) resolve input artifact file paths+sizes from
+    `ctx.input` dirs via `Deno.stat()` → `verboseInputs()`, (2) `runAgent()`
+    (with `output` + `nodeId`) emits `verbosePrompt()` → Claude CLI executes →
+    `verboseValidation()` → on failure: `verboseContinuation()` → retry,
+    (3) `safetyCheckDiff()` returns enriched result → engine calls
+    `verboseSafety()` with `checkedFiles` + `violations`. Then in
+    `commitIfNeeded()` (called from `executeNode()` after agent returns):
+    (4) `commitNodeChanges()` returns enriched result → engine calls
+    `verboseCommit()` with `filesStaged`, `message`, branch. All verbose
+    methods guarded by `verbosity !== "verbose"` — no-op in default/quiet.
+    Output: human-readable stderr lines with section headers. Loop body nodes
+    get prompt/validation/continuation verbose only; safety/commit verbose
+    deferred (loop body bypasses `executeAgentNode()`).
+  - **Verbose Edge Cases** (behavioral contracts verified by tests):
+    - **Default mode (no `-v`):** All 6 verbose methods produce zero stderr
+      output. `OutputManager` constructed with `verbose=false` suppresses all
+      verbose calls unconditionally.
+    - **Empty input dir:** `resolveInputArtifacts()` returns empty list →
+      `verboseInputs()` reports `0 files` without error. No `Deno.stat()` calls.
+    - **Missing file stat:** `Deno.stat()` failure on input artifact →
+      graceful skip, verbose output includes error detail for affected path.
+    - **Zero staged files at commit:** `commitNodeChanges()` detects no staged
+      files → `verboseCommit()` reports no-op commit. No git commit created.
+    - **Safety check with `allowed_paths: []`:** `safetyCheckDiff()` skipped
+      entirely when node has empty `allowed_paths`. No `verboseSafety()` call.
+    - **Safety check with `allowed_paths` configured:** `safetyCheckDiff()`
+      executes, `verboseSafety()` emits `checkedFiles` + any `violations`.
+  - **Meta-Agent Trigger**: Engine executes meta-agent as last DAG node
+    (`run_always: true`). On failure: reads failed node ID from `state.json`.
+    Runs meta-agent with failure context.
 - **Rules:**
   - Artifacts overwritten on re-run (git history preserves previous).
   - QA iteration numbering restarts on re-run.
@@ -200,8 +273,8 @@ graph TD
 - **Scale:** Single pipeline per issue. Sequential stages (no parallel agents).
 - **Fault:** Stage failure stops pipeline, Meta-Agent analyzes, failure reported
   on issue.
-- **Sec:** Diff-based safety checks. No elevated permissions beyond CI runner.
-- **Logs:** Full transcripts per stage in `.sdlc/pipeline/<issue>/logs/`.
+- **Sec:** Diff-based safety checks. Agents run with local user's permissions.
+- **Logs:** Full transcripts per stage in `.sdlc/runs/<run-id>/logs/`.
 
 ## 7. Constraints
 

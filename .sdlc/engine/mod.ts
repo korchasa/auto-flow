@@ -30,6 +30,7 @@ export {
 } from "./state.ts";
 export { runAgent } from "./agent.ts";
 export type { AgentResult } from "./agent.ts";
+export { saveAgentLog } from "./log.ts";
 export { extractFrontmatterField, runLoop } from "./loop.ts";
 export type { LoopResult } from "./loop.ts";
 export { runHuman } from "./human.ts";

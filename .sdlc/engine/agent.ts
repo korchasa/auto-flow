@@ -5,7 +5,13 @@ import type {
   TemplateContext,
 } from "./types.ts";
 import { interpolate } from "./template.ts";
-import { allPassed, formatFailures, runValidations } from "./validate.ts";
+import {
+  allPassed,
+  formatFailures,
+  runValidations,
+  type ValidationResult,
+} from "./validate.ts";
+import type { OutputManager } from "./output.ts";
 
 /** Result of an agent node execution. */
 export interface AgentResult {
@@ -21,7 +27,11 @@ export interface AgentRunOptions {
   node: NodeConfig;
   ctx: TemplateContext;
   settings: Required<NodeSettings>;
-  onOutput?: (line: string) => void;
+  claudeArgs?: string[];
+  /** OutputManager for verbose diagnostics. */
+  output?: OutputManager;
+  /** Node ID for verbose output tagging. */
+  nodeId?: string;
 }
 
 /**
@@ -35,7 +45,12 @@ export interface AgentRunOptions {
  * 5. Run `after` hook if configured
  */
 export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
-  const { node, ctx, settings, onOutput } = opts;
+  const { node, ctx, settings, claudeArgs, output, nodeId } = opts;
+
+  // Derive onOutput callback from OutputManager
+  const onOutput = output && nodeId
+    ? (line: string) => output.nodeOutput(nodeId, line)
+    : undefined;
 
   // Run before hook
   if (node.before) {
@@ -48,10 +63,16 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     ? interpolate(node.task_template, ctx)
     : "";
 
+  // Verbose: show interpolated prompt
+  if (output && nodeId) {
+    output.verbosePrompt(nodeId, taskPrompt);
+  }
+
   // Initial invocation
   let result = await invokeClaudeCli({
     promptFile: node.prompt ? interpolate(node.prompt, ctx) : undefined,
     taskPrompt,
+    claudeArgs,
     timeoutSeconds: settings.timeout_seconds,
     maxRetries: settings.max_retries,
     retryDelaySeconds: settings.retry_delay_seconds,
@@ -61,9 +82,27 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
   let continuations = 0;
   const validationRules = node.validate ?? [];
 
+  // Fail fast if initial invocation returned no output at all
+  if (result.error && !result.output) {
+    return {
+      success: false,
+      continuations,
+      error: result.error,
+    };
+  }
+
   // Continuation loop
   while (validationRules.length > 0) {
     const validationResults = await runValidations(validationRules, ctx);
+
+    // Verbose: show validation results
+    if (output && nodeId) {
+      output.verboseValidation(
+        nodeId,
+        toVerboseValidation(validationResults),
+      );
+    }
+
     if (allPassed(validationResults)) {
       break;
     }
@@ -82,6 +121,19 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
 
     continuations++;
     const failures = formatFailures(validationResults);
+
+    // Verbose: show continuation context
+    if (output && nodeId) {
+      output.verboseContinuation(
+        nodeId,
+        continuations,
+        settings.max_continuations,
+        validationResults.filter((r) => !r.passed).map((r) =>
+          `${r.rule.type}: ${r.message}`
+        ),
+      );
+    }
+
     const resumePrompt =
       `Validation failed (continuation ${continuations}/${settings.max_continuations}):\n${failures}\nFix the issues.`;
 
@@ -97,6 +149,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     result = await invokeClaudeCli({
       resumeSessionId: result.output.session_id,
       taskPrompt: resumePrompt,
+      claudeArgs,
       timeoutSeconds: settings.timeout_seconds,
       maxRetries: settings.max_retries,
       retryDelaySeconds: settings.retry_delay_seconds,
@@ -140,10 +193,11 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
 
 // --- Internal helpers ---
 
-interface InvokeOptions {
+export interface InvokeOptions {
   promptFile?: string;
   taskPrompt: string;
   resumeSessionId?: string;
+  claudeArgs?: string[];
   timeoutSeconds: number;
   maxRetries: number;
   retryDelaySeconds: number;
@@ -192,8 +246,14 @@ async function invokeClaudeCli(opts: InvokeOptions): Promise<InvokeResult> {
   };
 }
 
-function buildClaudeArgs(opts: InvokeOptions): string[] {
+/** Build CLI arguments for the claude command. Exported for testing. */
+export function buildClaudeArgs(opts: InvokeOptions): string[] {
   const args: string[] = [];
+
+  // Extra CLI args (e.g. --dangerously-skip-permissions) go first
+  if (opts.claudeArgs && opts.claudeArgs.length > 0) {
+    args.push(...opts.claudeArgs);
+  }
 
   if (opts.resumeSessionId) {
     args.push("--resume", opts.resumeSessionId);
@@ -216,10 +276,15 @@ async function executeClaudeProcess(
   timeoutSeconds: number,
   onOutput?: (line: string) => void,
 ): Promise<ClaudeCliOutput> {
+  // Unset CLAUDECODE to allow nested claude CLI invocations.
+  // Claude Code checks this variable and refuses to launch inside another session.
+  // Deno.Command merges env with parent, so setting empty string overrides it.
   const cmd = new Deno.Command("claude", {
     args,
+    stdin: "null",
     stdout: "piped",
     stderr: "piped",
+    env: { CLAUDECODE: "" },
   });
 
   const process = cmd.spawn();
@@ -233,35 +298,58 @@ async function executeClaudeProcess(
     }
   }, timeoutSeconds * 1000);
 
-  // Read stderr for streaming output
-  if (onOutput) {
-    const stderrReader = process.stderr.getReader();
-    const decoder = new TextDecoder();
-    (async () => {
-      try {
-        while (true) {
-          const { done, value } = await stderrReader.read();
-          if (done) break;
-          const text = decoder.decode(value, { stream: true });
+  // Collect stdout fully
+  const stdoutChunks: Uint8Array[] = [];
+  const stdoutReader = process.stdout.getReader();
+  (async () => {
+    try {
+      while (true) {
+        const { done, value } = await stdoutReader.read();
+        if (done) break;
+        stdoutChunks.push(value);
+      }
+    } catch { /* stream closed */ }
+  })();
+
+  // Collect stderr, optionally streaming lines to onOutput
+  const stderrChunks: Uint8Array[] = [];
+  const stderrReader = process.stderr.getReader();
+  const stderrDecoder = new TextDecoder();
+  (async () => {
+    try {
+      while (true) {
+        const { done, value } = await stderrReader.read();
+        if (done) break;
+        stderrChunks.push(value);
+        if (onOutput) {
+          const text = stderrDecoder.decode(value, { stream: true });
           for (const line of text.split("\n").filter(Boolean)) {
             onOutput(line);
           }
         }
-      } catch {
-        // Stream closed
       }
-    })();
-  }
+    } catch { /* stream closed */ }
+  })();
 
-  const output = await process.output();
+  const status = await process.status;
   clearTimeout(timeoutId);
 
-  const stdout = new TextDecoder().decode(output.stdout).trim();
+  const concat = (chunks: Uint8Array[]) => {
+    const total = chunks.reduce((n, c) => n + c.length, 0);
+    const buf = new Uint8Array(total);
+    let offset = 0;
+    for (const c of chunks) {
+      buf.set(c, offset);
+      offset += c.length;
+    }
+    return buf;
+  };
+  const stdout = new TextDecoder().decode(concat(stdoutChunks)).trim();
+  const stderr = new TextDecoder().decode(concat(stderrChunks)).trim();
 
-  if (!output.success && !stdout) {
-    const stderr = new TextDecoder().decode(output.stderr).trim();
+  if (!status.success && !stdout) {
     throw new Error(
-      `Claude CLI exited with code ${output.code}${
+      `Claude CLI exited with code ${status.code}${
         stderr ? `: ${stderr}` : ""
       }`,
     );
@@ -293,6 +381,17 @@ async function runShellCommand(
       `${label} failed: ${command}${stderr ? `\n${stderr}` : ""}`,
     );
   }
+}
+
+/** Convert ValidationResult[] to verbose format for output. */
+function toVerboseValidation(
+  results: ValidationResult[],
+): { rule: string; passed: boolean; detail?: string }[] {
+  return results.map((r) => ({
+    rule: r.rule.type,
+    passed: r.passed,
+    detail: r.message,
+  }));
 }
 
 function sleep(ms: number): Promise<void> {

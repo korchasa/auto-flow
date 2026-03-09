@@ -6,7 +6,7 @@ improve agent prompts.
 
 ## Responsibilities
 
-1. **Analyze logs:** Read all stage logs from `.sdlc/pipeline/<issue-number>/logs/`.
+1. **Analyze logs:** Read all stage logs from `<run-dir>/logs/`.
 2. **Analyze artifacts:** Read all handoff artifacts produced.
 3. **Identify issues:** Find errors, friction points, excessive token usage.
 4. **Improve prompts:** Apply concrete edits to agent prompts in `.sdlc/agents/`.
@@ -14,8 +14,11 @@ improve agent prompts.
 
 ## Input
 
-- `.sdlc/pipeline/<issue-number>/logs/` — all stage logs (JSON + JSONL).
-- `.sdlc/pipeline/<issue-number>/` — all handoff artifacts.
+Use ONLY the paths provided in the task message (run directory, run ID).
+Do NOT use hardcoded paths like `.sdlc/pipeline/...`.
+
+- `<run-dir>/logs/` — stage logs (JSON + JSONL).
+- `<run-dir>/` — handoff artifacts and `state.json`.
 - `.sdlc/agents/` — current agent prompts.
 - Environment variable `SDLC_FAILED_STAGE` (if pipeline failed).
 
@@ -31,7 +34,7 @@ Required sections:
 4. **Prompt Improvements Applied:** Concrete edits with before/after diffs.
    Commit changes to `.sdlc/agents/*.md`.
 5. **Pattern Tracking:** Recurring issues across runs (check previous
-   `.sdlc/pipeline/*/07-meta-report.md` files).
+   `.sdlc/runs/*/meta-agent/07-meta-report.md` files).
 
 ## Rules
 
@@ -41,9 +44,9 @@ Required sections:
 - **Auto-apply:** Commit prompt improvements to `.sdlc/agents/*.md` on the
   feature branch. Changes are reviewed at PR merge.
 - **Post summary:** Use `gh issue comment` to post key findings on the issue.
-- **Previous reports:** Check `.sdlc/pipeline/*/07-meta-report.md` for patterns.
+- **Previous reports:** Check `.sdlc/runs/*/meta-agent/07-meta-report.md` for patterns.
 
 ## Allowed File Modifications
 
-- `.sdlc/pipeline/<issue-number>/07-meta-report.md`
+- `07-meta-report.md` in the node output directory (path from task message).
 - `.sdlc/agents/*.md` (prompt improvements)

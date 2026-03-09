@@ -9,12 +9,18 @@ export interface CommitResult {
   success: boolean;
   commitHash?: string;
   error?: string;
+  /** Files staged in this commit (from `git diff --cached --name-only`). */
+  filesStaged: string[];
+  /** Commit message used. */
+  message: string;
 }
 
 /** Result of a safety check. */
 export interface SafetyCheckResult {
   safe: boolean;
   violations: string[];
+  /** Files found in the diff (exposed for verbose output). */
+  checkedFiles: string[];
 }
 
 /** Commit all changes with a node-specific message. */
@@ -27,10 +33,20 @@ export async function commitNodeChanges(
     // Stage all changes
     await runGit(["add", "-A"]);
 
+    // Capture staged files before commit
+    const stagedOutput = await runGit(["diff", "--cached", "--name-only"]);
+    const filesStaged = stagedOutput.trim()
+      ? stagedOutput.trim().split("\n").filter(Boolean)
+      : [];
+
     // Check if there are changes to commit
-    const status = await runGit(["status", "--porcelain"]);
-    if (!status.trim()) {
-      return { success: true, commitHash: undefined }; // Nothing to commit
+    if (filesStaged.length === 0) {
+      return {
+        success: true,
+        commitHash: undefined,
+        filesStaged: [],
+        message: "",
+      };
     }
 
     // Commit with pipeline-specific message
@@ -39,11 +55,13 @@ export async function commitNodeChanges(
 
     // Get the commit hash
     const hash = (await runGit(["rev-parse", "HEAD"])).trim();
-    return { success: true, commitHash: hash };
+    return { success: true, commitHash: hash, filesStaged, message };
   } catch (err) {
     return {
       success: false,
       error: `Git commit failed: ${(err as Error).message}`,
+      filesStaged: [],
+      message: "",
     };
   }
 }
@@ -67,11 +85,11 @@ export async function safetyCheckDiff(
     changedFiles = combined ? combined.split("\n").filter(Boolean) : [];
   } catch {
     // No HEAD commit yet or no changes
-    return { safe: true, violations: [] };
+    return { safe: true, violations: [], checkedFiles: [] };
   }
 
   if (changedFiles.length === 0) {
-    return { safe: true, violations: [] };
+    return { safe: true, violations: [], checkedFiles: [] };
   }
 
   // Skip scope check if no allowed paths configured
@@ -101,12 +119,18 @@ export async function safetyCheckDiff(
   return {
     safe: violations.length === 0,
     violations,
+    checkedFiles: changedFiles,
   };
 }
 
 /** Get the current branch name. */
 export async function getCurrentBranch(): Promise<string> {
   return (await runGit(["rev-parse", "--abbrev-ref", "HEAD"])).trim();
+}
+
+/** Get the current branch name (short alias for verbose output). */
+export async function branch(): Promise<string> {
+  return (await runGit(["branch", "--show-current"])).trim();
 }
 
 /** Push current branch to origin with retry. */

@@ -17,6 +17,7 @@ export interface PipelineConfig {
 /** Global defaults applied to all nodes unless overridden. */
 export interface PipelineDefaults extends NodeSettings {
   max_parallel?: number; // 0 = unlimited (default)
+  claude_args?: string[]; // extra args passed to claude CLI (e.g. ["--dangerously-skip-permissions"])
 }
 
 /** Configuration for a single pipeline node. */

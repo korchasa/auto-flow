@@ -1,0 +1,35 @@
+{
+  "name": "auto-flow",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "denoland.vscode-deno",
+        "github.vscode-github-actions",
+        "Anthropic.claude-code"
+      ],
+      "settings": {
+        "deno.enable": true,
+        "deno.lint": true,
+        "deno.unstable": [],
+        "editor.defaultFormatter": "denoland.vscode-deno",
+        "editor.formatOnSave": true
+      }
+    }
+  },
+  "containerEnv": {
+    "DENO_DIR": "/tmp/deno-cache"
+  },
+  "secrets": {
+    "ANTHROPIC_API_KEY": {
+      "description": "API key for Claude Code CLI"
+    },
+    "GITHUB_TOKEN": {
+      "description": "GitHub PAT for gh CLI (issues:write, pull-requests:write, contents:write)"
+    }
+  },
+  "postCreateCommand": "deno cache --reload vendor/assert.ts vendor/yaml.ts",
+  "remoteUser": "vscode"
+}

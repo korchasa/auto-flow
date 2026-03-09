@@ -1,12 +1,22 @@
 import type { NodeState, NodeStatus, RunState } from "./types.ts";
 
-/** Generate a run ID from the current timestamp. Format: YYYYMMDDTHHMMSS */
-export function generateRunId(): string {
+/** Generate a run ID from the current timestamp with optional label.
+ * Format: YYYYMMDDTHHMMSS or YYYYMMDDTHHMMSS-<label> when label provided.
+ * Label is sanitized: lowercased, non-alphanumeric chars replaced with '-',
+ * consecutive dashes collapsed, trimmed to 60 chars. */
+export function generateRunId(label?: string): string {
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}T${
-    pad(now.getHours())
-  }${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${
+    pad(now.getDate())
+  }T${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  if (!label) return ts;
+  const slug = label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 60);
+  return slug ? `${ts}-${slug}` : ts;
 }
 
 /** Create a fresh RunState for a new pipeline execution. */

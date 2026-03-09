@@ -75,9 +75,9 @@ All pipeline configuration is via environment variables:
 - `SDLC_MAX_QA_ITERATIONS` — max Executor+QA loop iterations (default: `3`)
 - `SDLC_STAGE_TIMEOUT_MINUTES` — default timeout per stage in minutes (default: `30`)
 
-### Required Secrets (GitHub Actions)
+### Authentication
 
-- `ANTHROPIC_API_KEY` — API key for Claude Code CLI
+- **Claude Code CLI** — OAuth session (`claude login`) or `ANTHROPIC_API_KEY` env var
 - `GITHUB_TOKEN` — for PR creation and issue comments (auto-provided by GitHub Actions)
 
 ## License

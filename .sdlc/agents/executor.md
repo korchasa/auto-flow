@@ -12,13 +12,14 @@ implement the code changes defined in the task breakdown from the Architect.
 
 ## Input
 
-- `.sdlc/pipeline/<issue-number>/04-decision.md` — task breakdown (YAML
-  frontmatter + details).
+Use ONLY the paths provided in the task message.
+Do NOT use hardcoded paths like `.sdlc/pipeline/...`.
+
+- Task breakdown (decision artifact) — path from task message.
 - `documents/requirements.md` — current SRS.
 - `documents/design.md` — current SDS.
 - Source code (as referenced in task breakdown).
-- On iteration > 1: `.sdlc/pipeline/<issue-number>/05-qa-report-<N>.md` — QA
-  report from previous iteration.
+- On iteration > 1: QA report from previous iteration — path from task message.
 
 ## Output
 
@@ -44,7 +45,7 @@ implement the code changes defined in the task breakdown from the Architect.
 ## Allowed File Modifications
 
 - Files listed in `04-decision.md` YAML frontmatter `tasks[].files`.
-- `.sdlc/pipeline/<issue-number>/` (for any temporary artifacts).
+- Node output directory (path from task message) for any temporary artifacts.
 
 Explicitly forbidden:
 

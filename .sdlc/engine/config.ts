@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS: Required<NodeSettings> = {
 export const DEFAULT_PIPELINE_DEFAULTS: Required<PipelineDefaults> = {
   ...DEFAULT_SETTINGS,
   max_parallel: 0,
+  claude_args: [],
 };
 
 /** Parse YAML string into PipelineConfig, validate schema, merge defaults. */
@@ -249,8 +250,8 @@ function mergeDefaults(config: PipelineConfig): PipelineConfig {
   };
 }
 
-/** Extract NodeSettings fields from PipelineDefaults (exclude max_parallel). */
+/** Extract NodeSettings fields from PipelineDefaults (exclude pipeline-only fields). */
 function extractNodeSettings(defaults: PipelineDefaults): NodeSettings {
-  const { max_parallel: _, ...settings } = defaults;
+  const { max_parallel: _, claude_args: _ca, ...settings } = defaults;
   return settings;
 }
