@@ -11,12 +11,12 @@
 
 - **Diagrams:**
 
-### 2.1 Legacy: GitHub Actions Pipeline (Shell Scripts)
+### 2.1 Legacy: Shell Script Pipeline
 
 ```mermaid
 graph LR
-    Issue["GitHub Issue<br/>(labeled)"] --> GHA["GitHub Actions<br/>Workflow"]
-    GHA --> S1["Stage 1: PM"]
+    Issue["GitHub Issue"] --> CLI["deno task run<br/>--issue N"]
+    CLI --> S1["Stage 1: PM"]
     S1 --> S2["Stage 2: Tech Lead"]
     S2 --> S3["Stage 3: Reviewer"]
     S3 --> S4["Stage 4: Architect"]
@@ -26,7 +26,7 @@ graph LR
     S8 --> S9["Stage 9: Meta-Agent"]
     S6 -->|"FAIL after max"| S9
 
-    subgraph Docker["Single Docker Image"]
+    subgraph Devcontainer["Devcontainer"]
         S1; S2; S3; S4; S5; S6; S8; S9
     end
 ```
@@ -135,12 +135,11 @@ graph TD
 - **Node types:** `agent`, `merge`, `loop`, `human`
 - **Deps:** `claude` CLI, `deno`, `git`, `jsr:@std/yaml`.
 
-### 3.6 GitHub Actions Workflow (Legacy)
+### 3.6 Pipeline Trigger (Legacy)
 
-- **Purpose:** Trigger pipeline on issue label, run stages sequentially.
-- **Interfaces:** `issues.labeled` event trigger. Sequential jobs using same
-  Docker image.
-- **Deps:** Docker image, GitHub secrets (API keys).
+- **Purpose:** Trigger pipeline on issue number, run stages sequentially.
+- **Interfaces:** CLI: `deno task run --issue <N>`. Fetches issue via `gh`.
+- **Deps:** Devcontainer, environment secrets (`ANTHROPIC_API_KEY`, `GITHUB_TOKEN`).
 
 ## 4. Data
 
@@ -184,10 +183,9 @@ graph TD
     Executor reads QA report, fixes -> repeat (max 3).
   - **Diff Safety Check**: After Executor exit, check `git diff` for
     out-of-scope modifications, unauthorized deletions, secret patterns.
-  - **Meta-Agent Trigger**: GHA Meta-Agent job uses `if: always()` +
-    `needs: [all-stage-jobs]`. On failure: reads `SDLC_FAILED_STAGE` from
-    upstream job outputs to identify failed stage. Runs
-    `stage-9-meta-agent.sh` with failure context.
+  - **Meta-Agent Trigger**: Engine executes meta-agent as last DAG node
+    (`run_always: true`). On failure: reads failed node ID from `state.json`.
+    Runs meta-agent with failure context.
 - **Rules:**
   - Artifacts overwritten on re-run (git history preserves previous).
   - QA iteration numbering restarts on re-run.
@@ -200,8 +198,8 @@ graph TD
 - **Scale:** Single pipeline per issue. Sequential stages (no parallel agents).
 - **Fault:** Stage failure stops pipeline, Meta-Agent analyzes, failure reported
   on issue.
-- **Sec:** Diff-based safety checks. No elevated permissions beyond CI runner.
-- **Logs:** Full transcripts per stage in `.sdlc/pipeline/<issue>/logs/`.
+- **Sec:** Diff-based safety checks. Agents run with local user's permissions.
+- **Logs:** Full transcripts per stage in `.sdlc/runs/<run-id>/logs/`.
 
 ## 7. Constraints
 

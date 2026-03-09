@@ -3,7 +3,7 @@
 ## 0. Resolved Design Decisions
 
 - **Target project:** This repo (auto-sdlc). Project-agnostic reuse deferred.
-- **Concurrent pipelines:** One pipeline per branch enforced by GHA concurrency guard (FR-1). No additional locking on shared docs.
+- **Concurrent pipelines:** One pipeline per branch. Single local execution assumed. No concurrent locking.
 - **Cost limits:** Not tracked. No budget constraints.
 - **Agent prompts:** Written incrementally alongside implementation.
 - **CLAUDE.md interaction:** Target project's CLAUDE.md and agent system prompts complement each other (additive, not conflicting).
@@ -15,8 +15,8 @@
 
 ## 1. Introduction
 
-- **Document purpose:** Define the specification for the automated multi-agent development pipeline orchestrated via Claude Code agents and GitHub Actions.
-- **Scope:** A CI/CD-integrated system where a GitHub Issue triggers a chain of specialized AI agents, each performing a distinct role in the software development lifecycle — from specification writing to QA verification.
+- **Document purpose:** Define the specification for the automated multi-agent development pipeline orchestrated via Claude Code agents and Deno engine.
+- **Scope:** A locally-run system where a GitHub Issue triggers a chain of specialized AI agents (via `deno task run --issue <N>`), each performing a distinct role in the software development lifecycle — from specification writing to QA verification.
 - **Audience:** Project maintainer (korchasa), contributors.
 - **Definitions and abbreviations:**
   - **Agent:** An isolated Claude Code CLI invocation with a dedicated system prompt (role).
@@ -28,9 +28,9 @@
 
 ## 2. General description
 
-- **System context:** Operates as a GitHub Actions workflow triggered by issue events. All stages run inside the same Docker image containing all required tools. Each stage is a separate shell script that invokes `claude` CLI with stage-specific prompts and handles validation/continuation logic. Agents communicate through files committed to the repository.
+- **System context:** Operates as a local Deno engine process triggered by CLI command (`deno task run --issue <N>`). The engine reads pipeline DAG config (`.sdlc/pipeline.yaml`), executes nodes sequentially/in parallel via `claude` CLI, validates outputs, and commits artifacts. Agents communicate through files in the repository.
 - **Assumptions and constraints:**
-  - A single Docker image provides the runtime for all stages (see FR-13).
+  - A devcontainer provides the runtime environment with all required tools (see FR-12).
   - Each agent is stateless between runs — all context comes from input artifacts and its system prompt.
   - The target project is this repository (auto-sdlc). Pipeline design should be project-agnostic for future reuse in other repos.
 - **Goal:** Automate the full development cycle for feature requests: from issue triage to a ready-to-merge PR — fully autonomous, no human gates between stages. PR merge is the only human checkpoint (post-pipeline, not between stages).
@@ -39,14 +39,12 @@
 
 ### 3.1 FR-1: Pipeline Trigger
 
-- **Description:** A GitHub Issue with a specific label triggers the agent pipeline.
-- **Use case scenario:** Maintainer creates an issue describing a feature/bug, adds the label `agent-pipeline`. GitHub Actions workflow starts.
+- **Description:** A GitHub Issue number triggers the agent pipeline via local CLI invocation.
+- **Use case scenario:** Maintainer runs `deno task run --issue <N>`. Engine fetches issue title+body via `gh` CLI, then executes the pipeline DAG.
 - **Acceptance criteria:**
-  - Pipeline triggers on `issues.labeled` event when label is `agent-pipeline`.
-  - Issue body and title are extracted and passed as input to the first agent.
-  - Pipeline does NOT trigger on issues without the label.
-  - **Re-run guard:** Before starting Stage 1, the pipeline checks if a PR from branch `agent/<issue-number>` has already been merged. If yes, the pipeline posts a comment on the issue ("Pipeline already completed for this issue. Close this issue and create a new one for further changes.") and exits without running any stages. This prevents duplicate work on already-merged changes.
-  - **Concurrent pipeline guard:** GitHub Actions workflow uses `concurrency: { group: agent-pipeline-${{ github.event.issue.number }}, cancel-in-progress: false }`. If a pipeline is already running for issue N, a second trigger queues and waits until the first completes. This prevents race conditions on branch `agent/N` (parallel commits/pushes to same worktree).
+  - Pipeline starts via `deno task run --issue <N>`.
+  - Issue body and title are extracted (via `gh issue view`) and passed as input to the first agent.
+  - **Re-run guard:** Before starting Stage 1, the engine checks if a PR from branch `agent/<issue-number>` has already been merged. If yes, the engine logs a warning and exits without running any stages.
 
 ### 3.2 FR-2: Stage 1 — Project Manager (Specification)
 
@@ -151,7 +149,7 @@
 ### 3.7 FR-7: Stage 6-7 — Executor + QA (Iterative Implementation Loop)
 
 - **Description:** The Executor and QA agents work as an iterative pair. Executor implements, QA verifies. If QA finds issues, Executor fixes them. The loop continues until QA passes or the iteration limit is reached.
-- **Orchestration:** The loop is managed by `stage-6-executor.sh`, which acts as the loop controller. It invokes the Executor agent, then calls `stage-7-qa.sh` as a sub-step. Based on the QA verdict, it either exits the loop (on `PASS`) or re-invokes the Executor with the QA report (on `FAIL`). `stage-7-qa.sh` is not called independently by the CI/CD workflow — it is always invoked by `stage-6-executor.sh`.
+- **Orchestration:** The loop is managed by the engine's `loop` node type (`.sdlc/engine/loop.ts`). It invokes the Executor agent, then QA agent. Based on the QA verdict, it either exits the loop (on `PASS`) or re-invokes the Executor with the QA report (on `FAIL`). Legacy: `stage-6-executor.sh` calls `stage-7-qa.sh` as sub-step.
 - **Executor Input:** `04-decision.md`, `documents/requirements.md`, `documents/design.md`, source code. On subsequent iterations: previous QA report (`05-qa-report-N.md`).
 - **Executor Output:** Code changes, tests, commits on feature branch.
 - **QA Input:** `01-spec.md`, `04-decision.md`, all changed files, test results.
@@ -192,7 +190,7 @@
   - Each QA issue has: description, affected file, severity (blocking/non-blocking).
   - `qa.md` prompt MUST include a concrete YAML frontmatter example to ensure LLM compliance.
 
-### 3.8 FR-8: Continuation Mechanism
+### 3.8 FR-8: Continuation Mechanism ⚠️
 
 - **Description:** Each stage script wraps the Claude Code CLI invocation and validates the agent's output before considering the stage complete. If validation fails, the script re-invokes the agent in the same session using `--resume` with a description of the problem, giving the agent a chance to fix its output without starting from scratch.
 - **Acceptance criteria:**
@@ -218,10 +216,10 @@
         - **Reviewer (Stage 3):** `.sdlc/pipeline/<issue-number>/03-revised-plan.md`.
         - **Architect (Stage 4):** `.sdlc/pipeline/<issue-number>/04-decision.md`.
         - **Tech Lead SDS (Stage 5):** `documents/design.md`.
-        - **Executor (Stage 6):** file allowlist extracted from `04-decision.md` YAML frontmatter via `yq --front-matter=extract '.tasks[].files[]' 04-decision.md`, plus always-allowed paths: `.sdlc/pipeline/<issue-number>/`. Explicitly forbidden: `.github/`, `.sdlc/agents/`, `.sdlc/scripts/`, `CLAUDE.md`.
+        - **Executor (Stage 6):** file allowlist extracted from `04-decision.md` YAML frontmatter via `yq --front-matter=extract '.tasks[].files[]' 04-decision.md`, plus always-allowed paths: `.sdlc/pipeline/<issue-number>/`. Explicitly forbidden: `.sdlc/agents/`, `.sdlc/scripts/`, `.sdlc/engine/`, `CLAUDE.md`.
         - **Presenter (Stage 8):** `.sdlc/pipeline/<issue-number>/06-summary.md`.
       - Deletion of files not mentioned in the task breakdown (Executor only).
-      - Addition of secret-like patterns in committed code (all stages). Detection: primary tool is `gitleaks detect --no-git --staged` (included in Docker image, see FR-12). Fallback regex: `(?i)(api[_-]?key|secret|token|password|credential)\s*[:=]\s*['"][^'"]{8,}`.
+      - Addition of secret-like patterns in committed code (all stages). Detection: primary tool is `gitleaks detect --no-git --staged` (included in devcontainer, see FR-12). Fallback regex: `(?i)(api[_-]?key|secret|token|password|credential)\s*[:=]\s*['"][^'"]{8,}`.
     - If a safety violation is detected: continuation is triggered with a description of the violation, asking the agent to revert the problematic changes.
 - **Quality metrics:**
   - Continuation success rate: percentage of continuations that resolve the issue (target > 70%).
@@ -260,12 +258,13 @@
   - Logs are committed to the feature branch after each stage.
   - Stage script locates the JSONL transcript by session ID extracted from the JSON output.
 - **Acceptance criteria (Deno engine path):**
-  - [ ] After each non-loop agent node completes successfully, the engine saves two files to `.sdlc/runs/<run-id>/logs/`:
+  - [x] After each non-loop agent node completes successfully, the engine saves two files to `.sdlc/runs/<run-id>/logs/`:
     - `<node-id>.json` — full `ClaudeCliOutput` JSON object (`result`, `session_id`, `total_cost_usd`, `duration_ms`, `duration_api_ms`, `num_turns`, `is_error`).
     - `<node-id>.jsonl` — copy of the JSONL session transcript from `~/.claude/projects/<project-hash>/`, located by matching `session_id` in filenames.
-  - [ ] If the JSONL transcript file is not found: engine logs a warning and continues — pipeline does NOT fail.
-  - [ ] Loop body nodes (executor, qa) are excluded from engine-level log saving (deferred).
-  - [ ] Log-saving logic has unit tests covering: successful save, JSONL-not-found warning path.
+    - Evidence: `.sdlc/engine/engine.ts:266-270`, `.sdlc/engine/log.ts:18-47`
+  - [x] If the JSONL transcript file is not found: engine logs a warning and continues — pipeline does NOT fail. Evidence: `.sdlc/engine/log.ts:43-45`
+  - [x] Loop body nodes (executor, qa) are excluded from engine-level log saving (deferred). Evidence: `.sdlc/engine/loop.ts` — no `saveAgentLog` call
+  - [x] Log-saving logic has unit tests covering: successful save, JSONL-not-found warning path. Evidence: `.sdlc/engine/log_test.ts:29-124` (5 tests)
 
 ### 3.11 FR-11: Meta-Agent (Prompt Optimization)
 
@@ -273,7 +272,7 @@
 - **Trigger conditions:**
   - **On pipeline success:** runs as the final stage after Presenter (Stage 9).
   - **On pipeline failure:** runs automatically when any stage fails after exhausting its continuation limit.
-- **Trigger mechanism:** GitHub Actions workflow defines the Meta-Agent job with `if: always()` and `needs: [all-stage-jobs]`. The job receives pipeline status via `needs.<job>.result` context. On failure: stage scripts export `SDLC_FAILED_STAGE=<stage-number>` as a GitHub Actions output; the Meta-Agent job reads this to identify the failed stage. The Meta-Agent job runs regardless of upstream job success/failure.
+- **Trigger mechanism:** Engine executes meta-agent node as the last DAG node. In `pipeline.yaml`, the meta-agent node depends on all other nodes and is configured to run regardless of upstream success/failure (engine handles this via `run_always: true` or equivalent). Failed node ID is available in `state.json`.
 - **Input:**
   - All logs from `.sdlc/pipeline/<issue-number>/logs/`.
   - All handoff artifacts produced before the failure (if failed).
@@ -295,14 +294,14 @@
 
 ### 3.12 FR-12: Runtime Infrastructure
 
-- **Description:** All pipeline stages run inside a single Docker image. Each stage has a dedicated shell script that orchestrates agent invocation, validation, and continuation.
-- **Docker image contents:**
+- **Description:** Pipeline runs locally inside a devcontainer. The Deno engine orchestrates agent invocations. Legacy shell scripts preserved for backward compatibility.
+- **Devcontainer contents** (`.devcontainer/Dockerfile`):
   - `claude` CLI (Claude Code) — installed via `npm install -g @anthropic-ai/claude-code`.
-  - `deno` runtime — for running project checks and tests.
+  - `deno` runtime — for running project checks, tests, and the pipeline engine.
   - `git` — for branch management, commits, and diff-based safety checks.
   - `gh` CLI — for creating PRs and posting issue comments.
   - `gitleaks` — for secret detection in diff-based safety checks (see FR-8).
-- **Stage scripts:**
+- **Stage scripts (legacy):**
   - Located in `.sdlc/scripts/stage-<N>-<role>.sh`.
   - Each script is responsible for:
     1. Preparing input: collecting handoff artifacts, setting environment variables.
@@ -313,14 +312,11 @@
     6. Reporting stage status to the GitHub Issue via `gh`.
   - Scripts share common functions via `.sdlc/scripts/lib.sh` (logging, git operations, continuation loop, artifact validation).
 - **Acceptance criteria:**
-  - The Docker image builds successfully and contains all listed tools.
-  - Each stage can be run independently by executing its script with the issue number as argument: `.sdlc/scripts/stage-1-pm.sh <issue-number>`.
-  - The GitHub Actions workflow uses the same image for all jobs, only varying the script and secrets.
+  - Devcontainer builds successfully and contains all listed tools.
+  - Primary launch: `deno task run --issue <N>` (engine path).
+  - Legacy: each stage can be run independently via `.sdlc/scripts/stage-1-pm.sh <issue-number>`.
   - Stage scripts are executable and pass `shellcheck` without errors.
   - **Retry logic:** `lib.sh` implements a generic retry wrapper (`retry_with_backoff`) used for all external API calls (`claude` CLI, `gh` CLI). Parameters: max attempts = 3, initial delay = 5s, backoff multiplier = 2x. Retryable conditions: non-zero exit code from CLI tools (network errors, rate limits). Non-retryable: validation failures, agent logic errors.
-- **Quality metrics:**
-  - Image build time < 5 minutes.
-  - Image size < 2 GB.
 
 ### 3.13 FR-13: Artifact Versioning
 
@@ -335,81 +331,76 @@
 
 - **Description:** Defines how data flows between pipeline stages and when commits happen on the feature branch.
 - **Data flow:**
-  - Each agent reads its input artifacts directly from the filesystem (`.sdlc/pipeline/<issue-number>/` and `documents/`).
-  - Each stage script is responsible for validating that all expected output artifacts exist and are non-empty before the stage is considered complete (see FR-8).
-  - There is no manifest or registry — the file system is the single source of truth for inter-stage communication.
-  - Claude CLI's built-in context auto-compression handles large input sets; no manual context management is required from the pipeline.
+  - Engine path: artifacts stored in `.sdlc/runs/<run-id>/<node-id>/`, linked via `{{input.<node-id>}}` templates in `pipeline.yaml`.
+  - Legacy path: artifacts in `.sdlc/pipeline/<issue-number>/`.
+  - The file system is the single source of truth for inter-stage communication. No manifest or registry.
+  - Claude CLI's built-in context auto-compression handles large input sets; no manual context management is required.
 - **Commit strategy:**
   - All pipeline work happens on a dedicated feature branch `agent/<issue-number>`.
-  - The stage script creates the branch (or checks it out) before the first stage and commits + pushes after every stage completes successfully.
+  - Engine commits after each successful node. Legacy scripts commit + push after each stage.
   - Each commit message follows the format: `sdlc(<role>): <issue-number> — <brief description>`.
   - Commit includes: stage output artifact(s), updated project documents (if any), and the stage log.
-  - If a stage fails after exhausting continuations, the partial work is NOT committed. The failure is reported on the issue.
+  - If a stage fails after exhausting continuations, the partial work is NOT committed.
 - **Branch lifecycle:**
   - Branch is created at the start of Stage 1 (or checked out if it already exists from a previous run).
   - On re-run, existing branch is reused — new commits overwrite previous artifacts (previous versions preserved in git history per FR-13).
   - Branch is merged via PR created by the Presenter (Stage 8).
-- **Concurrent pipeline isolation:**
-  - Each pipeline run uses `git worktree add` to create an isolated working directory for its branch `agent/<issue-number>`.
-  - This prevents concurrent pipelines (different issues) from interfering with each other's file modifications.
-  - Worktree is cleaned up after the pipeline completes (success or failure).
 - **Acceptance criteria:**
-  - Stage script validates output artifacts before committing.
-  - Every successful stage results in exactly one commit + push to `agent/<issue-number>`.
+  - Engine/script validates output artifacts before committing.
+  - Every successful stage results in exactly one commit on `agent/<issue-number>`.
   - Failed stages produce no commits.
   - Branch is created/reused automatically by the pipeline.
 
 ### 3.15 FR-15: Configuration
 
-- **Description:** All pipeline configuration is managed via environment variables. No config files — environment is the single source of truth.
+- **Description:** Pipeline configuration via environment variables and `pipeline.yaml`. Env vars override YAML defaults.
 - **Variables:**
   - `SDLC_MAX_CONTINUATIONS` — maximum continuations per stage (default: `3`).
   - `SDLC_MAX_QA_ITERATIONS` — maximum Executor+QA loop iterations (default: `3`).
-  - `SDLC_STAGE_TIMEOUT_MINUTES` — default timeout per stage in minutes (default: `30`). Can be overridden per stage via `SDLC_STAGE_<N>_TIMEOUT_MINUTES`.
+  - `SDLC_STAGE_TIMEOUT_MINUTES` — default timeout per stage in minutes (default: `30`).
 - **Acceptance criteria:**
-  - All variables have sensible defaults in `lib.sh`.
-  - Stage scripts read configuration from environment, falling back to defaults.
-  - Variables can be set in GitHub Actions workflow YAML per job.
+  - All variables have sensible defaults in `lib.sh` (legacy) and engine config (`.sdlc/engine/config.ts`).
+  - Engine and stage scripts read configuration from environment, falling back to defaults.
 
 ### 3.16 FR-16: Secrets
 
 - **Description:** Defines the required secrets for pipeline operation.
-- **Required secrets (GitHub Actions secrets):**
+- **Required secrets (environment variables):**
   - `ANTHROPIC_API_KEY` — API key for Claude Code CLI authentication.
-  - `GITHUB_TOKEN` — automatically provided by GitHub Actions; used by `gh` CLI for PR creation and issue comments. Must have `issues:write`, `pull-requests:write`, `contents:write` permissions.
+  - `GITHUB_TOKEN` — used by `gh` CLI for PR creation and issue comments. Must have `issues:write`, `pull-requests:write`, `contents:write` permissions. Can be obtained via `gh auth token`.
 - **Acceptance criteria:**
-  - Secrets are passed as environment variables to stage scripts by the GitHub Actions workflow.
+  - Secrets are provided via environment variables (`.env` file or shell export) before running the engine.
   - No secrets are hardcoded in scripts, prompts, or Dockerfile.
   - Diff-based safety checks (FR-8) detect and reject any secret-like patterns in agent-produced code.
 
 ## 4. Non-functional requirements
 
-- **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. When multiple pipelines run concurrently for different issues, each pipeline operates in its own working directory cloned from the repository (worktree per branch `agent/<issue-number>`). This prevents file-level conflicts between concurrent pipelines modifying shared documents (`requirements.md`, `design.md`). Merge conflicts between branches are resolved manually by the maintainer at PR merge time. Deferred: automatic rebase-and-retry in a future version.
+- **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution for different issues is not supported.
 - **Reproducibility:** Agent prompts are versioned in the repository under `.sdlc/agents/`.
-- **Observability:** Full logs stored per stage. Total pipeline duration reported in the final PR description.
-- **Fault tolerance:** If a stage fails (agent error, timeout, continuation limit exhausted), the pipeline stops, Meta-Agent runs to analyze the failure, and the failure is reported on the issue. Manual restart is possible. Meta-Agent trigger is guaranteed by GitHub Actions `if: always()` on the Meta-Agent job (see FR-11 trigger mechanism).
-- **Timeouts:** Each stage has a timeout configured at the CI/CD job level (GitHub Actions `timeout-minutes`). Default values are set via environment variables (see FR-15). When a timeout fires, the stage is treated as failed — Meta-Agent is triggered for analysis.
-- **Security:** Enforced at the stage script level via diff-based checks (see FR-8). Agents do not have elevated permissions beyond what the CI runner provides.
+- **Observability:** Full logs stored per stage in `.sdlc/runs/<run-id>/logs/`. Total pipeline duration reported in the final PR description.
+- **Fault tolerance:** If a stage fails (agent error, timeout, continuation limit exhausted), the pipeline stops, Meta-Agent runs to analyze the failure. Manual restart via `deno task run --issue <N> --resume <run-id>`.
+- **Timeouts:** Each stage has a configurable timeout via `SDLC_STAGE_TIMEOUT_MINUTES` env var (default: 30 min). Engine enforces timeout per node. When a timeout fires, the stage is treated as failed — Meta-Agent is triggered for analysis.
+- **Security:** Enforced at the engine/stage script level via diff-based checks (see FR-8). Agents run with the local user's permissions.
 
 ## 5. Interfaces
 
-- **Trigger:** GitHub Issues API (`issues.labeled` event).
-- **Agent runtime:** `claude` CLI inside the pipeline Docker image. Invocation method: `claude -p "<task prompt>" --append-system-prompt-file .sdlc/agents/<role>.md --output-format json`. Key flags:
-  - `--append-system-prompt-file` — adds role-specific instructions while preserving Claude Code's built-in capabilities (tool use, file access). This is preferred over `--system-prompt-file` which replaces the default prompt entirely and disables built-in tools.
-  - `--output-format json` — returns structured JSON with `result`, `session_id`, `total_cost_usd`, `duration_ms`, `num_turns`, `is_error`. Stage scripts extract `session_id` via `jq -r '.session_id'` for use with `--resume`.
-  - `--resume <session-id>` — re-invokes agent in the same session for continuations (FR-8). Session ID is stored in a shell variable during the stage script execution.
+- **Trigger:** CLI command `deno task run --issue <N>`. Issue data fetched via `gh issue view <N> --json title,body`.
+- **Agent runtime:** `claude` CLI invoked by the Deno engine. Invocation: `claude -p "<task prompt>" --append-system-prompt-file .sdlc/agents/<role>.md --output-format json`. Key flags:
+  - `--append-system-prompt-file` — adds role-specific instructions while preserving Claude Code's built-in capabilities (tool use, file access). Preferred over `--system-prompt-file` which replaces the default prompt entirely.
+  - `--output-format json` — returns structured JSON with `result`, `session_id`, `total_cost_usd`, `duration_ms`, `num_turns`, `is_error`.
+  - `--resume <session-id>` — re-invokes agent in the same session for continuations (FR-8).
   - `-p "<prompt>"` — non-interactive mode, task description is passed as the prompt argument.
-- **Stage orchestration:** Each stage is a shell script (`.sdlc/scripts/stage-<N>-<role>.sh`) that handles invocation, validation, continuation, and artifact commit.
-- **Inter-stage communication:** Structured files in `.sdlc/pipeline/<issue-number>/` (one artifact per stage + logs). Each agent reads input files directly from the filesystem. Stage scripts validate output artifacts exist before committing. No manifest — filesystem is source of truth. On re-run, files are overwritten; history preserved in git.
-- **Branching & commits:** All work on branch `agent/<issue-number>`. One commit + push per successful stage. Commit format: `sdlc(<role>): <issue-number> — <description>`. Failed stages produce no commits.
-- **Human interaction:** GitHub Issue comments for status updates, progress reporting, and Meta-Agent findings (posted via `gh` CLI from stage scripts).
-- **CI/CD:** GitHub Actions workflow with sequential jobs. All jobs use the same Docker image; each job runs its stage script. Workflow-level `concurrency` key (`group: agent-pipeline-<issue-number>`, `cancel-in-progress: false`) ensures at most one pipeline runs per issue; queued runs start after current completes. The Meta-Agent job is defined with `if: always()` and `needs: [all-stage-jobs]`, ensuring it runs on both success and failure. Failed stage scripts export `SDLC_FAILED_STAGE` as a GitHub Actions step output for the Meta-Agent to consume.
+- **Pipeline engine:** Deno/TypeScript engine (`.sdlc/engine/`) reads DAG config from `.sdlc/pipeline.yaml`, resolves node dependencies, executes nodes in topological order, manages state in `.sdlc/runs/<run-id>/state.json`.
+- **Legacy stage scripts:** `.sdlc/scripts/stage-<N>-<role>.sh` — handle invocation, validation, continuation, artifact commit. Superseded by engine but preserved.
+- **Inter-stage communication:** Engine: artifacts in `.sdlc/runs/<run-id>/<node-id>/`, linked via templates. Legacy: `.sdlc/pipeline/<issue-number>/`. Filesystem is source of truth.
+- **Branching & commits:** All work on branch `agent/<issue-number>`. One commit per successful stage. Commit format: `sdlc(<role>): <issue-number> — <description>`. Failed stages produce no commits.
+- **Human interaction:** GitHub Issue comments for status updates, progress reporting, and Meta-Agent findings (posted via `gh` CLI).
 
 ## 6. Acceptance criteria
 
 The system is considered accepted if:
 
-1. Creating a labeled issue triggers the full pipeline.
+1. Running `deno task run --issue <N>` triggers the full pipeline for the given issue.
 2. Each stage produces its expected artifact with all required sections.
 3. The Continuation mechanism catches and fixes `deno task check` failures without human intervention.
 4. The Executor+QA loop iterates until quality checks pass.
@@ -454,24 +445,24 @@ The system is considered accepted if:
     stage-4-architect.sh
     stage-5-sds-update.sh
     stage-6-executor.sh                # Loop controller: invokes executor + calls stage-7-qa.sh
-    stage-7-qa.sh                      # Called by stage-6, not directly by CI/CD
+    stage-7-qa.sh                      # Called by stage-6, not directly by engine
     stage-8-presenter.sh
     stage-9-meta-agent.sh
+  engine/                              # Deno/TypeScript pipeline engine
+    cli.ts                             # Entry point: deno task run --issue <N>
+    engine.ts                          # DAG executor
+    ...
+  runs/
+    <run-id>/                          # Per-run artifacts (engine path)
+      <node-id>/                       # Node output directory
+      logs/
+        <node-id>.json               # CLI JSON output (metadata)
+        <node-id>.jsonl              # Full session transcript
+      state.json                     # Run state (node statuses, session IDs)
   pipeline/
-    <issue-number>/                    # Per-issue artifacts (overwritten on re-run)
+    <issue-number>/                    # Per-issue artifacts (legacy path, overwritten on re-run)
       01-spec.md
       02-plan.md
-      03-revised-plan.md
-      04-decision.md
-      04a-sds-diff.md
-      05-qa-report-<N>.md
-      06-summary.md
-      07-meta-report.md
-      logs/
-        stage-1-pm.json              # CLI JSON output (metadata)
-        stage-1-pm.jsonl             # Full session transcript
-        stage-2-tech-lead.json
-        stage-2-tech-lead.jsonl
-        ...
-  Dockerfile                           # Single image for all stages
+      ...
+  pipeline.yaml                        # DAG-based pipeline configuration
 ```

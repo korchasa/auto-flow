@@ -28,7 +28,11 @@
       "Bash(deno run -A scripts/fmt.ts)",
       "Bash(deno run -A --allow-run \"deno fmt .sdlc/engine/agent_test.ts\")",
       "Bash(deno run --no-check -A .sdlc/engine/agent_test.ts)",
-      "Bash(wc -l /workspaces/auto-flow/.sdlc/engine/*.ts)"
+      "Bash(wc -l /workspaces/auto-flow/.sdlc/engine/*.ts)",
+      "Bash(git -C /workspaces/auto-flow log --oneline -20)",
+      "Bash(ls -lh /workspaces/auto-flow/.sdlc/engine/*.ts)",
+      "Bash(ls -lh /workspaces/auto-flow/.sdlc/agents/*.md)",
+      "Bash(grep -l \"safety_check_diff\\\\|validate_artifact\\\\|continuation_loop\" /workspaces/auto-flow/.sdlc/scripts/stage-*.sh)"
     ],
     "additionalDirectories": [
       "/Users/korchasa/www/tools/auto-sdlc/.claude"
