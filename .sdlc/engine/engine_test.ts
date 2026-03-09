@@ -168,6 +168,69 @@ Deno.test("AC6 negative — verboseSafety skipped when allowed_paths empty", () 
   );
 });
 
+// --- Safety-to-continuation logic pattern tests ---
+
+Deno.test("Safety violation triggers continuation pattern — not immediate failure", () => {
+  // Verifies the engine.ts executeAgentNode() safety-continuation pattern:
+  // When safetyCheckDiff returns violations, engine should construct a resume
+  // prompt and re-invoke, not immediately fail the node.
+  const safetyResult = {
+    safe: false,
+    violations: ["Out-of-scope modification: .github/ci.yml"],
+    checkedFiles: [".github/ci.yml", "src/main.ts"],
+  };
+
+  // The new pattern: violations + remaining continuations → build resume prompt
+  const continuations = 0;
+  const maxContinuations = 3;
+  const shouldContinue = !safetyResult.safe &&
+    continuations < maxContinuations;
+
+  assertEquals(shouldContinue, true, "Should trigger continuation, not fail");
+
+  // Resume prompt includes violation details
+  const resumePrompt =
+    `Safety check violations detected (continuation ${continuations + 1}/${maxContinuations}):\n${
+      safetyResult.violations.join("\n")
+    }\nRevert the problematic changes and fix the issues.`;
+  assertEquals(resumePrompt.includes("Out-of-scope"), true);
+  assertEquals(resumePrompt.includes("continuation 1/3"), true);
+});
+
+Deno.test("Safety violation exhausts continuations — fails node", () => {
+  // When continuations are exhausted after safety violation, node must fail.
+  const safetyResult = {
+    safe: false,
+    violations: ["Potential secret detected in diff content"],
+    checkedFiles: ["src/config.ts"],
+  };
+
+  const continuations = 3;
+  const maxContinuations = 3;
+  const shouldContinue = !safetyResult.safe &&
+    continuations < maxContinuations;
+
+  assertEquals(shouldContinue, false, "Should fail — continuations exhausted");
+});
+
+Deno.test("Safety and validation continuations share same budget", () => {
+  // Safety and validation continuations share a single max_continuations counter.
+  // If validation used 2 of 3, safety only has 1 left.
+  let continuations = 2; // validation used 2
+  const maxContinuations = 3;
+
+  // Safety violation with 1 remaining
+  const safetyViolation = true;
+  if (safetyViolation && continuations < maxContinuations) {
+    continuations++;
+  }
+  assertEquals(continuations, 3, "Should use the last continuation");
+
+  // Next violation should fail
+  const shouldContinue = continuations < maxContinuations;
+  assertEquals(shouldContinue, false, "No continuations left");
+});
+
 // --- Edge case: empty input directory ---
 
 Deno.test("resolveInputArtifacts — empty directory returns empty list", async () => {

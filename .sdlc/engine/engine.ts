@@ -25,7 +25,7 @@ import {
   markRunFailed,
   saveState,
 } from "./state.ts";
-import { runAgent } from "./agent.ts";
+import { invokeClaudeCli, runAgent } from "./agent.ts";
 import { saveAgentLog } from "./log.ts";
 import { runLoop } from "./loop.ts";
 import { runHuman, terminalInput } from "./human.ts";
@@ -275,7 +275,7 @@ export class Engine {
       await saveAgentLog(runDir, nodeId, result.output);
     }
 
-    // Safety check
+    // Safety check with continuation support
     if (node.allowed_paths && node.allowed_paths.length > 0) {
       const resolvedPaths = node.allowed_paths.map((p) => {
         try {
@@ -284,23 +284,81 @@ export class Engine {
           return p;
         }
       });
-      const safetyResult = await safetyCheckDiff(resolvedPaths);
 
-      // Verbose: show safety check results
-      this.output.verboseSafety(
-        nodeId,
-        safetyResult.checkedFiles,
-        safetyResult.violations,
-      );
+      let continuations = result.continuations;
+      const maxContinuations = settings.max_continuations;
+      let sessionId = result.session_id;
 
-      if (!safetyResult.safe) {
-        markNodeFailed(
-          this.state,
+      // Safety-continuation loop: re-invoke agent on violations
+      // deno-lint-ignore no-constant-condition
+      while (true) {
+        const safetyResult = await safetyCheckDiff(resolvedPaths);
+
+        // Verbose: show safety check results
+        this.output.verboseSafety(
           nodeId,
-          `Safety violations: ${safetyResult.violations.join("; ")}`,
+          safetyResult.checkedFiles,
+          safetyResult.violations,
         );
-        return false;
+
+        if (safetyResult.safe) break;
+
+        // Continuations exhausted — fail the node
+        if (continuations >= maxContinuations) {
+          markNodeFailed(
+            this.state,
+            nodeId,
+            `Safety violations after ${continuations} continuations: ${safetyResult.violations.join("; ")}`,
+          );
+          return false;
+        }
+
+        // No session to resume — fail
+        if (!sessionId) {
+          markNodeFailed(
+            this.state,
+            nodeId,
+            `Safety violations (no session_id for continuation): ${safetyResult.violations.join("; ")}`,
+          );
+          return false;
+        }
+
+        continuations++;
+        const resumePrompt =
+          `Safety check violations detected (continuation ${continuations}/${maxContinuations}):\n${safetyResult.violations.join("\n")}\nRevert the problematic changes and fix the issues.`;
+
+        // Verbose: show continuation context
+        this.output.verboseContinuation(
+          nodeId,
+          continuations,
+          maxContinuations,
+          safetyResult.violations,
+        );
+
+        const resumeResult = await invokeClaudeCli({
+          resumeSessionId: sessionId,
+          taskPrompt: resumePrompt,
+          claudeArgs: this.config.defaults?.claude_args,
+          timeoutSeconds: settings.timeout_seconds,
+          maxRetries: settings.max_retries,
+          retryDelaySeconds: settings.retry_delay_seconds,
+        });
+
+        if (resumeResult.error) {
+          markNodeFailed(
+            this.state,
+            nodeId,
+            `Safety continuation failed: ${resumeResult.error}`,
+          );
+          return false;
+        }
+
+        if (resumeResult.output?.session_id) {
+          sessionId = resumeResult.output.session_id;
+        }
       }
+
+      this.state.nodes[nodeId].continuations = continuations;
     }
 
     return true;
