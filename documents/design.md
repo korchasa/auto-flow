@@ -122,7 +122,7 @@ graph TD
   - `agent.ts` — Claude CLI invocation, continuation loop, retry
   - `loop.ts` — loop node execution with condition extraction
   - `human.ts` — terminal user input, abort logic
-  - `git.ts` — commit per node, diff safety checks
+  - `git.ts` — commit per node, diff safety checks, branch query
   - `output.ts` — terminal output manager (quiet/normal/verbose), verbose
     methods for detailed agent-node diagnostics
   - `engine.ts` — main executor: level iteration, parallel dispatch, verbose
@@ -159,8 +159,9 @@ graph TD
     `git add -A` to capture staged files. Returns enriched `CommitResult` with
     `filesStaged: string[]` and `message: string`. `safetyCheckDiff()` returns
     enriched `SafetyCheckResult` with `checkedFiles: string[]` (from
-    already-computed `changedFiles`). Verbose calls for safety/commit stay in
-    engine.
+    already-computed `changedFiles`). `branch()` helper: returns current branch
+    name via `git branch --show-current`. Verbose calls for safety/commit stay
+    in engine.
   - `engine.ts`: `executeAgentNode()` resolves input artifact paths+sizes by
     walking `ctx.input` directories via `Deno.stat()`; calls
     `this.output.verboseInputs()` before `runAgent()`. Passes `this.output`
