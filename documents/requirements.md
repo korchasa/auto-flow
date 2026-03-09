@@ -190,37 +190,36 @@
   - Each QA issue has: description, affected file, severity (blocking/non-blocking).
   - `qa.md` prompt MUST include a concrete YAML frontmatter example to ensure LLM compliance.
 
-### 3.8 FR-8: Continuation Mechanism ⚠️
+### 3.8 FR-8: Continuation Mechanism
 
 - **Description:** Each stage script wraps the Claude Code CLI invocation and validates the agent's output before considering the stage complete. If validation fails, the script re-invokes the agent in the same session using `--resume` with a description of the problem, giving the agent a chance to fix its output without starting from scratch.
 - **Acceptance criteria:**
-  - **Stage script responsibilities:**
-    1. Invoke `claude` CLI with the stage prompt and input artifacts.
+  - **Stage script responsibilities (engine path — `.sdlc/engine/`):**
+    1. [x] Invoke `claude` CLI with the stage prompt and input artifacts. Evidence: `.sdlc/engine/agent.ts:208-230` (`buildClaudeArgs`), `.sdlc/engine/agent.ts:75-117` (invocation loop)
     2. After the agent exits, run stage-specific validation checks:
-       - **For Executor stage:** run `deno task check`. If it fails, continuation is triggered.
-       - **For QA stage (called by stage-6):** (1) verify `05-qa-report-N.md` exists and is non-empty, (2) extract verdict via `yq --front-matter=extract '.verdict' 05-qa-report-N.md`, (3) if verdict is not exactly `PASS` or `FAIL` — treat as validation failure, trigger continuation on QA agent.
-       - **For all stages:** verify the expected output artifact exists and is non-empty.
-    3. If validation fails: re-invoke `claude --resume <session-id>` with the validation error output appended as context (e.g., "deno task check failed with: <error output>. Fix the issues.").
-    4. Repeat until validation passes or the continuation limit is reached.
+       - [ ] **For Executor stage:** run `deno task check` via `custom_script` validation rule. If it fails, continuation is triggered.
+       - [ ] **For QA stage:** (1) verify `05-qa-report-N.md` exists and is non-empty, (2) extract verdict via frontmatter parsing, (3) if verdict is not exactly `PASS` or `FAIL` — treat as validation failure, trigger continuation on QA agent.
+       - [x] **For all stages:** verify the expected output artifact exists and is non-empty. Evidence: `.sdlc/engine/validate.ts:60-88` (`file_exists`, `file_not_empty` rules), `.sdlc/pipeline.yaml` (per-node `validate` config)
+    3. [x] If validation fails: re-invoke `claude --resume <session-id>` with the validation error output appended as context. Evidence: `.sdlc/engine/agent.ts:94-116` (resume prompt construction + `invokeClaudeCli` with `resumeSessionId`)
+    4. [x] Repeat until validation passes or the continuation limit is reached. Evidence: `.sdlc/engine/agent.ts:75-91` (loop with `continuations < settings.max_continuations`)
   - **Continuation limits:**
-    - Maximum continuations per stage: configurable (default 3).
-    - If limit reached: stage is marked as failed, pipeline stops, Meta-Agent is triggered (FR-11).
+    - [x] Maximum continuations per stage: configurable (default 3). Evidence: `.sdlc/pipeline.yaml:9` (`max_continuations: 3`), `.sdlc/engine/agent.ts:82-91`
+    - [ ] If limit reached: stage is marked as failed, pipeline stops, Meta-Agent is triggered (FR-11).
   - **Session persistence:**
-    - The `--resume` flag ensures the agent retains full conversation context from the initial invocation.
-    - Each continuation adds only the validation error to the context, not the full prompt.
+    - [x] The `--resume` flag ensures the agent retains full conversation context from the initial invocation. Evidence: `.sdlc/engine/agent.ts:208-230` (`--resume` flag in `buildClaudeArgs`)
+    - [x] Each continuation adds only the validation error to the context, not the full prompt. Evidence: `.sdlc/engine/agent.ts:94-97` (resume prompt = failures only)
   - **Diff-based safety checks (all stages that modify files):**
-    - After each agent exit, the stage script runs `git diff` and checks for:
-      - Modifications to files outside the expected scope. Each stage defines an allowlist of files/paths it may modify:
-        - **PM (Stage 1):** `documents/requirements.md`, `.sdlc/pipeline/<issue-number>/01-spec.md`.
-        - **Tech Lead (Stage 2):** `.sdlc/pipeline/<issue-number>/02-plan.md`.
-        - **Reviewer (Stage 3):** `.sdlc/pipeline/<issue-number>/03-revised-plan.md`.
-        - **Architect (Stage 4):** `.sdlc/pipeline/<issue-number>/04-decision.md`.
-        - **Tech Lead SDS (Stage 5):** `documents/design.md`.
+    - After each agent exit, the engine runs `git diff` and checks for:
+      - [x] Modifications to files outside the expected scope. Each stage defines an allowlist of files/paths it may modify (configured in `pipeline.yaml` per node via `allowed_paths`). Evidence: `.sdlc/engine/git.ts:56-104` (`safetyCheckDiff` with `allowedPaths` prefix matching)
+        - Per-stage allowlists defined in `.sdlc/pipeline.yaml` per node.
         - **Executor (Stage 6):** file allowlist extracted from `04-decision.md` YAML frontmatter via `yq --front-matter=extract '.tasks[].files[]' 04-decision.md`, plus always-allowed paths: `.sdlc/pipeline/<issue-number>/`. Explicitly forbidden: `.sdlc/agents/`, `.sdlc/scripts/`, `.sdlc/engine/`, `CLAUDE.md`.
-        - **Presenter (Stage 8):** `.sdlc/pipeline/<issue-number>/06-summary.md`.
-      - Deletion of files not mentioned in the task breakdown (Executor only).
-      - Addition of secret-like patterns in committed code (all stages). Detection: primary tool is `gitleaks detect --no-git --staged` (included in devcontainer, see FR-12). Fallback regex: `(?i)(api[_-]?key|secret|token|password|credential)\s*[:=]\s*['"][^'"]{8,}`.
-    - If a safety violation is detected: continuation is triggered with a description of the violation, asking the agent to revert the problematic changes.
+      - [ ] Deletion of files not mentioned in the task breakdown (Executor only).
+      - Secrets detection in committed code (all stages):
+        - [ ] Primary: `gitleaks detect --no-git --staged` (included in devcontainer, see FR-12).
+        - [x] Fallback regex: `(?i)(api[_-]?key|secret|token|password|credential)\s*[:=]\s*['"][^'"]{8,}`. Evidence: `.sdlc/engine/git.ts:92-95`
+    - [ ] If a safety violation is detected: continuation is triggered with a description of the violation, asking the agent to revert the problematic changes. (Safety check exists but is NOT called from engine orchestration — `.sdlc/engine/engine.ts` does not invoke `safetyCheckDiff` between agent exit and commit.)
+  - **Stage script responsibilities (legacy path — `.sdlc/scripts/`):**
+    - [x] Legacy shell implementation in `lib.sh`: `continuation_loop()`, `safety_check_diff()`, `run_agent()`, `retry_with_backoff()`. Evidence: `.sdlc/scripts/lib.sh:59-233`
 - **Quality metrics:**
   - Continuation success rate: percentage of continuations that resolve the issue (target > 70%).
   - Average continuations per stage (target < 1.0 across all runs).
