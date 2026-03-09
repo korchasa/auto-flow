@@ -62,7 +62,7 @@ nodes:
   reviewer:
     type: agent
     label: "Tech Lead Reviewer — Critique & Revision"
-    inputs: [tech-lead]
+    inputs: [pm, tech-lead]
     prompt: ".sdlc/agents/tech-lead-reviewer.md"
     task_template: |
       Review the plan at {{input.tech-lead}}/02-plan.md.
@@ -81,7 +81,7 @@ nodes:
   architect:
     type: agent
     label: "Architect — Decision & Task Breakdown"
-    inputs: [reviewer]
+    inputs: [pm, reviewer]
     prompt: ".sdlc/agents/architect.md"
     task_template: |
       Read the revised plan at {{input.reviewer}}/03-revised-plan.md.
@@ -115,7 +115,7 @@ nodes:
   executor:
     type: agent
     label: "Executor — Implementation"
-    inputs: [sds-update]
+    inputs: [architect, sds-update]
     prompt: ".sdlc/agents/executor.md"
     task_template: |
       Read the decision at {{input.architect}}/04-decision.md.
@@ -127,7 +127,7 @@ nodes:
   qa:
     type: agent
     label: "QA — Verification"
-    inputs: [executor]
+    inputs: [pm, architect, executor]
     prompt: ".sdlc/agents/qa.md"
     task_template: |
       Verify the implementation against the spec at {{input.pm}}/01-spec.md.
@@ -154,7 +154,7 @@ nodes:
   presenter:
     type: agent
     label: "Presenter — Change Summary"
-    inputs: [impl-loop]
+    inputs: [pm, architect, impl-loop]
     prompt: ".sdlc/agents/presenter.md"
     task_template: |
       Create a summary of all changes made during the pipeline.
