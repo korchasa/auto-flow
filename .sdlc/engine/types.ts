@@ -64,9 +64,18 @@ export interface NodeSettings {
 
 /** Artifact validation rule. */
 export interface ValidationRule {
-  type: "file_exists" | "file_not_empty" | "contains_section" | "custom_script";
+  type:
+    | "file_exists"
+    | "file_not_empty"
+    | "contains_section"
+    | "custom_script"
+    | "frontmatter_field";
   path: string;
   value?: string;
+  /** Target field name in YAML frontmatter (for frontmatter_field rule). */
+  field?: string;
+  /** Allowed values for the field (for frontmatter_field rule). */
+  allowed?: string[];
 }
 
 // --- Runtime State ---

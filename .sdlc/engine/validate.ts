@@ -48,6 +48,8 @@ async function runSingleValidation(
       return await checkContainsSection(rule, resolvedPath);
     case "custom_script":
       return await checkCustomScript(rule, resolvedPath);
+    case "frontmatter_field":
+      return await checkFrontmatterField(rule, resolvedPath);
     default:
       return {
         rule,
@@ -157,6 +159,70 @@ async function checkCustomScript(
       }`,
     };
   }
+}
+
+async function checkFrontmatterField(
+  rule: ValidationRule,
+  path: string,
+): Promise<ValidationResult> {
+  if (!rule.field) {
+    return {
+      rule,
+      passed: false,
+      message: `frontmatter_field rule requires 'field' property`,
+    };
+  }
+
+  let content: string;
+  try {
+    content = await Deno.readTextFile(path);
+  } catch {
+    return { rule, passed: false, message: `File not found: ${path}` };
+  }
+
+  // Extract YAML frontmatter between --- delimiters
+  const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!fmMatch) {
+    return {
+      rule,
+      passed: false,
+      message: `No YAML frontmatter found in ${path}`,
+    };
+  }
+
+  // Parse the target field from frontmatter (simple key: value parsing)
+  const fieldPattern = new RegExp(
+    `^${escapeRegex(rule.field)}:\\s*(.+)$`,
+    "m",
+  );
+  const fieldMatch = fmMatch[1].match(fieldPattern);
+  if (!fieldMatch) {
+    return {
+      rule,
+      passed: false,
+      message: `Field '${rule.field}' not found in frontmatter of ${path}`,
+    };
+  }
+
+  const value = fieldMatch[1].trim();
+
+  // If allowed values are specified, check against them
+  if (rule.allowed && rule.allowed.length > 0) {
+    if (!rule.allowed.includes(value)) {
+      return {
+        rule,
+        passed: false,
+        message:
+          `Field '${rule.field}' has value '${value}', not in allowed set [${rule.allowed.join(", ")}] in ${path}`,
+      };
+    }
+  }
+
+  return {
+    rule,
+    passed: true,
+    message: `Field '${rule.field}' = '${value}' in ${path}`,
+  };
 }
 
 function escapeRegex(str: string): string {

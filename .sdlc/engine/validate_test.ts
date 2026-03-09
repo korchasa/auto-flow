@@ -220,6 +220,136 @@ Deno.test("formatFailures — formats only failures", () => {
   );
 });
 
+// --- frontmatter_field tests ---
+
+Deno.test("frontmatter_field — valid value passes", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(
+    filePath,
+    "---\nverdict: PASS\n---\n# Report\nContent here\n",
+  );
+
+  const rules: ValidationRule[] = [
+    {
+      type: "frontmatter_field",
+      path: filePath,
+      field: "verdict",
+      allowed: ["PASS", "FAIL"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, true);
+  assertEquals(results[0].message.includes("PASS"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("frontmatter_field — invalid value fails", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(
+    filePath,
+    "---\nverdict: MAYBE\n---\n# Report\n",
+  );
+
+  const rules: ValidationRule[] = [
+    {
+      type: "frontmatter_field",
+      path: filePath,
+      field: "verdict",
+      allowed: ["PASS", "FAIL"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("MAYBE"), true);
+  assertEquals(results[0].message.includes("allowed"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("frontmatter_field — missing field fails", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(
+    filePath,
+    "---\ntitle: Report\n---\n# Report\n",
+  );
+
+  const rules: ValidationRule[] = [
+    {
+      type: "frontmatter_field",
+      path: filePath,
+      field: "verdict",
+      allowed: ["PASS", "FAIL"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("not found"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("frontmatter_field — malformed frontmatter fails", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(filePath, "# No frontmatter here\nJust content\n");
+
+  const rules: ValidationRule[] = [
+    {
+      type: "frontmatter_field",
+      path: filePath,
+      field: "verdict",
+      allowed: ["PASS", "FAIL"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("frontmatter"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("frontmatter_field — missing file fails", async () => {
+  const rules: ValidationRule[] = [
+    {
+      type: "frontmatter_field",
+      path: "/tmp/nonexistent-fm-abc123.md",
+      field: "verdict",
+      allowed: ["PASS", "FAIL"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx("/tmp"));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("not found"), true);
+});
+
+Deno.test("frontmatter_field — missing config field fails", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(filePath, "---\nverdict: PASS\n---\n");
+
+  const rules: ValidationRule[] = [
+    {
+      type: "frontmatter_field",
+      path: filePath,
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("requires"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
 Deno.test("multiple rules — mixed results", async () => {
   const tmpDir = await Deno.makeTempDir();
   await Deno.writeTextFile(`${tmpDir}/exists.md`, "# Title\nContent");
