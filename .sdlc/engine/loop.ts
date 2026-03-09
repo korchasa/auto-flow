@@ -74,6 +74,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         node: bodyNode,
         ctx,
         settings,
+        claudeArgs: config.defaults?.claude_args,
         onOutput: opts.onOutput
           ? (line: string) => opts.onOutput!(bodyNodeId, line)
           : undefined,
