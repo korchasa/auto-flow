@@ -30,9 +30,9 @@ import { saveAgentLog } from "./log.ts";
 import { runLoop } from "./loop.ts";
 import { runHuman, terminalInput } from "./human.ts";
 import type { UserInput } from "./human.ts";
-import { commitNodeChanges, safetyCheckDiff } from "./git.ts";
+import { branch, commitNodeChanges, safetyCheckDiff } from "./git.ts";
 import { OutputManager } from "./output.ts";
-import type { RunSummary } from "./output.ts";
+import type { RunSummary, VerboseInput } from "./output.ts";
 
 /** Main pipeline engine. Orchestrates node execution across DAG levels. */
 export class Engine {
@@ -246,12 +246,17 @@ export class Engine {
     const ctx = this.buildContext(nodeId);
     const settings = node.settings as Required<NodeSettings>;
 
+    // Verbose: resolve and show input artifacts
+    const inputArtifacts = await resolveInputArtifacts(ctx.input);
+    this.output.verboseInputs(nodeId, inputArtifacts);
+
     const result = await runAgent({
       node,
       ctx,
       settings,
       claudeArgs: this.config.defaults?.claude_args,
-      onOutput: (line) => this.output.nodeOutput(nodeId, line),
+      output: this.output,
+      nodeId,
     });
 
     if (!result.success) {
@@ -280,6 +285,14 @@ export class Engine {
         }
       });
       const safetyResult = await safetyCheckDiff(resolvedPaths);
+
+      // Verbose: show safety check results
+      this.output.verboseSafety(
+        nodeId,
+        safetyResult.checkedFiles,
+        safetyResult.violations,
+      );
+
       if (!safetyResult.safe) {
         markNodeFailed(
           this.state,
@@ -335,7 +348,7 @@ export class Engine {
       },
       onIteration: (iteration, maxIterations) =>
         this.output.loopIteration(nodeId, iteration, maxIterations),
-      onOutput: (id, line) => this.output.nodeOutput(id, line),
+      output: this.output,
       saveState: () => saveState(this.state),
     });
 
@@ -433,6 +446,15 @@ export class Engine {
     );
     if (!result.success) {
       this.output.warn(`Git commit for ${nodeId}: ${result.error}`);
+    } else if (result.filesStaged.length > 0) {
+      // Verbose: show commit details
+      const currentBranch = await branch().catch(() => "unknown");
+      this.output.verboseCommit(
+        nodeId,
+        result.filesStaged,
+        result.message,
+        currentBranch,
+      );
     }
   }
 
@@ -463,6 +485,33 @@ export class Engine {
     };
     this.output.summary(summary);
   }
+}
+
+/**
+ * Resolve input artifact file paths and sizes from input directories.
+ * Walks each input directory (non-recursive), collects file path + size.
+ */
+export async function resolveInputArtifacts(
+  inputs: Record<string, string>,
+): Promise<VerboseInput[]> {
+  const result: VerboseInput[] = [];
+  for (const [_nodeId, dir] of Object.entries(inputs)) {
+    try {
+      for await (const entry of Deno.readDir(dir)) {
+        if (!entry.isFile) continue;
+        const filePath = `${dir}/${entry.name}`;
+        try {
+          const stat = await Deno.stat(filePath);
+          result.push({ path: filePath, sizeBytes: stat.size });
+        } catch {
+          // File may have been removed between readDir and stat
+        }
+      }
+    } catch {
+      // Directory may not exist
+    }
+  }
+  return result;
 }
 
 /** Recursively copy a directory. */
