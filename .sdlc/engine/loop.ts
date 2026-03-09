@@ -10,6 +10,7 @@ import { buildLoopBodyOrder } from "./dag.ts";
 import { runAgent } from "./agent.ts";
 import type { AgentResult } from "./agent.ts";
 import { markNodeCompleted, markNodeFailed, markNodeStarted } from "./state.ts";
+import type { OutputManager } from "./output.ts";
 
 /** Result of a loop execution. */
 export interface LoopResult {
@@ -32,7 +33,8 @@ export interface LoopRunOptions {
     result: AgentResult,
   ) => void;
   onIteration?: (iteration: number, maxIterations: number) => void;
-  onOutput?: (nodeId: string, line: string) => void;
+  /** OutputManager for verbose diagnostics (forwarded to runAgent). */
+  output?: OutputManager;
   saveState?: () => Promise<void>;
 }
 
@@ -75,9 +77,8 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         ctx,
         settings,
         claudeArgs: config.defaults?.claude_args,
-        onOutput: opts.onOutput
-          ? (line: string) => opts.onOutput!(bodyNodeId, line)
-          : undefined,
+        output: opts.output,
+        nodeId: bodyNodeId,
       });
 
       if (result.success) {

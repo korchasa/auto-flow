@@ -1,5 +1,7 @@
 import { assertEquals } from "@std/assert";
 import { extractFrontmatterField } from "./loop.ts";
+import type { LoopRunOptions } from "./loop.ts";
+import { OutputManager } from "./output.ts";
 
 // Note: Full integration tests for runLoop require claude CLI.
 // These tests cover the pure logic: frontmatter extraction and structure.
@@ -86,4 +88,21 @@ approved: true
 # Report`;
 
   assertEquals(extractFrontmatterField(content, "approved"), "true");
+});
+
+Deno.test("LoopRunOptions — accepts output field", () => {
+  const output = new OutputManager("verbose");
+  // Verify the type allows output field (compile-time check)
+  const opts: Partial<LoopRunOptions> = {
+    loopNodeId: "exec-qa-loop",
+    output,
+  };
+  assertEquals(opts.output instanceof OutputManager, true);
+});
+
+Deno.test("LoopRunOptions — output is optional", () => {
+  const opts: Partial<LoopRunOptions> = {
+    loopNodeId: "exec-qa-loop",
+  };
+  assertEquals(opts.output, undefined);
 });
