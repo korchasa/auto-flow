@@ -20,7 +20,15 @@
       "Bash(for f in ~/.claude/agents/*.md)",
       "Bash(do cp -L \"$f\" /Users/korchasa/www/tools/auto-sdlc/.claude/agents/)",
       "Bash(done)",
-      "Bash(git remote add origin git@github.com:korchasa/auto-flow.git)"
+      "Bash(git remote add origin git@github.com:korchasa/auto-flow.git)",
+      "Bash(git stash pop)",
+      "Bash(git stash drop)",
+      "Bash(deno task run:task --task .sdlc/tasks/fr-10-agent-log-storage.md -v)",
+      "Bash(CLAUDECODE= deno task run:task --task .sdlc/tasks/fr-10-agent-log-storage.md -v)",
+      "Bash(deno run -A scripts/fmt.ts)",
+      "Bash(deno run -A --allow-run \"deno fmt .sdlc/engine/agent_test.ts\")",
+      "Bash(deno run --no-check -A .sdlc/engine/agent_test.ts)",
+      "Bash(wc -l /workspaces/auto-flow/.sdlc/engine/*.ts)"
     ],
     "additionalDirectories": [
       "/Users/korchasa/www/tools/auto-sdlc/.claude"
