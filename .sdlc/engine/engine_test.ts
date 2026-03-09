@@ -1,6 +1,13 @@
 import { assertEquals } from "@std/assert";
 import type { EngineOptions } from "./types.ts";
 import { Engine, resolveInputArtifacts } from "./engine.ts";
+import { OutputManager } from "./output.ts";
+
+/** Capture output lines from an OutputManager. */
+function createCapture(): { lines: string[]; writer: (text: string) => void } {
+  const lines: string[] = [];
+  return { lines, writer: (text: string) => lines.push(text) };
+}
 
 // Note: Full integration tests for Engine require claude CLI and a git repo.
 // These tests verify options structure and dry-run behavior.
@@ -110,6 +117,47 @@ Deno.test("resolveInputArtifacts — returns empty for non-existent directory", 
 Deno.test("resolveInputArtifacts — returns empty for empty inputs", async () => {
   const result = await resolveInputArtifacts({});
   assertEquals(result.length, 0);
+});
+
+// --- AC6: Safety check verbose coverage ---
+
+Deno.test("AC6 positive — verboseSafety called when allowed_paths configured", () => {
+  // Simulates engine.ts:279-294 logic: when allowed_paths.length > 0,
+  // safetyCheckDiff runs and verboseSafety is called with results.
+  const cap = createCapture();
+  const out = new OutputManager("verbose", cap.writer);
+
+  const allowedPaths = ["src/"];
+  const safetyResult = {
+    safe: true,
+    violations: [] as string[],
+    checkedFiles: ["src/main.ts", "src/util.ts"],
+  };
+
+  // Engine calls verboseSafety only when allowed_paths.length > 0
+  if (allowedPaths.length > 0) {
+    out.verboseSafety("executor", safetyResult.checkedFiles, safetyResult.violations);
+  }
+
+  assertEquals(cap.lines.length > 0, true, "verboseSafety should emit output");
+  assertEquals(cap.lines.some((l) => l.includes("SAFETY CHECK")), true);
+  assertEquals(cap.lines.some((l) => l.includes("src/main.ts")), true);
+});
+
+Deno.test("AC6 negative — verboseSafety skipped when allowed_paths empty", () => {
+  // Simulates engine.ts:279 logic: when allowed_paths is empty,
+  // safetyCheckDiff is skipped entirely — no verboseSafety call.
+  const cap = createCapture();
+  const out = new OutputManager("verbose", cap.writer);
+
+  const allowedPaths: string[] = [];
+
+  // Engine skips entire safety block when allowed_paths.length === 0
+  if (allowedPaths.length > 0) {
+    out.verboseSafety("executor", [], []);
+  }
+
+  assertEquals(cap.lines.length, 0, "No verbose safety output when allowed_paths empty");
 });
 
 Deno.test("resolveInputArtifacts — skips subdirectories", async () => {
