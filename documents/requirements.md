@@ -251,14 +251,21 @@
 
 - **Description:** Every agent's full session transcript is stored for analysis and prompt improvement.
 - **Log sources:**
-  - **JSON output:** Claude CLI with `--output-format json` returns a structured JSON object with `result`, `session_id`, `total_cost_usd`, `duration_ms`, `duration_api_ms`, `num_turns`, `is_error`. This is captured by the stage script.
+  - **JSON output:** Claude CLI with `--output-format json` returns a structured JSON object with `result`, `session_id`, `total_cost_usd`, `duration_ms`, `duration_api_ms`, `num_turns`, `is_error`. This is captured by the stage script or engine.
   - **JSONL transcript:** Claude CLI automatically stores full session transcripts as JSONL files in `~/.claude/projects/`. Each line is a JSON event (messages, tool calls, responses).
-- **Acceptance criteria:**
+- **Acceptance criteria (legacy shell script path):**
   - Each stage script saves two log files:
     - `.sdlc/pipeline/<issue-number>/logs/stage-<N>-<role>.json` — the JSON output from `claude` CLI (metadata: cost, duration, session ID, result).
     - `.sdlc/pipeline/<issue-number>/logs/stage-<N>-<role>.jsonl` — copy of the JSONL transcript from `~/.claude/projects/` for the session.
   - Logs are committed to the feature branch after each stage.
   - Stage script locates the JSONL transcript by session ID extracted from the JSON output.
+- **Acceptance criteria (Deno engine path):**
+  - [ ] After each non-loop agent node completes successfully, the engine saves two files to `.sdlc/runs/<run-id>/logs/`:
+    - `<node-id>.json` — full `ClaudeCliOutput` JSON object (`result`, `session_id`, `total_cost_usd`, `duration_ms`, `duration_api_ms`, `num_turns`, `is_error`).
+    - `<node-id>.jsonl` — copy of the JSONL session transcript from `~/.claude/projects/<project-hash>/`, located by matching `session_id` in filenames.
+  - [ ] If the JSONL transcript file is not found: engine logs a warning and continues — pipeline does NOT fail.
+  - [ ] Loop body nodes (executor, qa) are excluded from engine-level log saving (deferred).
+  - [ ] Log-saving logic has unit tests covering: successful save, JSONL-not-found warning path.
 
 ### 3.11 FR-11: Meta-Agent (Prompt Optimization)
 
