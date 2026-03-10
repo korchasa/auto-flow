@@ -33,7 +33,7 @@ Deno.test("AgentRunOptions — type structure with OutputManager", () => {
   const node: NodeConfig = {
     type: "agent",
     label: "Test agent",
-    prompt: ".sdlc/agents/test.md",
+    prompt: "agents/executor/SKILL.md",
     task_template: "Do task for issue #{{args.issue}}",
     validate: [
       { type: "file_exists", path: "{{node_dir}}/output.md" },

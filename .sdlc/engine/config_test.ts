@@ -8,7 +8,7 @@ nodes:
   spec:
     type: agent
     label: "Write spec"
-    prompt: ".sdlc/agents/pm.md"
+    prompt: "agents/pm/SKILL.md"
     task_template: "Write a spec for issue #{{args.issue}}"
 `;
 
