@@ -18,7 +18,7 @@ nodes:
   pm:
     type: agent
     label: "Project Manager — Specification"
-    prompt: ".sdlc/agents/pm.md"
+    prompt: "agents/pm/SKILL.md"
     task_template: |
       Read GitHub issue #{{args.issue}} and produce a specification.
       Output:
@@ -44,7 +44,7 @@ nodes:
     type: agent
     label: "Tech Lead — Implementation Plan"
     inputs: [pm]
-    prompt: ".sdlc/agents/tech-lead.md"
+    prompt: "agents/tech-lead/SKILL.md"
     task_template: |
       Read the specification at {{input.pm}}/01-spec.md.
       Read documents/requirements.md and documents/design.md.
@@ -63,7 +63,7 @@ nodes:
     type: agent
     label: "Tech Lead Reviewer — Critique & Revision"
     inputs: [pm, tech-lead]
-    prompt: ".sdlc/agents/tech-lead-reviewer.md"
+    prompt: "agents/tech-lead-reviewer/SKILL.md"
     task_template: |
       Review the plan at {{input.tech-lead}}/02-plan.md.
       Read the spec at {{input.pm}}/01-spec.md.
@@ -82,7 +82,7 @@ nodes:
     type: agent
     label: "Architect — Decision & Task Breakdown"
     inputs: [pm, reviewer]
-    prompt: ".sdlc/agents/architect.md"
+    prompt: "agents/architect/SKILL.md"
     task_template: |
       Read the revised plan at {{input.reviewer}}/03-revised-plan.md.
       Read the spec at {{input.pm}}/01-spec.md.
@@ -101,7 +101,7 @@ nodes:
     type: agent
     label: "Tech Lead — SDS Update"
     inputs: [architect]
-    prompt: ".sdlc/agents/tech-lead-sds.md"
+    prompt: "agents/tech-lead-sds/SKILL.md"
     task_template: |
       Read the decision at {{input.architect}}/04-decision.md.
       Update documents/design.md with the selected variant's design details.
@@ -116,7 +116,7 @@ nodes:
     type: agent
     label: "Executor — Implementation"
     inputs: [architect, sds-update]
-    prompt: ".sdlc/agents/executor.md"
+    prompt: "agents/executor/SKILL.md"
     task_template: |
       Read the decision at {{input.architect}}/04-decision.md.
       Read documents/requirements.md and documents/design.md.
@@ -135,7 +135,7 @@ nodes:
     type: agent
     label: "QA — Verification"
     inputs: [pm, architect, executor]
-    prompt: ".sdlc/agents/qa.md"
+    prompt: "agents/qa/SKILL.md"
     task_template: |
       Verify the implementation against the spec at {{input.pm}}/01-spec.md.
       Check the decision at {{input.architect}}/04-decision.md.
@@ -162,7 +162,7 @@ nodes:
     type: agent
     label: "Presenter — Change Summary"
     inputs: [pm, architect, impl-loop]
-    prompt: ".sdlc/agents/presenter.md"
+    prompt: "agents/presenter/SKILL.md"
     task_template: |
       Create a summary of all changes made during the pipeline.
       Read the spec at {{input.pm}}/01-spec.md.
@@ -181,7 +181,7 @@ nodes:
   meta-agent:
     type: agent
     label: "Meta-Agent — Prompt Analysis"
-    prompt: ".sdlc/agents/meta-agent.md"
+    prompt: "agents/meta-agent/SKILL.md"
     task_template: |
       Analyze all logs and artifacts from run {{run_id}} at {{run_dir}}.
       Produce a meta-report with prompt improvement suggestions.
@@ -193,5 +193,5 @@ nodes:
       - type: file_exists
         path: "{{node_dir}}/07-meta-report.md"
     allowed_paths:
-      - ".sdlc/agents/"
+      - "agents/"
       - ".sdlc/runs/"
