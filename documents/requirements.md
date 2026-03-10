@@ -217,7 +217,7 @@
     - After each agent exit, the engine runs `git diff` and checks for:
       - [x] Modifications to files outside the expected scope. Each stage defines an allowlist of files/paths it may modify (configured in `pipeline.yaml` per node via `allowed_paths`). Evidence: `.sdlc/engine/git.ts:56-104` (`safetyCheckDiff` with `allowedPaths` prefix matching)
         - Per-stage allowlists defined in `.sdlc/pipeline.yaml` per node.
-        - **Executor (Stage 6):** file allowlist extracted from `04-decision.md` YAML frontmatter via `yq --front-matter=extract '.tasks[].files[]' 04-decision.md`, plus always-allowed paths: `.sdlc/pipeline/<issue-number>/`. Explicitly forbidden: `.sdlc/agents/`, `.sdlc/scripts/`, `.sdlc/engine/`, `CLAUDE.md`.
+        - **Executor (Stage 6):** file allowlist extracted from `04-decision.md` YAML frontmatter via `yq --front-matter=extract '.tasks[].files[]' 04-decision.md`, plus always-allowed paths: `.sdlc/pipeline/<issue-number>/`. Explicitly forbidden: `agents/`, `.sdlc/scripts/`, `.sdlc/engine/`, `CLAUDE.md`.
       - [ ] Deletion of files not mentioned in the task breakdown (Executor only).
       - Secrets detection in committed code (all stages):
         - [x] Primary: `gitleaks detect --no-git --staged` (included in devcontainer, see FR-12). Evidence: `.sdlc/engine/git.ts:179-216` (`runGitleaks()`), `.sdlc/engine/git.ts:108-126` (integration in `safetyCheckDiff()`)
@@ -279,7 +279,7 @@
 - **Input:**
   - All logs from `.sdlc/pipeline/<issue-number>/logs/`.
   - All handoff artifacts produced before the failure (if failed).
-  - Current agent prompts from `.sdlc/agents/`.
+  - Current agent prompts from `agents/`.
   - The continuation/validation error output that caused the failure (if applicable).
 - **Output:** `.sdlc/pipeline/<issue-number>/07-meta-report.md`.
 - **Acceptance criteria:**
@@ -307,7 +307,7 @@
   - Located in `.sdlc/scripts/stage-<N>-<role>.sh`.
   - Each script is responsible for:
     1. Preparing input: collecting handoff artifacts, setting environment variables.
-    2. Invoking `claude` CLI with the agent prompt from `.sdlc/agents/<role>.md`.
+    2. Invoking `claude` CLI with the agent prompt from `agents/<role>/SKILL.md`.
     3. Running stage-specific validation (artifact checks, `deno task check` for Executor).
     4. Implementing the Continuation mechanism (FR-8): re-invoking via `--resume` on validation failure.
     5. Committing output artifacts and logs to the feature branch.
@@ -429,7 +429,7 @@
 ## 5. Interfaces
 
 - **Trigger:** Separate `deno task` subcommands per input source: `run:task <path>` (task file), `run:text "..."` (inline text), `run:file <path>` (local file). All share common engine flags.
-- **Agent runtime:** `claude` CLI invoked by the Deno engine. Invocation: `claude -p "<task prompt>" --append-system-prompt-file .sdlc/agents/<role>.md --output-format json`. Key flags:
+- **Agent runtime:** `claude` CLI invoked by the Deno engine. Invocation: `claude -p "<task prompt>" --append-system-prompt-file agents/<role>/SKILL.md --output-format json`. Key flags:
   - `--append-system-prompt-file` — adds role-specific instructions while preserving Claude Code's built-in capabilities (tool use, file access). Preferred over `--system-prompt-file` which replaces the default prompt entirely.
   - `--output-format json` — returns structured JSON with `result`, `session_id`, `total_cost_usd`, `duration_ms`, `num_turns`, `is_error`.
   - `--resume <session-id>` — re-invokes agent in the same session for continuations (FR-8).
@@ -470,16 +470,21 @@ The system is considered accepted if:
 ## Appendix B: File Structure
 
 ```
+agents/                                  # Agent system prompts (versioned, SKILL.md)
+  pm/SKILL.md
+  tech-lead/SKILL.md
+  tech-lead-reviewer/SKILL.md
+  architect/SKILL.md
+  tech-lead-sds/SKILL.md
+  executor/SKILL.md
+  qa/SKILL.md
+  presenter/SKILL.md
+  meta-agent/SKILL.md
+.claude/skills/                          # Symlinks for Claude Code skill discovery
+  agent-pm -> ../../agents/pm/
+  agent-tech-lead -> ../../agents/tech-lead/
+  ...                                    # (9 symlinks total)
 .sdlc/
-  agents/                              # Agent system prompts (versioned)
-    pm.md
-    tech-lead.md
-    tech-lead-reviewer.md
-    architect.md
-    executor.md
-    qa.md
-    presenter.md
-    meta-agent.md
   scripts/                             # Stage orchestration scripts
     lib.sh                             # Shared functions (logging, continuation loop, git ops)
     stage-1-pm.sh
@@ -509,3 +514,7 @@ The system is considered accepted if:
       ...
   pipeline.yaml                        # DAG-based pipeline configuration
 ```
+
+- возможность продолжить работу после остановки по какой-то причине. С указанием шага, с которого продолжаем
+- проверки незакомиченности должны проверять конкретные папки, а не все
+
