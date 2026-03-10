@@ -151,7 +151,7 @@ graph TD
   shell script orchestration with YAML-driven node graph.
 - **Modules:**
   - `types.ts` — type declarations (incl. `ValidationRule.type` union,
-    `NodeConfig.run_always`)
+    `NodeConfig.run_always`, `LoopResult.bodyResults`)
   - `template.ts` — `{{var}}` interpolation for prompts/paths
   - `config.ts` — YAML parsing, schema validation, defaults merge
   - `dag.ts` — topological sort, cycle detection, level grouping
@@ -159,13 +159,14 @@ graph TD
     contains_section, custom_script, frontmatter_field)
   - `state.ts` — RunState persistence to `state.json`, resume logic
   - `agent.ts` — Claude CLI invocation, continuation loop, retry
-  - `loop.ts` — loop node execution with condition extraction
+  - `loop.ts` — loop node execution with condition extraction, per-iteration
+    `AgentResult` accumulation into `LoopResult.bodyResults`
   - `human.ts` — terminal user input, abort logic
   - `git.ts` — commit helper (used by committer agent nodes), branch query
   - `output.ts` — terminal output manager (quiet/normal/verbose), verbose
     methods for detailed agent-node diagnostics
   - `engine.ts` — main executor: level iteration, parallel dispatch, verbose
-    input resolution
+    input resolution, loop-node log saving via `onNodeComplete` callback
   - `cli.ts` — CLI entry point: argument parsing, .env loading
   - `mod.ts` — public API re-exports
 - **Interfaces:**
@@ -237,6 +238,8 @@ graph TD
     (enriched for verbose output)
   - ValidationRule: `{ type: "file_exists"|"file_not_empty"|"contains_section"|
     "custom_script"|"frontmatter_field", path?, field?, allowed?, ... }`
+  - LoopResult: `{ ..., bodyResults: AgentResult[] }` — accumulated per-iteration
+    agent results; consumed by `executeLoopNode()` callback for log saving
   - NodeConfig: `{ ..., run_always?: boolean }` — flag for post-levels execution
 - **ERD:** N/A (file-based, no database).
 - **Migration:** N/A.
@@ -258,6 +261,12 @@ graph TD
 - **Context management:** Claude CLI auto-compression handles large input sets.
 - **Template variables:** `{{node_dir}}`, `{{input.*}}`, `{{run_dir}}`,
   `{{run_id}}`, `{{args.*}}`, `{{env.*}}`, `{{loop.iteration}}`.
+- **After-hook conventions:** Commands run from repo root (no `cd {{run_dir}}`
+  prefix needed). Use `|| true` suffix to prevent hook failure from killing
+  the node. Example (sds-update diff capture):
+  `git diff HEAD -- documents/design.md > {{node_dir}}/04a-sds-diff.md;
+  [ -s {{node_dir}}/04a-sds-diff.md ] || echo "No changes" >
+  {{node_dir}}/04a-sds-diff.md || true`.
 
 ### 4.2 Commit Strategy
 
@@ -292,6 +301,15 @@ graph TD
     default/quiet. Output: human-readable stderr lines with section headers.
     Note: safety check and auto-commit verbose removed (engine no longer
     performs these operations).
+  - **Loop Node Log Saving** (callback-based, no I/O in `loop.ts`):
+    `runLoop()` accumulates `AgentResult` per body-node iteration into
+    `LoopResult.bodyResults[]` (pure data, no filesystem ops). In
+    `executeLoopNode()` (`engine.ts`), the `onNodeComplete` callback iterates
+    `bodyResults`, calling `saveAgentLog()` with iteration-qualified nodeId
+    (`${id}-iter-${i}`). Guard: only on `result.success && result.output`.
+    `saveAgentLog()` errors caught and warned (non-fatal) — audit I/O must not
+    break loop execution. `runDir` resolved via `getRunDir(this.state.run_id)`
+    (already in engine scope).
   - **Verbose Edge Cases** (behavioral contracts verified by tests):
     - **Default mode (no `-v`):** All 6 verbose methods produce zero stderr
       output. `OutputManager` constructed with `verbose=false` suppresses all

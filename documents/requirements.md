@@ -147,6 +147,7 @@
   - Agent updates `documents/design.md` with new/modified components, data structures, algorithms.
   - Changes are scoped to the selected variant only.
   - After the agent exits, stage script generates `04a-sds-diff.md` containing the unified diff of `documents/design.md` (via `git diff`). This artifact serves as an audit trail for the Meta-Agent and debugging.
+  - [ ] Engine `after` hook for `04a-sds-diff.md` must use `git diff HEAD -- documents/design.md` (diff against last commit, not index) to produce correct output under deferred commit strategy (FR-14). If no changes detected, file must contain explicit "No changes to documents/design.md" text, not be empty.
 - **Quality metrics:**
   - Every new component in SDS has: purpose, interfaces, dependencies.
   - No orphan references (every component mentioned in the plan exists in SDS after update).
@@ -260,7 +261,8 @@
     - `<node-id>.jsonl` — copy of the JSONL session transcript from `~/.claude/projects/<project-hash>/`, located by matching `session_id` in filenames.
     - Evidence: `.sdlc/engine/engine.ts:266-270`, `.sdlc/engine/log.ts:18-47`
   - [x] If the JSONL transcript file is not found: engine logs a warning and continues — pipeline does NOT fail. Evidence: `.sdlc/engine/log.ts:43-45`
-  - [x] Loop body nodes (executor, qa) are excluded from engine-level log saving (deferred). Evidence: `.sdlc/engine/loop.ts` — no `saveAgentLog` call
+  - [ ] Loop body nodes (executor, qa) must have logs saved after each iteration. Log files use iteration-qualified names: `<node-id>-iter-<N>.json` and `<node-id>-iter-<N>.jsonl`. `runLoop()` calls `saveAgentLog()` for each body node after successful completion.
+  - [ ] `LoopResult` includes per-iteration `AgentResult` references (with `ClaudeCliOutput`) to enable log extraction by the engine.
   - [x] Log-saving logic has unit tests covering: successful save, JSONL-not-found warning path. Evidence: `.sdlc/engine/log_test.ts:29-124` (5 tests)
 
 ### 3.11 FR-11: Meta-Agent (Prompt Optimization)
@@ -412,6 +414,17 @@
   - [ ] Each agent skill is invocable standalone via `/agent-<name>`.
   - [ ] `deno task check` passes after migration.
   - [ ] References to `.sdlc/agents/` in SRS sections (FR-8, FR-11, FR-12, Interfaces, Appendix B) updated to reflect new `agents/<name>/SKILL.md` paths.
+
+### 3.20 FR-20: Pipeline Config Drift Detection
+
+- **Description:** Automated verification that pipeline YAML configs (`pipeline.yaml`, `pipeline-task.yaml`) remain consistent with engine expectations and SRS requirements. Detects mismatches in node declarations, required fields, hook syntax, and validation rules.
+- **Acceptance criteria:**
+  - [ ] A `deno task check:pipeline` command validates both `pipeline.yaml` and `pipeline-task.yaml` against engine schema expectations (required node fields per type, valid validation rule types, template variable syntax).
+  - [ ] Check verifies all node types used in configs are supported by the engine dispatcher (`agent`, `loop`, `merge`, `human`).
+  - [ ] Check verifies `after`/`before` hook commands use valid template variables (no unresolved `{{...}}` patterns after interpolation context is known).
+  - [ ] Check verifies loop nodes reference existing body nodes and condition nodes declared in the same config.
+  - [ ] Check runs as part of `deno task check` (integrated into `scripts/check.ts`).
+  - [ ] Failures produce actionable error messages with config file path and line context.
 
 ## 4. Non-functional requirements
 

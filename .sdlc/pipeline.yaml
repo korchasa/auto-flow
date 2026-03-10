@@ -105,6 +105,8 @@ nodes:
     label: "Commit planning artifacts"
     prompt: agents/committer/SKILL.md
     inputs: [sds-update]
+    task_template: |
+      Stage and commit all changes for the plan phase.
     env:
       SDLC_PHASE: plan
 
@@ -155,6 +157,8 @@ nodes:
     label: "Commit implementation"
     prompt: agents/committer/SKILL.md
     inputs: [impl-loop]
+    task_template: |
+      Stage and commit all changes for the impl phase.
     env:
       SDLC_PHASE: impl
 
@@ -182,6 +186,8 @@ nodes:
     label: "Commit presentation artifacts"
     prompt: agents/committer/SKILL.md
     inputs: [presenter]
+    task_template: |
+      Stage and commit all changes for the present phase.
     env:
       SDLC_PHASE: present
 
