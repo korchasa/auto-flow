@@ -65,6 +65,8 @@ graph TD
     with YAML config, template interpolation, parallel levels, loop nodes,
     human nodes, resume support
   - **Agent Runtime**: Claude Code CLI invocations with role-specific prompts
+    from `agents/<name>/SKILL.md`; also discoverable as Claude Code skills via
+    `.claude/skills/agent-<name>` symlinks
   - **Artifact Store**: Git-tracked files in `.sdlc/runs/<run-id>/<node-id>/`
   - **Validation Engine**: Rule-based checks (file_exists, file_not_empty,
     contains_section, custom_script, frontmatter_field)
@@ -102,13 +104,48 @@ graph TD
     failures.
 - **Deps:** `claude` CLI, `git`, `gh`.
 
-### 3.4 Agent Prompts (`.sdlc/agents/`)
+### 3.4 Agent Prompts (`agents/`)
 
 - **Purpose:** Versioned system prompts defining each agent's role and behavior.
-- **Interfaces:** Markdown files consumed by `claude --system-prompt`.
+  Each agent lives in `agents/<name>/SKILL.md` with YAML frontmatter enabling
+  dual-use: pipeline-driven (via engine `prompt:` config) and interactive
+  (via Claude Code `/agent-<name>` slash commands).
+- **Directory structure:** `agents/<name>/SKILL.md` — 9 agents: `pm`,
+  `tech-lead`, `tech-lead-reviewer`, `architect`, `tech-lead-sds`, `executor`,
+  `qa`, `presenter`, `meta-agent`.
+- **SKILL.md frontmatter template:**
+  ```yaml
+  ---
+  name: "agent-<name>"
+  description: "<one-line role description>"
+  disable-model-invocation: true
+  ---
+  ```
+  - `disable-model-invocation: true` — prevents automatic invocation; agents
+    are only triggered explicitly (pipeline or slash command).
+- **Interfaces:**
+  - Pipeline: engine reads `prompt:` path from `pipeline.yaml` → file content
+    passed to `claude --system-prompt`.
+  - Interactive: Claude Code discovers skills via `.claude/skills/agent-<name>`
+    symlinks → user invokes `/agent-<name>`.
 - **Deps:** None (static content, versioned in git).
 
-### 3.5 Pipeline Engine (`.sdlc/engine/`)
+### 3.5 Skill Symlinks (`.claude/skills/agent-*`)
+
+- **Purpose:** Bridge pipeline agents into Claude Code's skill discovery system,
+  enabling `/agent-<name>` slash command invocability (FR-19 AC #2, AC #6).
+- **Structure:** 9 symlinks: `.claude/skills/agent-<name>` → `../../agents/<name>/`
+  (relative paths for portability within repo).
+- **Agents exposed:** `agent-pm`, `agent-tech-lead`, `agent-tech-lead-reviewer`,
+  `agent-architect`, `agent-tech-lead-sds`, `agent-executor`, `agent-qa`,
+  `agent-presenter`, `agent-meta-agent`.
+- **Interfaces:** Claude Code skill loader reads symlink target directory,
+  discovers `SKILL.md` frontmatter, registers slash command.
+- **Deps:** `agents/<name>/SKILL.md` (symlink targets must exist).
+- **Constraint:** Symlinks are Linux-native; devcontainer runtime ensures
+  consistent behavior (no Windows symlink issues).
+
+### 3.6 Pipeline Engine (`.sdlc/engine/`)
 
 - **Purpose:** Configurable DAG-based pipeline executor. Replaces hardcoded
   shell script orchestration with YAML-driven node graph.
@@ -184,7 +221,7 @@ graph TD
   - All existing callers pass no `output` arg — zero behavioral change.
 - **Deps:** `claude` CLI, `deno`, `git`, `jsr:@std/yaml`.
 
-### 3.6 Pipeline Trigger (Legacy)
+### 3.7 Pipeline Trigger (Legacy)
 
 - **Purpose:** Trigger pipeline on issue number, run stages sequentially.
 - **Interfaces:** CLI: `deno task run:issue <N>`. Fetches issue via `gh`.
@@ -195,7 +232,7 @@ graph TD
 - **Entities:**
   - Handoff Artifact: Structured Markdown (01-spec.md through 07-meta-report.md)
   - Agent Log: Claude CLI JSON output (`.sdlc/runs/<run-id>/logs/<node-id>.json`)
-  - Agent Prompt: System prompt Markdown (`.sdlc/agents/<role>.md`)
+  - Agent Prompt: SKILL.md with YAML frontmatter (`agents/<name>/SKILL.md`)
   - Run State: JSON (`.sdlc/runs/<run-id>/state.json`)
   - Pipeline Config: YAML (`.sdlc/pipeline.yaml`)
   - CommitResult: `{ commitHash, filesStaged: string[], message: string }`
@@ -292,7 +329,7 @@ graph TD
   - Artifacts overwritten on re-run (git history preserves previous).
   - QA iteration numbering restarts on re-run.
   - Meta-Agent runs on both success and failure.
-  - Meta-Agent auto-applies prompt improvements to `.sdlc/agents/*.md` and
+  - Meta-Agent auto-applies prompt improvements to `agents/*/SKILL.md` and
     commits changes. Human review at PR merge.
 
 ## 6. Non-Functional
