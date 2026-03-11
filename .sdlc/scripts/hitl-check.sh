@@ -3,31 +3,36 @@ set -euo pipefail
 
 # hitl-check.sh — Poll GitHub issue for human reply after HITL marker.
 # Called by engine via defaults.hitl.check_script.
-# Args: --repo OWNER/REPO --issue N --run-id ID --node-id ID --bot-login LOGIN
+# Args: --run-dir DIR --issue-source PATH --run-id ID --node-id ID --bot-login LOGIN
 # Exit 0 + body on stdout = reply found. Exit 1 = no reply yet.
 
-REPO="" ISSUE="" RUN_ID="" NODE_ID="" BOT_LOGIN=""
+RUN_DIR="" ISSUE_SOURCE="" RUN_ID="" NODE_ID="" BOT_LOGIN=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --repo)       REPO="$2"; shift 2 ;;
-    --issue)      ISSUE="$2"; shift 2 ;;
-    --run-id)     RUN_ID="$2"; shift 2 ;;
-    --node-id)    NODE_ID="$2"; shift 2 ;;
-    --bot-login)  BOT_LOGIN="$2"; shift 2 ;;
+    --run-dir)       RUN_DIR="$2"; shift 2 ;;
+    --issue-source)  ISSUE_SOURCE="$2"; shift 2 ;;
+    --run-id)        RUN_ID="$2"; shift 2 ;;
+    --node-id)       NODE_ID="$2"; shift 2 ;;
+    --bot-login)     BOT_LOGIN="$2"; shift 2 ;;
     *) echo "Unknown arg: $1" >&2; exit 1 ;;
   esac
 done
 
-# Auto-detect repo if not provided
-if [[ -z "$REPO" ]]; then
-  REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)
-fi
-
-if [[ -z "$ISSUE" ]]; then
-  echo "ERROR: --issue is required" >&2
+# Extract issue number from PM artifact frontmatter
+if [[ -z "$ISSUE_SOURCE" || -z "$RUN_DIR" ]]; then
+  echo "ERROR: --run-dir and --issue-source are required" >&2
   exit 1
 fi
+
+ISSUE=$(yq '.issue' "$RUN_DIR/$ISSUE_SOURCE" 2>/dev/null || true)
+if [[ -z "$ISSUE" || "$ISSUE" == "null" ]]; then
+  echo "ERROR: could not extract issue number from $RUN_DIR/$ISSUE_SOURCE" >&2
+  exit 1
+fi
+
+# Auto-detect repo
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)
 
 MARKER="<!-- hitl:${RUN_ID}:${NODE_ID} -->"
 

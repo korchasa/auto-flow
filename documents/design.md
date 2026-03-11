@@ -15,7 +15,7 @@
 
 ```mermaid
 graph LR
-    Issue["GitHub Issue"] --> CLI["deno task run<br/>--issue N"]
+    Issue["GitHub Issue"] --> CLI["deno task run"]
     CLI --> S1["Stage 1: PM"]
     S1 --> S2["Stage 2: Tech Lead"]
     S2 --> S3["Stage 3: Reviewer"]
@@ -172,7 +172,7 @@ graph TD
   - `cli.ts` — CLI entry point: argument parsing, .env loading
   - `mod.ts` — public API re-exports
 - **Interfaces:**
-  - CLI: `deno task run:{issue|text|file} <arg> [--config <path>] [--resume <run-id>]
+  - CLI: `deno task run [--prompt <text>] [--config <path>] [--resume <run-id>]
     [--dry-run] [-v|-q] [--env KEY=VAL] [--skip nodes] [--only nodes]`
   - Config: `.sdlc/pipeline.yaml` (YAML, version "1")
   - State: `.sdlc/runs/<run-id>/state.json` (JSON)
@@ -228,26 +228,32 @@ graph TD
   specific (GitHub), not engine code. Engine invokes via configurable paths.
 - **Scripts:**
   - `hitl-ask.sh` — render question JSON → markdown, post to GitHub issue.
-    - Input: `--repo`, `--issue`, `--run-id`, `--node-id`, `--question-json`.
-    - Renders: header, blockquoted question, numbered options (from
-      `options[].label` + `options[].description`), HTML marker
+    - Input: `--run-dir`, `--issue-source`, `--run-id`, `--node-id`,
+      `--question-json`.
+    - Extracts issue: `yq '.issue' "$RUN_DIR/$ISSUE_SOURCE"`.
+    - Auto-detects repo: `gh repo view --json nameWithOwner`.
+    - Renders: header, blockquoted question, numbered options, HTML marker
       `<!-- hitl:<run-id>:<node-id> -->`.
-    - Posts via `gh issue comment --repo <repo> <issue> --body "$md"`.
-    - Deps: `jq`, `gh`.
+    - Posts via `gh issue comment <N> --body "$md"`.
+    - Deps: `jq`, `yq`, `gh`.
   - `hitl-check.sh` — poll GitHub issue for human reply after marker.
-    - Input: `--repo`, `--issue`, `--run-id`, `--node-id`, `--bot-login`.
+    - Input: `--run-dir`, `--issue-source`, `--run-id`, `--node-id`,
+      `--bot-login`.
+    - Extracts issue: `yq '.issue' "$RUN_DIR/$ISSUE_SOURCE"`.
+    - Auto-detects repo: `gh repo view --json nameWithOwner`.
     - Fetches comments: `gh api repos/{owner}/{repo}/issues/<N>/comments`.
-    - jq filter: find comment with marker `<!-- hitl:<run-id>:<node-id> -->`,
-      then first subsequent comment where `.user.login != bot-login`.
+    - jq filter: find comment with marker, then first subsequent non-bot comment.
     - Exit 0 + body on stdout = reply found. Exit 1 = no reply yet.
-    - Deps: `jq`, `gh`.
+    - Deps: `jq`, `yq`, `gh`.
 - **Interfaces:** Called by engine via `defaults.hitl.ask_script` /
   `defaults.hitl.check_script` paths in `pipeline.yaml`.
 
-### 3.8 Pipeline Trigger (Legacy)
+### 3.8 Pipeline Trigger
 
-- **Purpose:** Trigger pipeline on issue number, run stages sequentially.
-- **Interfaces:** CLI: `deno task run:issue <N>`. Fetches issue via `gh`.
+- **Purpose:** Single entry point for pipeline. PM agent autonomously triages
+  open GitHub issues.
+- **Interfaces:** CLI: `deno task run [--prompt "..."]`. PM selects
+  highest-priority open issue via `gh`.
 - **Deps:** Devcontainer, Claude CLI auth (OAuth or API key), `GITHUB_TOKEN`.
 
 ## 4. Data
@@ -382,6 +388,7 @@ graph TD
       hitl:
         ask_script: .sdlc/scripts/hitl-ask.sh
         check_script: .sdlc/scripts/hitl-check.sh
+        issue_source: pm/01-spec.md
         poll_interval: 60
         timeout: 7200
     ```

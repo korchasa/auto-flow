@@ -5,8 +5,7 @@
  *
  * Options:
  *   --config <path>       Pipeline config file (default: .sdlc/pipeline.yaml)
- *   --issue <number>      GitHub issue number (sets args.issue)
- *   --task <file>         Task file path (sets args.task, args.task_id; mutually exclusive with --issue)
+ *   --prompt <text>       Additional context for PM agent (sets args.prompt)
  *   --resume <run-id>     Resume a previous run from its state
  *   --dry-run             Print execution plan without running
  *   -v, --verbose         Show full streaming output
@@ -37,17 +36,9 @@ export function parseArgs(args: string[]): EngineOptions {
       case "--config":
         configPath = args[++i];
         break;
-      case "--issue":
-        cliArgs.issue = args[++i];
+      case "--prompt":
+        cliArgs.prompt = args[++i];
         break;
-      case "--task": {
-        const filePath = args[++i];
-        cliArgs.task = filePath;
-        // Extract stem: basename without extension
-        const base = filePath.split("/").pop() ?? filePath;
-        cliArgs.task_id = base.replace(/\.[^.]+$/, "");
-        break;
-      }
       case "--resume":
         resume = true;
         runId = args[++i];
@@ -94,12 +85,6 @@ export function parseArgs(args: string[]): EngineOptions {
     }
   }
 
-  if (cliArgs.task && cliArgs.issue) {
-    throw new Error(
-      "--task and --issue are mutually exclusive: use one trigger at a time",
-    );
-  }
-
   return {
     config_path: configPath,
     run_id: runId,
@@ -122,8 +107,7 @@ Usage:
 
 Options:
   --config <path>       Pipeline config file (default: .sdlc/pipeline.yaml)
-  --issue <number>      GitHub issue number (sets args.issue)
-  --task <file>         Task file path (sets args.task, args.task_id; mutually exclusive with --issue)
+  --prompt <text>       Additional context for PM agent (optional)
   --resume <run-id>     Resume a previous run
   --dry-run             Print execution plan without running
   -v, --verbose         Show full streaming output from agents
@@ -134,12 +118,12 @@ Options:
   -h, --help            Show this help
 
 Examples:
-  deno task run --issue 42
-  deno task run:task --task .sdlc/tasks/my-feature.md
-  deno task run --config custom.yaml --issue 42 -v
+  deno task run
+  deno task run --prompt "Focus on the login bug"
+  deno task run --config custom.yaml -v
   deno task run --resume 20260308T143022
-  deno task run --dry-run --issue 1
-  deno task run --issue 42 --skip meta-agent --env DEBUG=true
+  deno task run --dry-run
+  deno task run --skip meta-agent --env DEBUG=true
 `);
 }
 

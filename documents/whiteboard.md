@@ -1,286 +1,193 @@
-# FR-21: Human-in-the-Loop (Agent-Initiated)
+# Consolidate to Single Autonomous Pipeline
 
 ## Goal
 
-Enable any pipeline agent to pause mid-task, ask a question to a human, and
-resume with the answer — without breaking pipeline autonomy in the common case.
-Business value: prevents hallucination/failure when agents face genuine
-ambiguity; enables 1-min human input to save 30-min executor+QA rework cycles.
+Eliminate dual-pipeline (`pipeline.yaml` + `pipeline-task.yaml`), remove
+`--issue <N>` and `--task` from CLI. PM agent autonomously triages GitHub Issues.
+Agents write comments to issues via `gh` themselves — engine has zero GitHub
+knowledge. Business value: zero-friction launch (`deno task run`), single config,
+PM owns triage.
 
 ## Overview
 
 ### Context
 
-- SRS: `documents/requirements.md` §3.21 (FR-21)
-- SDS: `documents/design.md` §3.7, §4.1 HITL, §5 "HITL via AskUserQuestion Interception"
-- RnD: `documents/rnd/human-in-the-loop.md` (experiments confirmed; all key questions resolved)
-- Pipeline is fully autonomous — no agent can currently request human input mid-task
-- `AskUserQuestion` is a built-in Claude Code tool; denied in `-p` mode but visible as structured
-  JSON in `permission_denials` of the CLI JSON output
-- Verified (see RnD): `--resume <session_id> -p "<answer>"` restores full context; agent
-  correctly interprets answer. Cost: ~$0.08/roundtrip
-- Engine must remain project-agnostic: zero GitHub/Slack-specific code in engine core;
-  delivery/polling delegated to configurable pipeline scripts
+- Two near-identical pipeline configs: 200 lines duplicated, 3 lines differ
+- CLI requires `--issue <N>` or `--task <file>` — user pre-selects work
+- `{{args.issue}}` used in: pipeline templates, HITL (`hitl.ts:129,165`),
+  engine runLabel (`engine.ts:80`), 10+ test files
+- Agents currently don't write to issues — engine/scripts handle all GitHub I/O
+- HITL scripts (`hitl-ask.sh`, `hitl-check.sh`) receive `--issue` from engine
 
 ### Current State
 
-Engine (`agent.ts`, `engine.ts`, `types.ts`, `state.ts`):
-- `ClaudeCliOutput` has no `permission_denials` field → engine cannot detect HITL requests
-- `NodeStatus` has no `waiting` state → cannot persist HITL pause in `state.json`
-- `PipelineDefaults` has no `hitl` config → no `ask_script`/`check_script`/`poll_interval`/`timeout`
-- `NodeState` has no `question_json` field → question not persisted for recovery
-- `engine.ts:executeAgentNode()` has no HITL detection or poll loop
-- `waiting` nodes not handled on `--resume`
-
-Pipeline scripts (`.sdlc/scripts/`):
-- `hitl-ask.sh` — does not exist
-- `hitl-check.sh` — does not exist
+- **CLI**: `--issue` and `--task` flags, mutually exclusive; no `--prompt`
+- **Pipeline**: PM reads `issue #{{args.issue}}`; presenter posts on `{{args.issue}}`
+- **Engine**: `hitl.ts` passes `args.issue` to HITL scripts; `engine.ts:80`
+  uses `args.issue` for run label
+- **Agents**: no `gh issue comment` in any agent prompt — zero GitHub writes
 
 ### Constraints
 
-- Engine must contain zero GitHub/Slack/email-specific code (SRS §3.21 key constraint)
-- No Claude API calls during human wait (poll must be cheap: `sleep` + shell script)
-- `--resume` skip logic is state.json-based (no changes needed to core resume mechanism)
-- HITL timeout → node `failed` → Meta-Agent triggered (existing `run_always` reused)
-- Must pass `deno task check` after each change (TDD: RED → GREEN → REFACTOR)
+- Engine = project-agnostic (zero GitHub/issue logic in engine core)
+- HITL scripts = GitHub-specific boundary (acceptable)
+- PM must output issue number in `01-spec.md` for downstream agents to read
+- HITL scripts extract issue number from PM artifact via `issue_source` config
+- `deno task check` must pass
+- `yq` required in runtime environment (Docker image)
 
 ## Definition of Done
 
-- [x] `ClaudeCliOutput` type includes `permission_denials?: PermissionDenial[]`
-- [x] `NodeStatus` includes `"waiting"` state
-- [x] `NodeState` includes `question_json?: string` (session_id already exists)
-- [x] `PipelineDefaults` includes `hitl?: HitlConfig` (`ask_script`, `check_script`,
-      `poll_interval`, `timeout`, `bot_login`)
-- [x] Engine detects `AskUserQuestion` in `permission_denials` after agent node completes
-- [x] Engine saves `session_id`, `question_json`, status `waiting` to `state.json`
-- [x] Engine invokes `ask_script` with `--repo`, `--issue`, `--run-id`, `--node-id`,
-      `--question-json` args
-- [x] Engine enters poll loop: `sleep(poll_interval)` → `check_script` → exit 0 = reply in stdout
-- [x] On reply: engine resumes agent via `claude --resume <session_id> -p "<reply>"`
-- [x] Configurable `poll_interval` (default 60s) and `timeout` (default 7200s) in `pipeline.yaml`
-- [x] On timeout: node marked `failed`, Meta-Agent triggered (existing mechanism)
-- [x] `deno task run --resume <run-id>` on pipeline with `waiting` node auto-enters poll loop
-- [x] `hitl-ask.sh` renders question JSON → markdown with HTML marker, posts via `gh issue comment`
-- [x] `hitl-check.sh` finds first non-bot comment after marker, outputs body (exit 0) or exit 1
+- [x] `pipeline-task.yaml` deleted
+- [x] `deno task run:task` removed from `deno.json`
+- [x] `--task` and `--issue` flags removed from CLI
+- [x] `--prompt <text>` flag added to CLI (optional, sets `args.prompt`)
+- [x] PM prompt: autonomously triages issues via `gh`; selects highest-priority
+      open issue; sets `in-progress` label; writes `issue: N` in `01-spec.md`
+      frontmatter; appends `args.prompt` if present
+- [x] All agent prompts: read issue number from `{{input.pm}}/01-spec.md`,
+      post progress to issue via `gh issue comment`
+- [x] Presenter reads issue from PM artifact, creates PR + posts summary
+- [x] Meta-agent reads issue from PM artifact, posts findings
+- [x] Engine: zero `args.issue` references; runLabel from `args.prompt` or "auto"
+- [x] HITL config: new `issue_source` field (relative to run_dir); scripts
+      receive `--run-dir` + `--issue-source`, extract issue via `yq`
+- [x] All `{{args.task}}`, `{{args.task_id}}`, `{{args.issue}}` removed from
+      pipeline templates and engine code
+- [x] CLI tests, engine tests, HITL tests updated
+- [x] SRS updated: single entry point `deno task run [--prompt "..."]`
+- [x] AGENTS.md updated
 - [x] `deno task check` passes
-- [x] SRS §3.21 all `[ ]` ACs marked `[x]` with evidence
 
-## Solution (Variant B: Extracted `hitl.ts` Module)
+## Solution
 
-### Architecture sequence
+### Step 1 — Delete `pipeline-task.yaml` + clean `deno.json`
 
-```
-executeAgentNode()
-  → runAgent() → AgentResult{permission_denials?}
-    → detectHitlRequest() → HitlQuestion found
-      → markNodeWaiting(sessionId, questionJson) + saveState()
-      → runHitlLoop(skipAsk=false)
-          → ask_script (gh issue comment)
-          → poll: sleep → check_script → reply? → invokeClaudeCli(--resume)
-          → timeout → AgentResult{success:false}
-  → resume (wasWaiting=true) → runHitlLoop(skipAsk=true)
-      → skip ask_script → poll → resume agent
-```
+- Delete `.sdlc/pipeline-task.yaml`
+- Remove `"run:task"` task from `deno.json`
 
-### Step 1 — RED: failing tests
+### Step 2 — CLI: remove `--task`, `--issue`, add `--prompt`
 
-**`hitl_test.ts`** (new):
-- `detectHitlRequest()`: null when no `permission_denials`; null when no
-  AskUserQuestion entry; `HitlQuestion` when AskUserQuestion present
-- `runHitlLoop()`: ask invoked with correct args; poll exits on check exit-0;
-  timeout returns failure; `skipAsk=true` skips ask invocation
-- Tests use injected `scriptRunner` stub (see Step 5) — no real shell invocations
+**`cli.ts`**:
+- Remove `case "--task"` block
+- Remove `case "--issue"` block
+- Remove mutual-exclusion check
+- Add `case "--prompt"`: `cliArgs.prompt = args[++i]`
+- Update `printUsage()`
+- `engine.ts:80` runLabel: `args.prompt?.slice(0,20) ?? "auto"`
 
-**`state_test.ts`** additions:
-- `markNodeWaiting()`: sets status=`waiting`, `session_id`, `question_json`
+**`cli_test.ts`**:
+- Remove all `--task` and `--issue` tests
+- Add `--prompt` test
 
-**`agent_test.ts`** additions:
-- `AgentResult.permission_denials` populated from `ClaudeCliOutput`
+### Step 3 — Pipeline: remove `{{args.issue}}` from templates
 
-### Step 2 — types.ts
-
-```typescript
-export interface PermissionDenial {
-  tool_name: string;
-  tool_input: Record<string, unknown>;
-}
-// ClaudeCliOutput: add field
-permission_denials?: PermissionDenial[];
-// NodeStatus: add "waiting" to union
-// NodeState: add field
-question_json?: string;   // serialized HitlQuestion; set when status=waiting
-// New interface:
-export interface HitlConfig {
-  ask_script: string;
-  check_script: string;
-  poll_interval: number;  // seconds between polls, default 60
-  timeout: number;        // max wait seconds, default 7200
-  bot_login?: string;     // login to exclude in hitl-check.sh
-}
-// PipelineDefaults: add field
-hitl?: HitlConfig;
-```
-
-### Step 3 — state.ts
-
-Add `markNodeWaiting()`:
-```typescript
-export function markNodeWaiting(
-  state: RunState, nodeId: string,
-  sessionId: string, questionJson: string,
-): void {
-  updateNodeState(state, nodeId, {
-    status: "waiting", session_id: sessionId, question_json: questionJson,
-  });
-}
-```
-
-### Step 4 — agent.ts
-
-- Add `permission_denials?: PermissionDenial[]` to `AgentResult` interface
-- In `runAgent()` success return: include
-  `permission_denials: result.output?.permission_denials`
-
-### Step 5 — hitl.ts (new file)
-
-Exports:
-```typescript
-export interface HitlQuestion {
-  question: string; header?: string;
-  options?: Array<{ label: string; description?: string }>;
-  multiSelect?: boolean;
-}
-export interface HitlRunOptions {
-  config: HitlConfig; nodeId: string; runId: string;
-  args: Record<string,string>; env: Record<string,string>;
-  sessionId: string; question: HitlQuestion;
-  node: NodeConfig; ctx: TemplateContext; settings: Required<NodeSettings>;
-  claudeArgs?: string[]; output?: OutputManager;
-  /** Injected script runner — defaults to real shell; override in tests. */
-  scriptRunner?: (path: string, args: string[]) => Promise<{exitCode: number; stdout: string}>;
-}
-export function detectHitlRequest(output: ClaudeCliOutput): HitlQuestion | null
-export async function runHitlLoop(
-  opts: HitlRunOptions, skipAsk?: boolean
-): Promise<AgentResult>
-```
-
-`runHitlLoop` flow:
-1. `!skipAsk` → invoke `ask_script` via shell with args:
-   `--repo ${env.GITHUB_REPO||""} --issue ${args.issue||""} --run-id ${runId}`
-   `--node-id ${nodeId} --question-json <JSON>`
-2. Poll (`deadline = Date.now() + config.timeout * 1000`):
-   - `output?.status(nodeId, "WAITING for human reply (${elapsed}s elapsed)")` — visible in terminal
-   - `sleep(config.poll_interval * 1000)`
-   - invoke `check_script` with `--repo --issue --run-id --node-id --bot-login`
-   - exit 0 → read stdout as reply → break loop
-   - exit 1 → no reply yet → continue
-   - other exit → log warning + continue (transient error)
-3. reply → `invokeClaudeCli({ resumeSessionId: sessionId, taskPrompt: reply, ... })`
-   → return `AgentResult` from resumed invocation
-4. deadline exceeded → `{ success: false, continuations: 0, error: "HITL timeout after Xs" }`
-
-Internal `runScript(path, args): Promise<{exitCode, stdout}>` — shared by ask + check.
-
-### Step 6 — engine.ts
-
-**`executeNode()`** — capture status before overwrite:
-```typescript
-const wasWaiting = this.state.nodes[nodeId]?.status === "waiting";
-markNodeStarted(this.state, nodeId);  // only sets status+started_at; preserves session_id+question_json
-// in switch:
-case "agent": success = await this.executeAgentNode(nodeId, node, wasWaiting);
-```
-Safety: `markNodeStarted()` only mutates `status` and `started_at` — `session_id` and `question_json`
-survive on `NodeState`. Pre-capture of `wasWaiting` before `markNodeStarted()` is the only fix needed.
-
-**`executeAgentNode(nodeId, node, wasWaiting=false)`** signature extended:
-
-- **Normal path** (`!wasWaiting`): run `runAgent()` → call `detectHitlRequest(result.output)`:
-  - question found → `markNodeWaiting()` + `saveState()` → `runHitlLoop(opts, false)`
-  - no question → proceed as before
-- **Resume path** (`wasWaiting`): read `nodeState.session_id` + `nodeState.question_json`
-  → `runHitlLoop(opts, true /* skipAsk */)`
-- Both paths: `!result.success` → `markNodeFailed()`; success → save log
-
-If HITL detected but `defaults.hitl` absent: throw immediately — fail fast.
-
-### Step 7 — config.ts
-
-In `extractNodeSettings()`: destructure `hitl` out alongside `max_parallel` and
-`claude_args` to prevent it leaking into per-node `NodeSettings`.
-No schema validation needed — `hitl` is optional; missing = HITL disabled.
-
-### Step 8 — hitl-ask.sh (`.sdlc/scripts/hitl-ask.sh`)
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-# Parse args: --repo --issue --run-id --node-id --question-json
-# If REPO empty: REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
-# Render via jq: header + blockquoted question + numbered options + HTML marker
-# Marker line: <!-- hitl:<RUN_ID>:<NODE_ID> -->
-# Post: gh issue comment "$ISSUE" --repo "$REPO" --body "$MARKDOWN"
-```
-
-Output markdown format:
-```
-**Agent `<node-id>` is waiting for your input**
-
-> <question>
-
-1. **<label>** — <description>
-
-_Reply with a comment below._
-<!-- hitl:<run-id>:<node-id> -->
-```
-
-### Step 9 — hitl-check.sh (`.sdlc/scripts/hitl-check.sh`)
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-# Parse: --repo --issue --run-id --node-id --bot-login
-# MARKER="<!-- hitl:${RUN_ID}:${NODE_ID} -->"
-# gh api "repos/${REPO}/issues/${ISSUE}/comments" --paginate \
-#   | jq -s "add"  ← REQUIRED: --paginate emits one array per page; -s merges into single array
-#   | jq: find marker comment → first subsequent where .user.login != BOT_LOGIN
-# Found: echo body; exit 0   Not found: exit 1
-```
-
-### Step 10 — pipeline.yaml + pipeline-task.yaml
-
-Add to `defaults`:
+**`pipeline.yaml`** PM `task_template`:
 ```yaml
-defaults:
-  hitl:
-    ask_script: .sdlc/scripts/hitl-ask.sh
-    check_script: .sdlc/scripts/hitl-check.sh
-    poll_interval: 60
-    timeout: 7200
-    bot_login: "github-actions[bot]"
+Triage open GitHub issues and select the highest-priority one to implement.
+Additional context: {{args.prompt}}
+Output:
+  - {{node_dir}}/01-spec.md (YAML frontmatter with `issue: <N>`,
+    then problem, affected requirements, SRS changes, scope)
+  - Update documents/requirements.md with new/modified requirements
 ```
 
-### Step 11 — GREEN + REFACTOR + CHECK
+Presenter `task_template`:
+```yaml
+Read issue number from {{input.pm}}/01-spec.md frontmatter.
+Create a PR targeting main and post a summary comment on that issue.
+Output: {{node_dir}}/06-summary.md
+```
 
-`deno task check` → fix all errors/warnings; confirm all tests pass.
+### Step 4 — Agent prompts: add `gh issue comment` responsibility
 
-### Step 12 — SRS + SDS update
+Each agent SKILL.md gets instruction to post progress to the issue.
+Pattern:
+```
+Read the issue number from the PM spec at `{{input.pm}}/01-spec.md`
+(YAML frontmatter `issue:` field). Post progress to that issue via
+`gh issue comment <N> --body "..."`.
+```
 
-Mark all FR-21 `[ ]` ACs `[x]` with `file.ts:line` evidence.
-Update `design.md` §3.7 evidence refs.
+PM is special — determines issue number, posts after selection.
+
+### Step 5 — PM agent prompt (`agents/pm/SKILL.md`)
+
+Major rewrite:
+1. Run `gh issue list --state open --json number,title,labels`
+   → select highest-priority unassigned issue
+2. Set label: `gh issue edit <N> --add-label "in-progress"`
+3. Read issue: `gh issue view <N> --json body,title,comments`
+4. Write `01-spec.md` with YAML frontmatter: `issue: <N>`
+5. Post comment: "Pipeline started — specification phase"
+6. If no open issues → fail fast with clear error
+
+### Step 6 — HITL: `issue_source` config + `--run-dir`
+
+**`pipeline.yaml`** HITL config:
+```yaml
+hitl:
+  ask_script: .sdlc/scripts/hitl-ask.sh
+  check_script: .sdlc/scripts/hitl-check.sh
+  issue_source: pm/01-spec.md    # relative to run_dir
+  poll_interval: 60
+  timeout: 7200
+  bot_login: "github-actions[bot]"
+```
+
+**`types.ts`** — `HitlConfig`: add `issue_source: string`
+
+**`hitl.ts`** — `buildScriptArgs()`:
+- Remove `--issue` / `--repo` args
+- Add `--run-dir ${runDir}` and `--issue-source ${config.issue_source}`
+
+**`hitl-ask.sh` / `hitl-check.sh`**:
+- Parse `--run-dir` and `--issue-source`
+- Extract: `ISSUE=$(yq '.issue' "$RUN_DIR/$ISSUE_SOURCE")`
+- Extract repo: `REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)`
+
+### Step 7 — Engine: remove all `args.issue` references
+
+- `engine.ts:80`: `args.prompt?.slice(0,20) ?? "auto"`
+- `hitl.ts:129,165`: pass `run_dir` + `issue_source` (Step 6)
+- Remove `args.issue` from all engine code
+
+### Step 8 — Update tests
+
+- `cli_test.ts`: remove task/issue tests, add prompt test
+- `template_test.ts`: keep as generic template tests (args.foo, etc.)
+- `engine_test.ts`: update default args (no issue)
+- `hitl_test.ts`: update to `run_dir` + `issue_source`
+- `human_test.ts`: update template fixtures
+- `agent_test.ts`, `config_test.ts`, `state_test.ts`: minor updates
+
+### Step 9 — Update docs
+
+**SRS** (`documents/requirements.md`):
+- Remove `run:task`, `run:text`, `run:file` entry points
+- Single entry: `deno task run [--prompt "..."]`
+- Update PM: autonomous triage, highest-priority selection
+- Update agents: self-posting to issues via `gh`
+
+**AGENTS.md**: `run:task` → `run`
+
+**SDS** (`documents/design.md`):
+- CLI interface: `--prompt` only
+- HITL: `issue_source` config, `--run-dir` args
+- Agent model: agents write to issues
+
+### Step 10 — GREEN + CHECK
+
+`deno task check` → all tests pass, zero warnings/errors.
 
 ### Execution order
 
-1. `hitl_test.ts` + state/agent test additions (RED)
-2. `types.ts`
-3. `state.ts` (`markNodeWaiting`)
-4. `agent.ts` (`permission_denials` in `AgentResult`)
-5. `hitl.ts` (GREEN)
-6. `engine.ts` (`wasWaiting` flag + HITL branch in `executeAgentNode`)
-7. `config.ts` (`hitl` exclusion in `extractNodeSettings`)
-8. `deno task check` — GREEN
-9. `hitl-ask.sh` + `hitl-check.sh`
-10. `pipeline.yaml` + `pipeline-task.yaml`
-11. `deno task check` — final
-12. `requirements.md` + `design.md` (evidence)
+1. Step 1 (delete files)
+2. Step 2 (CLI)
+3. Step 3 (pipeline.yaml)
+4. Step 5 (PM prompt)
+5. Step 4 (other agent prompts)
+6. Step 6 + 7 (HITL + engine)
+7. Step 8 (tests)
+8. Step 9 (docs)
+9. Step 10 (check)

@@ -32,7 +32,7 @@ export interface HitlRunOptions {
   config: HitlConfig;
   nodeId: string;
   runId: string;
-  args: Record<string, string>;
+  runDir: string;
   env: Record<string, string>;
   sessionId: string;
   question: HitlQuestion;
@@ -109,8 +109,7 @@ export async function runHitlLoop(
     config,
     nodeId,
     runId,
-    args,
-    env,
+    runDir,
     sessionId,
     question,
     settings,
@@ -126,7 +125,7 @@ export async function runHitlLoop(
   if (!skipAsk) {
     const askArgs = buildScriptArgs(
       "ask",
-      { repo: env.GITHUB_REPO ?? "", issue: args.issue ?? "" },
+      runDir,
       runId,
       nodeId,
       config,
@@ -162,7 +161,7 @@ export async function runHitlLoop(
 
     const checkArgs = buildScriptArgs(
       "check",
-      { repo: env.GITHUB_REPO ?? "", issue: args.issue ?? "" },
+      runDir,
       runId,
       nodeId,
       config,
@@ -225,17 +224,17 @@ export async function runHitlLoop(
 /** Build args array for ask/check scripts. */
 function buildScriptArgs(
   type: "ask" | "check",
-  identifiers: { repo: string; issue: string },
+  runDir: string,
   runId: string,
   nodeId: string,
   config: HitlConfig,
   question?: HitlQuestion,
 ): string[] {
   const args = [
-    "--repo",
-    identifiers.repo,
-    "--issue",
-    identifiers.issue,
+    "--run-dir",
+    runDir,
+    "--issue-source",
+    config.issue_source ?? "",
     "--run-id",
     runId,
     "--node-id",

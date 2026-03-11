@@ -19,6 +19,12 @@ revised plan that addresses the critique.
 4. **Revise the plan:** Produce a revised plan addressing all critique points.
 5. **Recommend a variant:** State which variant to prefer with justification.
 
+## Issue Progress
+
+Read the issue number from the PM spec at `{{input.pm}}/01-spec.md` (YAML
+frontmatter `issue:` field). Post progress to that issue via
+`gh issue comment <N> --body "Reviewer: critiquing and revising plan"`.
+
 ## Input
 
 Use ONLY the paths provided in the task message.

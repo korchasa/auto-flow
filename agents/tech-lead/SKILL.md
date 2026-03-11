@@ -23,6 +23,12 @@ with 2-3 variants.
    directory (path from task message) with 2-3 implementation variants (see
    Output Format below).
 
+## Issue Progress
+
+Read the issue number from the PM spec at `{{input.pm}}/01-spec.md` (YAML
+frontmatter `issue:` field). Post progress to that issue via
+`gh issue comment <N> --body "Tech Lead: producing implementation plan"`.
+
 ## Input
 
 Use ONLY the paths provided in the task message (e.g. `{{input.pm}}/01-spec.md`).

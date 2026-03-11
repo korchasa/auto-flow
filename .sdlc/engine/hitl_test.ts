@@ -97,6 +97,7 @@ function makeHitlConfig(): HitlConfig {
   return {
     ask_script: ".sdlc/scripts/hitl-ask.sh",
     check_script: ".sdlc/scripts/hitl-check.sh",
+    issue_source: "pm/01-spec.md",
     poll_interval: 0.01, // fast for tests (10ms)
     timeout: 0.5, // 500ms timeout for tests
     bot_login: "bot[bot]",
@@ -108,8 +109,8 @@ function makeBaseOpts(overrides?: Partial<HitlRunOptions>): HitlRunOptions {
     config: makeHitlConfig(),
     nodeId: "pm",
     runId: "test-run",
-    args: { issue: "42" },
-    env: { GITHUB_REPO: "owner/repo" },
+    runDir: "/tmp/run",
+    env: {},
     sessionId: "sess-123",
     question: {
       question: "Which language?",
@@ -125,7 +126,7 @@ function makeBaseOpts(overrides?: Partial<HitlRunOptions>): HitlRunOptions {
       node_dir: "/tmp/test",
       run_dir: "/tmp/run",
       run_id: "test-run",
-      args: { issue: "42" },
+      args: {},
       env: {},
       input: {},
     },
@@ -170,8 +171,8 @@ Deno.test("runHitlLoop — invokes ask_script with correct args", async () => {
   // ask_script was called
   const askCall = calls.find((c) => c.path.includes("ask"));
   assertEquals(askCall !== undefined, true);
-  assertEquals(askCall!.args.includes("--repo"), true);
-  assertEquals(askCall!.args.includes("--issue"), true);
+  assertEquals(askCall!.args.includes("--run-dir"), true);
+  assertEquals(askCall!.args.includes("--issue-source"), true);
   assertEquals(askCall!.args.includes("--run-id"), true);
   assertEquals(askCall!.args.includes("--node-id"), true);
   assertEquals(askCall!.args.includes("--question-json"), true);

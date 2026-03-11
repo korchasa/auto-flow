@@ -8,7 +8,7 @@ function makeCtx(): TemplateContext {
     node_dir: "/tmp/test-human-node",
     run_dir: "/tmp/test-run",
     run_id: "test-run",
-    args: { issue: "42" },
+    args: { prompt: "fix login" },
     env: {},
     input: { spec: "/tmp/test-run/spec" },
   };
@@ -24,7 +24,7 @@ Deno.test("runHuman — approve option", async () => {
   const node: NodeConfig = {
     type: "human",
     label: "Review",
-    question: "Approve changes for issue #{{args.issue}}?",
+    question: "Approve changes for prompt '{{args.prompt}}'?",
     options: ["approve", "reject"],
     abort_on: ["reject"],
   };
@@ -110,7 +110,7 @@ Deno.test("runHuman — template variables in question", async () => {
     type: "human",
     label: "Review",
     question:
-      "Review spec at {{input.spec}}/01-spec.md for issue #{{args.issue}}?",
+      "Review spec at {{input.spec}}/01-spec.md for prompt '{{args.prompt}}'?",
     options: ["approve", "reject"],
     abort_on: ["reject"],
   };
@@ -121,7 +121,7 @@ Deno.test("runHuman — template variables in question", async () => {
     capturedMessage.includes("/tmp/test-run/spec/01-spec.md"),
     true,
   );
-  assertEquals(capturedMessage.includes("#42"), true);
+  assertEquals(capturedMessage.includes("fix login"), true);
 });
 
 Deno.test("runHuman — option index out of range uses raw input", async () => {

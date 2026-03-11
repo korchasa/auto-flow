@@ -77,7 +77,7 @@ export class Engine {
       this.state = await loadState(this.options.run_id);
       this.state.status = "running";
     } else {
-      const runLabel = this.options.args.task_id ?? this.options.args.issue;
+      const runLabel = this.options.args.prompt?.slice(0, 20) ?? undefined;
       const runId = this.options.run_id ?? generateRunId(runLabel);
       const allNodeIds = Object.keys(this.config.nodes);
       this.state = createRunState(
@@ -301,7 +301,7 @@ export class Engine {
         config: hitlConfig,
         nodeId,
         runId: this.state.run_id,
-        args: this.state.args,
+        runDir: getRunDir(this.state.run_id),
         env: this.state.env,
         sessionId: nodeState.session_id,
         question,
@@ -376,7 +376,7 @@ export class Engine {
           config: hitlConfig,
           nodeId,
           runId: this.state.run_id,
-          args: this.state.args,
+          runDir: getRunDir(this.state.run_id),
           env: this.state.env,
           sessionId,
           question: hitlQuestion,

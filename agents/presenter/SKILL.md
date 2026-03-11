@@ -17,6 +17,11 @@ summary comment on the issue.
 3. **Create Pull Request:** Using `gh pr create` targeting `main`.
 4. **Post issue comment:** Using `gh issue comment`.
 
+## Issue Number
+
+Read the issue number from `{{input.pm}}/01-spec.md` YAML frontmatter
+(`issue:` field). Use this number for PR linking and issue comments.
+
 ## Input
 
 Use ONLY the paths provided in the task message (e.g. `{{input.pm}}/01-spec.md`).
@@ -27,9 +32,8 @@ Sources (in priority order):
 1. Spec and decision artifacts — paths from task message.
 2. QA report — path from task message.
 3. `git diff main...HEAD` and `git log main...HEAD --oneline` — always available.
-4. Task spec file (`.sdlc/tasks/`) — always available.
-5. `documents/requirements.md` — updated SRS.
-6. `documents/design.md` — updated SDS.
+4. `documents/requirements.md` — updated SRS.
+5. `documents/design.md` — updated SDS.
 
 If spec/decision files are missing, synthesize the summary from git diff, QA
 report, and task spec. Do NOT fail — always produce a summary.
@@ -51,7 +55,8 @@ After creating `06-summary.md`:
 0. **Check auth:** Run `gh auth status`. If not authenticated, skip PR/comment
    creation and note it in the summary output. Do NOT fail the stage.
 1. **Create PR:** Run `gh pr create --title "<title>" --body "<06-summary.md content>"` targeting `main`.
-2. **Post issue comment:** Run `gh issue comment <issue-number> --body "<summary>"`.
+2. **Post issue comment:** Run `gh issue comment <N> --body "<summary>"` where
+   `<N>` is the issue number from PM spec frontmatter.
 
 ## Rules
 

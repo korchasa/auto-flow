@@ -49,9 +49,10 @@ Required sections:
   vague advice.
 - **Auto-apply:** Commit prompt improvements to `agents/*/SKILL.md` on the
   feature branch. Changes are reviewed at PR merge.
-- **Post summary:** If the run is associated with a GitHub Issue (check
-  `state.json` for `args.issue`), use `gh issue comment` to post key findings.
-  Skip for task-mode runs (no associated issue).
+- **Post summary:** Read the PM spec at `<run-dir>/pm/01-spec.md`. If it
+  exists and contains YAML frontmatter with `issue: <N>`, use
+  `gh issue comment <N> --body "..."` to post key findings. If the PM spec
+  is missing or has no issue field, skip posting.
 - **Previous reports:** Check `.sdlc/runs/*/meta-agent/07-meta-report.md` for patterns.
 
 ## Allowed File Modifications

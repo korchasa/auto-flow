@@ -21,7 +21,7 @@
 - IF ISSUE PERSISTS AFTER 2 ATTEMPTS: STOP. OUTPUT "STOP-ANALYSIS REPORT"
   (STATE, EXPECTED, 5-WHY CHAIN, ROOT CAUSE, HYPOTHESES). WAIT FOR USER HELP.
 - WHEN EDITING PIPELINE CONFIG, ALWAYS CHECK LOCALLY FIRST.
-- BEFORE RUNNING `deno task run:task`, COMMIT OR STASH ALL LOCAL CHANGES.
+- BEFORE RUNNING `deno task run`, COMMIT OR STASH ALL LOCAL CHANGES.
   Engine's safety check treats uncommitted diffs as out-of-scope modifications.
 - BE PRECISE IN YOUR WORDING. USE A SCIENTIFIC APPROACH. ACCOMPANY HIGHLY
   SPECIALIZED TERMS AND ABBREVIATIONS WITH SHORT HINTS IN PARENTHESES
@@ -39,10 +39,10 @@
 
 Automate the full software development lifecycle for feature requests: from
 GitHub Issue triage to merged, tested code — fully autonomous, no human gates
-between stages. A locally-run system where a GitHub Issue triggers a chain of
-specialized AI agents (Claude Code CLI) via `deno task run --issue <N>`, each
-performing a distinct role (PM, Tech Lead, Architect, Executor, QA, Presenter,
-Meta-Agent).
+between stages. A locally-run system where `deno task run` triggers a chain of
+specialized AI agents (Claude Code CLI), PM autonomously selects highest-priority
+open issue, each agent performing a distinct role (PM, Tech Lead, Architect,
+Executor, QA, Presenter, Meta-Agent).
 
 ## Project tooling Stack
 
@@ -58,7 +58,7 @@ Meta-Agent).
 - **Pattern:** Configurable DAG-based multi-agent pipeline with parallel levels,
   loop nodes, and human interaction nodes
 - **Pipeline Engine:** Deno/TypeScript engine (`.sdlc/engine/`) driven by YAML
-  config (`.sdlc/pipeline.yaml`). Entry: `deno task run --issue <N>`
+  config (`.sdlc/pipeline.yaml`). Entry: `deno task run [--prompt "..."]`
 - **Node types:** `agent` (Claude CLI), `merge` (combine outputs), `loop`
   (iterative body with exit condition), `human` (terminal prompt)
 - **Inter-agent communication:** Structured artifacts in

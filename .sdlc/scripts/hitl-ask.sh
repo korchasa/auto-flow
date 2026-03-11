@@ -3,30 +3,35 @@ set -euo pipefail
 
 # hitl-ask.sh — Render HITL question JSON → markdown, post to GitHub issue.
 # Called by engine via defaults.hitl.ask_script.
-# Args: --repo OWNER/REPO --issue N --run-id ID --node-id ID --question-json JSON
+# Args: --run-dir DIR --issue-source PATH --run-id ID --node-id ID --question-json JSON
 
-REPO="" ISSUE="" RUN_ID="" NODE_ID="" QUESTION_JSON=""
+RUN_DIR="" ISSUE_SOURCE="" RUN_ID="" NODE_ID="" QUESTION_JSON=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --repo)         REPO="$2"; shift 2 ;;
-    --issue)        ISSUE="$2"; shift 2 ;;
-    --run-id)       RUN_ID="$2"; shift 2 ;;
-    --node-id)      NODE_ID="$2"; shift 2 ;;
+    --run-dir)       RUN_DIR="$2"; shift 2 ;;
+    --issue-source)  ISSUE_SOURCE="$2"; shift 2 ;;
+    --run-id)        RUN_ID="$2"; shift 2 ;;
+    --node-id)       NODE_ID="$2"; shift 2 ;;
     --question-json) QUESTION_JSON="$2"; shift 2 ;;
     *) echo "Unknown arg: $1" >&2; exit 1 ;;
   esac
 done
 
-# Auto-detect repo if not provided
-if [[ -z "$REPO" ]]; then
-  REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)
-fi
-
-if [[ -z "$ISSUE" ]]; then
-  echo "ERROR: --issue is required" >&2
+# Extract issue number from PM artifact frontmatter
+if [[ -z "$ISSUE_SOURCE" || -z "$RUN_DIR" ]]; then
+  echo "ERROR: --run-dir and --issue-source are required" >&2
   exit 1
 fi
+
+ISSUE=$(yq '.issue' "$RUN_DIR/$ISSUE_SOURCE" 2>/dev/null || true)
+if [[ -z "$ISSUE" || "$ISSUE" == "null" ]]; then
+  echo "ERROR: could not extract issue number from $RUN_DIR/$ISSUE_SOURCE" >&2
+  exit 1
+fi
+
+# Auto-detect repo
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)
 
 if [[ -z "$QUESTION_JSON" ]]; then
   echo "ERROR: --question-json is required" >&2

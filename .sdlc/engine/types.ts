@@ -177,6 +177,7 @@ export interface ClaudeCliOutput {
 export interface HitlConfig {
   ask_script: string;
   check_script: string;
+  issue_source?: string; // relative path from run_dir to artifact with issue frontmatter
   poll_interval: number; // seconds between polls, default 60
   timeout: number; // max wait seconds, default 7200
   bot_login?: string; // login to exclude in hitl-check.sh

@@ -16,6 +16,12 @@ Executor's implementation against the specification and produce a QA report.
 3. **Review changed files:** Inspect `git diff` for quality and correctness.
 4. **Produce QA report:** Write verdict (PASS/FAIL) with detailed findings.
 
+## Issue Progress
+
+Read the issue number from the PM spec at `{{input.pm}}/01-spec.md` (YAML
+frontmatter `issue:` field). Post progress to that issue via
+`gh issue comment <N> --body "QA: verifying implementation — verdict: <PASS|FAIL>"`.
+
 ## Input
 
 - Specification and decision paths are provided in the task prompt.

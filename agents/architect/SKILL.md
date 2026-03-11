@@ -18,6 +18,12 @@ the final implementation variant and produce a task breakdown for the Executor.
    alignment, and complexity/maintainability trade-off.
 4. **Produce task breakdown:** Ordered by dependency, each task is atomic.
 
+## Issue Progress
+
+Read the issue number from the PM spec at `{{input.pm}}/01-spec.md` (YAML
+frontmatter `issue:` field). Post progress to that issue via
+`gh issue comment <N> --body "Architect: selecting variant and breaking down tasks"`.
+
 ## Input
 
 Use ONLY the paths provided in the task message.

@@ -20,7 +20,7 @@ function makeOptions(overrides?: Partial<EngineOptions>): EngineOptions {
   return {
     config_path: ".sdlc/pipeline.yaml",
     verbosity: "quiet",
-    args: { issue: "42" },
+    args: {},
     env_overrides: {},
     ...overrides,
   };
@@ -30,7 +30,6 @@ Deno.test("EngineOptions — default structure", () => {
   const opts = makeOptions();
   assertEquals(opts.config_path, ".sdlc/pipeline.yaml");
   assertEquals(opts.verbosity, "quiet");
-  assertEquals(opts.args.issue, "42");
   assertEquals(opts.resume, undefined);
   assertEquals(opts.dry_run, undefined);
 });
