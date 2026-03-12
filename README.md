@@ -1,84 +1,161 @@
 # auto-flow
 
-Fully autonomous software development pipeline: from GitHub Issue to merged PR — no human gates between stages.
+Fully autonomous software development pipeline: from GitHub Issue triage to merged PR — no human gates between stages.
 
-A CI/CD-integrated system where a labeled GitHub Issue triggers a chain of specialized AI agents (Claude Code CLI), each performing a distinct SDLC role.
+A locally-run system where `deno task run` triggers a DAG-based chain of specialized AI agents (Claude Code CLI). PM agent autonomously selects the highest-priority open issue; each agent performs a distinct SDLC role (PM, Tech Lead, Reviewer, Architect, SDS Update, Executor, QA, Presenter, Meta-Agent).
 
 ## How It Works
 
-1. A GitHub Issue with the `agent-pipeline` label triggers the pipeline
-2. Specialized agents execute sequentially, each producing structured artifacts
-3. Agents communicate via Markdown files committed to the repository
-4. A Pull Request is created automatically for human review — the only manual checkpoint
+The pipeline engine (`.sdlc/engine/`, Deno/TypeScript) reads a YAML config (`.sdlc/pipeline.yaml`) and builds a directed acyclic graph (DAG) of nodes. Nodes are sorted topologically into parallel levels and executed concurrently (configurable `max_parallel`).
 
-### Pipeline Stages
+Four node types:
 
-- **Stage 1 — Project Manager**: Reads the issue, produces a specification (`01-spec.md`), updates SRS
-- **Stage 2 — Tech Lead**: Creates an implementation plan with 2-3 variants (`02-plan.md`)
-- **Stage 3 — Reviewer**: Critiques and revises the plan (`03-revised-plan.md`)
-- **Stage 4 — Architect**: Selects a variant, produces task breakdown (`04-decision.md`)
-- **Stage 5 — Tech Lead (SDS)**: Updates the Software Design Specification
-- **Stage 6-7 — Executor + QA**: Iterative implementation/verification loop (max 3 iterations)
-- **Stage 8 — Presenter**: Creates PR with a human-readable summary (`06-summary.md`)
-- **Stage 9 — Meta-Agent**: Analyzes logs, auto-applies prompt improvements
+- **agent** — invokes Claude Code CLI with a role-specific prompt
+- **merge** — combines outputs from multiple predecessor nodes
+- **loop** — iterative body with frontmatter-based exit condition (e.g., Executor+QA cycle)
+- **human** — terminal prompt for manual input; also supports Human-in-the-Loop (HITL) via GitHub issue comments
+
+Inter-agent communication uses structured Markdown artifacts in `.sdlc/runs/<run-id>/<node-id>/`, linked via `{{input.<node-id>}}` template variables. On validation failure, the engine resumes the agent in the same session with error context (continuation mechanism).
+
+## Pipeline Stages
+
+| Node | Role | Output |
+|------|------|--------|
+| `pm` | Project Manager — Specification | `01-spec.md` |
+| `tech-lead` | Tech Lead — Implementation Plan | `02-plan.md` |
+| `reviewer` | Tech Lead Reviewer — Critique & Revision | `03-revised-plan.md` |
+| `architect` | Architect — Decision & Task Breakdown | `04-decision.md` |
+| `sds-update` | Tech Lead — SDS Update | updated `documents/design.md` |
+| `commit-plan` | Committer — plan phase | git commit |
+| `impl-loop` | Executor+QA loop (max 3 iterations) | implementation + `05-qa-report.md` |
+| `commit-impl` | Committer — impl phase | git commit |
+| `presenter` | Presenter — Change Summary & PR | `06-summary.md` |
+| `commit-present` | Committer — present phase | git commit |
+| `meta-agent` | Meta-Agent — Prompt Analysis (runs always) | `07-meta-report.md` |
 
 ## Architecture
 
-- **Pattern**: Multi-agent pipeline with sequential stages and iterative loops
-- **Orchestration**: Shell scripts in `.sdlc/scripts/` invoke `claude` CLI with role-specific prompts
-- **Inter-agent communication**: Structured Markdown artifacts in `.sdlc/pipeline/<issue-number>/`
-- **Continuation mechanism**: `--resume` flag for re-invoking agents on validation failure
-- **Safety checks**: Diff-based scope validation, secret detection via `gitleaks`
+- **Engine:** `.sdlc/engine/` — Deno/TypeScript DAG executor with YAML config, template interpolation, parallel levels, loop nodes, HITL support, resume capability
+- **Agent prompts:** `agents/<name>/SKILL.md` — 10 agents with YAML frontmatter; dual-use as pipeline prompts and Claude Code skills
+- **Artifact store:** `.sdlc/runs/<run-id>/<node-id>/` — per-run isolation, git-tracked
+- **State:** `.sdlc/runs/<run-id>/state.json` — tracks node completion for resume
+- **Validation:** Rule-based checks per node (file_exists, file_not_empty, contains_section, custom_script, frontmatter_field)
+- **Commit strategy:** Engine does not auto-commit; dedicated `committer` agent nodes handle commits at 3 pipeline points
+- **Observability:** 3 verbosity levels (`-q` / default / `-v`); status lines with timestamps; final summary
+- **Legacy:** Shell scripts in `.sdlc/scripts/` preserved for backward compatibility, superseded by engine
 
-## Tech Stack
-
-- **Deno** — scripting, utilities, validation, task runner
-- **Shell/Bash** — stage orchestration scripts
-- **Docker** — single runtime image for all stages
-- **GitHub Actions** — CI/CD pipeline trigger and execution
-- **Claude Code CLI** (`claude`) — AI agent runtime
-- **`gh` CLI** — GitHub API interaction (PRs, issue comments)
-
-## Project Structure
-
-```
-.sdlc/
-  agents/          # Agent system prompts (versioned)
-  scripts/         # Stage orchestration scripts + lib.sh
-  pipeline/        # Per-issue artifacts and logs
-documents/
-  requirements.md  # Software Requirements Specification (SRS)
-  design.md        # Software Design Specification (SDS)
-scripts/           # Deno task scripts (check, test, dev, prod)
-```
-
-## Development
-
-### Prerequisites
+## Prerequisites
 
 - [Deno](https://deno.land/) runtime
-- Claude Code CLI (`@anthropic-ai/claude-code`)
-- `gh` CLI for GitHub API interaction
+- Docker / devcontainer (runtime environment)
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude`)
+- [`gh` CLI](https://cli.github.com/) for GitHub API interaction
+- Git
 
-### Commands
+## Quick Start
 
 ```bash
-deno task check    # Full verification: format, lint, test, comment-scan
-deno task test     # Run all tests
+# Run the full pipeline (PM auto-selects highest-priority open issue)
+deno task run
+
+# Pass additional context to PM
+deno task run --prompt "Focus on performance issues"
+
+# Resume a failed/interrupted run
+deno task run --resume <run-id>
+
+# Dry run (validate config, show DAG, no execution)
+deno task run --dry-run
 ```
 
 ## Configuration
 
-All pipeline configuration is via environment variables:
+Pipeline behavior is defined in `.sdlc/pipeline.yaml`. Key settings under `defaults:`:
 
-- `SDLC_MAX_CONTINUATIONS` — max continuations per stage (default: `3`)
-- `SDLC_MAX_QA_ITERATIONS` — max Executor+QA loop iterations (default: `3`)
-- `SDLC_STAGE_TIMEOUT_MINUTES` — default timeout per stage in minutes (default: `30`)
+- `max_continuations` — max agent re-invocations on validation failure (default: 3)
+- `max_parallel` — concurrent node execution limit (default: 2)
+- `timeout_seconds` — per-node timeout (default: 1800)
+- `hitl` — Human-in-the-Loop config: `ask_script`, `check_script`, `poll_interval`, `timeout`
 
-### Authentication
+Node-level overrides are supported for all defaults.
+
+## CLI Flags
+
+```
+deno task run [OPTIONS]
+
+Options:
+  --prompt <text>     Additional context passed to PM agent
+  --resume <run-id>   Resume a previous run (skip completed nodes)
+  --dry-run           Validate config and show DAG without executing
+  --config <path>     Custom pipeline config (default: .sdlc/pipeline.yaml)
+  --skip <nodes>      Comma-separated node IDs to skip
+  --only <nodes>      Run only specified nodes
+  --env KEY=VAL       Set environment variable for the run
+  -v                  Verbose output (detailed agent diagnostics)
+  -q                  Quiet output (minimal status)
+```
+
+## Agents as Skills
+
+All 10 pipeline agents are also available as Claude Code slash commands via `.claude/skills/agent-<name>` symlinks pointing to `agents/<name>/`.
+
+Available commands:
+
+- `/agent-pm` — Project Manager
+- `/agent-tech-lead` — Tech Lead (implementation plan)
+- `/agent-tech-lead-reviewer` — Tech Lead Reviewer (critique)
+- `/agent-architect` — Architect (decision & task breakdown)
+- `/agent-tech-lead-sds` — Tech Lead SDS (design spec update)
+- `/agent-executor` — Executor (implementation)
+- `/agent-qa` — QA (verification)
+- `/agent-presenter` — Presenter (summary & PR)
+- `/agent-meta-agent` — Meta-Agent (prompt analysis)
+- `/agent-committer` — Committer (git commits)
+
+## Project Structure
+
+```
+agents/                    # Agent prompts (10 agents)
+  pm/SKILL.md
+  tech-lead/SKILL.md
+  tech-lead-reviewer/SKILL.md
+  architect/SKILL.md
+  tech-lead-sds/SKILL.md
+  executor/SKILL.md
+  qa/SKILL.md
+  presenter/SKILL.md
+  meta-agent/SKILL.md
+  committer/SKILL.md
+.sdlc/
+  engine/                  # Pipeline engine (Deno/TypeScript)
+  pipeline.yaml            # Pipeline DAG configuration
+  runs/                    # Per-run artifacts and state
+  scripts/                 # Legacy shell scripts + HITL scripts
+.claude/
+  skills/                  # Symlinks: agent-<name> -> ../../agents/<name>/
+documents/
+  requirements.md          # Software Requirements Specification (SRS)
+  design.md                # Software Design Specification (SDS)
+scripts/
+  check.ts                 # Full verification: fmt, lint, test, gitleaks
+```
+
+## Development Commands
+
+```bash
+deno task run              # Run the full pipeline
+deno task check            # Full verification: format, lint, test, gitleaks
+deno task test             # Run all tests
+deno task test:engine      # Run engine tests only
+deno task fmt              # Format code
+deno task run:validate     # Type-check engine modules
+```
+
+## Authentication
 
 - **Claude Code CLI** — OAuth session (`claude login`) or `ANTHROPIC_API_KEY` env var
-- `GITHUB_TOKEN` — for PR creation and issue comments (auto-provided by GitHub Actions)
+- **`GITHUB_TOKEN`** — required for PR creation and issue comments (set manually or via `gh auth login`)
 
 ## License
 
