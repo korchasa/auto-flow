@@ -458,6 +458,32 @@
   - [ ] Agents-as-skills mentioned with `/agent-<name>` slash command examples.
   - [ ] Installation/setup instructions are accurate for devcontainer workflow.
 
+### 3.23 FR-23: Run Artifacts Folder Structure
+
+- **Description:** Run artifacts under `.sdlc/runs/<run-id>/` must follow a
+  hierarchical layout that groups node output directories by pipeline phase,
+  separating agent output artifacts from runtime metadata (logs, state).
+- **Motivation:** Current flat layout intermixes planning nodes, implementation
+  loop nodes, commit nodes, and infrastructure files (`logs/`, `state.json`)
+  at the same level. This hinders navigability and does not reflect the
+  pipeline execution flow.
+- **Layout:** Node output directories grouped into phase subdirectories
+  reflecting the DAG execution flow. Runtime metadata (`state.json`, `logs/`)
+  at the run root level (not inside phase groups).
+- **Acceptance criteria:**
+  - [ ] Node output directories are grouped by pipeline phase under
+    `.sdlc/runs/<run-id>/` (e.g., `plan/`, `impl/`, `report/` or similar
+    phase names derived from pipeline stages).
+  - [ ] `state.json` and `logs/` remain at the run root level
+    (`.sdlc/runs/<run-id>/state.json`, `.sdlc/runs/<run-id>/logs/`).
+  - [ ] `{{node_dir}}` and `{{input.<node-id>}}` template variables resolve
+    correctly to the new hierarchical paths.
+  - [ ] Engine's state manager, log saver, and artifact validator work with
+    the new directory structure.
+  - [ ] Existing pipeline.yaml node definitions require minimal changes (phase
+    grouping derived from config or convention, not hardcoded per-node paths).
+  - [ ] All existing engine tests pass after restructuring.
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
