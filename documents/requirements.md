@@ -732,6 +732,29 @@
     Evidence: `engine/config_test.ts:568-659`.
   - [x] `deno task check` passes.
 
+### 3.31 FR-32: Stream Log Timestamps
+
+- **Description:** Each non-empty line written to the stream log file
+  (`.sdlc/runs/<run-id>/logs/<node-id>.jsonl`) is prefixed with a wall-clock
+  timestamp in `[HH:MM:SS]` format (24-hour, zero-padded). Empty lines pass
+  through without prefix. Terminal output via `onOutput` callback is NOT
+  prefixed — timestamps appear in persisted logs only.
+- **Motivation:** Raw JSONL log files lack temporal context, making it hard to
+  correlate log entries with real-world events during post-incident analysis.
+- **Acceptance criteria:**
+  - [x] Each non-empty line in the stream log file is prefixed with `[HH:MM:SS]`.
+    Evidence: `engine/agent.ts:606-611` (`stampLines()`),
+    `engine/agent_test.ts:400-407` (single-line test),
+    `engine/agent_test.ts:409-424` (multi-line test).
+  - [x] Timestamp reflects wall-clock time when the event was received (not batch time).
+    Evidence: `engine/agent.ts:594-600` (`tsPrefix()` calls `new Date()` at call time),
+    `engine/agent.ts:384,402` (`stampLines` called inside stream processing loop).
+  - [x] Terminal output via `onOutput` callback is NOT prefixed with timestamps.
+    Evidence: `engine/agent.ts:386,404` (`onOutput` receives raw `summary` without `stampLines`).
+  - [x] Timestamp format is `[HH:MM:SS] <content>` (24-hour, zero-padded, space before content).
+    Evidence: `engine/agent.ts:594-600` (format construction),
+    `engine/agent_test.ts:391-398` (format regex test).
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
