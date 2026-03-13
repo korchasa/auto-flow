@@ -70,6 +70,36 @@ function validateSchema(config: Record<string, unknown>): void {
     const node = rawNode as Record<string, unknown>;
     validateNode(id, node, nodeIds);
   }
+
+  // Validate phases if present
+  if (config.phases) {
+    if (typeof config.phases !== "object" || Array.isArray(config.phases)) {
+      throw new Error(
+        "'phases' must be an object mapping phase names to node arrays",
+      );
+    }
+    const phases = config.phases as Record<string, unknown>;
+    const seenNodes = new Map<string, string>(); // nodeId → phaseName
+    for (const [phaseName, phaseNodes] of Object.entries(phases)) {
+      if (!Array.isArray(phaseNodes)) {
+        throw new Error(`Phase '${phaseName}' must be an array of node IDs`);
+      }
+      for (const nodeId of phaseNodes) {
+        if (!nodeIds.includes(nodeId as string)) {
+          throw new Error(
+            `Phase '${phaseName}' references unknown node '${nodeId}'`,
+          );
+        }
+        const existing = seenNodes.get(nodeId as string);
+        if (existing) {
+          throw new Error(
+            `Node '${nodeId}' appears in multiple phases: '${existing}' and '${phaseName}'`,
+          );
+        }
+        seenNodes.set(nodeId as string, phaseName);
+      }
+    }
+  }
 }
 
 function validateNode(

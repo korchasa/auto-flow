@@ -563,6 +563,69 @@ Deno.test("parseConfig — run_always absent leaves no run_on", () => {
   assertEquals(config.nodes.spec.run_always, undefined);
 });
 
+// --- phases validation tests ---
+
+Deno.test("parseConfig — phases referencing valid nodes passes", () => {
+  const yaml = `
+name: test
+version: "1"
+phases:
+  plan: [a]
+  impl: [b]
+nodes:
+  a:
+    type: agent
+    label: A
+    task_template: "do A"
+  b:
+    type: agent
+    label: B
+    task_template: "do B"
+    inputs: [a]
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.phases!.plan, ["a"]);
+});
+
+Deno.test("parseConfig — phases referencing unknown node throws", () => {
+  const yaml = `
+name: test
+version: "1"
+phases:
+  plan: [a, nonexistent]
+nodes:
+  a:
+    type: agent
+    label: A
+    task_template: "do A"
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "Phase 'plan' references unknown node 'nonexistent'",
+  );
+});
+
+Deno.test("parseConfig — phases with duplicate node across phases throws", () => {
+  const yaml = `
+name: test
+version: "1"
+phases:
+  plan: [a]
+  impl: [a]
+nodes:
+  a:
+    type: agent
+    label: A
+    task_template: "do A"
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "Node 'a' appears in multiple phases",
+  );
+});
+
 // --- validatePromptPaths tests (FR-31) ---
 
 Deno.test("parseConfig — missing prompt file throws with file path", () => {
