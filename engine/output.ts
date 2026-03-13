@@ -1,4 +1,4 @@
-import type { Verbosity } from "./types.ts";
+import type { ClaudeCliOutput, Verbosity } from "./types.ts";
 
 /** Input artifact descriptor for verbose output. */
 export interface VerboseInput {
@@ -185,6 +185,18 @@ export class OutputManager {
     for (const f of files) {
       this.write(`    ${f}\n`);
     }
+  }
+
+  /** Show one-line agent result summary after node completion (FR-30). Suppressed in quiet mode. */
+  nodeResult(nodeId: string, output: ClaudeCliOutput): void {
+    if (this.verbosity === "quiet") return;
+    const firstLine = (output.result ?? "").split("\n")[0].slice(0, 120);
+    const cost = output.total_cost_usd.toFixed(4);
+    const durationS = Math.round(output.duration_ms / 1000);
+    this.status(
+      nodeId,
+      `  RESULT: ${firstLine} | cost=$${cost} | duration=${durationS}s | turns=${output.num_turns}`,
+    );
   }
 
   /** Print the dry-run execution plan. */

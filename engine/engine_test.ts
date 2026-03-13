@@ -13,6 +13,7 @@ import {
   resolveInputArtifacts,
   sortPostPipelineNodes,
 } from "./engine.ts";
+import type { AgentResult } from "./agent.ts";
 import { getNodesByStatus } from "./state.ts";
 import { OutputManager } from "./output.ts";
 
@@ -538,6 +539,123 @@ Deno.test("dryRunPlan — no Post-pipeline section when params omitted (backward
   const output = cap.lines.join("");
   assertEquals(output.includes("Post-pipeline:"), false);
   assertEquals(output.includes("Level 1"), true);
+});
+
+// --- Task 4: executeLoopNode onNodeComplete → nodeResult() wiring ---
+
+Deno.test("executeLoopNode onNodeComplete — calls nodeResult() for successful loop body with output", () => {
+  const cap = createCapture();
+  const out = new OutputManager("normal", cap.writer);
+
+  const mockResult: AgentResult = {
+    success: true,
+    continuations: 0,
+    output: {
+      result: "Loop body completed successfully",
+      session_id: "s-loop-1",
+      total_cost_usd: 0.0080,
+      duration_ms: 15000,
+      duration_api_ms: 14000,
+      num_turns: 3,
+      is_error: false,
+    },
+  };
+
+  // Simulate the onNodeComplete callback from executeLoopNode (engine.ts:545-565)
+  const onNodeComplete = (
+    id: string,
+    _iteration: number,
+    result: AgentResult,
+  ) => {
+    if (result.success) {
+      out.status(id, "COMPLETED");
+      if (result.output) {
+        out.nodeResult(id, result.output);
+      }
+    } else {
+      out.nodeFailed(id, result.error ?? "Failed");
+    }
+  };
+
+  onNodeComplete("executor", 1, mockResult);
+
+  const output = cap.lines.join("");
+  assertEquals(output.includes("RESULT:"), true);
+  assertEquals(output.includes("Loop body completed successfully"), true);
+  assertEquals(output.includes("cost=$0.0080"), true);
+  assertEquals(output.includes("turns=3"), true);
+  assertEquals(output.includes("duration=15s"), true);
+});
+
+Deno.test("executeLoopNode onNodeComplete — suppresses nodeResult() in quiet mode", () => {
+  const cap = createCapture();
+  const out = new OutputManager("quiet", cap.writer);
+
+  const mockResult: AgentResult = {
+    success: true,
+    continuations: 0,
+    output: {
+      result: "Loop body done",
+      session_id: "s-loop-2",
+      total_cost_usd: 0.005,
+      duration_ms: 5000,
+      duration_api_ms: 4500,
+      num_turns: 2,
+      is_error: false,
+    },
+  };
+
+  const onNodeComplete = (
+    id: string,
+    _iteration: number,
+    result: AgentResult,
+  ) => {
+    if (result.success) {
+      out.status(id, "COMPLETED");
+      if (result.output) {
+        out.nodeResult(id, result.output);
+      }
+    } else {
+      out.nodeFailed(id, result.error ?? "Failed");
+    }
+  };
+
+  onNodeComplete("executor", 1, mockResult);
+
+  // quiet mode: status() and nodeResult() both suppressed; only errors shown
+  assertEquals(cap.lines.length, 0);
+});
+
+Deno.test("executeLoopNode onNodeComplete — skips nodeResult() when result has no output", () => {
+  const cap = createCapture();
+  const out = new OutputManager("normal", cap.writer);
+
+  const mockResult: AgentResult = {
+    success: true,
+    continuations: 0,
+    // output intentionally absent
+  };
+
+  const onNodeComplete = (
+    id: string,
+    _iteration: number,
+    result: AgentResult,
+  ) => {
+    if (result.success) {
+      out.status(id, "COMPLETED");
+      if (result.output) {
+        out.nodeResult(id, result.output);
+      }
+    } else {
+      out.nodeFailed(id, result.error ?? "Failed");
+    }
+  };
+
+  onNodeComplete("executor", 1, mockResult);
+
+  const output = cap.lines.join("");
+  assertEquals(output.includes("COMPLETED"), true);
+  assertEquals(output.includes("RESULT:"), false);
 });
 
 Deno.test("dry-run — post-pipeline nodes excluded from regular levels filtering logic", () => {

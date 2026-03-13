@@ -6,6 +6,7 @@ import type {
   RunState,
   TemplateContext,
 } from "./types.ts";
+import type { AgentResult } from "./agent.ts";
 import { loadConfig } from "./config.ts";
 import { buildLevels, topoSort } from "./dag.ts";
 import {
@@ -293,11 +294,18 @@ export class Engine {
 
     try {
       let success: boolean;
+      let lastAgentResult: AgentResult | null = null;
 
       switch (node.type) {
-        case "agent":
-          success = await this.executeAgentNode(nodeId, node, wasWaiting);
+        case "agent": {
+          lastAgentResult = await this.executeAgentNode(
+            nodeId,
+            node,
+            wasWaiting,
+          );
+          success = lastAgentResult?.success === true;
           break;
+        }
         case "merge":
           success = await this.executeMergeNode(nodeId, node);
           break;
@@ -315,9 +323,15 @@ export class Engine {
         markNodeCompleted(this.state, nodeId);
         const duration = this.state.nodes[nodeId].duration_ms ?? 0;
         this.output.nodeCompleted(nodeId, duration);
+        if (lastAgentResult?.output) {
+          this.output.nodeResult(nodeId, lastAgentResult.output);
+        }
       } else {
         const error = this.state.nodes[nodeId].error ?? "Unknown error";
         this.output.nodeFailed(nodeId, error);
+        if (lastAgentResult?.output) {
+          this.output.nodeResult(nodeId, lastAgentResult.output);
+        }
 
         // Check on_error policy
         const onError = node.settings?.on_error ?? "fail";
@@ -338,7 +352,7 @@ export class Engine {
     nodeId: string,
     node: NodeConfig,
     wasWaiting = false,
-  ): Promise<boolean> {
+  ): Promise<AgentResult | null> {
     const ctx = this.buildContext(nodeId);
     const settings = node.settings as Required<NodeSettings>;
     const hitlConfig = this.config.defaults?.hitl;
@@ -353,7 +367,7 @@ export class Engine {
           nodeId,
           "Waiting node missing session_id or question_json",
         );
-        return false;
+        return null;
       }
       if (!hitlConfig) {
         markNodeFailed(
@@ -361,7 +375,7 @@ export class Engine {
           nodeId,
           "HITL detected but defaults.hitl not configured in pipeline.yaml",
         );
-        return false;
+        return null;
       }
 
       const question = JSON.parse(nodeState.question_json);
@@ -387,7 +401,7 @@ export class Engine {
           nodeId,
           hitlResult.error ?? "HITL resume failed",
         );
-        return false;
+        return null;
       }
 
       if (hitlResult.session_id) {
@@ -397,7 +411,7 @@ export class Engine {
         const runDir = getRunDir(this.state.run_id);
         await saveAgentLog(runDir, nodeId, hitlResult.output);
       }
-      return true;
+      return hitlResult;
     }
 
     // Normal path: run agent
@@ -420,7 +434,7 @@ export class Engine {
 
     if (!result.success) {
       markNodeFailed(this.state, nodeId, result.error ?? "Agent failed");
-      return false;
+      return result;
     }
 
     // Check for HITL request in permission_denials
@@ -434,7 +448,7 @@ export class Engine {
             nodeId,
             "Agent requested HITL (AskUserQuestion) but defaults.hitl not configured in pipeline.yaml",
           );
-          return false;
+          return null;
         }
 
         const sessionId = result.output.session_id;
@@ -467,7 +481,7 @@ export class Engine {
             nodeId,
             hitlResult.error ?? "HITL failed",
           );
-          return false;
+          return null;
         }
 
         if (hitlResult.session_id) {
@@ -477,7 +491,7 @@ export class Engine {
           const runDir = getRunDir(this.state.run_id);
           await saveAgentLog(runDir, nodeId, hitlResult.output);
         }
-        return true;
+        return hitlResult;
       }
     }
 
@@ -492,7 +506,7 @@ export class Engine {
       await saveAgentLog(runDir, nodeId, result.output);
     }
 
-    return true;
+    return result;
   }
 
   private async executeMergeNode(
@@ -531,6 +545,9 @@ export class Engine {
       onNodeComplete: (id, iteration, result) => {
         if (result.success) {
           this.output.status(id, "COMPLETED");
+          if (result.output) {
+            this.output.nodeResult(id, result.output);
+          }
         } else {
           this.output.nodeFailed(id, result.error ?? "Failed");
         }

@@ -170,6 +170,113 @@ Deno.test("verboseCommit — no-op in quiet mode", () => {
   assertEquals(cap.lines.length, 0);
 });
 
+// --- nodeResult tests (FR-30) ---
+
+Deno.test("nodeResult — emits result line in normal mode", () => {
+  const cap = createCapture();
+  const out = new OutputManager("normal", cap.writer);
+  out.nodeResult("executor", {
+    result: "Implementation complete",
+    session_id: "s1",
+    total_cost_usd: 0.0123,
+    duration_ms: 45000,
+    duration_api_ms: 40000,
+    num_turns: 7,
+    is_error: false,
+  });
+  const joined = cap.lines.join("");
+  assertEquals(joined.includes("RESULT:"), true);
+  assertEquals(joined.includes("Implementation complete"), true);
+  assertEquals(joined.includes("cost=$0.0123"), true);
+  assertEquals(joined.includes("duration=45s"), true);
+  assertEquals(joined.includes("turns=7"), true);
+});
+
+Deno.test("nodeResult — suppressed in quiet mode", () => {
+  const cap = createCapture();
+  const out = new OutputManager("quiet", cap.writer);
+  out.nodeResult("executor", {
+    result: "Done",
+    session_id: "s1",
+    total_cost_usd: 0.01,
+    duration_ms: 5000,
+    duration_api_ms: 4000,
+    num_turns: 3,
+    is_error: false,
+  });
+  assertEquals(cap.lines.length, 0);
+});
+
+Deno.test("nodeResult — emits result line in verbose mode", () => {
+  const cap = createCapture();
+  const out = new OutputManager("verbose", cap.writer);
+  out.nodeResult("qa", {
+    result: "All tests passed",
+    session_id: "s2",
+    total_cost_usd: 0.0050,
+    duration_ms: 10000,
+    duration_api_ms: 9000,
+    num_turns: 2,
+    is_error: false,
+  });
+  const joined = cap.lines.join("");
+  assertEquals(joined.includes("RESULT:"), true);
+  assertEquals(joined.includes("All tests passed"), true);
+  assertEquals(joined.includes("turns=2"), true);
+});
+
+Deno.test("nodeResult — truncates first line to 120 chars", () => {
+  const cap = createCapture();
+  const out = new OutputManager("normal", cap.writer);
+  const longLine = "A".repeat(200);
+  out.nodeResult("executor", {
+    result: longLine,
+    session_id: "s1",
+    total_cost_usd: 0.01,
+    duration_ms: 1000,
+    duration_api_ms: 900,
+    num_turns: 1,
+    is_error: false,
+  });
+  const joined = cap.lines.join("");
+  assertEquals(joined.includes("A".repeat(120)), true);
+  assertEquals(joined.includes("A".repeat(121)), false);
+});
+
+Deno.test("nodeResult — uses first line only for multiline result", () => {
+  const cap = createCapture();
+  const out = new OutputManager("normal", cap.writer);
+  out.nodeResult("executor", {
+    result: "First line\nSecond line\nThird line",
+    session_id: "s1",
+    total_cost_usd: 0.01,
+    duration_ms: 2000,
+    duration_api_ms: 1800,
+    num_turns: 4,
+    is_error: false,
+  });
+  const joined = cap.lines.join("");
+  assertEquals(joined.includes("First line"), true);
+  assertEquals(joined.includes("Second line"), false);
+});
+
+Deno.test("nodeResult — handles empty result string", () => {
+  const cap = createCapture();
+  const out = new OutputManager("normal", cap.writer);
+  out.nodeResult("executor", {
+    result: "",
+    session_id: "s1",
+    total_cost_usd: 0.0,
+    duration_ms: 500,
+    duration_api_ms: 450,
+    num_turns: 1,
+    is_error: false,
+  });
+  const joined = cap.lines.join("");
+  assertEquals(joined.includes("RESULT:"), true);
+  assertEquals(joined.includes("cost=$0.0000"), true);
+});
+
 // --- AC8: Default mode (verbose=false) emits zero verbose output ---
 
 Deno.test("AC8 — default mode emits zero output from all 6 verbose methods", () => {
