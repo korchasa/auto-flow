@@ -754,6 +754,10 @@
   - [x] Timestamp format is `[HH:MM:SS] <content>` (24-hour, zero-padded, space before content).
     Evidence: `engine/agent.ts:594-600` (format construction),
     `engine/agent_test.ts:391-398` (format regex test).
+  - [x] Empty lines pass through to stream log without timestamp prefix.
+    Evidence: `engine/agent.ts:609` (identity branch in `stampLines` map),
+    `engine/agent_test.ts:426-442` (empty-line test).
+  - [x] `deno task check` passes.
 
 ## 4. Non-functional requirements
 
