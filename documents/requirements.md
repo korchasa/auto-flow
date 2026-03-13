@@ -744,8 +744,8 @@
 ## 5. Interfaces
 
 - **Trigger:** Single entry point `deno task run [--prompt "..."]`. PM agent autonomously selects and triages open GitHub issues. `--prompt` passes optional additional context to PM. Common engine flags: `--resume`, `--dry-run`, `-v`, `-q`, `--config`.
-- **Agent runtime:** `claude` CLI invoked by the Deno engine. Invocation: `claude -p "<task prompt>" --append-system-prompt-file agents/<role>/SKILL.md --output-format json`. Key flags:
-  - `--append-system-prompt-file` — adds role-specific instructions while preserving Claude Code's built-in capabilities (tool use, file access). Preferred over `--system-prompt-file` which replaces the default prompt entirely.
+- **Agent runtime:** `claude` CLI invoked by the Deno engine. Prompt content cached at config load time and passed inline via `--append-system-prompt`; fallback to `--append-system-prompt-file` for template paths. Key flags:
+  - `--append-system-prompt` — adds role-specific instructions inline (content cached from `agents/<role>/SKILL.md` at startup). Preserves Claude Code's built-in capabilities. Fallback: `--append-system-prompt-file` for template-path prompts.
   - `--output-format json` — returns structured JSON with `result`, `session_id`, `total_cost_usd`, `duration_ms`, `num_turns`, `is_error`.
   - `--resume <session-id>` — re-invokes agent in the same session for continuations (FR-8).
   - `-p "<prompt>"` — non-interactive mode, task description is passed as the prompt argument.

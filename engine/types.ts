@@ -30,6 +30,9 @@ export interface NodeConfig {
 
   // agent-specific
   prompt?: string;
+  /** Cached prompt file content, read at config load time.
+   * Populated for non-template prompt paths; undefined for template paths. */
+  prompt_content?: string;
   task_template?: string;
   /** Claude model override for this node (e.g. "claude-opus-4-6"). */
   model?: string;

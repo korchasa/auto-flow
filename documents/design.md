@@ -165,8 +165,10 @@ graph LR
   - `disable-model-invocation: true` — prevents automatic invocation; agents
     are only triggered explicitly (pipeline or slash command).
 - **Interfaces:**
-  - Pipeline: engine reads `prompt:` path from `pipeline.yaml` → file content
-    passed to `claude --system-prompt`.
+  - Pipeline: engine reads `prompt:` path from `pipeline.yaml`, caches file
+    content at config load time (`prompt_content`), passes inline via
+    `claude --append-system-prompt`. Fallback to `--append-system-prompt-file`
+    for template paths.
   - Interactive: Claude Code discovers skills via `.claude/skills/agent-<name>`
     symlinks → user invokes `/agent-<name>`.
 - **Deps:** None (static content, versioned in git).
