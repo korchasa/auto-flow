@@ -102,8 +102,20 @@ export function markNodeStarted(state: RunState, nodeId: string): void {
   });
 }
 
-/** Mark a node as completed. */
-export function markNodeCompleted(state: RunState, nodeId: string): void {
+/** Recompute state.total_cost_usd by summing all nodes' cost_usd fields. */
+export function updateRunCost(state: RunState): void {
+  state.total_cost_usd = Object.values(state.nodes).reduce(
+    (sum, node) => sum + (node.cost_usd ?? 0),
+    0,
+  );
+}
+
+/** Mark a node as completed. Optionally records per-node cost and updates run total. */
+export function markNodeCompleted(
+  state: RunState,
+  nodeId: string,
+  costUsd?: number,
+): void {
   const node = state.nodes[nodeId];
   const startedAt = node.started_at
     ? new Date(node.started_at).getTime()
@@ -113,6 +125,10 @@ export function markNodeCompleted(state: RunState, nodeId: string): void {
     completed_at: new Date().toISOString(),
     duration_ms: Date.now() - startedAt,
   });
+  if (costUsd !== undefined) {
+    state.nodes[nodeId].cost_usd = costUsd;
+    updateRunCost(state);
+  }
 }
 
 /** Mark a node as failed. */

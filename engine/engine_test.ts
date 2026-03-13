@@ -2,6 +2,7 @@ import { assertEquals } from "@std/assert";
 import type {
   EngineOptions,
   NodeConfig,
+  NodeState,
   PipelineConfig,
   RunState,
 } from "./types.ts";
@@ -14,7 +15,12 @@ import {
   sortPostPipelineNodes,
 } from "./engine.ts";
 import type { AgentResult } from "./agent.ts";
-import { getNodesByStatus } from "./state.ts";
+import {
+  createRunState,
+  getNodesByStatus,
+  markNodeCompleted,
+  markNodeStarted,
+} from "./state.ts";
 import { OutputManager } from "./output.ts";
 
 /** Capture output lines from an OutputManager. */
@@ -685,4 +691,71 @@ Deno.test("dry-run — post-pipeline nodes excluded from regular levels filterin
   assertEquals(postPipelineIds.length, 2);
   assertEquals(postPipelineIds.includes("meta-agent"), true);
   assertEquals(postPipelineIds.includes("tech-lead-review"), true);
+});
+
+// --- FR-32: Cost field integration tests ---
+
+Deno.test("NodeState — cost_usd field present after markNodeCompleted with cost", () => {
+  const state = createRunState("test", "cfg.yaml", ["agent1"], {}, {});
+  markNodeStarted(state, "agent1");
+  markNodeCompleted(state, "agent1", 0.0123);
+
+  assertEquals(state.nodes.agent1.cost_usd, 0.0123);
+  assertEquals(state.total_cost_usd, 0.0123);
+});
+
+Deno.test("RunState — total_cost_usd accumulates across multiple agent nodes", () => {
+  const state = createRunState(
+    "test",
+    "cfg.yaml",
+    ["spec", "plan", "exec"],
+    {},
+    {},
+  );
+  markNodeStarted(state, "spec");
+  markNodeCompleted(state, "spec", 0.01);
+  markNodeStarted(state, "plan");
+  markNodeCompleted(state, "plan", 0.02);
+  markNodeStarted(state, "exec");
+  markNodeCompleted(state, "exec", 0.005);
+
+  // Use toFixed(4) comparison to avoid floating-point precision issues
+  assertEquals(
+    Number((state.total_cost_usd ?? 0).toFixed(4)),
+    0.035,
+  );
+  assertEquals(state.nodes.spec.cost_usd, 0.01);
+  assertEquals(state.nodes.plan.cost_usd, 0.02);
+  assertEquals(state.nodes.exec.cost_usd, 0.005);
+});
+
+Deno.test("NodeState — cost_usd undefined when no cost passed to markNodeCompleted", () => {
+  const state = createRunState("test", "cfg.yaml", ["a"], {}, {});
+  markNodeStarted(state, "a");
+  markNodeCompleted(state, "a");
+
+  const ns: NodeState = state.nodes.a;
+  assertEquals(ns.cost_usd, undefined);
+  assertEquals(state.total_cost_usd, undefined);
+});
+
+Deno.test("RunState — total_cost_usd in state.json roundtrip", async () => {
+  const state = createRunState("test-cost", "cfg.yaml", ["a", "b"], {}, {});
+  markNodeStarted(state, "a");
+  markNodeCompleted(state, "a", 0.007);
+  markNodeStarted(state, "b");
+  markNodeCompleted(state, "b", 0.003);
+
+  const tmpDir = await Deno.makeTempDir();
+  try {
+    const statePath = `${tmpDir}/state.json`;
+    await Deno.writeTextFile(statePath, JSON.stringify(state, null, 2) + "\n");
+    const loaded = JSON.parse(await Deno.readTextFile(statePath)) as RunState;
+
+    assertEquals(loaded.total_cost_usd, 0.01);
+    assertEquals(loaded.nodes.a.cost_usd, 0.007);
+    assertEquals(loaded.nodes.b.cost_usd, 0.003);
+  } finally {
+    await Deno.remove(tmpDir, { recursive: true });
+  }
 });

@@ -15,26 +15,24 @@ produce a specification artifact, updating the project's SRS.
 1. **Sync with main:** Run `git pull origin main` to ensure the working tree
    has the latest changes before any work begins.
 2. **Triage issues:**
-   - First, run `gh issue list --state open --label "in-progress" --json number,title,labels`.
-     If any issues are returned, select from this set (they have priority).
-     **STOP exploring** once you find an in-progress issue — do NOT view other
-     issues for comparison. Pick the highest-priority in-progress issue and
-     proceed immediately.
+   - **Branch shortcut:** Check `git branch --show-current`. If the branch is
+     `sdlc/issue-<N>`, the issue is pre-selected — skip triage, go directly to
+     step 3 with that issue number.
+   - Otherwise, run `gh issue list --state open --label "in-progress" --json number,title,labels`.
+     If any in-progress issue is returned: **HARD STOP on triage.** Pick the
+     first one. Do NOT view other issues, do NOT list all open issues.
    - If no `in-progress` issues exist, fall back to
      `gh issue list --state open --json number,title,labels` and select from all
-     open issues. Prefer issues with `priority` or `bug` labels. View at most
-     2 candidate issues before deciding.
+     open issues. View at most 2 candidate issues before deciding.
    - **No open issues at all:** Fail fast with: "No open GitHub issues found
      for triage."
 3. **Read the issue:** Run `gh issue view <N> --json body,title,comments` to
-   get full details. View only the selected issue — not other issues.
-4. **Review existing docs:** Read `documents/requirements.md` (SRS),
-   `documents/design.md` (SDS — read-only reference), and `AGENTS.md` (project
-   vision — read-only reference).
-   **Efficiency:** Complete steps 2-3 (issue selection + read) before
-   any codebase exploration. Only read source files that are directly referenced
-   in the issue body or needed to understand affected requirements. Avoid broad
-   codebase scans.
+   get full details. View ONLY the selected issue — never other issues.
+4. **Review existing docs:** Read `documents/requirements.md` (SRS) and
+   `documents/design.md` (SDS — read-only reference) in parallel.
+   **Read each file ONCE.** Do not re-read, grep, or tail a file you already
+   read. Do not probe irrelevant files (`ls`, `find`, filesystem exploration).
+   Only read source files directly referenced in the issue body.
 5. **Update the SRS:** Add or modify requirements in `documents/requirements.md`
    to reflect the issue. Every new requirement gets a status marker `[ ]`
    (pending).

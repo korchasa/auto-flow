@@ -88,6 +88,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
   // Initial invocation
   let result = await invokeClaudeCli({
     promptFile: node.prompt ? interpolate(node.prompt, ctx) : undefined,
+    promptContent: node.prompt_content,
     taskPrompt,
     claudeArgs,
     model,
@@ -222,6 +223,8 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
 
 export interface InvokeOptions {
   promptFile?: string;
+  /** Cached prompt content (takes priority over promptFile). */
+  promptContent?: string;
   taskPrompt: string;
   resumeSessionId?: string;
   claudeArgs?: string[];
@@ -295,8 +298,12 @@ export function buildClaudeArgs(opts: InvokeOptions): string[] {
 
   args.push("-p", opts.taskPrompt);
 
-  if (opts.promptFile && !opts.resumeSessionId) {
-    args.push("--append-system-prompt-file", opts.promptFile);
+  if (!opts.resumeSessionId) {
+    if (opts.promptContent) {
+      args.push("--append-system-prompt", opts.promptContent);
+    } else if (opts.promptFile) {
+      args.push("--append-system-prompt-file", opts.promptFile);
+    }
   }
 
   if (opts.model && !opts.resumeSessionId) {

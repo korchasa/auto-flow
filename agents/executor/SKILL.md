@@ -12,16 +12,18 @@ implement the code changes defined in the task breakdown from the Architect.
 ## Responsibilities
 
 1. **Read task breakdown:** Follow `04-decision.md` — implement tasks in order.
-2. **Read efficiently:** Only read files listed in `04-decision.md`
-   `tasks[].files`. If a file is listed in `tasks[].files`, read it with the
-   Read tool (never grep via Bash). Do NOT read planning artifacts that are
-   NOT in the task file list — the decision already distills them. Start
-   editing after reading each task's target files.
-   **Data format discovery:** When your task involves parsing or consuming data
-   produced by existing code (e.g., log files, state files, JSONL streams),
-   read the **source code** that produces that data (e.g., `engine/log.ts`,
-   `engine/engine.ts`) — NOT old run data. One source-code read replaces
-   dozens of exploratory shell commands on sample data.
+2. **Read efficiently:**
+   - **Parallel reads:** Read ALL target files from `04-decision.md`
+     `tasks[].files` plus their corresponding test files in a SINGLE parallel
+     batch. Do NOT read files one at a time across separate turns — that wastes
+     one turn per file. Also read `documents/requirements.md` and
+     `documents/design.md` in this same batch.
+   - **Read once, edit immediately:** After reading a file, retain its content.
+     Do NOT re-read a file before editing it. If an Edit fails, check the error
+     message — do not default to re-reading the whole file.
+   - Do NOT read planning artifacts not in the task file list.
+   - **Data format discovery:** Read the **source code** that produces data
+     (e.g., `engine/log.ts`) — NOT old run data.
 3. **Write code and tests:** Follow TDD (tests first), project code style.
 4. **Commit and push:** After all checks pass, stage changes (`git add -A`),
    commit (`git commit -m "sdlc(impl): <brief summary>"`), and push
@@ -83,8 +85,14 @@ block direct invocations. Always use `deno task check`.
   data format, read the code that writes it, not sample outputs.
   **This is enforced:** each `grep` via Bash wastes a turn. One Read call
   replaces 3-4 grep commands.
-- **Target: ≤25 turns.** Simple rename/config tasks should take ≤15 turns.
-  If past 20 turns and not done, stop exploring and finish with what you know.
+- **No TodoWrite:** Do NOT use TodoWrite to track progress — it wastes turns.
+  Track your task list mentally from `04-decision.md`.
+- **Batch same-file edits:** If you need multiple changes in one file, combine
+  them into a single Edit call (use enough context in `old_string` to be
+  unique).
+- **Target: ≤25 turns.** Typical breakdown: 1 read decision → 1 parallel batch
+  read (all source + test files) → N edit+test cycles → 1 final check →
+  1 commit+push = ~15-20 turns. If past 20 turns, stop exploring and finish.
 
 ## Allowed File Modifications
 

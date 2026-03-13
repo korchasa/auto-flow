@@ -71,35 +71,36 @@ Fields:
 
 ## Git Workflow
 
-1. Check `git status` and `git branch --show-current`.
-   - If already on `sdlc/issue-<N>` branch (from a prior run), stay on it.
-     Run `git pull origin sdlc/issue-<N>` to sync, then skip to step 4.
-   - If on `main`, run `git pull` and create branch: `git checkout -b sdlc/issue-<N>`.
-   - If working tree has uncommitted changes, use `git stash --include-untracked`
-     once before checkout. Do NOT `git stash pop` after — those changes are from
-     earlier pipeline stages and are already committed.
-2. Check if a PR already exists: `gh pr list --head sdlc/issue-<N> --json number`.
-   If yes, reuse it (no new PR needed — just push).
-3. Commit decision artifact + SDS changes (single commit).
-   **IMPORTANT:** Run artifacts under `.sdlc/runs/` may be gitignored. Use
+1. Run `git branch --show-current` and `gh pr list --head sdlc/issue-<N> --json number`
+   (parallel).
+   - If already on `sdlc/issue-<N>`: stay on it, skip to step 2.
+   - If on `main` or other branch: `git checkout -b sdlc/issue-<N> origin/main`
+     (create from origin/main directly — no stash, no checkout main, no pull).
+2. Commit decision artifact + SDS changes (single commit).
+   **IMPORTANT:** Run artifacts under `.sdlc/runs/` are gitignored. Always use
    `git add -f <path>` for files in that directory.
-4. Push with `-u` and, if no PR exists, create draft PR via
-   `gh pr create --draft`.
-   PR body MUST include `Closes #<N>` (issue number from spec) on its own line
-   so GitHub auto-closes the issue when the PR is merged.
+3. Push: `git push --force-with-lease -u origin sdlc/issue-<N>`.
+   Always use `--force-with-lease` (the branch may exist from a prior run).
+   If no PR exists (from step 1 check), create one: `gh pr create --draft`.
+   PR body MUST include `Closes #<N>` on its own line.
 
 **Git error recovery:** If a git operation fails, read the error message and
-diagnose before retrying. Do NOT retry the same command or loop through
-reset/clean/checkout. One stash + one branch creation should suffice.
+diagnose before retrying. Do NOT retry the same command blindly.
 
 ## Efficiency
 
-- Read `design.md` once, make all edits, then move on. Do not re-read
-  repeatedly.
+- **Read each file ONCE.** Do not re-read files you already have in context.
+- **Batch edits:** When updating `design.md`, collect all changes and apply
+  them in 1-2 large Edit calls — not many small ones. Each Edit call costs
+  a turn.
+- **Edit tool:** Never copy line numbers from Grep output into `old_string`.
+  Use the actual file content as shown by Read.
 - Keep SDS updates focused: only add/modify sections relevant to the selected
   variant.
 - One issue comment at the end, not multiple.
-- Target: ≤15 turns.
+- **Target: ≤15 turns.** Typical breakdown: 3 reads (plan+spec+design, parallel)
+  → 2 code greps (parallel) → 1 branch → 1 write decision → 1-2 edit SDS →
+  1 commit → 1 push/PR → 1 comment = ~12 turns.
 
 ## Rules
 

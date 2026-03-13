@@ -17,6 +17,7 @@ import {
   markRunCompleted,
   markRunFailed,
   updateNodeState,
+  updateRunCost,
 } from "./state.ts";
 
 Deno.test("generateRunId — format YYYYMMDDTHHMMSS without label", () => {
@@ -276,4 +277,52 @@ Deno.test("createRunState — tracks nested body node IDs from flat list", () =>
   assertEquals(state.nodes.qa.status, "pending");
   assertEquals(state.nodes["impl-loop"].status, "pending");
   assertEquals(state.nodes.pm.status, "pending");
+});
+
+// --- FR-32: Cost tracking tests ---
+
+Deno.test("markNodeCompleted — with costUsd sets node.cost_usd", () => {
+  const state = createRunState("test", "cfg.yaml", ["a"], {}, {});
+  markNodeStarted(state, "a");
+  markNodeCompleted(state, "a", 0.0042);
+
+  assertEquals(state.nodes.a.status, "completed");
+  assertEquals(state.nodes.a.cost_usd, 0.0042);
+});
+
+Deno.test("markNodeCompleted — without costUsd leaves cost_usd undefined", () => {
+  const state = createRunState("test", "cfg.yaml", ["a"], {}, {});
+  markNodeStarted(state, "a");
+  markNodeCompleted(state, "a");
+
+  assertEquals(state.nodes.a.cost_usd, undefined);
+  assertEquals(state.total_cost_usd, undefined);
+});
+
+Deno.test("markNodeCompleted — with costUsd updates state.total_cost_usd", () => {
+  const state = createRunState("test", "cfg.yaml", ["a", "b"], {}, {});
+  markNodeStarted(state, "a");
+  markNodeCompleted(state, "a", 0.005);
+  assertEquals(state.total_cost_usd, 0.005);
+
+  markNodeStarted(state, "b");
+  markNodeCompleted(state, "b", 0.003);
+  assertEquals(state.total_cost_usd, 0.008);
+});
+
+Deno.test("updateRunCost — sums cost_usd across nodes, skips undefined", () => {
+  const state = createRunState("test", "cfg.yaml", ["a", "b", "c"], {}, {});
+  state.nodes.a.cost_usd = 0.01;
+  state.nodes.b.cost_usd = 0.02;
+  // c has no cost_usd
+  updateRunCost(state);
+
+  assertEquals(state.total_cost_usd, 0.03);
+});
+
+Deno.test("updateRunCost — total is 0 when no nodes have cost", () => {
+  const state = createRunState("test", "cfg.yaml", ["a"], {}, {});
+  updateRunCost(state);
+
+  assertEquals(state.total_cost_usd, 0);
 });

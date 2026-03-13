@@ -650,6 +650,57 @@ Deno.test("parseConfig — existing prompt file passes without error", () => {
   assertEquals(config.nodes.spec.prompt, "agents/pm/SKILL.md");
 });
 
+Deno.test("parseConfig — existing prompt file has prompt_content populated", () => {
+  const config = parseConfig(MINIMAL_AGENT);
+  const content = Deno.readTextFileSync("agents/pm/SKILL.md");
+  assertEquals(config.nodes.spec.prompt_content, content);
+});
+
+Deno.test("parseConfig — template prompt path has no prompt_content", () => {
+  const yaml = `
+name: test
+version: "1"
+nodes:
+  a:
+    type: agent
+    label: A
+    prompt: "{{env.AGENTS_DIR}}/SKILL.md"
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.nodes.a.prompt_content, undefined);
+});
+
+Deno.test("parseConfig — loop body node prompt_content populated", () => {
+  const yaml = `
+name: test
+version: "1"
+nodes:
+  impl-loop:
+    type: loop
+    label: Implementation loop
+    condition_node: qa
+    condition_field: verdict
+    exit_value: PASS
+    nodes:
+      executor:
+        type: agent
+        label: Executor
+        prompt: agents/pm/SKILL.md
+      qa:
+        type: agent
+        label: QA
+        task_template: "verify"
+        inputs: [executor]
+`;
+  const config = parseConfig(yaml);
+  const content = Deno.readTextFileSync("agents/pm/SKILL.md");
+  assertEquals(
+    config.nodes["impl-loop"].nodes!.executor.prompt_content,
+    content,
+  );
+  assertEquals(config.nodes["impl-loop"].nodes!.qa.prompt_content, undefined);
+});
+
 Deno.test("parseConfig — template prompt path skipped (no filesystem check)", () => {
   const yaml = `
 name: test

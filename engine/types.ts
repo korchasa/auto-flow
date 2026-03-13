@@ -30,6 +30,9 @@ export interface NodeConfig {
 
   // agent-specific
   prompt?: string;
+  /** Cached prompt file content, read at config load time.
+   * Populated for non-template prompt paths; undefined for template paths. */
+  prompt_content?: string;
   task_template?: string;
   /** Claude model override for this node (e.g. "claude-opus-4-6"). */
   model?: string;
@@ -129,6 +132,8 @@ export interface NodeState {
   continuations?: number;
   session_id?: string; // claude CLI session ID
   question_json?: string; // serialized HitlQuestion; set when status=waiting
+  /** Per-node cost from ClaudeCliOutput.total_cost_usd (FR-32). */
+  cost_usd?: number;
 }
 
 /** Persisted run state (state.json). */
@@ -141,6 +146,8 @@ export interface RunState {
   args: Record<string, string>;
   env: Record<string, string>;
   nodes: Record<string, NodeState>;
+  /** Sum of all nodes[*].cost_usd, recomputed on each node completion (FR-32). */
+  total_cost_usd?: number;
 }
 
 // --- Template Context ---

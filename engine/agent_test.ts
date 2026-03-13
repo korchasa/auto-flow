@@ -161,6 +161,40 @@ Deno.test("buildClaudeArgs — resume mode omits promptFile", () => {
   assertEquals(args.includes("--append-system-prompt-file"), false);
 });
 
+Deno.test("buildClaudeArgs — promptContent uses --append-system-prompt inline", () => {
+  const args = buildClaudeArgs(
+    makeInvokeOpts({
+      promptContent: "You are a helpful agent.",
+    }),
+  );
+  const idx = args.indexOf("--append-system-prompt");
+  assertEquals(idx >= 0, true, "should contain --append-system-prompt");
+  assertEquals(args[idx + 1], "You are a helpful agent.");
+  assertEquals(args.includes("--append-system-prompt-file"), false);
+});
+
+Deno.test("buildClaudeArgs — promptContent takes priority over promptFile", () => {
+  const args = buildClaudeArgs(
+    makeInvokeOpts({
+      promptFile: "agents/pm/SKILL.md",
+      promptContent: "Cached content here.",
+    }),
+  );
+  assertEquals(args.includes("--append-system-prompt"), true);
+  assertEquals(args.includes("--append-system-prompt-file"), false);
+});
+
+Deno.test("buildClaudeArgs — promptContent omitted on resume", () => {
+  const args = buildClaudeArgs(
+    makeInvokeOpts({
+      resumeSessionId: "sess-456",
+      promptContent: "Cached content.",
+    }),
+  );
+  assertEquals(args.includes("--append-system-prompt"), false);
+  assertEquals(args.includes("--append-system-prompt-file"), false);
+});
+
 Deno.test("settings — default values", () => {
   const settings = makeSettings();
   assertEquals(settings.max_continuations, 3);
