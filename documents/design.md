@@ -413,6 +413,27 @@ graph LR
   highest-priority open issue via `gh`.
 - **Deps:** Devcontainer, Claude CLI auth (OAuth or API key), `GITHUB_TOKEN`.
 
+### 3.10 Dashboard Generator (`scripts/generate-dashboard.ts`) (FR-33)
+
+- **Purpose:** Generate self-contained HTML dashboard summarizing pipeline run
+  results. Reads `state.json` + per-node `logs/*.json`. Produces `index.html`
+  in run directory with all CSS inlined (no CDN deps).
+- **Functions:**
+  - `readRunState(runDir)` — parse `state.json` → `RunState`
+  - `readNodeLog(runDir, nodeId)` — parse `logs/<nodeId>.json` →
+    `ClaudeCliOutput`
+  - `renderCard(nodeId, state, log)` — HTML card: status badge, timing, cost,
+    result summary via `<details><summary>` (first 3 lines preview, full text
+    in details body). Single-line results render without `<details>` wrapper.
+  - `renderHtml(runDir, state, logs)` — full page: run metadata header,
+    phase-grouped card grid, inlined CSS
+  - `escHtml(str)` — escape `<>&"'` for XSS-safe HTML embedding
+- **Interfaces:**
+  - CLI: `deno task dashboard --run-dir <path>`
+  - Hook: `after:` on `optimize` node (`|| true` suffix for non-fatal)
+- **Deps:** `engine/types.ts` (imports `RunState`, `ClaudeCliOutput` types
+  for parsing). No runtime engine dependency — reads JSON files directly.
+
 ## 4. Data
 
 - **Entities:**
