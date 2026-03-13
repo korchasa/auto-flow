@@ -337,7 +337,11 @@ export class Engine {
       }
 
       if (success) {
-        markNodeCompleted(this.state, nodeId);
+        markNodeCompleted(
+          this.state,
+          nodeId,
+          lastAgentResult?.output?.total_cost_usd,
+        );
         const duration = this.state.nodes[nodeId].duration_ms ?? 0;
         this.output.nodeCompleted(nodeId, duration);
         if (lastAgentResult?.output) {

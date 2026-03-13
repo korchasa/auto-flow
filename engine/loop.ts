@@ -94,7 +94,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
       bodyResults.push(result);
 
       if (result.success) {
-        markNodeCompleted(state, bodyNodeId);
+        markNodeCompleted(state, bodyNodeId, result.output?.total_cost_usd);
       } else {
         markNodeFailed(
           state,

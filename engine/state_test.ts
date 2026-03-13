@@ -16,6 +16,7 @@ import {
   markRunAborted,
   markRunCompleted,
   markRunFailed,
+  recomputeTotalCost,
   updateNodeState,
 } from "./state.ts";
 
@@ -276,4 +277,48 @@ Deno.test("createRunState — tracks nested body node IDs from flat list", () =>
   assertEquals(state.nodes.qa.status, "pending");
   assertEquals(state.nodes["impl-loop"].status, "pending");
   assertEquals(state.nodes.pm.status, "pending");
+});
+
+// --- Cost aggregation tests ---
+
+Deno.test("markNodeCompleted — with costUsd sets node cost_usd and total_cost_usd", () => {
+  const state = createRunState("test", "cfg.yaml", ["a"], {}, {});
+  markNodeStarted(state, "a");
+  markNodeCompleted(state, "a", 0.0042);
+
+  assertEquals(state.nodes.a.cost_usd, 0.0042);
+  assertEquals(state.total_cost_usd, 0.0042);
+});
+
+Deno.test("markNodeCompleted — without costUsd leaves node cost_usd undefined, total_cost_usd unchanged", () => {
+  const state = createRunState("test", "cfg.yaml", ["a", "b"], {}, {});
+  markNodeStarted(state, "a");
+  markNodeCompleted(state, "a", 0.01);
+  markNodeStarted(state, "b");
+  markNodeCompleted(state, "b"); // no cost
+
+  assertEquals(state.nodes.b.cost_usd, undefined);
+  assertEquals(state.total_cost_usd, 0.01); // unchanged from node a
+});
+
+Deno.test("markNodeCompleted — multiple nodes with mixed costs aggregate correctly", () => {
+  const state = createRunState("test", "cfg.yaml", ["a", "b", "c"], {}, {});
+  markNodeStarted(state, "a");
+  markNodeCompleted(state, "a", 0.01);
+  markNodeStarted(state, "b");
+  markNodeCompleted(state, "b"); // no cost
+  markNodeStarted(state, "c");
+  markNodeCompleted(state, "c", 0.05);
+
+  assertEquals(state.nodes.a.cost_usd, 0.01);
+  assertEquals(state.nodes.b.cost_usd, undefined);
+  assertEquals(state.nodes.c.cost_usd, 0.05);
+  assertEquals(state.total_cost_usd, 0.01 + 0.05);
+});
+
+Deno.test("recomputeTotalCost — all-undefined costs yields total_cost_usd = 0", () => {
+  const state = createRunState("test", "cfg.yaml", ["a", "b"], {}, {});
+  // No costs set on any node
+  recomputeTotalCost(state);
+  assertEquals(state.total_cost_usd, 0);
 });
