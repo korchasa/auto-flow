@@ -7,6 +7,10 @@
 # Usage: stage-6-executor.sh <issue-number>
 #
 # When sourced with --source-only, only defines functions (for testing).
+#
+# DEPRECATED: This script is superseded by the Deno/TypeScript pipeline engine.
+# Use `deno task run` instead. Retained for backward compatibility only.
+#
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,11 +20,11 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
 STAGE_NAME="stage-6-executor"
-AGENT_PROMPT="$REPO_ROOT/.sdlc/agents/executor.md"
+AGENT_PROMPT="$REPO_ROOT/.claude/skills/agent-executor/SKILL.md"
 QA_SCRIPT="$SCRIPT_DIR/stage-7-qa.sh"
 
 # Paths forbidden for executor modifications
-FORBIDDEN_PATHS=(".github/" ".sdlc/agents/" ".sdlc/scripts/" "CLAUDE.md")
+FORBIDDEN_PATHS=(".github/" ".claude/skills/agent-*/" ".sdlc/scripts/" "CLAUDE.md")
 
 # ============================================================
 # extract_executor_allowlist()

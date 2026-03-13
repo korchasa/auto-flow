@@ -9,6 +9,10 @@
 # Environment: SDLC_FAILED_STAGE — set to failed stage number (if any).
 #
 # When sourced with --source-only, only defines functions (for testing).
+#
+# DEPRECATED: This script is superseded by the Deno/TypeScript pipeline engine.
+# Use `deno task run` instead. Retained for backward compatibility only.
+#
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,7 +22,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
 STAGE_NAME="stage-9-meta-agent"
-AGENT_PROMPT="$REPO_ROOT/.sdlc/agents/meta-agent.md"
+AGENT_PROMPT="$REPO_ROOT/.claude/skills/agent-meta-agent/SKILL.md"
 
 # ============================================================
 # validate_meta_report_sections()
@@ -94,7 +98,7 @@ Pipeline status: ${status_msg}
 Instructions:
 1. Read all logs in .sdlc/pipeline/${issue_number}/logs/.
 2. Read all artifacts in .sdlc/pipeline/${issue_number}/.
-3. Read current agent prompts in .sdlc/agents/.
+3. Read current agent prompts in .claude/skills/agent-*/.
 4. Check previous meta-reports: .sdlc/pipeline/*/07-meta-report.md.
 5. Create .sdlc/pipeline/${issue_number}/07-meta-report.md with:
    - Run Summary (stages completed/failed, continuations)
@@ -102,7 +106,7 @@ Instructions:
    - Friction Points (continuations, low quality, excessive tokens)
    - Prompt Improvements Applied (concrete diffs, commit changes)
    - Pattern Tracking (recurring issues)
-6. Apply prompt improvements to .sdlc/agents/*.md files.
+6. Apply prompt improvements to .claude/skills/agent-*/SKILL.md files.
 7. Post summary on issue: \`gh issue comment ${issue_number} --body "<findings>"\`
 EOF
 }
@@ -129,7 +133,7 @@ main() {
   local log_json="${log_dir}/${STAGE_NAME}.json"
   local allowed_paths=(
     ".sdlc/pipeline/${issue_number}/"
-    ".sdlc/agents/"
+    ".claude/skills/"
   )
 
   mkdir -p "$pipeline_dir" "$log_dir"
@@ -190,7 +194,7 @@ main() {
 
   # Include modified agent prompts
   local modified_agents
-  modified_agents=$(git -C "$REPO_ROOT" diff --name-only -- .sdlc/agents/ 2>/dev/null || true)
+  modified_agents=$(git -C "$REPO_ROOT" diff --name-only -- .claude/skills/ 2>/dev/null || true)
   if [[ -n "$modified_agents" ]]; then
     while IFS= read -r f; do
       [[ -n "$f" ]] && files_to_commit+=("$REPO_ROOT/$f")
