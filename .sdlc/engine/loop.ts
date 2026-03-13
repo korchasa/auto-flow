@@ -9,12 +9,7 @@ import type {
 import { buildLoopBodyOrder } from "./dag.ts";
 import { runAgent } from "./agent.ts";
 import type { AgentResult } from "./agent.ts";
-import {
-  getRunDir,
-  markNodeCompleted,
-  markNodeFailed,
-  markNodeStarted,
-} from "./state.ts";
+import { markNodeCompleted, markNodeFailed, markNodeStarted } from "./state.ts";
 import type { OutputManager } from "./output.ts";
 
 /** Result of a loop execution. */
@@ -80,9 +75,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
       opts.onNodeStart?.(bodyNodeId, iteration);
       markNodeStarted(state, bodyNodeId);
 
-      const runDir = getRunDir(state.run_id);
-      const iterNodeId = `${bodyNodeId}-iter-${iteration}`;
-      const streamLogPath = `${runDir}/logs/${iterNodeId}.stream.log`;
+      const streamLogPath = `${ctx.node_dir}/stream.log`;
 
       const result = await runAgent({
         node: bodyNode,
