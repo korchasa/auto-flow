@@ -71,15 +71,20 @@ Fields:
 
 ## Git Workflow
 
-1. Check `git status` first. If on `main` and clean, proceed directly.
-   If working tree has changes from previous pipeline nodes, use
-   `git stash --include-untracked` once. Do NOT `git stash pop` after
-   checkout — the stashed changes are from earlier pipeline stages and are
-   already committed or irrelevant to your branch.
-2. Ensure you are on `main` with latest: `git checkout main && git pull`.
-3. Create branch: `git checkout -b sdlc/issue-<N>`.
-4. Commit decision artifact + SDS changes (single commit).
-5. Push with `-u` and create draft PR via `gh pr create --draft`.
+1. Check `git status` and `git branch --show-current`.
+   - If already on `sdlc/issue-<N>` branch (from a prior run), stay on it.
+     Run `git pull origin sdlc/issue-<N>` to sync, then skip to step 4.
+   - If on `main`, run `git pull` and create branch: `git checkout -b sdlc/issue-<N>`.
+   - If working tree has uncommitted changes, use `git stash --include-untracked`
+     once before checkout. Do NOT `git stash pop` after — those changes are from
+     earlier pipeline stages and are already committed.
+2. Check if a PR already exists: `gh pr list --head sdlc/issue-<N> --json number`.
+   If yes, reuse it (no new PR needed — just push).
+3. Commit decision artifact + SDS changes (single commit).
+   **IMPORTANT:** Run artifacts under `.sdlc/runs/` may be gitignored. Use
+   `git add -f <path>` for files in that directory.
+4. Push with `-u` and, if no PR exists, create draft PR via
+   `gh pr create --draft`.
    PR body MUST include `Closes #<N>` (issue number from spec) on its own line
    so GitHub auto-closes the issue when the PR is merged.
 

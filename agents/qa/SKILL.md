@@ -16,11 +16,18 @@ Executor's implementation against the specification and produce a QA report.
 3. **Review changed files:** Inspect `git diff` for quality and correctness.
 4. **Produce QA report:** Write verdict (PASS/FAIL) with detailed findings.
 
-## Issue Progress
+## PR Progress
 
-Read the issue number from the PM spec at `{{input.specification}}/01-spec.md` (YAML
-frontmatter `issue:` field). Post progress to that issue via
-`gh issue comment <N> --body "QA: verifying implementation — verdict: <PASS|FAIL>"`.
+Find the PR number for the current branch:
+`gh pr list --head "$(git branch --show-current)" --json number -q '.[0].number'`.
+Post verdict as PR review:
+- PASS: `gh pr review <N> --approve --body "QA: PASS — all acceptance criteria met"`
+- FAIL: `gh pr review <N> --request-changes --body "QA: FAIL — <summary of issues>"`
+
+**Self-approval failure:** If `gh pr review --approve` fails (e.g., cannot
+approve own PR), post verdict via `gh issue comment` on the issue instead.
+Do NOT retry the approve command. This is the only case where issue comments
+are acceptable.
 
 ## Input
 
@@ -99,13 +106,15 @@ FAIL: 2 blocking issues found. Tests fail and edge case missing.
 ## Efficiency
 
 - Use the Read tool to inspect files, not `grep`/`cat` via Bash. Each Read
-  gives you the full file; you rarely need more than one read per file.
+  gives you the full file content; one Read replaces multiple grep calls.
 - Batch verifications: read each file once and check multiple criteria from
-  the same content.
+  the same content. Do NOT grep the same file for different patterns.
 - Do NOT use the Agent tool (subagents). All verification is direct.
-- Do NOT attempt `gh pr review --approve` — the pipeline bot cannot
-  self-approve. Post verdict via `gh issue comment` only.
-- Target: ≤18 turns.
+- **Trust `deno task check`:** If all tests/lint/format pass, do not
+  re-verify things already covered by tests (e.g., import correctness,
+  syntax). Focus manual checks on acceptance criteria not testable by CI.
+- Target: ≤18 turns. Typical flow: deno task check (1) + read changed files
+  (3-5) + read spec (1) + write report (1) + post verdict (1) = ~10 turns.
 
 ## Rules
 
