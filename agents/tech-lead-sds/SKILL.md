@@ -22,9 +22,15 @@ breakdown from the Architect.
 Use ONLY the paths provided in the task message.
 Do NOT use hardcoded paths like `.sdlc/pipeline/...`.
 
-- Decision artifact — path from task message.
-- Revised plan artifact — path from task message.
+- Decision artifact — path from task message (e.g.,
+  `{{input.architect}}/04-decision.md`). This is your primary input.
 - `documents/design.md` — current SDS.
+
+**Available inputs:** Only artifacts from nodes listed in your pipeline
+`inputs:` are guaranteed to exist. Do NOT attempt to read artifacts from nodes
+not in your input mapping (e.g., reviewer output, tech-lead plan). If the
+task message references a path outside your inputs, skip it and work with
+what you have.
 
 **Path verification:** Before reading input artifacts, verify each path exists.
 If a path from the task message is unreadable, stop and report the error —
