@@ -200,7 +200,8 @@ graph LR
     `PipelineDefaults.model` (default model for all nodes),
     `LoopNodeConfig.nodes` (inline body node definitions),
     `LoopResult.bodyResults`, `ErrorCategory` (structured failure enum),
-    `NodeState.error_category`)
+    `NodeState.error_category`, `NodeState.cost_usd` (per-node cost from
+    Claude CLI), `RunState.total_cost_usd` (aggregate sum of all node costs))
   - `template.ts` — `{{var}}` interpolation for prompts/paths
   - `config.ts` — YAML parsing, schema validation, defaults merge,
     `run_on` normalization. `validateNode()`: if `run_on` present, must be
@@ -221,7 +222,10 @@ graph LR
     contains_section, custom_script, frontmatter_field)
   - `state.ts` — RunState persistence to `state.json`, resume logic,
     phase registry (`setPhaseRegistry()`, `clearPhaseRegistry()`,
-    `getPhaseForNode()`)
+    `getPhaseForNode()`).
+    `markNodeCompleted(state, nodeId, costUsd?)`: optional `costUsd` param
+    writes `cost_usd` to node entry; calls `recomputeTotalCost()` to update
+    `state.total_cost_usd` (sum of all node `cost_usd`, undefined treated as 0)
   - `agent.ts` — Claude CLI invocation, continuation loop, retry.
     `AgentRunOptions.model` and `InvokeOptions.model`: optional string for
     per-node model selection. `buildClaudeArgs()` emits `--model <value>` when
@@ -426,6 +430,10 @@ graph LR
     design, decision]`). Engine treats `phases` as opaque config data.
     Node IDs use activity-based naming (FR-33): `specification`, `design`,
     `decision`, `implementation`, `build`, `verify`, `review`, `optimize`
+  - NodeState: `{ ..., cost_usd?: number }` — per-node cost from
+    `ClaudeCliOutput.total_cost_usd`, written by `markNodeCompleted()` (FR-32)
+  - RunState: `{ ..., total_cost_usd?: number }` — aggregate sum of all node
+    `cost_usd` values, recomputed on each `markNodeCompleted()` call (FR-32)
   - CommitResult: `{ commitHash, filesStaged: string[], message: string }`
     (enriched for verbose output)
   - ValidationRule: `{ type: "file_exists"|"file_not_empty"|"contains_section"|
@@ -639,4 +647,5 @@ graph LR
 
 - **Simplified:** Pipeline runs sequentially (no parallel stages in v1).
 - **Deferred:** Multi-repo support. Parallel pipelines for multiple issues.
-  Issue size/complexity limits. Cost tracking and budget limits.
+  Issue size/complexity limits. Cost budget limits (cost aggregation in
+  state.json implemented via FR-32; budget enforcement deferred).
