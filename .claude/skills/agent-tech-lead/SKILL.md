@@ -1,7 +1,8 @@
 ---
 name: "agent-tech-lead"
 description: "Tech Lead — selects variant, updates SDS, creates branch + draft PR"
-disable-model-invocation: true
+compatibility: ["claude-code"]
+allowed-tools: []
 ---
 
 # Role: Tech Lead (Decision + Branch + PR)
@@ -51,7 +52,7 @@ tasks:
   - desc: "Add phases config key"
     files: [".sdlc/pipeline.yaml"]
   - desc: "Rename node IDs"
-    files: [".sdlc/pipeline.yaml", "agents/*/SKILL.md"]
+    files: [".sdlc/pipeline.yaml", ".claude/skills/agent-*/SKILL.md"]
 ---
 ```
 
@@ -72,13 +73,17 @@ Fields:
 ## Git Workflow
 
 1. Run `git branch --show-current` and `gh pr list --head sdlc/issue-<N> --json number`
-   (parallel).
+   (parallel, same response).
    - If already on `sdlc/issue-<N>`: stay on it, skip to step 2.
    - If on `main` or other branch: `git checkout -b sdlc/issue-<N> origin/main`
-     (create from origin/main directly — no stash, no checkout main, no pull).
+     (create from origin/main directly).
+   - **FORBIDDEN:** Do NOT run `git stash`, `git checkout main`, or `git pull`.
+     These waste 2-3 turns and are unnecessary — create branch from
+     `origin/main` directly in one command.
 2. Commit decision artifact + SDS changes (single commit).
    **IMPORTANT:** Run artifacts under `.sdlc/runs/` are gitignored. Always use
-   `git add -f <path>` for files in that directory.
+   `git add -f <path>` for files in that directory. Use `-f` on the first
+   attempt — do NOT try without `-f` first.
 3. Push: `git push --force-with-lease -u origin sdlc/issue-<N>`.
    Always use `--force-with-lease` (the branch may exist from a prior run).
    If no PR exists (from step 1 check), create one: `gh pr create --draft`.
@@ -89,18 +94,23 @@ diagnose before retrying. Do NOT retry the same command blindly.
 
 ## Efficiency
 
+- **Parallel reads (MANDATORY):** Your FIRST response MUST issue multiple Read
+  tool calls in one response: plan, spec, requirements.md, design.md, AGENTS.md.
+  NEVER read these one-per-turn — that wastes 4 turns.
 - **Read each file ONCE.** Do not re-read files you already have in context.
-- **Batch edits:** When updating `design.md`, collect all changes and apply
-  them in 1-2 large Edit calls — not many small ones. Each Edit call costs
-  a turn.
-- **Edit tool:** Never copy line numbers from Grep output into `old_string`.
-  Use the actual file content as shown by Read.
+- **No git exploration:** Do NOT run `git show`, `git log`, or `git diff` to
+  explore history. Do NOT run `ls` to inspect directories. You have all context
+  from the Read calls. The only Bash commands you need are: `git branch`,
+  `gh pr list`, `git add`, `git commit`, `git push`, `gh pr create`,
+  `gh issue comment`.
+- **Batch edits:** When updating `design.md`, apply ALL changes in 1 large Edit
+  call. Each Edit call costs a turn.
 - Keep SDS updates focused: only add/modify sections relevant to the selected
   variant.
 - One issue comment at the end, not multiple.
-- **Target: ≤15 turns.** Typical breakdown: 3 reads (plan+spec+design, parallel)
-  → 2 code greps (parallel) → 1 branch → 1 write decision → 1-2 edit SDS →
-  1 commit → 1 push/PR → 1 comment = ~12 turns.
+- **Target: ≤12 turns.** Typical breakdown: 1 parallel read (all 5 inputs) →
+  1 branch check → 1 write decision → 1 edit SDS → 1 commit → 1 push/PR →
+  1 comment = ~8 turns.
 
 ## Rules
 

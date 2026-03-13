@@ -265,10 +265,10 @@
 - **Input:**
   - `documents/meta.md` — persistent memory (read first).
   - Run logs from `<run-dir>/logs/` and `state.json`.
-  - Current agent prompts from `agents/`.
+  - Current agent prompts from `.claude/skills/agent-*/`.
   - `<run-dir>/failed-node.txt` (on pipeline failure).
 - **Output:**
-  - Primary: edited `agents/*/SKILL.md` (prompt fixes).
+  - Primary: edited `.claude/skills/agent-*/SKILL.md` (prompt fixes).
   - Secondary: `<run-dir>/meta-agent/07-changelog.md` (minimal fix log).
   - Persistent: updated `documents/meta.md` (cross-run memory).
 - **Acceptance criteria:**
@@ -293,7 +293,7 @@
   - Located in `.sdlc/scripts/stage-<N>-<role>.sh`.
   - Each script is responsible for:
     1. Preparing input: collecting handoff artifacts, setting environment variables.
-    2. Invoking `claude` CLI with the agent prompt from `agents/<role>/SKILL.md`.
+    2. Invoking `claude` CLI with the agent prompt from `.claude/skills/agent-<role>/SKILL.md`.
     3. Running stage-specific validation (artifact checks, `deno task check` for Executor).
     4. Implementing the Continuation mechanism (FR-8): re-invoking via `--resume` on validation failure.
     5. Committing output artifacts and logs to the feature branch.
@@ -368,7 +368,7 @@
 - **Motivation:** Current `.sdlc/` prefix conflates engine source code, configuration, runtime data, and legacy scripts. This hinders navigation, IDE support, and standard tooling (test runners, linters).
 - **Acceptance criteria:**
   - [x] Engine source code lives under a standard `src/` or dedicated top-level directory (not `.sdlc/engine/`). Evidence: `engine/` (top-level directory, 30 files moved via `git mv .sdlc/engine/ engine/`)
-  - [ ] Agent prompts in a top-level `agents/` directory (not `.sdlc/agents/`).
+  - ~~`[ ] Agent prompts in a top-level agents/ directory`~~ — superseded by FR-36/FR-19: canonical location is `.claude/skills/agent-<name>/`.
   - [ ] Pipeline config (`pipeline.yaml`) at project root or in a config directory.
   - [ ] Run artifacts in a gitignored data directory (e.g., `runs/` or `.sdlc/runs/`); `.gitignore` updated.
   - [ ] Legacy shell scripts in a `scripts/` directory (not `.sdlc/scripts/`).
@@ -392,17 +392,16 @@
 
 ### 3.19 FR-19: Agents as Skills
 
-- **Description:** Each pipeline agent is a Claude Code project skill, stored in `./agents/<name>/SKILL.md`. Skills are linked into `.claude/skills/` via symlinks for IDE integration. Each agent can be invoked standalone via `/agent-<name>` or used by the pipeline engine.
+- **Description:** Each pipeline agent is a Claude Code project skill stored canonically in `.claude/skills/agent-<name>/SKILL.md` per the agentskills.io specification. Each skill directory may include a `scripts/` subdirectory with co-located stage scripts. No symlinks. Each agent can be invoked standalone via `/agent-<name>` or used by the pipeline engine.
 - **Agents (7):** pm, architect, tech-lead, tech-lead-review, executor, qa, meta-agent. (FR-26: reduced from 10-agent set; removed committer, tech-lead-reviewer, tech-lead-sds; presenter has no agent directory.)
+- **Supersedes:** Original layout `agents/<name>/SKILL.md` with `.claude/skills/` symlinks (superseded by FR-36).
 - **Acceptance criteria:**
-  - [ ] Each of 7 agents has a dedicated directory under `./agents/<name>/` with a `SKILL.md` file containing YAML frontmatter (name, description, disable-model-invocation) and role instructions.
-  - [ ] Symlinks exist: `.claude/skills/agent-<name>` → `../../agents/<name>/` for all 7 agents.
-  - [ ] Pipeline engine `prompt:` fields in `pipeline.yaml` and `pipeline-task.yaml` reference the new SKILL.md paths (e.g., `agents/pm/SKILL.md`).
-  - [ ] Current `.sdlc/agents/*.md` files are migrated (content preserved, format adapted to SKILL.md with frontmatter).
-  - [ ] `.sdlc/agents/` directory removed after migration.
+  - [ ] Each of 7 agents has a canonical directory `.claude/skills/agent-<name>/` containing `SKILL.md` with spec-compliant YAML frontmatter (`name`, `description`, `compatibility`, `allowed-tools`; no `disable-model-invocation`).
+  - [ ] No symlinks in `.claude/skills/` pointing to `agents/`.
+  - [ ] `agents/` top-level directory removed after migration.
+  - [ ] Pipeline engine `prompt:` fields in `pipeline.yaml` reference `.claude/skills/agent-<name>/SKILL.md`.
   - [ ] Each agent skill is invocable standalone via `/agent-<name>`.
   - [ ] `deno task check` passes after migration.
-  - [ ] References to `.sdlc/agents/` in SRS sections (FR-8, FR-11, FR-12, Interfaces, Appendix B) updated to reflect new `agents/<name>/SKILL.md` paths.
 
 ### 3.20 FR-20: Pipeline Config Drift Detection
 
@@ -503,12 +502,12 @@
     nodes:
       executor:
         type: agent
-        prompt: "agents/executor/SKILL.md"
+        prompt: ".claude/skills/agent-executor/SKILL.md"
         inputs: [architect, sds-update]
         ...
       qa:
         type: agent
-        prompt: "agents/qa/SKILL.md"
+        prompt: ".claude/skills/agent-qa/SKILL.md"
         inputs: [pm, architect, executor]
         ...
   ```
@@ -587,7 +586,7 @@
   executor, qa — plus tech-lead-review and meta-agent as post-pipeline.
 - **Role changes:**
   - `tech-lead` node (current) → renamed to **`architect`** (designs solution
-    with variants). Prompt: `agents/architect/SKILL.md`.
+    with variants). Prompt: `.claude/skills/agent-architect/SKILL.md`.
   - `reviewer` node → **removed**. Design review absorbed into new tech-lead.
   - `architect` node (current) → renamed to **`tech-lead`** (reviews design,
     selects variant, task breakdown, updates SDS, creates branch
@@ -808,6 +807,19 @@
   - [x] `escHtml()` applied to all result content to prevent XSS. Evidence: `scripts/generate-dashboard.ts:74-75`
   - [x] Unit tests cover: multi-line result (details/summary structure), single-line result (p tag), empty result, HTML special chars in result. Evidence: `scripts/generate-dashboard_test.ts:100-170`
   - [x] `deno task check` passes. Evidence: confirmed by CI run on branch `sdlc/issue-47`
+
+### 3.35 FR-36: Agentskills.io-Compliant Skill Layout
+
+- **Description:** All pipeline agent skills must conform to the [agentskills.io specification](https://agentskills.io/specification). Canonical skill directories live in `.claude/skills/agent-<name>/`. Associated stage scripts co-located under `scripts/` subdirectory of each skill. Frontmatter uses only spec-defined fields.
+- **Motivation:** Spec compliance enables standard skill tooling and discovery. Co-location reduces cognitive overhead. Removing the `agents/` → `.claude/skills/` symlink indirection eliminates broken-symlink failure mode.
+- **Acceptance criteria:**
+  - [ ] Each skill directory `.claude/skills/agent-<name>/` contains `SKILL.md` with frontmatter fields: `name` (matches directory name), `description`, `compatibility`, `allowed-tools`. No `disable-model-invocation` field.
+  - [ ] Stage scripts moved from `.sdlc/scripts/stage-*.sh` into `.claude/skills/agent-<name>/scripts/` (one-to-one mapping per agent).
+  - [ ] `hitl-ask.sh`, `hitl-check.sh`, `lib.sh`, and shared utilities remain in `.sdlc/scripts/` (engine infrastructure, not agent skills).
+  - [ ] `agents/` top-level directory removed; no broken symlinks in `.claude/skills/`.
+  - [ ] `pipeline.yaml` `prompt:` fields updated to `.claude/skills/agent-<name>/SKILL.md`.
+  - [ ] `documents/design.md` and `CLAUDE.md` path references updated to reflect new layout.
+  - [ ] `deno task check` passes after migration.
 
 ## 4. Non-functional requirements
 

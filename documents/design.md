@@ -87,8 +87,8 @@ graph LR
     with YAML config, template interpolation, parallel levels, loop nodes,
     human nodes, resume support
   - **Agent Runtime**: Claude Code CLI invocations with role-specific prompts
-    from `agents/<name>/SKILL.md`; also discoverable as Claude Code skills via
-    `.claude/skills/agent-<name>` symlinks
+    from `.claude/skills/agent-<name>/SKILL.md` (canonical, agentskills.io-
+    compliant; no symlinks)
   - **Artifact Store**: Git-tracked files in `.sdlc/runs/<run-id>/[<phase>/]<node-id>/`
     (phase subdir present when node has `phase` field in config)
   - **Validation Engine**: Rule-based checks (file_exists, file_not_empty,
@@ -127,69 +127,55 @@ graph LR
     failures.
 - **Deps:** `claude` CLI, `git`, `gh`.
 
-### 3.4 Agent Prompts (`agents/`)
+### 3.4 Agent Skills (`.claude/skills/agent-*`) (FR-36)
 
 - **Purpose:** Versioned system prompts defining each agent's role and behavior.
-  Each agent lives in `agents/<name>/SKILL.md` with YAML frontmatter enabling
-  dual-use: pipeline-driven (via engine `prompt:` config) and interactive
-  (via Claude Code `/agent-<name>` slash commands).
-- **Directory structure:** `agents/<name>/SKILL.md` — 7 agents:
-  - `pm` — triages open GitHub issues, selects highest-priority, produces spec.
-  - `architect` — design-solution role: produces implementation plan with 2-3
-    variants, affected files, effort estimates, risk analysis (formerly
-    tech-lead function).
-  - `tech-lead` — critique + decision + SDS update + branch creation
+  Each agent lives in `.claude/skills/agent-<name>/SKILL.md` (canonical,
+  agentskills.io-compliant). Dual-use: pipeline-driven (via engine `prompt:`
+  config) and interactive (via Claude Code `/agent-<name>` slash commands).
+- **Directory structure:** `.claude/skills/agent-<name>/SKILL.md` — 7 agents:
+  - `agent-pm` — triages open GitHub issues, selects highest-priority, produces
+    spec.
+  - `agent-architect` — design-solution role: produces implementation plan with
+    2-3 variants, affected files, effort estimates, risk analysis.
+  - `agent-tech-lead` — critique + decision + SDS update + branch creation
     (`git checkout -b sdlc/issue-<N>`) + draft PR (`gh pr create --draft`) +
-    task breakdown from selected variant. Absorbs former reviewer (FR-4) and
-    SDS-update (FR-6) responsibilities. Uses `{{run_id}}` for `--prompt` mode
+    task breakdown from selected variant. Uses `{{run_id}}` for `--prompt` mode
     fallback branch `sdlc/{{run_id}}`.
-  - `executor` — implements tasks. Owns `git add`, `git commit`, `git push`
-    after each task. Posts PR comment with implementation summary.
-  - `qa` — verifies executor output. Posts verdict as PR review
+  - `agent-executor` — implements tasks. Owns `git add`, `git commit`,
+    `git push` after each task. Posts PR comment with implementation summary.
+  - `agent-qa` — verifies executor output. Posts verdict as PR review
     (`gh pr review`: approve/request-changes).
-  - `tech-lead-review` — post-pipeline: final code review + CI gate check +
-    merge. `run_on: always`. Handles missing-PR case gracefully (no-op with
-    clear message if pipeline failed before PR creation).
-  - `meta-agent` — prompt optimization, failure analysis.
-- **Removed agents (FR-26):** `tech-lead-reviewer` (absorbed into tech-lead),
-  `tech-lead-sds` (absorbed into tech-lead), `committer` (executor owns
-  commits), `code-reviewer` (replaced by tech-lead-review).
-- **SKILL.md frontmatter template:**
+  - `agent-tech-lead-review` — post-pipeline: final code review + CI gate
+    check + merge. `run_on: always`. Handles missing-PR case gracefully.
+  - `agent-meta-agent` — prompt optimization, failure analysis.
+- **Removed agents (FR-26):** `tech-lead-reviewer`, `tech-lead-sds`,
+  `committer`, `code-reviewer`.
+- **SKILL.md frontmatter (agentskills.io-compliant):**
   ```yaml
   ---
   name: "agent-<name>"
   description: "<one-line role description>"
-  disable-model-invocation: true
+  compatibility: ["claude-code"]
+  allowed-tools: []
   ---
   ```
-  - `disable-model-invocation: true` — prevents automatic invocation; agents
-    are only triggered explicitly (pipeline or slash command).
+  - `compatibility: ["claude-code"]` — declares runtime compatibility.
+  - `allowed-tools: []` — no automatic tool grants; agents use tools available
+    in their execution context.
 - **Interfaces:**
-  - Pipeline: engine reads `prompt:` path from `pipeline.yaml`, caches file
-    content at config load time (`prompt_content`), passes inline via
+  - Pipeline: engine reads `prompt:` path from `pipeline.yaml` (now
+    `.claude/skills/agent-<name>/SKILL.md`), caches file content at config load
+    time (`prompt_content`), passes inline via
     `claude --append-system-prompt`. Fallback to `--append-system-prompt-file`
     for template paths.
-  - Interactive: Claude Code discovers skills via `.claude/skills/agent-<name>`
-    symlinks → user invokes `/agent-<name>`.
+  - Interactive: Claude Code discovers skills directly from
+    `.claude/skills/agent-<name>/SKILL.md` → user invokes `/agent-<name>`.
+    No symlinks required (canonical location).
+- **Migration (FR-36):** Formerly `agents/<name>/SKILL.md` with symlinks from
+  `.claude/skills/`. Migrated to canonical `.claude/skills/` layout; `agents/`
+  top-level directory removed. Symlink indirection eliminated.
 - **Deps:** None (static content, versioned in git).
-
-### 3.5 Skill Symlinks (`.claude/skills/agent-*`)
-
-- **Purpose:** Bridge pipeline agents into Claude Code's skill discovery system,
-  enabling `/agent-<name>` slash command invocability (FR-19 AC #2, AC #6).
-- **Structure:** 7 symlinks: `.claude/skills/agent-<name>` → `../../agents/<name>/`
-  (relative paths for portability within repo).
-- **Agents exposed:** `agent-pm`, `agent-architect`, `agent-tech-lead`,
-  `agent-executor`, `agent-qa`, `agent-tech-lead-review`, `agent-meta-agent`.
-- **Removed (FR-26):** `agent-tech-lead-reviewer`, `agent-tech-lead-sds`,
-  `agent-committer`, `agent-code-reviewer` (agents deleted),
-  `agent-presenter` dangling symlink cleaned.
-- **Added (FR-26):** `agent-tech-lead-review`.
-- **Interfaces:** Claude Code skill loader reads symlink target directory,
-  discovers `SKILL.md` frontmatter, registers slash command.
-- **Deps:** `agents/<name>/SKILL.md` (symlink targets must exist).
-- **Constraint:** Symlinks are Linux-native; devcontainer runtime ensures
-  consistent behavior (no Windows symlink issues).
 
 ### 3.6 Pipeline Engine (`engine/`)
 
@@ -443,7 +429,7 @@ graph LR
 - **Entities:**
   - Handoff Artifact: Structured Markdown (01-spec.md through 07-changelog.md)
   - Agent Log: Claude CLI JSON output (`.sdlc/runs/<run-id>/logs/<node-id>.json`)
-  - Agent Prompt: SKILL.md with YAML frontmatter (`agents/<name>/SKILL.md`)
+  - Agent Prompt: SKILL.md with YAML frontmatter (`.claude/skills/agent-<name>/SKILL.md`)
   - Run State: JSON (`.sdlc/runs/<run-id>/state.json`)
   - Pipeline Config: YAML (`.sdlc/pipeline.yaml`). Top-level keys: `name`,
     `version`, `defaults`, `phases` (FR-33), `nodes`. `phases` key declares
@@ -606,7 +592,7 @@ graph LR
     After all DAG levels complete (success or failure), engine collects
     post-pipeline nodes, sorts topologically, filters by condition (see above),
     and executes in order. Meta-agent reads `failed-node.txt` for failure
-    context. Edits `agents/*/SKILL.md` to fix diagnosed problems. Produces
+    context. Edits `.claude/skills/agent-*/SKILL.md` to fix diagnosed problems. Produces
     minimal `07-changelog.md` listing applied fixes. Updates persistent memory
     in `documents/meta.md`. Posts 2-3 line summary to GitHub issue.
   - **Tech-Lead-Review Node**: Post-pipeline agent (`run_on: always`). Performs
@@ -653,7 +639,7 @@ graph LR
   - Artifacts overwritten on re-run (git history preserves previous).
   - QA iteration numbering restarts on re-run.
   - Meta-Agent runs on both success and failure.
-  - Meta-Agent auto-applies prompt improvements to `agents/*/SKILL.md`.
+  - Meta-Agent auto-applies prompt improvements to `.claude/skills/agent-*/SKILL.md`.
     Human review at PR merge via tech-lead-review.
 
 ## 6. Non-Functional

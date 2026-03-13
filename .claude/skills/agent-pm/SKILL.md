@@ -1,7 +1,8 @@
 ---
 name: "agent-pm"
 description: "Project Manager — triages GitHub issues, selects highest-priority, produces specification artifact"
-disable-model-invocation: true
+compatibility: ["claude-code"]
+allowed-tools: []
 ---
 
 # Role: Project Manager (PM)
@@ -15,23 +16,23 @@ produce a specification artifact, updating the project's SRS.
 1. **Sync with main:** Run `git pull origin main` to ensure the working tree
    has the latest changes before any work begins.
 2. **Triage issues:**
-   - **Branch shortcut:** Check `git branch --show-current`. If the branch is
-     `sdlc/issue-<N>`, the issue is pre-selected — skip triage, go directly to
-     step 3 with that issue number.
-   - Otherwise, run `gh issue list --state open --label "in-progress" --json number,title,labels`.
-     If any in-progress issue is returned: **HARD STOP on triage.** Pick the
-     first one. Do NOT view other issues, do NOT list all open issues.
+   - **Branch shortcut (MANDATORY CHECK FIRST):** Run `git branch --show-current`.
+     If the branch is `sdlc/issue-<N>`, the issue is pre-selected.
+     **HARD STOP on triage:** Do NOT run `gh issue list`. Go directly to step 3
+     with that issue number. This should resolve triage in 1 turn.
+   - **Only if NOT on `sdlc/issue-*` branch:** run `gh issue list --state open
+     --label "in-progress" --json number,title,labels`. Pick the first one.
+     Do NOT view other issues, do NOT list all open issues.
    - If no `in-progress` issues exist, fall back to
-     `gh issue list --state open --json number,title,labels` and select from all
-     open issues. View at most 2 candidate issues before deciding.
-   - **No open issues at all:** Fail fast with: "No open GitHub issues found
-     for triage."
+     `gh issue list --state open --json number,title,labels`. View at most 2.
+   - **No open issues at all:** Fail fast: "No open GitHub issues found."
 3. **Read the issue:** Run `gh issue view <N> --json body,title,comments` to
    get full details. View ONLY the selected issue — never other issues.
-4. **Review existing docs:** Read `documents/requirements.md` (SRS) and
-   `documents/design.md` (SDS — read-only reference) in parallel.
-   **Read each file ONCE.** Do not re-read, grep, or tail a file you already
-   read. Do not probe irrelevant files (`ls`, `find`, filesystem exploration).
+4. **Review existing docs:** In ONE response, issue Read calls for BOTH
+   `documents/requirements.md` AND `documents/design.md` in parallel.
+   **Read each file ONCE.** Do NOT re-read, grep, or tail a file you already
+   read. Do NOT use Grep to search files you already read — you have the full
+   content. Do not probe irrelevant files (`ls`, `find`, filesystem exploration).
    Only read source files directly referenced in the issue body.
 5. **Update the SRS:** Add or modify requirements in `documents/requirements.md`
    to reflect the issue. Every new requirement gets a status marker `[ ]`
@@ -114,8 +115,13 @@ Define what is NOT included in this issue's scope:
   guessing.
 - **YAML frontmatter required:** `01-spec.md` MUST start with `---` on line 1
   and contain `issue: <N>` in the frontmatter.
-- **Target: ≤12 turns.** Issue triage should take 2-3 turns max. SRS update
-  and spec writing should take 5-8 turns. Avoid broad codebase exploration.
+- **No Bash file inspection:** Do NOT use `head`, `cat`, `tail`, or `grep`
+  via Bash. Use Read or Grep tools instead.
+- **No Grep after Read:** If you already Read a file, do NOT Grep it — you
+  already have the content. Search your context instead.
+- **Target: ≤8 turns.** Branch shortcut = 1 turn. Issue view = 1 turn.
+  Parallel read docs = 1 turn. SRS update + spec write = 3-4 turns.
+  Comment = 1 turn. Total ~7 turns.
 
 ## Allowed File Modifications
 

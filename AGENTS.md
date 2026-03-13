@@ -95,7 +95,7 @@ Executor, QA, Presenter, Meta-Agent).
   pipeline config. There can be many pipelines, but the engine is one. Engine
   code must not reference concrete node names, artifact filenames, or pipeline
   structure. All pipeline-specific knowledge lives in `.sdlc/pipeline.yaml`
-  and agent prompts (`agents/*/SKILL.md`)
+  and agent prompts (`.claude/skills/agent-*/SKILL.md`)
 
 ## Planning Rules
 

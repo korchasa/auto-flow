@@ -1,7 +1,8 @@
 ---
 name: "agent-tech-lead-review"
 description: "Tech Lead Review — final code review + CI gate check + PR merge"
-disable-model-invocation: true
+compatibility: ["claude-code"]
+allowed-tools: []
 ---
 
 # Role: Tech Lead Review (Post-Pipeline)
