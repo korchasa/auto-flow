@@ -798,6 +798,17 @@
   - [ ] Unit test covers `on_failure_script` execution path.
   - [ ] `deno task check` passes.
 
+### 3.34 FR-35: Dashboard Result Summary Display
+
+- **Description:** HTML dashboard cards for pipeline nodes must display at least the first 3 lines of the agent result text. Long results must be collapsible (expand on click). Single-line results display inline without unnecessary whitespace. Prior implementation used `white-space: nowrap; text-overflow: ellipsis` truncating multi-line results to ~40 chars.
+- **Acceptance criteria:**
+  - [x] `renderCard()` in `scripts/generate-dashboard.ts` uses `<details>/<summary>` for multi-line results (>1 line): first 3 lines in `<summary>`, full text in `<details>` body. Evidence: `scripts/generate-dashboard.ts:73-77`
+  - [x] Single-line results render as `<p class="result">` without `<details>` wrapper. Evidence: `scripts/generate-dashboard.ts:72`
+  - [x] No `white-space: nowrap; text-overflow: ellipsis` CSS for result text. Evidence: `scripts/generate-dashboard.ts:189` (`white-space:pre-wrap`)
+  - [x] `escHtml()` applied to all result content to prevent XSS. Evidence: `scripts/generate-dashboard.ts:74-75`
+  - [x] Unit tests cover: multi-line result (details/summary structure), single-line result (p tag), empty result, HTML special chars in result. Evidence: `scripts/generate-dashboard_test.ts:100-170`
+  - [x] `deno task check` passes. Evidence: confirmed by CI run on branch `sdlc/issue-47`
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.

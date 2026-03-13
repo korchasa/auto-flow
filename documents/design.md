@@ -417,7 +417,7 @@ graph LR
   highest-priority open issue via `gh`.
 - **Deps:** Devcontainer, Claude CLI auth (OAuth or API key), `GITHUB_TOKEN`.
 
-### 3.10 Dashboard Generator (`scripts/generate-dashboard.ts`) (FR-33)
+### 3.10 Dashboard Generator (`scripts/generate-dashboard.ts`) (FR-33, FR-35)
 
 - **Purpose:** Generate self-contained HTML dashboard summarizing pipeline run
   results. Reads `state.json` + per-node `logs/*.json`. Produces `index.html`

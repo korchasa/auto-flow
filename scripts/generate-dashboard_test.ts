@@ -151,6 +151,13 @@ Deno.test("renderCard — displays cost from log", () => {
   assertEquals(html.includes("0.1234"), true);
 });
 
+Deno.test("renderCard — no <details> and no crash for empty/undefined result", () => {
+  const state: NodeState = { status: "running" };
+  const html = renderCard("mynode", state, null);
+  assertEquals(html.includes("<details>"), false);
+  assertEquals(html.includes("mynode"), true);
+});
+
 Deno.test("renderCard — 3-line preview in summary, full text in details body", () => {
   const state: NodeState = { status: "completed" };
   const log: ClaudeCliOutput = {
