@@ -15,32 +15,27 @@ Four node types:
 - **loop** — iterative body with frontmatter-based exit condition (e.g., Executor+QA cycle)
 - **human** — terminal prompt for manual input; also supports Human-in-the-Loop (HITL) via GitHub issue comments
 
-Inter-agent communication uses structured Markdown artifacts in `.sdlc/runs/<run-id>/<node-id>/`, linked via `{{input.<node-id>}}` template variables. On validation failure, the engine resumes the agent in the same session with error context (continuation mechanism).
+Inter-agent communication uses structured Markdown artifacts in `.sdlc/runs/<run-id>/[<phase>/]<node-id>/`, linked via `{{input.<node-id>}}` template variables (e.g. `{{input.specification}}`, `{{input.decision}}`). On validation failure, the engine resumes the agent in the same session with error context (continuation mechanism).
 
 ## Pipeline Stages
 
-| Node | Role | Output |
-|------|------|--------|
-| `pm` | Project Manager — Specification | `01-spec.md` |
-| `tech-lead` | Tech Lead — Implementation Plan | `02-plan.md` |
-| `reviewer` | Tech Lead Reviewer — Critique & Revision | `03-revised-plan.md` |
-| `architect` | Architect — Decision & Task Breakdown | `04-decision.md` |
-| `sds-update` | Tech Lead — SDS Update | updated `documents/design.md` |
-| `commit-plan` | Committer — plan phase | git commit |
-| `impl-loop` | Executor+QA loop (max 3 iterations) | implementation + `05-qa-report.md` |
-| `commit-impl` | Committer — impl phase | git commit |
-| `presenter` | Presenter — Change Summary & PR | `06-summary.md` |
-| `commit-present` | Committer — present phase | git commit |
-| `meta-agent` | Meta-Agent — Prompt Optimization (runs always) | `07-changelog.md` + `documents/meta.md` |
+| Node | Phase | Role | Output |
+|------|-------|------|--------|
+| `specification` | plan | Project Manager — Specification | `01-spec.md` |
+| `design` | plan | Architect — Design-Solution Plan | `02-plan.md` |
+| `decision` | plan | Tech Lead — Decision + Branch + PR | `04-decision.md` |
+| `implementation` | impl | Executor+QA loop (max 3 iterations) | implementation + `05-qa-report.md` |
+| `review` | report | Tech Lead Review — Final Review + Merge (run_on: always) | `08-review.md` |
+| `optimize` | report | Meta-Agent — Prompt Optimization (run_on: always) | `07-changelog.md` |
 
 ## Architecture
 
 - **Engine:** `engine/` — Deno/TypeScript DAG executor with YAML config, template interpolation, parallel levels, loop nodes, HITL support, resume capability
-- **Agent prompts:** `agents/<name>/SKILL.md` — 10 agents with YAML frontmatter; dual-use as pipeline prompts and Claude Code skills
+- **Agent prompts:** `agents/<name>/SKILL.md` — 7 agents with YAML frontmatter; dual-use as pipeline prompts and Claude Code skills
 - **Artifact store:** `.sdlc/runs/<run-id>/<node-id>/` — per-run isolation, git-tracked
 - **State:** `.sdlc/runs/<run-id>/state.json` — tracks node completion for resume
 - **Validation:** Rule-based checks per node (file_exists, file_not_empty, contains_section, custom_script, frontmatter_field)
-- **Commit strategy:** Engine does not auto-commit; dedicated `committer` agent nodes handle commits at 3 pipeline points
+- **Commit strategy:** Engine does not auto-commit; executor agent owns `git add`, `git commit`, `git push` per task
 - **Observability:** 3 verbosity levels (`-q` / default / `-v`); status lines with timestamps; final summary
 - **Legacy:** Shell scripts in `.sdlc/scripts/` preserved for backward compatibility, superseded by engine
 
@@ -98,35 +93,29 @@ Options:
 
 ## Agents as Skills
 
-All 10 pipeline agents are also available as Claude Code slash commands via `.claude/skills/agent-<name>` symlinks pointing to `agents/<name>/`.
+All 7 pipeline agents are also available as Claude Code slash commands via `.claude/skills/agent-<name>` symlinks pointing to `agents/<name>/`.
 
 Available commands:
 
-- `/agent-pm` — Project Manager
-- `/agent-tech-lead` — Tech Lead (implementation plan)
-- `/agent-tech-lead-reviewer` — Tech Lead Reviewer (critique)
-- `/agent-architect` — Architect (decision & task breakdown)
-- `/agent-tech-lead-sds` — Tech Lead SDS (design spec update)
+- `/agent-pm` — Project Manager (specification)
+- `/agent-architect` — Architect (design-solution plan)
+- `/agent-tech-lead` — Tech Lead (decision & branch & PR)
 - `/agent-executor` — Executor (implementation)
 - `/agent-qa` — QA (verification)
-- `/agent-presenter` — Presenter (summary & PR)
-- `/agent-meta-agent` — Meta-Agent (prompt analysis)
-- `/agent-committer` — Committer (git commits)
+- `/agent-tech-lead-review` — Tech Lead Review (final review & merge)
+- `/agent-meta-agent` — Meta-Agent (prompt optimization)
 
 ## Project Structure
 
 ```
-agents/                    # Agent prompts (10 agents)
+agents/                    # Agent prompts (7 agents)
   pm/SKILL.md
-  tech-lead/SKILL.md
-  tech-lead-reviewer/SKILL.md
   architect/SKILL.md
-  tech-lead-sds/SKILL.md
+  tech-lead/SKILL.md
   executor/SKILL.md
   qa/SKILL.md
-  presenter/SKILL.md
+  tech-lead-review/SKILL.md
   meta-agent/SKILL.md
-  committer/SKILL.md
 .sdlc/
   engine/                  # Pipeline engine (Deno/TypeScript)
   pipeline.yaml            # Pipeline DAG configuration

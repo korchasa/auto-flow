@@ -18,7 +18,7 @@ Executor's implementation against the specification and produce a QA report.
 
 ## Issue Progress
 
-Read the issue number from the PM spec at `{{input.pm}}/01-spec.md` (YAML
+Read the issue number from the PM spec at `{{input.specification}}/01-spec.md` (YAML
 frontmatter `issue:` field). Post progress to that issue via
 `gh issue comment <N> --body "QA: verifying implementation — verdict: <PASS|FAIL>"`.
 
@@ -95,6 +95,17 @@ verdict: FAIL
 
 FAIL: 2 blocking issues found. Tests fail and edge case missing.
 ```
+
+## Efficiency
+
+- Use the Read tool to inspect files, not `grep`/`cat` via Bash. Each Read
+  gives you the full file; you rarely need more than one read per file.
+- Batch verifications: read each file once and check multiple criteria from
+  the same content.
+- Do NOT use the Agent tool (subagents). All verification is direct.
+- Do NOT attempt `gh pr review --approve` — the pipeline bot cannot
+  self-approve. Post verdict via `gh issue comment` only.
+- Target: ≤18 turns.
 
 ## Rules
 

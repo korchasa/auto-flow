@@ -1,6 +1,6 @@
-# Pipeline configuration — 8-agent SDLC flow (FR-26).
-# DAG: pm → architect → tech-lead → impl-loop(executor, qa)
-#      ; tech-lead-review(run_on:always) ; meta-agent(run_on:always)
+# Pipeline configuration — 8-agent SDLC flow (FR-26, FR-33).
+# DAG: specification → design → decision → implementation(build, verify)
+#      ; review(run_on:always) ; optimize(run_on:always)
 # See: documents/requirements.md for stage specifications.
 
 name: "auto-flow-sdlc"
@@ -18,14 +18,19 @@ defaults:
   hitl:
     ask_script: .sdlc/scripts/hitl-ask.sh
     check_script: .sdlc/scripts/hitl-check.sh
-    issue_source: plan/pm/01-spec.md
+    issue_source: plan/specification/01-spec.md
     poll_interval: 60
     timeout: 7200
     bot_login: "github-actions[bot]"
 
+phases:
+  plan: [specification, design, decision]
+  impl: [implementation]
+  report: [review, optimize]
+
 nodes:
   # Stage 1: Project Manager — specification
-  pm:
+  specification:
     type: agent
     phase: plan
     label: "Project Manager — Specification"
@@ -52,15 +57,15 @@ nodes:
         value: "Scope"
 
   # Stage 2: Architect — design-solution plan with variants
-  architect:
+  design:
     type: agent
     phase: plan
     label: "Architect — Design-Solution Plan"
     model: claude-opus-4-6
-    inputs: [pm]
+    inputs: [specification]
     prompt: "agents/architect/SKILL.md"
     task_template: |
-      Read the specification at {{input.pm}}/01-spec.md.
+      Read the specification at {{input.specification}}/01-spec.md.
       Read documents/requirements.md and documents/design.md.
       Produce an implementation plan with 2-3 variants.
       Output: {{node_dir}}/02-plan.md
@@ -71,16 +76,16 @@ nodes:
         path: "{{node_dir}}/02-plan.md"
 
   # Stage 3: Tech Lead — critique, decision, SDS update, branch + draft PR
-  tech-lead:
+  decision:
     type: agent
     phase: plan
     label: "Tech Lead — Decision + Branch + PR"
     model: claude-opus-4-6
-    inputs: [pm, architect]
+    inputs: [specification, design]
     prompt: "agents/tech-lead/SKILL.md"
     task_template: |
-      Read the plan at {{input.architect}}/02-plan.md.
-      Read the spec at {{input.pm}}/01-spec.md.
+      Read the plan at {{input.design}}/02-plan.md.
+      Read the spec at {{input.specification}}/01-spec.md.
       Read documents/requirements.md, documents/design.md, and AGENTS.md.
       Critique the plan, select a variant, produce task breakdown (04-decision.md).
       Update documents/design.md with selected variant's design details.
@@ -93,37 +98,37 @@ nodes:
         path: "{{node_dir}}/04-decision.md"
 
   # Stages 4-5: Executor + QA loop (body nodes defined inline)
-  impl-loop:
+  implementation:
     type: loop
     phase: impl
     label: "Executor+QA Implementation Loop"
-    inputs: [tech-lead]
-    condition_node: qa
+    inputs: [decision]
+    condition_node: verify
     condition_field: verdict
     exit_value: PASS
     max_iterations: 3
     nodes:
-      executor:
+      build:
         type: agent
         label: "Executor — Implementation"
-        inputs: [tech-lead]
+        inputs: [decision]
         prompt: "agents/executor/SKILL.md"
         task_template: |
-          Read the decision at {{input.tech-lead}}/04-decision.md.
+          Read the decision at {{input.decision}}/04-decision.md.
           Read documents/requirements.md and documents/design.md.
           Implement the changes following the task breakdown.
           This is iteration {{loop.iteration}}.
         validate:
           - type: custom_script
             path: "deno task check"
-      qa:
+      verify:
         type: agent
         label: "QA — Verification"
-        inputs: [pm, tech-lead, executor]
+        inputs: [specification, decision, build]
         prompt: "agents/qa/SKILL.md"
         task_template: |
-          Verify the implementation against the spec at {{input.pm}}/01-spec.md.
-          Check the decision at {{input.tech-lead}}/04-decision.md.
+          Verify the implementation against the spec at {{input.specification}}/01-spec.md.
+          Check the decision at {{input.decision}}/04-decision.md.
           Run deno task check and verify all acceptance criteria.
           Post verdict as PR review (approve or request-changes).
           Output: {{node_dir}}/05-qa-report.md with YAML frontmatter containing verdict: PASS or FAIL
@@ -134,16 +139,16 @@ nodes:
             path: "{{node_dir}}/05-qa-report.md"
 
   # Post-pipeline: Tech Lead Review — final review + CI gate + merge
-  tech-lead-review:
+  review:
     type: agent
     phase: report
     label: "Tech Lead Review — Final Review + Merge"
-    inputs: [pm, tech-lead, impl-loop]
+    inputs: [specification, decision, implementation]
     prompt: "agents/tech-lead-review/SKILL.md"
     task_template: |
       Perform final code review of the PR.
-      Read the spec at {{input.pm}}/01-spec.md for acceptance criteria.
-      Read the decision at {{input.tech-lead}}/04-decision.md for scope.
+      Read the spec at {{input.specification}}/01-spec.md for acceptance criteria.
+      Read the decision at {{input.decision}}/04-decision.md for scope.
       Check CI gates and merge if all pass.
       Output: {{node_dir}}/08-review.md
     run_on: always
@@ -156,7 +161,7 @@ nodes:
         path: "{{node_dir}}/08-review.md"
 
   # Post-pipeline: Meta-Agent — prompt optimization
-  meta-agent:
+  optimize:
     type: agent
     phase: report
     label: "Meta-Agent — Prompt Optimization"

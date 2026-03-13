@@ -59,16 +59,28 @@ graph TD
     Dispatch --> Output["Output<br/>3 verbosity levels"]
 ```
 
-### 2.3 Pipeline DAG (FR-26)
+### 2.3 Pipeline DAG (FR-26, FR-33)
 
 ```mermaid
 graph LR
-    PM["pm"] --> Arch["architect<br/>(design-solution)"]
-    Arch --> TL["tech-lead<br/>(decision+branch+PR)"]
-    TL --> Loop["impl-loop<br/>(executor→qa)"]
-    Loop -.-> TLR["tech-lead-review<br/>(run_on:always)"]
-    Loop -.-> MA["meta-agent<br/>(run_on:always)"]
+    Spec["specification"] --> Design["design<br/>(solution plan)"]
+    Design --> Decision["decision<br/>(critique+branch+PR)"]
+    Decision --> Loop["implementation<br/>(build→verify)"]
+    Loop -.-> Review["review<br/>(run_on:always)"]
+    Loop -.-> Optimize["optimize<br/>(run_on:always)"]
 ```
+
+- **Node ID convention (FR-33):** Activity-based IDs reflect what work is done,
+  not who does it. Mapping: `pm`→`specification`, `architect`→`design`,
+  `tech-lead`→`decision`, `impl-loop`→`implementation`, `executor`→`build`,
+  `qa`→`verify`, `tech-lead-review`→`review`, `meta-agent`→`optimize`.
+- **Phases (FR-33):** Top-level `phases:` key in `pipeline.yaml` declares named
+  phase groups. Each phase lists member stage IDs:
+  - `plan`: [specification, design, decision]
+  - `impl`: [implementation]
+  - `report`: [review, optimize]
+  Phase grouping is declarative config; engine treats it as opaque data. Enables
+  future phase-level `run_on` semantics and cleaner artifact reporting.
 
 - **Subsystems:**
   - **Pipeline Engine** (`engine/`): Deno/TypeScript DAG-based executor
@@ -407,7 +419,12 @@ graph LR
   - Agent Log: Claude CLI JSON output (`.sdlc/runs/<run-id>/logs/<node-id>.json`)
   - Agent Prompt: SKILL.md with YAML frontmatter (`agents/<name>/SKILL.md`)
   - Run State: JSON (`.sdlc/runs/<run-id>/state.json`)
-  - Pipeline Config: YAML (`.sdlc/pipeline.yaml`)
+  - Pipeline Config: YAML (`.sdlc/pipeline.yaml`). Top-level keys: `name`,
+    `version`, `defaults`, `phases` (FR-33), `nodes`. `phases` key declares
+    named phase groups with member stage IDs (e.g., `plan: [specification,
+    design, decision]`). Engine treats `phases` as opaque config data.
+    Node IDs use activity-based naming (FR-33): `specification`, `design`,
+    `decision`, `implementation`, `build`, `verify`, `review`, `optimize`
   - CommitResult: `{ commitHash, filesStaged: string[], message: string }`
     (enriched for verbose output)
   - ValidationRule: `{ type: "file_exists"|"file_not_empty"|"contains_section"|
@@ -433,7 +450,7 @@ graph LR
   template variable pointing to predecessor's output directory. No manifest.
 - **Directory structure:** `.sdlc/runs/<run-id>/[<phase>/]<node-id>/` per node
   output. Phase subdir present when node's `phase` field is set in config.
-  Example with phases: `.sdlc/runs/abc/plan/pm/`, `.sdlc/runs/abc/impl/executor/`.
+  Example with phases: `.sdlc/runs/abc/plan/specification/`, `.sdlc/runs/abc/impl/build/`.
   Without phase: `.sdlc/runs/abc/some-node/` (backward-compatible flat layout).
 - **Validation:** Engine validates output via configurable rules (file_exists,
   file_not_empty, contains_section, custom_script, frontmatter_field) after
@@ -527,11 +544,11 @@ graph LR
     `state.config_path`, then `setPhaseRegistry()` called (registry not persisted
     in `state.json` — always rebuilt from config). `ensureRunDirs()` creates
     phase subdirs (e.g., `plan/`, `impl/`, `report/`) when phases present.
-    Phase assignment (default pipeline, FR-26):
-    - `plan`: pm, architect, tech-lead
-    - `impl`: impl-loop (body nodes `executor`, `qa` defined inline via
+    Phase assignment (default pipeline, FR-26, FR-33):
+    - `plan`: specification, design, decision
+    - `impl`: implementation (body nodes `build`, `verify` defined inline via
       `nodes` sub-object)
-    - `report`: meta-agent, tech-lead-review
+    - `report`: optimize, review
   - **Rollback Before Post-Pipeline Nodes**: When `pipelineSuccess === false`,
     engine calls `rollbackUncommitted()` before executing post-pipeline nodes.
     Reverts staged/unstaged modifications (`git checkout -- .` +
