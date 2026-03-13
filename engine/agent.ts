@@ -381,7 +381,7 @@ async function executeClaudeProcess(
             // Write readable formatted line to log file in real-time
             const summary = formatEventForOutput(event);
             if (logFile && summary) {
-              await logFile.write(encoder.encode(summary + "\n"));
+              await logFile.write(encoder.encode(stampLines(summary) + "\n"));
             }
             if (onOutput && summary) onOutput(summary);
           } catch {
@@ -399,7 +399,7 @@ async function executeClaudeProcess(
           }
           const summary = formatEventForOutput(event);
           if (logFile && summary) {
-            await logFile.write(encoder.encode(summary + "\n"));
+            await logFile.write(encoder.encode(stampLines(summary) + "\n"));
           }
           if (onOutput && summary) onOutput(summary);
         } catch { /* skip */ }
@@ -588,4 +588,24 @@ function toVerboseValidation(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Returns current time as [HH:MM:SS] prefix string. */
+export function tsPrefix(): string {
+  const d = new Date();
+  const h = String(d.getHours()).padStart(2, "0");
+  const m = String(d.getMinutes()).padStart(2, "0");
+  const s = String(d.getSeconds()).padStart(2, "0");
+  return `[${h}:${m}:${s}]`;
+}
+
+/**
+ * Prepend timestamp to each non-empty line of text.
+ * Empty lines pass through unchanged.
+ */
+export function stampLines(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => line ? `${tsPrefix()} ${line}` : line)
+    .join("\n");
 }

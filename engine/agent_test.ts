@@ -1,5 +1,10 @@
 import { assertEquals } from "@std/assert";
-import { buildClaudeArgs, formatEventForOutput } from "./agent.ts";
+import {
+  buildClaudeArgs,
+  formatEventForOutput,
+  stampLines,
+  tsPrefix,
+} from "./agent.ts";
 import type { AgentRunOptions, InvokeOptions } from "./agent.ts";
 import { OutputManager } from "./output.ts";
 import type { NodeConfig, NodeSettings, TemplateContext } from "./types.ts";
@@ -381,4 +386,57 @@ Deno.test("formatEventForOutput — long text truncated at 120 chars", () => {
   });
   assertEquals(out.includes("x".repeat(120) + "…"), true);
   assertEquals(out.includes("x".repeat(121)), false);
+});
+
+Deno.test("tsPrefix — returns [HH:MM:SS] format", () => {
+  const prefix = tsPrefix();
+  assertEquals(
+    /^\[\d{2}:\d{2}:\d{2}\]$/.test(prefix),
+    true,
+    `expected [HH:MM:SS] format, got: ${prefix}`,
+  );
+});
+
+Deno.test("stampLines — single line gets timestamp prefix", () => {
+  const result = stampLines("[stream] text: hello");
+  assertEquals(
+    /^\[\d{2}:\d{2}:\d{2}\] \[stream\] text: hello$/.test(result),
+    true,
+    `unexpected result: ${result}`,
+  );
+});
+
+Deno.test("stampLines — multi-line: each non-empty line gets timestamp", () => {
+  const input = "[stream] text: line1\n[stream] text: line2";
+  const result = stampLines(input);
+  const lines = result.split("\n");
+  assertEquals(lines.length, 2);
+  assertEquals(
+    /^\[\d{2}:\d{2}:\d{2}\] \[stream\] text: line1$/.test(lines[0]),
+    true,
+    `line 0: ${lines[0]}`,
+  );
+  assertEquals(
+    /^\[\d{2}:\d{2}:\d{2}\] \[stream\] text: line2$/.test(lines[1]),
+    true,
+    `line 1: ${lines[1]}`,
+  );
+});
+
+Deno.test("stampLines — empty lines pass through without timestamp", () => {
+  const input = "[stream] line1\n\n[stream] line2";
+  const result = stampLines(input);
+  const lines = result.split("\n");
+  assertEquals(lines.length, 3);
+  assertEquals(
+    /^\[\d{2}:\d{2}:\d{2}\] /.test(lines[0]),
+    true,
+    `line 0: ${lines[0]}`,
+  );
+  assertEquals(lines[1], "");
+  assertEquals(
+    /^\[\d{2}:\d{2}:\d{2}\] /.test(lines[2]),
+    true,
+    `line 2: ${lines[2]}`,
+  );
 });
