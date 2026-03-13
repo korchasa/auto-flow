@@ -231,6 +231,10 @@ graph LR
     `executeClaudeProcess()` uses `--output-format stream-json` and reads
     stdout line-by-line. Each JSON line appended to `streamLogPath` file
     (crash-resilient incremental write via `Deno.writeFile({ append: true })`).
+    **Stream log timestamps (FR-32):** `tsPrefix()` returns `[HH:MM:SS]`
+    wall-clock prefix; `stampLines()` prepends it to each non-empty line (empty
+    lines pass through). Applied to log file writes only — terminal output via
+    `onOutput` callback receives raw text without timestamps.
     On `result` event: extracts `ClaudeCliOutput` fields (`result`,
     `session_id`, `is_error`, `total_cost_usd`, `duration_ms`,
     `duration_api_ms`, `num_turns`, `permission_denials`). `is_error` derived
