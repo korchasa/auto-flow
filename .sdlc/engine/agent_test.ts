@@ -165,6 +165,34 @@ Deno.test("settings — default values", () => {
   assertEquals(settings.retry_delay_seconds, 5);
 });
 
+Deno.test("buildClaudeArgs — model present without resume emits --model", () => {
+  const args = buildClaudeArgs(
+    makeInvokeOpts({ model: "claude-sonnet-4-6" }),
+  );
+  const idx = args.indexOf("--model");
+  assertEquals(idx >= 0, true, "should contain --model");
+  assertEquals(args[idx + 1], "claude-sonnet-4-6");
+});
+
+Deno.test("buildClaudeArgs — model present with resume omits --model", () => {
+  const args = buildClaudeArgs(
+    makeInvokeOpts({
+      model: "claude-sonnet-4-6",
+      resumeSessionId: "sess-abc",
+    }),
+  );
+  assertEquals(
+    args.includes("--model"),
+    false,
+    "resume should not emit --model",
+  );
+});
+
+Deno.test("buildClaudeArgs — model absent omits --model", () => {
+  const args = buildClaudeArgs(makeInvokeOpts());
+  assertEquals(args.includes("--model"), false, "no model = no --model flag");
+});
+
 Deno.test("formatEventForOutput — system init", () => {
   const out = formatEventForOutput({
     type: "system",

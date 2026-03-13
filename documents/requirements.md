@@ -272,22 +272,22 @@
   - **On pipeline failure:** runs automatically when any stage fails after exhausting its continuation limit.
 - **Trigger mechanism:** Engine executes meta-agent node as a post-pipeline node. In `pipeline.yaml`, the meta-agent node is configured with `run_on: always` (FR-25) to run regardless of upstream success/failure. Failed node ID is available in `state.json`.
 - **Input:**
-  - All logs from `.sdlc/pipeline/<issue-number>/logs/`.
-  - All handoff artifacts produced before the failure (if failed).
+  - `documents/meta.md` — persistent memory (read first).
+  - Run logs from `<run-dir>/logs/` and `state.json`.
   - Current agent prompts from `agents/`.
-  - The continuation/validation error output that caused the failure (if applicable).
-- **Output:** `.sdlc/pipeline/<issue-number>/07-meta-report.md`.
+  - `<run-dir>/failed-node.txt` (on pipeline failure).
+- **Output:**
+  - Primary: edited `agents/*/SKILL.md` (prompt fixes).
+  - Secondary: `<run-dir>/meta-agent/07-changelog.md` (minimal fix log).
+  - Persistent: updated `documents/meta.md` (cross-run memory).
 - **Acceptance criteria:**
-  - Agent produces `07-meta-report.md` containing:
-    - **Run summary:** which stages completed, which failed, total continuations triggered.
-    - **Error analysis** (if failed): root cause hypothesis for the failure, which prompt or input likely caused it.
-    - **Friction points:** stages where the agent needed continuations, produced low-quality output, or took excessive tokens.
-    - **Prompt improvements applied:** concrete edits to agent prompts with before/after diffs, committed to the feature branch.
-    - **Pattern tracking:** recurring issues across multiple runs (references previous meta-reports if they exist in `.sdlc/pipeline/*/07-meta-report.md`).
-  - Meta-Agent auto-applies prompt improvements directly to agent prompt files and commits changes to the feature branch. Changes are reviewed as part of the PR (human gate at merge).
+  - Agent analyzes logs, diagnoses problems, and edits agent prompts directly.
+  - `07-changelog.md` lists each fix with evidence (turns/cost/error data).
+  - `documents/meta.md` updated with new patterns, fix outcomes, baselines.
+  - Does NOT produce verbose reports — focus is on prompt optimization.
 - **Quality metrics:**
-  - Every suggestion references a specific log excerpt as evidence.
-  - Applied changes are actionable: each includes a concrete prompt diff, not vague advice like "improve clarity".
+  - Every fix references specific log data as evidence.
+  - Fixes are minimal, targeted, and testable in next run.
 
 ### 3.12 FR-12: Runtime Infrastructure
 

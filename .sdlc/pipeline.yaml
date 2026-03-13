@@ -1,4 +1,6 @@
-# Default pipeline configuration — reproduces the current 9-stage SDLC flow.
+# Pipeline configuration — 8-agent SDLC flow (FR-26).
+# DAG: pm → architect → tech-lead → impl-loop(executor, qa)
+#      ; tech-lead-review(run_on:always) ; meta-agent(run_on:always)
 # See: documents/requirements.md for stage specifications.
 
 name: "auto-flow-sdlc"
@@ -10,12 +12,13 @@ defaults:
   timeout_seconds: 1800
   max_retries: 3
   retry_delay_seconds: 5
+  model: claude-sonnet-4-6
   claude_args:
     - "--dangerously-skip-permissions"
   hitl:
     ask_script: .sdlc/scripts/hitl-ask.sh
     check_script: .sdlc/scripts/hitl-check.sh
-    issue_source: pm/01-spec.md
+    issue_source: plan/pm/01-spec.md
     poll_interval: 60
     timeout: 7200
     bot_login: "github-actions[bot]"
@@ -24,6 +27,7 @@ nodes:
   # Stage 1: Project Manager — specification
   pm:
     type: agent
+    phase: plan
     label: "Project Manager — Specification"
     prompt: "agents/pm/SKILL.md"
     task_template: |
@@ -47,12 +51,14 @@ nodes:
         path: "{{node_dir}}/01-spec.md"
         value: "Scope"
 
-  # Stage 2: Tech Lead — plan with variants
-  tech-lead:
+  # Stage 2: Architect — design-solution plan with variants
+  architect:
     type: agent
-    label: "Tech Lead — Implementation Plan"
+    phase: plan
+    label: "Architect — Design-Solution Plan"
+    model: claude-opus-4-6
     inputs: [pm]
-    prompt: "agents/tech-lead/SKILL.md"
+    prompt: "agents/architect/SKILL.md"
     task_template: |
       Read the specification at {{input.pm}}/01-spec.md.
       Read documents/requirements.md and documents/design.md.
@@ -64,33 +70,21 @@ nodes:
       - type: file_not_empty
         path: "{{node_dir}}/02-plan.md"
 
-  # Stage 3: Reviewer — critique and revision
-  reviewer:
+  # Stage 3: Tech Lead — critique, decision, SDS update, branch + draft PR
+  tech-lead:
     type: agent
-    label: "Tech Lead Reviewer — Critique & Revision"
-    inputs: [pm, tech-lead]
-    prompt: "agents/tech-lead-reviewer/SKILL.md"
+    phase: plan
+    label: "Tech Lead — Decision + Branch + PR"
+    model: claude-opus-4-6
+    inputs: [pm, architect]
+    prompt: "agents/tech-lead/SKILL.md"
     task_template: |
-      Review the plan at {{input.tech-lead}}/02-plan.md.
+      Read the plan at {{input.architect}}/02-plan.md.
       Read the spec at {{input.pm}}/01-spec.md.
-      Produce a revised plan with critique and recommendation.
-      Output: {{node_dir}}/03-revised-plan.md
-    validate:
-      - type: file_exists
-        path: "{{node_dir}}/03-revised-plan.md"
-      - type: file_not_empty
-        path: "{{node_dir}}/03-revised-plan.md"
-
-  # Stage 4: Architect — variant selection and task breakdown
-  architect:
-    type: agent
-    label: "Architect — Decision & Task Breakdown"
-    inputs: [pm, reviewer]
-    prompt: "agents/architect/SKILL.md"
-    task_template: |
-      Read the revised plan at {{input.reviewer}}/03-revised-plan.md.
-      Read the spec at {{input.pm}}/01-spec.md.
-      Select a variant and produce a task breakdown with YAML frontmatter.
+      Read documents/requirements.md, documents/design.md, and AGENTS.md.
+      Critique the plan, select a variant, produce task breakdown (04-decision.md).
+      Update documents/design.md with selected variant's design details.
+      Create feature branch and draft PR.
       Output: {{node_dir}}/04-decision.md
     validate:
       - type: file_exists
@@ -98,23 +92,12 @@ nodes:
       - type: file_not_empty
         path: "{{node_dir}}/04-decision.md"
 
-  # Stage 5: SDS Update
-  sds-update:
-    type: agent
-    label: "Tech Lead — SDS Update"
-    inputs: [architect]
-    prompt: "agents/tech-lead-sds/SKILL.md"
-    task_template: |
-      Read the decision at {{input.architect}}/04-decision.md.
-      Update documents/design.md with the selected variant's design details.
-      Output: updated documents/design.md
-    after: "git diff HEAD -- documents/design.md > {{node_dir}}/04a-sds-diff.md; [ -s {{node_dir}}/04a-sds-diff.md ] || echo 'No changes to documents/design.md' > {{node_dir}}/04a-sds-diff.md || true"
-
-  # Stages 6-7: Executor + QA loop (body nodes defined inline)
+  # Stages 4-5: Executor + QA loop (body nodes defined inline)
   impl-loop:
     type: loop
+    phase: impl
     label: "Executor+QA Implementation Loop"
-    inputs: [sds-update]
+    inputs: [tech-lead]
     condition_node: qa
     condition_field: verdict
     exit_value: PASS
@@ -123,10 +106,10 @@ nodes:
       executor:
         type: agent
         label: "Executor — Implementation"
-        inputs: [architect, sds-update]
+        inputs: [tech-lead]
         prompt: "agents/executor/SKILL.md"
         task_template: |
-          Read the decision at {{input.architect}}/04-decision.md.
+          Read the decision at {{input.tech-lead}}/04-decision.md.
           Read documents/requirements.md and documents/design.md.
           Implement the changes following the task breakdown.
           This is iteration {{loop.iteration}}.
@@ -136,12 +119,13 @@ nodes:
       qa:
         type: agent
         label: "QA — Verification"
-        inputs: [pm, architect, executor]
+        inputs: [pm, tech-lead, executor]
         prompt: "agents/qa/SKILL.md"
         task_template: |
           Verify the implementation against the spec at {{input.pm}}/01-spec.md.
-          Check the decision at {{input.architect}}/04-decision.md.
+          Check the decision at {{input.tech-lead}}/04-decision.md.
           Run deno task check and verify all acceptance criteria.
+          Post verdict as PR review (approve or request-changes).
           Output: {{node_dir}}/05-qa-report.md with YAML frontmatter containing verdict: PASS or FAIL
         validate:
           - type: file_exists
@@ -149,44 +133,46 @@ nodes:
           - type: file_not_empty
             path: "{{node_dir}}/05-qa-report.md"
 
-  # Stage 8: Meta-Agent — prompt optimization
-  meta-agent:
+  # Post-pipeline: Tech Lead Review — final review + CI gate + merge
+  tech-lead-review:
     type: agent
-    label: "Meta-Agent — Prompt Analysis"
-    prompt: "agents/meta-agent/SKILL.md"
+    phase: report
+    label: "Tech Lead Review — Final Review + Merge"
+    inputs: [pm, tech-lead, impl-loop]
+    prompt: "agents/tech-lead-review/SKILL.md"
     task_template: |
-      Analyze all logs and artifacts from run {{run_id}} at {{run_dir}}.
-      Produce a meta-report with prompt improvement suggestions.
-      Output: {{node_dir}}/07-meta-report.md
+      Perform final code review of the PR.
+      Read the spec at {{input.pm}}/01-spec.md for acceptance criteria.
+      Read the decision at {{input.tech-lead}}/04-decision.md for scope.
+      Check CI gates and merge if all pass.
+      Output: {{node_dir}}/08-review.md
     run_on: always
     settings:
       on_error: continue
     validate:
       - type: file_exists
-        path: "{{node_dir}}/07-meta-report.md"
-      - type: contains_section
-        path: "{{node_dir}}/07-meta-report.md"
-        value: "Fixes Applied"
+        path: "{{node_dir}}/08-review.md"
+      - type: file_not_empty
+        path: "{{node_dir}}/08-review.md"
 
-  # Final commit — all pipeline artifacts
-  commit:
+  # Post-pipeline: Meta-Agent — prompt optimization
+  meta-agent:
     type: agent
-    label: "Commit all pipeline artifacts"
-    prompt: agents/committer/SKILL.md
-    inputs:
-      [
-        pm,
-        tech-lead,
-        reviewer,
-        architect,
-        sds-update,
-        impl-loop,
-        meta-agent,
-      ]
-    run_on: success
+    phase: report
+    label: "Meta-Agent — Prompt Optimization"
+    model: claude-opus-4-6
+    prompt: "agents/meta-agent/SKILL.md"
     task_template: |
-      Stage and commit ALL changes from the entire pipeline run.
-      Use `git add -A` to include everything.
-      Read the spec at {{input.pm}}/01-spec.md.
-      Read the decision at {{input.architect}}/04-decision.md.
-      Create summary, PR, and post issue comment.
+      Read your memory at documents/meta.md first.
+      Analyze logs from run {{run_id}} at {{run_dir}}.
+      Diagnose problems in agent behavior and fix their prompts in agents/*/SKILL.md.
+      Update documents/meta.md with findings and fix outcomes.
+      Write minimal changelog: {{node_dir}}/07-changelog.md
+    run_on: always
+    settings:
+      on_error: continue
+    validate:
+      - type: file_exists
+        path: "{{node_dir}}/07-changelog.md"
+      - type: file_not_empty
+        path: "{{node_dir}}/07-changelog.md"

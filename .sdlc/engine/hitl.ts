@@ -40,6 +40,8 @@ export interface HitlRunOptions {
   ctx: TemplateContext;
   settings: Required<NodeSettings>;
   claudeArgs?: string[];
+  /** Claude model override. Forwarded to invokeClaudeCli on resume. */
+  model?: string;
   output?: OutputManager;
   /** Injected script runner — defaults to real shell; override in tests. */
   scriptRunner?: ScriptRunner;
@@ -177,6 +179,7 @@ export async function runHitlLoop(
         resumeSessionId: sessionId,
         taskPrompt: reply,
         claudeArgs,
+        model: opts.model,
         timeoutSeconds: settings.timeout_seconds,
         maxRetries: settings.max_retries,
         retryDelaySeconds: settings.retry_delay_seconds,

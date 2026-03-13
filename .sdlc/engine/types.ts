@@ -18,6 +18,7 @@ export interface PipelineConfig {
 export interface PipelineDefaults extends NodeSettings {
   max_parallel?: number; // 0 = unlimited (default)
   claude_args?: string[]; // extra args passed to claude CLI (e.g. ["--dangerously-skip-permissions"])
+  model?: string; // default Claude model for all agent nodes (e.g. "claude-sonnet-4-6")
   hitl?: HitlConfig; // human-in-the-loop config (ask/check scripts, poll, timeout)
 }
 
@@ -30,6 +31,8 @@ export interface NodeConfig {
   // agent-specific
   prompt?: string;
   task_template?: string;
+  /** Claude model override for this node (e.g. "claude-opus-4-6"). */
+  model?: string;
 
   // common
   settings?: NodeSettings;

@@ -56,8 +56,18 @@ graph TD
     end
 
     Dispatch --> Validate["Validation<br/>file checks"]
-    Dispatch --> Git["Git<br/>commit per node"]
     Dispatch --> Output["Output<br/>3 verbosity levels"]
+```
+
+### 2.3 Pipeline DAG (FR-26)
+
+```mermaid
+graph LR
+    PM["pm"] --> Arch["architect<br/>(design-solution)"]
+    Arch --> TL["tech-lead<br/>(decision+branch+PR)"]
+    TL --> Loop["impl-loop<br/>(executor→qa)"]
+    Loop -.-> TLR["tech-lead-review<br/>(run_on:always)"]
+    Loop -.-> MA["meta-agent<br/>(run_on:always)"]
 ```
 
 - **Subsystems:**
@@ -111,9 +121,27 @@ graph TD
   Each agent lives in `agents/<name>/SKILL.md` with YAML frontmatter enabling
   dual-use: pipeline-driven (via engine `prompt:` config) and interactive
   (via Claude Code `/agent-<name>` slash commands).
-- **Directory structure:** `agents/<name>/SKILL.md` — 10 agents: `pm`,
-  `tech-lead`, `tech-lead-reviewer`, `architect`, `tech-lead-sds`, `executor`,
-  `qa`, `presenter`, `meta-agent`, `committer`.
+- **Directory structure:** `agents/<name>/SKILL.md` — 7 agents:
+  - `pm` — triages open GitHub issues, selects highest-priority, produces spec.
+  - `architect` — design-solution role: produces implementation plan with 2-3
+    variants, affected files, effort estimates, risk analysis (formerly
+    tech-lead function).
+  - `tech-lead` — critique + decision + SDS update + branch creation
+    (`git checkout -b sdlc/issue-<N>`) + draft PR (`gh pr create --draft`) +
+    task breakdown from selected variant. Absorbs former reviewer (FR-4) and
+    SDS-update (FR-6) responsibilities. Uses `{{run_id}}` for `--prompt` mode
+    fallback branch `sdlc/{{run_id}}`.
+  - `executor` — implements tasks. Owns `git add`, `git commit`, `git push`
+    after each task. Posts PR comment with implementation summary.
+  - `qa` — verifies executor output. Posts verdict as PR review
+    (`gh pr review`: approve/request-changes).
+  - `tech-lead-review` — post-pipeline: final code review + CI gate check +
+    merge. `run_on: always`. Handles missing-PR case gracefully (no-op with
+    clear message if pipeline failed before PR creation).
+  - `meta-agent` — prompt optimization, failure analysis.
+- **Removed agents (FR-26):** `tech-lead-reviewer` (absorbed into tech-lead),
+  `tech-lead-sds` (absorbed into tech-lead), `committer` (executor owns
+  commits).
 - **SKILL.md frontmatter template:**
   ```yaml
   ---
@@ -135,11 +163,14 @@ graph TD
 
 - **Purpose:** Bridge pipeline agents into Claude Code's skill discovery system,
   enabling `/agent-<name>` slash command invocability (FR-19 AC #2, AC #6).
-- **Structure:** 10 symlinks: `.claude/skills/agent-<name>` → `../../agents/<name>/`
+- **Structure:** 7 symlinks: `.claude/skills/agent-<name>` → `../../agents/<name>/`
   (relative paths for portability within repo).
-- **Agents exposed:** `agent-pm`, `agent-tech-lead`, `agent-tech-lead-reviewer`,
-  `agent-architect`, `agent-tech-lead-sds`, `agent-executor`, `agent-qa`,
-  `agent-presenter`, `agent-meta-agent`, `agent-committer`.
+- **Agents exposed:** `agent-pm`, `agent-architect`, `agent-tech-lead`,
+  `agent-executor`, `agent-qa`, `agent-tech-lead-review`, `agent-meta-agent`.
+- **Removed (FR-26):** `agent-tech-lead-reviewer`, `agent-tech-lead-sds`,
+  `agent-committer` (agents deleted), `agent-presenter` dangling symlink
+  cleaned.
+- **Added (FR-26):** `agent-tech-lead-review`.
 - **Interfaces:** Claude Code skill loader reads symlink target directory,
   discovers `SKILL.md` frontmatter, registers slash command.
 - **Deps:** `agents/<name>/SKILL.md` (symlink targets must exist).
@@ -153,7 +184,9 @@ graph TD
 - **Modules:**
   - `types.ts` — type declarations (incl. `ValidationRule.type` union,
     `NodeConfig.run_on` (`"always"|"success"|"failure"`), `NodeConfig.phase`,
-    `NodeConfig.env`, `LoopNodeConfig.nodes` (inline body node definitions),
+    `NodeConfig.env`, `NodeConfig.model` (per-node Claude model override),
+    `PipelineDefaults.model` (default model for all nodes),
+    `LoopNodeConfig.nodes` (inline body node definitions),
     `LoopResult.bodyResults`)
   - `template.ts` — `{{var}}` interpolation for prompts/paths
   - `config.ts` — YAML parsing, schema validation, defaults merge,
@@ -177,6 +210,11 @@ graph TD
     phase registry (`setPhaseRegistry()`, `clearPhaseRegistry()`,
     `getPhaseForNode()`)
   - `agent.ts` — Claude CLI invocation, continuation loop, retry.
+    `AgentRunOptions.model` and `InvokeOptions.model`: optional string for
+    per-node model selection. `buildClaudeArgs()` emits `--model <value>` when
+    `opts.model` is set AND `opts.resumeSessionId` is NOT set (resume inherits
+    original model from session). Resolution: `node.model ?? defaults.model ??
+    undefined` (computed in engine.ts/loop.ts, passed as field).
     `executeClaudeProcess()` uses `--output-format stream-json` and reads
     stdout line-by-line. Each JSON line appended to `streamLogPath` file
     (crash-resilient incremental write via `Deno.writeFile({ append: true })`).
@@ -199,7 +237,7 @@ graph TD
   - `hitl.ts` — HITL detection (`detectHitlRequest`) and poll loop
     (`runHitlLoop`); injectable `scriptRunner`/`claudeRunner` for testing
   - `human.ts` — terminal user input, abort logic
-  - `git.ts` — commit helper (used by committer agent nodes), branch query,
+  - `git.ts` — commit helper, branch query,
     `rollbackUncommitted()` for pre-post-pipeline cleanup
   - `output.ts` — terminal output manager (quiet/normal/verbose), verbose
     methods for detailed agent-node diagnostics
@@ -228,8 +266,9 @@ graph TD
   - `run_on?: "always" | "success" | "failure"` — execution condition for
     post-pipeline nodes. When set, node is excluded from DAG levels and executes
     in a post-pipeline step after all DAG levels complete:
-    - `"always"` — execute regardless of pipeline outcome. Used for meta-agent.
-    - `"success"` — execute only if pipeline succeeded. Used for commit nodes.
+    - `"always"` — execute regardless of pipeline outcome. Used for meta-agent
+      and tech-lead-review.
+    - `"success"` — execute only if pipeline succeeded.
     - `"failure"` — execute only if pipeline failed. Skipped nodes get
       `markNodeSkipped()` status.
     Backward compat: `run_always: true` in YAML normalized to `run_on: "always"`
@@ -242,10 +281,15 @@ graph TD
     Backward-compatible: omitting `phase` preserves flat layout.
   - `env?: Record<string, string>` — optional node-level environment variables.
     Merged with global env (node-level overrides global defaults). Accessible
-    in template context via `{{env.<key>}}`. Used by `commit-meta` node
-    (`SDLC_PHASE: meta`).
-- **Commit strategy:** Engine does not auto-commit. Dedicated committer agent
-  nodes handle commits at explicit pipeline points.
+    in template context via `{{env.<key>}}`.
+  - `model?: string` — optional per-node Claude model override (FR-27).
+    Overrides `defaults.model`. Absent = defaults.model or CLI default (no flag).
+    Emitted as `--model <value>` on initial invocations only; `--resume` calls
+    exclude `--model` (session inherits original). Resolution chain:
+    `node.model ?? defaults.model ?? undefined`. Centralized in
+    `buildClaudeArgs()` via `InvokeOptions.model` field.
+- **Commit strategy:** Engine does not auto-commit. Executor agent owns commits
+  (`git add`, `git commit`, `git push` per task). No dedicated committer nodes.
 - **Verbose Output (Direct Injection pattern):**
   - `output.ts` exposes 6 verbose-guarded methods on `OutputManager`:
     `verbosePrompt(nodeId, prompt)`,
@@ -347,7 +391,7 @@ graph TD
 ## 4. Data
 
 - **Entities:**
-  - Handoff Artifact: Structured Markdown (01-spec.md through 07-meta-report.md)
+  - Handoff Artifact: Structured Markdown (01-spec.md through 07-changelog.md)
   - Agent Log: Claude CLI JSON output (`.sdlc/runs/<run-id>/logs/<node-id>.json`)
   - Agent Prompt: SKILL.md with YAML frontmatter (`agents/<name>/SKILL.md`)
   - Run State: JSON (`.sdlc/runs/<run-id>/state.json`)
@@ -365,9 +409,9 @@ graph TD
     via topo-sort (>1 entry requires at least one `inputs` reference to
     prevent disconnected graph with arbitrary order).
   - NodeConfig: `{ ..., run_on?: "always"|"success"|"failure", phase?: string,
-    env?: Record<string, string> }` — `run_on` for conditional post-pipeline
-    execution; `phase` for artifact directory grouping; `env` for node-level
-    env vars
+    env?: Record<string, string>, model?: string }` — `run_on` for conditional
+    post-pipeline execution; `phase` for artifact directory grouping; `env` for
+    node-level env vars; `model` for per-node Claude model override (FR-27)
 - **ERD:** N/A (file-based, no database).
 - **Migration:** N/A.
 
@@ -403,14 +447,16 @@ graph TD
 
 ### 4.2 Commit Strategy
 
-- **Branch:** Feature branch, specified externally or current branch.
-- **Commit cadence:** Engine does NOT auto-commit. Commits at explicit
-  committer agent nodes (`agents/committer/SKILL.md`) placed at 4 points:
-  `commit-plan` (after SDS update), `commit-impl` (after executor+QA loop),
-  `commit-present` (after presenter), `commit-meta` (after meta-agent,
-  `run_on: success`).
-- **Commit format:** `sdlc(<phase>): <summary>` (phase from `SDLC_PHASE` env).
-- **Executor:** Instructed NOT to make git commits (pipeline-managed).
+- **Branch:** Feature branch created by tech-lead agent (`git checkout -b
+  sdlc/issue-<N>`). Fallback for `--prompt` mode: `sdlc/{{run_id}}`.
+- **Commit cadence (FR-26):** Executor-owned commits. No dedicated committer
+  agent nodes. Executor runs `git add`, `git commit`, `git push` after each
+  task. Commit messages follow `sdlc(impl): <summary>` format.
+- **PR creation:** Tech-lead creates draft PR (`gh pr create --draft`) before
+  impl-loop. Executor pushes to same branch. QA posts PR review verdicts.
+- **Post-pipeline:** Tech-lead-review performs final review + CI gate + merge.
+- **Engine invariant:** Engine does NOT auto-commit (FR-14 preserved). All git
+  operations happen inside agent prompts.
 - **Failure behavior:** Failed nodes produce no commits. On_error: "fail" stops
   pipeline; "continue" proceeds to next nodes.
 - **Resume:** `--resume <run-id>` skips completed nodes per state.json.
@@ -461,11 +507,11 @@ graph TD
     `state.config_path`, then `setPhaseRegistry()` called (registry not persisted
     in `state.json` — always rebuilt from config). `ensureRunDirs()` creates
     phase subdirs (e.g., `plan/`, `impl/`, `report/`) when phases present.
-    Phase assignment (default pipeline):
-    - `plan`: pm, tech-lead, reviewer, architect, sds-update, commit-plan
+    Phase assignment (default pipeline, FR-26):
+    - `plan`: pm, architect, tech-lead
     - `impl`: impl-loop (body nodes `executor`, `qa` defined inline via
-      `nodes` sub-object), commit-impl
-    - `report`: presenter, commit-present, meta-agent, commit-meta
+      `nodes` sub-object)
+    - `report`: meta-agent, tech-lead-review
   - **Rollback Before Post-Pipeline Nodes**: When `pipelineSuccess === false`,
     engine calls `rollbackUncommitted()` before executing post-pipeline nodes.
     Reverts staged/unstaged modifications (`git checkout -- .` +
@@ -475,9 +521,7 @@ graph TD
   - **Post-Pipeline Node Collection & Ordering**: `collectPostPipelineNodes()`
     collects nodes where `run_on !== undefined` (replaces `run_always`-based
     collection). `sortPostPipelineNodes()` sorts them topologically using
-    `inputs` field (reuses `toposort()` from `dag.ts`). Guarantees
-    `commit-meta` (which declares `inputs: [meta-agent]`) executes after
-    meta-agent.
+    `inputs` field (reuses `toposort()` from `dag.ts`).
   - **Post-Pipeline Node Filtering**: Before executing each post-pipeline node,
     engine applies per-node filter based on `run_on` value and
     `pipelineSuccess`:
@@ -490,15 +534,13 @@ graph TD
     After all DAG levels complete (success or failure), engine collects
     post-pipeline nodes, sorts topologically, filters by condition (see above),
     and executes in order. Meta-agent reads `failed-node.txt` for failure
-    context. Produces `07-meta-report.md` with "Fixes Applied" section
-    (structured: what broke, what changed, why). Posts run report *summary* to
-    GitHub issue (not full report). Does NOT self-commit — `commit-meta` node
-    handles commit.
-  - **commit-meta Node**: Dedicated committer agent node for meta-agent output.
-    Config: `type: agent`, `prompt: agents/committer/SKILL.md`,
-    `inputs: [meta-agent]`, `run_on: success`, `env: { SDLC_PHASE: meta }`.
-    Ensures FR-14 "engine never commits" invariant: commit responsibility stays
-    with committer agent nodes.
+    context. Edits `agents/*/SKILL.md` to fix diagnosed problems. Produces
+    minimal `07-changelog.md` listing applied fixes. Updates persistent memory
+    in `documents/meta.md`. Posts 2-3 line summary to GitHub issue.
+  - **Tech-Lead-Review Node**: Post-pipeline agent (`run_on: always`). Performs
+    final code review, checks CI gates, merges PR if all pass. Handles
+    missing-PR case gracefully (no-op with clear message when pipeline failed
+    before tech-lead created PR).
   - **HITL via AskUserQuestion Interception** (FR-21):
     Engine detects agent HITL requests by inspecting `permission_denials` in
     Claude CLI JSON output. Flow:
@@ -539,7 +581,7 @@ graph TD
   - QA iteration numbering restarts on re-run.
   - Meta-Agent runs on both success and failure.
   - Meta-Agent auto-applies prompt improvements to `agents/*/SKILL.md`.
-    `commit-meta` node commits changes. Human review at PR merge.
+    Human review at PR merge via tech-lead-review.
 
 ## 6. Non-Functional
 

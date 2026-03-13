@@ -31,7 +31,7 @@ Inter-agent communication uses structured Markdown artifacts in `.sdlc/runs/<run
 | `commit-impl` | Committer — impl phase | git commit |
 | `presenter` | Presenter — Change Summary & PR | `06-summary.md` |
 | `commit-present` | Committer — present phase | git commit |
-| `meta-agent` | Meta-Agent — Prompt Analysis (runs always) | `07-meta-report.md` |
+| `meta-agent` | Meta-Agent — Prompt Optimization (runs always) | `07-changelog.md` + `documents/meta.md` |
 
 ## Architecture
 

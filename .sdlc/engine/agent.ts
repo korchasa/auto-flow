@@ -30,6 +30,8 @@ export interface AgentRunOptions {
   ctx: TemplateContext;
   settings: Required<NodeSettings>;
   claudeArgs?: string[];
+  /** Claude model override (e.g. "claude-sonnet-4-6"). Omit = CLI default. */
+  model?: string;
   /** OutputManager for verbose diagnostics. */
   output?: OutputManager;
   /** Node ID for verbose output tagging. */
@@ -49,8 +51,16 @@ export interface AgentRunOptions {
  * 5. Run `after` hook if configured
  */
 export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
-  const { node, ctx, settings, claudeArgs, output, nodeId, streamLogPath } =
-    opts;
+  const {
+    node,
+    ctx,
+    settings,
+    claudeArgs,
+    model,
+    output,
+    nodeId,
+    streamLogPath,
+  } = opts;
 
   // Derive onOutput callback from OutputManager
   const onOutput = output && nodeId
@@ -78,6 +88,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     promptFile: node.prompt ? interpolate(node.prompt, ctx) : undefined,
     taskPrompt,
     claudeArgs,
+    model,
     timeoutSeconds: settings.timeout_seconds,
     maxRetries: settings.max_retries,
     retryDelaySeconds: settings.retry_delay_seconds,
@@ -156,6 +167,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       resumeSessionId: result.output.session_id,
       taskPrompt: resumePrompt,
       claudeArgs,
+      model,
       timeoutSeconds: settings.timeout_seconds,
       maxRetries: settings.max_retries,
       retryDelaySeconds: settings.retry_delay_seconds,
@@ -206,6 +218,8 @@ export interface InvokeOptions {
   taskPrompt: string;
   resumeSessionId?: string;
   claudeArgs?: string[];
+  /** Claude model override. Skipped on resume (session inherits model). */
+  model?: string;
   timeoutSeconds: number;
   maxRetries: number;
   retryDelaySeconds: number;
@@ -276,6 +290,10 @@ export function buildClaudeArgs(opts: InvokeOptions): string[] {
 
   if (opts.promptFile && !opts.resumeSessionId) {
     args.push("--append-system-prompt-file", opts.promptFile);
+  }
+
+  if (opts.model && !opts.resumeSessionId) {
+    args.push("--model", opts.model);
   }
 
   args.push("--output-format", "stream-json", "--verbose");

@@ -324,6 +324,7 @@ export class Engine {
     const ctx = this.buildContext(nodeId);
     const settings = node.settings as Required<NodeSettings>;
     const hitlConfig = this.config.defaults?.hitl;
+    const effectiveModel = node.model ?? this.config.defaults?.model;
 
     // Resume path: node was waiting for human reply
     if (wasWaiting) {
@@ -358,6 +359,7 @@ export class Engine {
         ctx,
         settings,
         claudeArgs: this.config.defaults?.claude_args,
+        model: effectiveModel,
         output: this.output,
       }, true /* skipAsk — question already delivered */);
 
@@ -392,6 +394,7 @@ export class Engine {
       ctx,
       settings,
       claudeArgs: this.config.defaults?.claude_args,
+      model: effectiveModel,
       output: this.output,
       nodeId,
       streamLogPath,
@@ -436,6 +439,7 @@ export class Engine {
           ctx,
           settings,
           claudeArgs: this.config.defaults?.claude_args,
+          model: effectiveModel,
           output: this.output,
         }, false /* skipAsk=false — deliver question */);
 
