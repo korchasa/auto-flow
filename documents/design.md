@@ -320,7 +320,7 @@ graph LR
   - `env?: Record<string, string>` — optional node-level environment variables.
     Merged with global env (node-level overrides global defaults). Accessible
     in template context via `{{env.<key>}}`.
-  - `model?: string` — optional per-node Claude model override (FR-27).
+  - `model?: string` — per-node Claude model override (FR-27, implemented).
     Overrides `defaults.model`. Absent = defaults.model or CLI default (no flag).
     Emitted as `--model <value>` on initial invocations only; `--resume` calls
     exclude `--model` (session inherits original). Resolution chain:
