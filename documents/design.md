@@ -202,7 +202,8 @@ graph LR
     `PipelineDefaults.model` (default model for all nodes),
     `LoopNodeConfig.nodes` (inline body node definitions),
     `LoopResult.bodyResults`, `ErrorCategory` (structured failure enum),
-    `NodeState.error_category`)
+    `NodeState.error_category`, `NodeState.cost_usd` (FR-32 per-node cost),
+    `RunState.total_cost_usd` (FR-32 aggregated run cost))
   - `template.ts` — `{{var}}` interpolation for prompts/paths
   - `config.ts` — YAML parsing, schema validation, defaults merge,
     `run_on` normalization. `validateNode()`: if `run_on` present, must be
@@ -223,7 +224,9 @@ graph LR
     contains_section, custom_script, frontmatter_field)
   - `state.ts` — RunState persistence to `state.json`, resume logic,
     phase registry (`setPhaseRegistry()`, `clearPhaseRegistry()`,
-    `getPhaseForNode()`)
+    `getPhaseForNode()`), cost aggregation (`updateRunCost()` sums
+    `nodes[*].cost_usd` → `total_cost_usd`; called from
+    `markNodeCompleted()` when optional `costUsd` param provided, FR-32)
   - `agent.ts` — Claude CLI invocation, continuation loop, retry.
     `AgentRunOptions.model` and `InvokeOptions.model`: optional string for
     per-node model selection. `buildClaudeArgs()` emits `--model <value>` when
@@ -461,6 +464,12 @@ graph LR
     a key in `nodes`. Body node ordering derived from `inputs` declarations
     via topo-sort (>1 entry requires at least one `inputs` reference to
     prevent disconnected graph with arbitrary order).
+  - NodeState: `{ ..., cost_usd?: number }` — per-node cost from
+    `ClaudeCliOutput.total_cost_usd`, set at completion via
+    `markNodeCompleted()` optional param (FR-32)
+  - RunState: `{ ..., total_cost_usd?: number }` — sum of all
+    `nodes[*].cost_usd`, recomputed by `updateRunCost()` on each node
+    completion (FR-32)
   - NodeConfig: `{ ..., run_on?: "always"|"success"|"failure", phase?: string,
     env?: Record<string, string>, model?: string }` — `run_on` for conditional
     post-pipeline execution; `phase` for artifact directory grouping; `env` for
@@ -662,4 +671,5 @@ graph LR
 
 - **Simplified:** Pipeline runs sequentially (no parallel stages in v1).
 - **Deferred:** Multi-repo support. Parallel pipelines for multiple issues.
-  Issue size/complexity limits. Cost tracking and budget limits.
+  Issue size/complexity limits. Cost budget limits and alerts (per-node cost
+  aggregation implemented in FR-32; budget enforcement deferred).
