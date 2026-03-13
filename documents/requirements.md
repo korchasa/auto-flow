@@ -732,6 +732,32 @@
     Evidence: `engine/config_test.ts:568-659`.
   - [x] `deno task check` passes.
 
+### 3.31 FR-32: Aggregate Cost Data in state.json
+
+- **Description:** Pipeline engine persists per-node cost and pipeline-level total
+  cost in `state.json`, eliminating the need to read N+1 separate log files to
+  build a cost summary. Per-node `cost_usd` is sourced from
+  `ClaudeCliOutput.total_cost_usd`; top-level `total_cost_usd` is the sum across
+  all completed nodes.
+- **Motivation:** Dashboards and external tooling currently must open one log file
+  per node to compute cost. A single `state.json` read is sufficient with this
+  change.
+- **Acceptance criteria:**
+  - [x] `NodeState.cost_usd?: number` field written at node completion time.
+    Evidence: `engine/types.ts` (`NodeState.cost_usd`), `engine/state.ts`
+    (`markNodeCompleted()` optional `costUsd` param).
+  - [x] `RunState.total_cost_usd?: number` is the sum of all `nodes[*].cost_usd`.
+    Evidence: `engine/state.ts` (`updateRunCost()` / `recomputeTotalCost()`).
+  - [x] Fields written alongside existing fields at node completion.
+    Evidence: `engine/engine.ts` and `engine/loop.ts` — both pass
+    `result.output?.total_cost_usd` to `markNodeCompleted()`.
+  - [x] Loop iteration nodes also report cost.
+    Evidence: `engine/loop.ts` loop body call site.
+  - [x] Backward-compatible: fields are optional; existing state files without
+    cost fields remain valid.
+  - [x] Unit tests cover: cost present, cost absent, mixed multi-node, all-undefined.
+    Evidence: `engine/state_test.ts`.
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
