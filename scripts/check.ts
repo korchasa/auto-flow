@@ -80,6 +80,49 @@ async function* walkDir(dir: string): AsyncGenerator<string> {
   }
 }
 
+async function pipelineIntegrity(): Promise<void> {
+  console.log("\n--- Pipeline Integrity ---");
+  const pipelinePath = ".sdlc/pipeline.yaml";
+
+  // 1. Load and validate pipeline config (schema + prompt paths + phases)
+  const { loadConfig } = await import("../engine/config.ts");
+  try {
+    await loadConfig(pipelinePath);
+    console.log(`  Pipeline config valid: ${pipelinePath}`);
+  } catch (err) {
+    console.error(`FAILED: Pipeline validation: ${(err as Error).message}`);
+    Deno.exit(1);
+  }
+
+  // 2. Check agent symlinks in .claude/skills/ point to existing directories
+  const skillsDir = ".claude/skills";
+  const brokenLinks: string[] = [];
+  try {
+    for await (const entry of Deno.readDir(skillsDir)) {
+      if (!entry.name.startsWith("agent-")) continue;
+      const linkPath = `${skillsDir}/${entry.name}`;
+      try {
+        await Deno.stat(linkPath); // follows symlink, fails if target missing
+      } catch {
+        const target = await Deno.readLink(linkPath);
+        brokenLinks.push(`${linkPath} -> ${target}`);
+      }
+    }
+  } catch {
+    console.warn(
+      "  Warning: .claude/skills/ directory not found, skipping symlink check",
+    );
+  }
+
+  if (brokenLinks.length > 0) {
+    console.error(
+      `FAILED: Broken agent symlinks:\n  - ${brokenLinks.join("\n  - ")}`,
+    );
+    Deno.exit(1);
+  }
+  console.log("  Agent symlinks valid.");
+}
+
 console.log("=== auto-flow: Full Check ===");
 
 await run("deno", ["fmt", "--check"], "Formatting Check");
@@ -102,6 +145,7 @@ if (testableDir.length > 0) {
   console.log("\n--- Tests ---");
   console.log("No test files found, skipping.");
 }
+await pipelineIntegrity();
 await commentScan();
 
 console.log("\n=== All checks passed! ===");
