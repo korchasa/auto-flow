@@ -1,6 +1,9 @@
 // scripts/loop_in_claude.ts
 // Autonomous loop: check GitHub issues → run pipeline via claude CLI → repeat.
+// Streams claude output as JSON and displays in readable format.
 // Exponential backoff (30s → 4h) when no actionable tickets found.
+
+import { processStream } from "./claude_stream_formatter.ts";
 
 const MIN_PAUSE_SEC = 30;
 const MAX_PAUSE_SEC = 4 * 60 * 60; // 4 hours
@@ -46,19 +49,53 @@ async function fetchActionableIssues(): Promise<
   );
 }
 
-/** Run the pipeline via claude CLI. Returns true on success. */
+/** Grace period (ms) after result event before killing a hanging process. */
+const KILL_GRACE_MS = 30_000;
+
+/** Run the pipeline via claude CLI with stream-json output. Returns true on success. */
 async function runPipelineViaClaude(): Promise<boolean> {
   const prompt = Deno.args.join(" ") ||
     "Run the application using `deno task run`. Monitor the output and report the result.";
-  console.log(`> claude -p "${prompt}"`);
+  console.log(`> claude -p "${prompt}" --output-format stream-json`);
   const cmd = new Deno.Command("claude", {
-    args: ["--dangerously-skip-permissions", "-p", prompt],
+    args: [
+      "--dangerously-skip-permissions",
+      "-p",
+      prompt,
+      "--output-format",
+      "stream-json",
+      "--verbose",
+    ],
     stdin: "null",
-    stdout: "inherit",
+    stdout: "piped",
     stderr: "inherit",
     env: { CLAUDECODE: "" },
   });
-  const { success } = await cmd.output();
+  const child = cmd.spawn();
+  const streamResult = await processStream(child.stdout);
+
+  // Workaround: claude CLI may hang after emitting result event (issue #25629).
+  // If stream completed, give process a grace period then kill.
+  if (streamResult.completed) {
+    const raced = await Promise.race([
+      child.status,
+      new Promise<null>((r) => setTimeout(() => r(null), KILL_GRACE_MS)),
+    ]);
+    if (raced === null) {
+      console.error(
+        `claude process did not exit within ${
+          KILL_GRACE_MS / 1000
+        }s after result, killing.`,
+      );
+      try {
+        child.kill("SIGKILL");
+      } catch { /* already exited */ }
+    }
+    return streamResult.success;
+  }
+
+  // Stream ended without result event — rely on exit code
+  const { success } = await child.status;
   return success;
 }
 
