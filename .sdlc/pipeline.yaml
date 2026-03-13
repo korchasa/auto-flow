@@ -158,7 +158,7 @@ nodes:
       Analyze all logs and artifacts from run {{run_id}} at {{run_dir}}.
       Produce a meta-report with prompt improvement suggestions.
       Output: {{node_dir}}/07-meta-report.md
-    run_always: true
+    run_on: always
     settings:
       on_error: continue
     validate:
@@ -183,7 +183,7 @@ nodes:
         impl-loop,
         meta-agent,
       ]
-    run_always: true
+    run_on: success
     task_template: |
       Stage and commit ALL changes from the entire pipeline run.
       Use `git add -A` to include everything.

@@ -54,7 +54,11 @@ export interface NodeConfig {
   abort_on?: string[];
 
   // post-pipeline execution
-  /** When true, node executes after all DAG levels complete (even on failure). */
+  /** When set, node executes after all DAG levels complete.
+   * "always" = regardless of outcome, "success" = only on success, "failure" = only on failure. */
+  run_on?: "always" | "success" | "failure";
+
+  /** @deprecated Use run_on instead. Normalized to run_on by config loader. */
   run_always?: boolean;
 
   /** Optional node-level environment variables.

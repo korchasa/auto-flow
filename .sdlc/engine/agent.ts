@@ -450,6 +450,48 @@ export function extractClaudeOutput(
   };
 }
 
+/** Shorten an absolute path by stripping common workspace prefixes. */
+function shortenPath(p: string): string {
+  return p.replace(/^\/workspaces\/[^/]+\//, "").replace(
+    /^\/[^/]+\/[^/]+\/[^/]+\/[^/]+\/[^/]+\//,
+    "",
+  );
+}
+
+const MAX_CMD_LEN = 80;
+
+/** Extract a human-readable detail string from a tool_use input. */
+// deno-lint-ignore no-explicit-any
+function formatToolDetail(name: string, input?: Record<string, any>): string {
+  if (!input) return "";
+  switch (name) {
+    case "Read":
+    case "Write":
+    case "Edit":
+      return input.file_path ? shortenPath(input.file_path) : "";
+    case "Bash":
+      if (input.description) return input.description;
+      if (input.command) {
+        const cmd = input.command as string;
+        return cmd.length > MAX_CMD_LEN
+          ? `\`${cmd.slice(0, MAX_CMD_LEN)}…\``
+          : `\`${cmd}\``;
+      }
+      return "";
+    case "Grep":
+      return [
+        input.pattern ? `/${input.pattern}/` : "",
+        input.path ? `in ${shortenPath(input.path)}` : "",
+      ].filter(Boolean).join(" ");
+    case "Glob":
+      return input.pattern ?? "";
+    case "Agent":
+      return input.description ?? "";
+    default:
+      return "";
+  }
+}
+
 /** Format a stream event as a one-line summary for verbose output. */
 // deno-lint-ignore no-explicit-any
 export function formatEventForOutput(event: Record<string, any>): string {
@@ -470,7 +512,12 @@ export function formatEventForOutput(event: Record<string, any>): string {
             : block.text;
           parts.push(`[stream] text: ${preview.replaceAll("\n", "↵")}`);
         } else if (block.type === "tool_use") {
-          parts.push(`[stream] tool: ${block.name ?? "?"}`);
+          const detail = formatToolDetail(block.name, block.input);
+          parts.push(
+            detail
+              ? `[stream] tool: ${block.name ?? "?"} ${detail}`
+              : `[stream] tool: ${block.name ?? "?"}`,
+          );
         }
       }
       return parts.join("\n");

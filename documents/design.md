@@ -157,7 +157,10 @@ graph TD
     `LoopResult.bodyResults`)
   - `template.ts` — `{{var}}` interpolation for prompts/paths
   - `config.ts` — YAML parsing, schema validation, defaults merge,
-    `run_on` normalization. `normalizeRunOn()` pass (in `mergeDefaults()`):
+    `run_on` normalization. `validateNode()`: if `run_on` present, must be
+    one of `"always"|"success"|"failure"`; error:
+    `Node '<id>' has invalid run_on value '<val>'. Must be one of: always, success, failure`.
+    `normalizeRunOn()` pass (in `mergeDefaults()`):
     if `node.run_always === true && !node.run_on` → sets `run_on = "always"`;
     if both present, `run_on` wins; deletes `run_always` from config
     post-normalization (downstream code only sees `run_on`).

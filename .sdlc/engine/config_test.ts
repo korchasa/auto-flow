@@ -442,3 +442,123 @@ Deno.test("parseConfig — invalid on_error throws", () => {
     'on_error must be "fail" or "continue"',
   );
 });
+
+// --- run_on validation tests ---
+
+Deno.test("parseConfig — run_on: 'always' is valid", () => {
+  const yaml = `
+name: test
+version: "1"
+nodes:
+  a:
+    type: agent
+    label: A
+    task_template: "do something"
+    run_on: always
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.nodes.a.run_on, "always");
+});
+
+Deno.test("parseConfig — run_on: 'success' is valid", () => {
+  const yaml = `
+name: test
+version: "1"
+nodes:
+  a:
+    type: agent
+    label: A
+    task_template: "do something"
+    run_on: success
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.nodes.a.run_on, "success");
+});
+
+Deno.test("parseConfig — run_on: 'failure' is valid", () => {
+  const yaml = `
+name: test
+version: "1"
+nodes:
+  a:
+    type: agent
+    label: A
+    task_template: "do something"
+    run_on: failure
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.nodes.a.run_on, "failure");
+});
+
+Deno.test("parseConfig — invalid run_on value throws", () => {
+  assertThrows(
+    () =>
+      parseConfig(
+        `name: test\nversion: "1"\nnodes:\n  a:\n    type: agent\n    label: A\n    task_template: x\n    run_on: sometimes`,
+      ),
+    Error,
+    "invalid run_on value 'sometimes'. Must be one of: always, success, failure",
+  );
+});
+
+Deno.test("parseConfig — run_on absent is valid (undefined)", () => {
+  const config = parseConfig(MINIMAL_AGENT);
+  assertEquals(config.nodes.spec.run_on, undefined);
+});
+
+// --- run_always → run_on normalization tests ---
+
+Deno.test("parseConfig — run_always: true normalized to run_on: 'always'", () => {
+  const yaml = `
+name: test
+version: "1"
+nodes:
+  a:
+    type: agent
+    label: A
+    task_template: "do something"
+    run_always: true
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.nodes.a.run_on, "always");
+  assertEquals(config.nodes.a.run_always, undefined);
+});
+
+Deno.test("parseConfig — run_always: false normalized (no run_on set)", () => {
+  const yaml = `
+name: test
+version: "1"
+nodes:
+  a:
+    type: agent
+    label: A
+    task_template: "do something"
+    run_always: false
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.nodes.a.run_on, undefined);
+  assertEquals(config.nodes.a.run_always, undefined);
+});
+
+Deno.test("parseConfig — run_on wins over run_always when both present", () => {
+  const yaml = `
+name: test
+version: "1"
+nodes:
+  a:
+    type: agent
+    label: A
+    task_template: "do something"
+    run_always: true
+    run_on: success
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.nodes.a.run_on, "success");
+  assertEquals(config.nodes.a.run_always, undefined);
+});
+
+Deno.test("parseConfig — run_always absent leaves no run_on", () => {
+  const config = parseConfig(MINIMAL_AGENT);
+  assertEquals(config.nodes.spec.run_on, undefined);
+  assertEquals(config.nodes.spec.run_always, undefined);
+});

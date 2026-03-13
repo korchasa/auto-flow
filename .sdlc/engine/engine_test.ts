@@ -7,10 +7,11 @@ import type {
 } from "./types.ts";
 import {
   collectAllNodeIds,
-  collectRunAlwaysNodes,
+  collectPostPipelineNodes,
   Engine,
+  findNodeConfig,
   resolveInputArtifacts,
-  sortRunAlwaysNodes,
+  sortPostPipelineNodes,
 } from "./engine.ts";
 import { getNodesByStatus } from "./state.ts";
 import { OutputManager } from "./output.ts";
@@ -196,52 +197,50 @@ Deno.test("resolveInputArtifacts — skips subdirectories", async () => {
   }
 });
 
-// --- run_always node support tests ---
+// --- post-pipeline node support tests ---
 
-Deno.test("collectRunAlwaysNodes — collects nodes with run_always: true", () => {
+Deno.test("collectPostPipelineNodes — collects nodes with run_on set", () => {
   const nodes: Record<string, NodeConfig> = {
     pm: { type: "agent", label: "PM" },
     executor: { type: "agent", label: "Executor" },
-    "meta-agent": { type: "agent", label: "Meta-Agent", run_always: true },
+    "meta-agent": { type: "agent", label: "Meta-Agent", run_on: "always" },
   };
-  const result = collectRunAlwaysNodes(nodes);
+  const result = collectPostPipelineNodes(nodes);
   assertEquals(result, ["meta-agent"]);
 });
 
-Deno.test("collectRunAlwaysNodes — returns empty when no run_always nodes", () => {
+Deno.test("collectPostPipelineNodes — returns empty when no run_on nodes", () => {
   const nodes: Record<string, NodeConfig> = {
     pm: { type: "agent", label: "PM" },
     executor: { type: "agent", label: "Executor" },
   };
-  const result = collectRunAlwaysNodes(nodes);
+  const result = collectPostPipelineNodes(nodes);
   assertEquals(result, []);
 });
 
-Deno.test("collectRunAlwaysNodes — multiple run_always nodes", () => {
+Deno.test("collectPostPipelineNodes — multiple run_on nodes", () => {
   const nodes: Record<string, NodeConfig> = {
     pm: { type: "agent", label: "PM" },
-    "meta-agent": { type: "agent", label: "Meta-Agent", run_always: true },
-    cleanup: { type: "agent", label: "Cleanup", run_always: true },
+    "meta-agent": { type: "agent", label: "Meta-Agent", run_on: "always" },
+    commit: { type: "agent", label: "Commit", run_on: "success" },
   };
-  const result = collectRunAlwaysNodes(nodes);
+  const result = collectPostPipelineNodes(nodes);
   assertEquals(result.length, 2);
   assertEquals(result.includes("meta-agent"), true);
-  assertEquals(result.includes("cleanup"), true);
+  assertEquals(result.includes("commit"), true);
 });
 
-Deno.test("run_always nodes excluded from regular DAG levels", () => {
-  // run_always nodes should not appear in regular DAG levels.
-  // They execute in a separate post-levels step.
+Deno.test("post-pipeline nodes excluded from regular DAG levels", () => {
   const nodes: Record<string, NodeConfig> = {
     pm: { type: "agent", label: "PM" },
-    "meta-agent": { type: "agent", label: "Meta-Agent", run_always: true },
+    "meta-agent": { type: "agent", label: "Meta-Agent", run_on: "always" },
   };
-  const runAlways = collectRunAlwaysNodes(nodes);
+  const postPipeline = collectPostPipelineNodes(nodes);
   const regularNodes = Object.keys(nodes).filter(
-    (id) => !runAlways.includes(id),
+    (id) => !postPipeline.includes(id),
   );
   assertEquals(regularNodes, ["pm"]);
-  assertEquals(runAlways, ["meta-agent"]);
+  assertEquals(postPipeline, ["meta-agent"]);
 });
 
 // --- NodeConfig.env field tests ---
@@ -263,7 +262,7 @@ Deno.test("NodeConfig — env field undefined when not set", () => {
   assertEquals(node.env, undefined);
 });
 
-// --- Pre-run_always rollback + failed-node-id extraction tests ---
+// --- Pre-post-pipeline rollback + failed-node-id extraction tests ---
 
 Deno.test("getNodesByStatus — extracts failed node IDs from run state", () => {
   const state: RunState = {
@@ -317,45 +316,45 @@ Deno.test("failed-node.txt — not written when no failed nodes", () => {
   assertEquals(failed.length, 0);
 });
 
-// --- run_always node ordering tests ---
+// --- post-pipeline node ordering tests ---
 
-Deno.test("sortRunAlwaysNodes — orders by dependency (commit-meta after meta-agent)", () => {
+Deno.test("sortPostPipelineNodes — orders by dependency (commit-meta after meta-agent)", () => {
   const nodes: Record<string, NodeConfig> = {
     "commit-meta": {
       type: "agent",
       label: "Commit Meta",
       inputs: ["meta-agent"],
-      run_always: true,
+      run_on: "success",
     },
     "meta-agent": {
       type: "agent",
       label: "Meta-Agent",
-      run_always: true,
+      run_on: "always",
     },
   };
-  const runAlwaysIds = ["commit-meta", "meta-agent"];
-  const sorted = sortRunAlwaysNodes(runAlwaysIds, nodes);
+  const postPipelineIds = ["commit-meta", "meta-agent"];
+  const sorted = sortPostPipelineNodes(postPipelineIds, nodes);
   assertEquals(sorted, ["meta-agent", "commit-meta"]);
 });
 
-Deno.test("sortRunAlwaysNodes — single node returns as-is", () => {
+Deno.test("sortPostPipelineNodes — single node returns as-is", () => {
   const nodes: Record<string, NodeConfig> = {
     "meta-agent": {
       type: "agent",
       label: "Meta-Agent",
-      run_always: true,
+      run_on: "always",
     },
   };
-  const sorted = sortRunAlwaysNodes(["meta-agent"], nodes);
+  const sorted = sortPostPipelineNodes(["meta-agent"], nodes);
   assertEquals(sorted, ["meta-agent"]);
 });
 
-Deno.test("sortRunAlwaysNodes — no dependencies preserves alphabetical order", () => {
+Deno.test("sortPostPipelineNodes — no dependencies preserves alphabetical order", () => {
   const nodes: Record<string, NodeConfig> = {
-    "cleanup": { type: "agent", label: "Cleanup", run_always: true },
-    "meta-agent": { type: "agent", label: "Meta-Agent", run_always: true },
+    "cleanup": { type: "agent", label: "Cleanup", run_on: "always" },
+    "meta-agent": { type: "agent", label: "Meta-Agent", run_on: "always" },
   };
-  const sorted = sortRunAlwaysNodes(["cleanup", "meta-agent"], nodes);
+  const sorted = sortPostPipelineNodes(["cleanup", "meta-agent"], nodes);
   assertEquals(sorted, ["cleanup", "meta-agent"]);
 });
 
@@ -408,4 +407,86 @@ Deno.test("collectAllNodeIds — no loop nodes returns top-level only", () => {
   };
   const ids = collectAllNodeIds(config);
   assertEquals(ids, ["a", "b"]);
+});
+
+// --- findNodeConfig tests ---
+
+Deno.test("findNodeConfig — finds top-level node", () => {
+  const config: PipelineConfig = {
+    name: "test",
+    version: "1",
+    nodes: {
+      pm: { type: "agent", label: "PM", task_template: "spec" },
+    },
+  };
+  const node = findNodeConfig(config, "pm");
+  assertEquals(node?.label, "PM");
+});
+
+Deno.test("findNodeConfig — finds loop body node", () => {
+  const config: PipelineConfig = {
+    name: "test",
+    version: "1",
+    nodes: {
+      "impl-loop": {
+        type: "loop",
+        label: "Loop",
+        condition_node: "qa",
+        condition_field: "verdict",
+        exit_value: "PASS",
+        nodes: {
+          executor: { type: "agent", label: "Executor", task_template: "impl" },
+          qa: {
+            type: "agent",
+            label: "QA",
+            task_template: "verify",
+            inputs: ["executor"],
+          },
+        },
+      },
+    },
+  };
+  const executor = findNodeConfig(config, "executor");
+  assertEquals(executor?.label, "Executor");
+
+  const qa = findNodeConfig(config, "qa");
+  assertEquals(qa?.label, "QA");
+  assertEquals(qa?.inputs, ["executor"]);
+});
+
+// --- run_on filtering tests ---
+
+Deno.test("collectPostPipelineNodes — collects all run_on variants", () => {
+  const nodes: Record<string, NodeConfig> = {
+    pm: { type: "agent", label: "PM" },
+    "meta-agent": { type: "agent", label: "Meta-Agent", run_on: "always" },
+    commit: { type: "agent", label: "Commit", run_on: "success" },
+    notify: { type: "agent", label: "Notify", run_on: "failure" },
+  };
+  const result = collectPostPipelineNodes(nodes);
+  assertEquals(result.length, 3);
+  assertEquals(result.includes("meta-agent"), true);
+  assertEquals(result.includes("commit"), true);
+  assertEquals(result.includes("notify"), true);
+});
+
+Deno.test("collectPostPipelineNodes — run_on: 'failure' node is collected", () => {
+  const nodes: Record<string, NodeConfig> = {
+    pm: { type: "agent", label: "PM" },
+    notify: { type: "agent", label: "Notify", run_on: "failure" },
+  };
+  const result = collectPostPipelineNodes(nodes);
+  assertEquals(result, ["notify"]);
+});
+
+Deno.test("findNodeConfig — returns undefined for unknown node", () => {
+  const config: PipelineConfig = {
+    name: "test",
+    version: "1",
+    nodes: {
+      pm: { type: "agent", label: "PM", task_template: "spec" },
+    },
+  };
+  const node = findNodeConfig(config, "nonexistent");
+  assertEquals(node, undefined);
 });

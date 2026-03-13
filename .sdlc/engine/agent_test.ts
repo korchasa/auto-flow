@@ -182,12 +182,153 @@ Deno.test("formatEventForOutput — assistant text", () => {
   assertEquals(out, "[stream] text: Hello world");
 });
 
-Deno.test("formatEventForOutput — assistant tool_use", () => {
+Deno.test("formatEventForOutput — assistant tool_use without input", () => {
   const out = formatEventForOutput({
     type: "assistant",
     message: { content: [{ type: "tool_use", name: "Bash" }] },
   });
   assertEquals(out, "[stream] tool: Bash");
+});
+
+Deno.test("formatEventForOutput — Read shows file_path", () => {
+  const out = formatEventForOutput({
+    type: "assistant",
+    message: {
+      content: [{
+        type: "tool_use",
+        name: "Read",
+        input: { file_path: "/workspaces/project/src/main.ts" },
+      }],
+    },
+  });
+  assertEquals(out, "[stream] tool: Read src/main.ts");
+});
+
+Deno.test("formatEventForOutput — Bash shows description", () => {
+  const out = formatEventForOutput({
+    type: "assistant",
+    message: {
+      content: [{
+        type: "tool_use",
+        name: "Bash",
+        input: {
+          command: "git status --porcelain",
+          description: "Check git status",
+        },
+      }],
+    },
+  });
+  assertEquals(out, "[stream] tool: Bash Check git status");
+});
+
+Deno.test("formatEventForOutput — Bash falls back to command when no description", () => {
+  const out = formatEventForOutput({
+    type: "assistant",
+    message: {
+      content: [{
+        type: "tool_use",
+        name: "Bash",
+        input: { command: "deno task check" },
+      }],
+    },
+  });
+  assertEquals(out, "[stream] tool: Bash `deno task check`");
+});
+
+Deno.test("formatEventForOutput — Grep shows pattern and path", () => {
+  const out = formatEventForOutput({
+    type: "assistant",
+    message: {
+      content: [{
+        type: "tool_use",
+        name: "Grep",
+        input: { pattern: "TODO", path: "/workspaces/project/src/" },
+      }],
+    },
+  });
+  assertEquals(out, "[stream] tool: Grep /TODO/ in src/");
+});
+
+Deno.test("formatEventForOutput — Write shows file_path", () => {
+  const out = formatEventForOutput({
+    type: "assistant",
+    message: {
+      content: [{
+        type: "tool_use",
+        name: "Write",
+        input: {
+          file_path: "/workspaces/project/src/utils.ts",
+          content: "...",
+        },
+      }],
+    },
+  });
+  assertEquals(out, "[stream] tool: Write src/utils.ts");
+});
+
+Deno.test("formatEventForOutput — Edit shows file_path", () => {
+  const out = formatEventForOutput({
+    type: "assistant",
+    message: {
+      content: [{
+        type: "tool_use",
+        name: "Edit",
+        input: {
+          file_path: "/workspaces/project/src/main.ts",
+          old_string: "a",
+          new_string: "b",
+        },
+      }],
+    },
+  });
+  assertEquals(out, "[stream] tool: Edit src/main.ts");
+});
+
+Deno.test("formatEventForOutput — Glob shows pattern", () => {
+  const out = formatEventForOutput({
+    type: "assistant",
+    message: {
+      content: [{
+        type: "tool_use",
+        name: "Glob",
+        input: { pattern: "**/*.ts" },
+      }],
+    },
+  });
+  assertEquals(out, "[stream] tool: Glob **/*.ts");
+});
+
+Deno.test("formatEventForOutput — Agent shows description", () => {
+  const out = formatEventForOutput({
+    type: "assistant",
+    message: {
+      content: [{
+        type: "tool_use",
+        name: "Agent",
+        input: {
+          description: "Explore codebase",
+          prompt: "...",
+          subagent_type: "Explore",
+        },
+      }],
+    },
+  });
+  assertEquals(out, "[stream] tool: Agent Explore codebase");
+});
+
+Deno.test("formatEventForOutput — long Bash command truncated", () => {
+  const longCmd = "x".repeat(200);
+  const out = formatEventForOutput({
+    type: "assistant",
+    message: {
+      content: [{
+        type: "tool_use",
+        name: "Bash",
+        input: { command: longCmd },
+      }],
+    },
+  });
+  assertEquals(out, "[stream] tool: Bash `" + "x".repeat(80) + "…`");
 });
 
 Deno.test("formatEventForOutput — result success", () => {

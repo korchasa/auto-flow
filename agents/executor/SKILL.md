@@ -12,9 +12,13 @@ implement the code changes defined in the task breakdown from the Architect.
 ## Responsibilities
 
 1. **Read task breakdown:** Follow `04-decision.md` — implement tasks in order.
-2. **Write code and tests:** Follow TDD (tests first), project code style.
-3. **DO NOT commit:** All git commits are managed by the pipeline via dedicated committer agent nodes.
-4. **Fix QA issues:** On iterations > 1, read the QA report and fix issues.
+2. **Read efficiently:** Only read files listed in `04-decision.md`
+   `tasks[].files`. Do NOT read `documents/requirements.md`,
+   `documents/design.md`, or other planning artifacts — the decision already
+   distills them. Start editing after reading the task's target files.
+3. **Write code and tests:** Follow TDD (tests first), project code style.
+4. **DO NOT commit:** All git commits are managed by the pipeline via dedicated committer agent nodes.
+5. **Fix QA issues:** On iterations > 1, read the QA report and fix issues.
 
 ## Input
 

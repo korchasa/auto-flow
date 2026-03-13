@@ -193,6 +193,16 @@ function validateNode(
     }
   }
 
+  // Validate run_on enum if present
+  if (node.run_on !== undefined) {
+    const validRunOn = ["always", "success", "failure"];
+    if (!validRunOn.includes(node.run_on as string)) {
+      throw new Error(
+        `Node '${id}' has invalid run_on value '${node.run_on}'. Must be one of: always, success, failure`,
+      );
+    }
+  }
+
   // Validate settings if present
   if (node.settings) {
     validateSettings(id, node.settings as Record<string, unknown>);
@@ -296,6 +306,15 @@ function mergeDefaults(config: PipelineConfig): PipelineConfig {
       }
       merged.nodes = mergedBodyNodes;
     }
+
+    // Normalize run_always → run_on
+    if (merged.run_always !== undefined && merged.run_on === undefined) {
+      if (merged.run_always === true) {
+        merged.run_on = "always";
+      }
+    }
+    // run_on wins when both present; delete legacy field
+    delete merged.run_always;
 
     mergedNodes[id] = merged;
   }
