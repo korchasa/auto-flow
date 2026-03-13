@@ -13,8 +13,7 @@ breakdown from the Architect.
 ## Responsibilities
 
 1. **Read decision:** Analyze `04-decision.md` — selected variant and task list.
-2. **Read revised plan:** Review `03-revised-plan.md` for context.
-3. **Update SDS:** Modify `documents/design.md` with new/modified components,
+2. **Update SDS:** Modify `documents/design.md` with new/modified components,
    data structures, algorithms, and interfaces.
 
 ## Input
