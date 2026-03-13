@@ -364,7 +364,7 @@ export class Engine {
     this.output.verboseInputs(nodeId, inputArtifacts);
 
     const runDir = getRunDir(this.state.run_id);
-    const streamLogPath = `${runDir}/logs/${nodeId}.stream.jsonl`;
+    const streamLogPath = `${runDir}/logs/${nodeId}.stream.log`;
 
     const result = await runAgent({
       node,

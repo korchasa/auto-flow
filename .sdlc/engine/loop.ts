@@ -82,7 +82,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
 
       const runDir = getRunDir(state.run_id);
       const iterNodeId = `${bodyNodeId}-iter-${iteration}`;
-      const streamLogPath = `${runDir}/logs/${iterNodeId}.stream.jsonl`;
+      const streamLogPath = `${runDir}/logs/${iterNodeId}.stream.log`;
 
       const result = await runAgent({
         node: bodyNode,

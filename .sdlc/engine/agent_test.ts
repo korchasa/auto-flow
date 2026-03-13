@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { buildClaudeArgs } from "./agent.ts";
+import { buildClaudeArgs, formatEventForOutput } from "./agent.ts";
 import type { AgentRunOptions, InvokeOptions } from "./agent.ts";
 import { OutputManager } from "./output.ts";
 import type { NodeConfig, NodeSettings, TemplateContext } from "./types.ts";
@@ -163,4 +163,53 @@ Deno.test("settings — default values", () => {
   assertEquals(settings.on_error, "fail");
   assertEquals(settings.max_retries, 3);
   assertEquals(settings.retry_delay_seconds, 5);
+});
+
+Deno.test("formatEventForOutput — system init", () => {
+  const out = formatEventForOutput({
+    type: "system",
+    subtype: "init",
+    model: "claude-opus-4-6",
+  });
+  assertEquals(out, "[stream] init model=claude-opus-4-6");
+});
+
+Deno.test("formatEventForOutput — assistant text", () => {
+  const out = formatEventForOutput({
+    type: "assistant",
+    message: { content: [{ type: "text", text: "Hello world" }] },
+  });
+  assertEquals(out, "[stream] text: Hello world");
+});
+
+Deno.test("formatEventForOutput — assistant tool_use", () => {
+  const out = formatEventForOutput({
+    type: "assistant",
+    message: { content: [{ type: "tool_use", name: "Bash" }] },
+  });
+  assertEquals(out, "[stream] tool: Bash");
+});
+
+Deno.test("formatEventForOutput — result success", () => {
+  const out = formatEventForOutput({
+    type: "result",
+    subtype: "success",
+    duration_ms: 5000,
+    total_cost_usd: 0.1234,
+  });
+  assertEquals(out, "[stream] result: success (5000ms, $0.1234)");
+});
+
+Deno.test("formatEventForOutput — unknown type returns empty", () => {
+  assertEquals(formatEventForOutput({ type: "rate_limit" }), "");
+});
+
+Deno.test("formatEventForOutput — long text truncated at 120 chars", () => {
+  const longText = "x".repeat(200);
+  const out = formatEventForOutput({
+    type: "assistant",
+    message: { content: [{ type: "text", text: longText }] },
+  });
+  assertEquals(out.includes("x".repeat(120) + "…"), true);
+  assertEquals(out.includes("x".repeat(121)), false);
 });

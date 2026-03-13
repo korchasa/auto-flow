@@ -285,8 +285,8 @@ export function buildClaudeArgs(opts: InvokeOptions): string[] {
 
 /**
  * Execute the claude CLI process with stream-json output.
- * Processes NDJSON events in real-time: writes each line to streamLogPath,
- * forwards formatted summaries to onOutput, and extracts ClaudeCliOutput
+ * Processes NDJSON events in real-time: writes readable formatted summaries
+ * to streamLogPath, forwards them to onOutput, and extracts ClaudeCliOutput
  * from the final "result" event.
  */
 async function executeClaudeProcess(
@@ -346,10 +346,6 @@ async function executeClaudeProcess(
         buffer = lines.pop()!;
         for (const line of lines) {
           if (!line.trim()) continue;
-          // Write raw line to log file in real-time
-          if (logFile) {
-            await logFile.write(encoder.encode(line + "\n"));
-          }
           // Parse and extract result event
           try {
             // deno-lint-ignore no-explicit-any
@@ -357,11 +353,12 @@ async function executeClaudeProcess(
             if (event.type === "result") {
               resultEvent = extractClaudeOutput(event);
             }
-            // Forward formatted summary to onOutput
-            if (onOutput) {
-              const summary = formatEventForOutput(event);
-              if (summary) onOutput(summary);
+            // Write readable formatted line to log file in real-time
+            const summary = formatEventForOutput(event);
+            if (logFile && summary) {
+              await logFile.write(encoder.encode(summary + "\n"));
             }
+            if (onOutput && summary) onOutput(summary);
           } catch {
             // Skip malformed JSON lines
           }
@@ -369,19 +366,17 @@ async function executeClaudeProcess(
       }
       // Process remaining buffer
       if (buffer.trim()) {
-        if (logFile) {
-          await logFile.write(encoder.encode(buffer + "\n"));
-        }
         try {
           // deno-lint-ignore no-explicit-any
           const event = JSON.parse(buffer) as Record<string, any>;
           if (event.type === "result") {
             resultEvent = extractClaudeOutput(event);
           }
-          if (onOutput) {
-            const summary = formatEventForOutput(event);
-            if (summary) onOutput(summary);
+          const summary = formatEventForOutput(event);
+          if (logFile && summary) {
+            await logFile.write(encoder.encode(summary + "\n"));
           }
+          if (onOutput && summary) onOutput(summary);
         } catch { /* skip */ }
       }
     } catch { /* stream closed */ }
@@ -439,8 +434,8 @@ async function executeClaudeProcess(
 }
 
 /** Extract ClaudeCliOutput fields from a stream-json result event. */
-// deno-lint-ignore no-explicit-any
 export function extractClaudeOutput(
+  // deno-lint-ignore no-explicit-any
   event: Record<string, any>,
 ): ClaudeCliOutput {
   return {
@@ -457,7 +452,7 @@ export function extractClaudeOutput(
 
 /** Format a stream event as a one-line summary for verbose output. */
 // deno-lint-ignore no-explicit-any
-function formatEventForOutput(event: Record<string, any>): string {
+export function formatEventForOutput(event: Record<string, any>): string {
   switch (event.type) {
     case "system":
       if (event.subtype === "init") {
