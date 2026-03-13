@@ -326,6 +326,20 @@ function mergeDefaults(config: PipelineConfig): PipelineConfig {
   };
 }
 
+/** Collect all prompt file paths from top-level and loop body nodes. */
+export function collectPromptPaths(config: PipelineConfig): string[] {
+  const paths: string[] = [];
+  for (const node of Object.values(config.nodes)) {
+    if (node.prompt) paths.push(node.prompt);
+    if (node.type === "loop" && node.nodes) {
+      for (const bodyNode of Object.values(node.nodes)) {
+        if (bodyNode.prompt) paths.push(bodyNode.prompt);
+      }
+    }
+  }
+  return paths;
+}
+
 /** Extract NodeSettings fields from PipelineDefaults (exclude pipeline-only fields). */
 function extractNodeSettings(defaults: PipelineDefaults): NodeSettings {
   const { max_parallel: _, claude_args: _ca, hitl: _hitl, ...settings } =
