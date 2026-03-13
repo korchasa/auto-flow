@@ -1,10 +1,14 @@
 /** Pipeline lock to prevent parallel runs.
- * Lock file contains JSON with PID, run_id, and timestamp.
- * Stale locks (dead PID) are automatically reclaimed. */
+ * Lock file contains JSON with PID, hostname, run_id, and timestamp.
+ * Stale detection: same hostname → PID check; different hostname → lock is
+ * treated as live (conservative: container PIDs are invisible from host). */
+
+import { hostname } from "node:os";
 
 /** Lock file content structure. */
 export interface LockInfo {
   pid: number;
+  hostname: string;
   run_id: string;
   started_at: string;
 }
@@ -16,7 +20,7 @@ export function defaultLockPath(): string {
   return LOCK_PATH;
 }
 
-/** Check if a process with given PID is alive. */
+/** Check if a process with given PID is alive on this host. */
 function isProcessAlive(pid: number): boolean {
   try {
     Deno.kill(pid, "SIGCONT");
@@ -32,8 +36,20 @@ export async function readLockInfo(lockPath: string): Promise<LockInfo> {
   return JSON.parse(text) as LockInfo;
 }
 
+/** Check if an existing lock is still held by a live process.
+ * Same hostname → PID check. Different hostname → assume alive. */
+function isLockAlive(existing: LockInfo): boolean {
+  const currentHost = hostname();
+  if (existing.hostname && existing.hostname !== currentHost) {
+    // Different host (e.g. container vs host) — cannot verify PID, assume alive
+    return true;
+  }
+  // Same host or missing hostname (backward compat) — check PID
+  return isProcessAlive(existing.pid);
+}
+
 /** Acquire pipeline lock. Throws if another live process holds it.
- * Reclaims stale locks (dead PID) automatically. */
+ * Reclaims stale locks (dead PID on same host) automatically. */
 export async function acquireLock(
   lockPath: string,
   runId: string,
@@ -41,9 +57,9 @@ export async function acquireLock(
   // Check existing lock
   try {
     const existing = await readLockInfo(lockPath);
-    if (isProcessAlive(existing.pid)) {
+    if (isLockAlive(existing)) {
       throw new Error(
-        `Pipeline is already running (run_id: ${existing.run_id}, pid: ${existing.pid}). ` +
+        `Pipeline is already running (run_id: ${existing.run_id}, pid: ${existing.pid}, host: ${existing.hostname}). ` +
           `Remove ${lockPath} manually if the process is stuck.`,
       );
     }
@@ -63,6 +79,7 @@ export async function acquireLock(
 
   const info: LockInfo = {
     pid: Deno.pid,
+    hostname: hostname(),
     run_id: runId,
     started_at: new Date().toISOString(),
   };
