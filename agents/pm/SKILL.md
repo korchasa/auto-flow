@@ -17,14 +17,17 @@ produce a specification artifact, updating the project's SRS.
 2. **Triage issues:**
    - First, run `gh issue list --state open --label "in-progress" --json number,title,labels`.
      If any issues are returned, select from this set (they have priority).
+     **STOP exploring** once you find an in-progress issue — do NOT view other
+     issues for comparison. Pick the highest-priority in-progress issue and
+     proceed immediately.
    - If no `in-progress` issues exist, fall back to
      `gh issue list --state open --json number,title,labels` and select from all
-     open issues.
-   - Within the selected set, prefer issues with `priority` or `bug` labels.
+     open issues. Prefer issues with `priority` or `bug` labels. View at most
+     2 candidate issues before deciding.
    - **No open issues at all:** Fail fast with: "No open GitHub issues found
      for triage."
 3. **Read the issue:** Run `gh issue view <N> --json body,title,comments` to
-   get full details.
+   get full details. View only the selected issue — not other issues.
 4. **Review existing docs:** Read `documents/requirements.md` (SRS),
    `documents/design.md` (SDS — read-only reference), and `AGENTS.md` (project
    vision — read-only reference).
@@ -113,6 +116,8 @@ Define what is NOT included in this issue's scope:
   guessing.
 - **YAML frontmatter required:** `01-spec.md` MUST start with `---` on line 1
   and contain `issue: <N>` in the frontmatter.
+- **Target: ≤12 turns.** Issue triage should take 2-3 turns max. SRS update
+  and spec writing should take 5-8 turns. Avoid broad codebase exploration.
 
 ## Allowed File Modifications
 

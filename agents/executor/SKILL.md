@@ -13,9 +13,10 @@ implement the code changes defined in the task breakdown from the Architect.
 
 1. **Read task breakdown:** Follow `04-decision.md` — implement tasks in order.
 2. **Read efficiently:** Only read files listed in `04-decision.md`
-   `tasks[].files`. Do NOT read `documents/requirements.md`,
-   `documents/design.md`, or other planning artifacts — the decision already
-   distills them. Start editing after reading the task's target files.
+   `tasks[].files`. If a file is listed in `tasks[].files`, read it with the
+   Read tool (never grep via Bash). Do NOT read planning artifacts that are
+   NOT in the task file list — the decision already distills them. Start
+   editing after reading each task's target files.
    **Data format discovery:** When your task involves parsing or consuming data
    produced by existing code (e.g., log files, state files, JSONL streams),
    read the **source code** that produces that data (e.g., `engine/log.ts`,
@@ -80,8 +81,10 @@ block direct invocations. Always use `deno task check`.
   `find`), parse files (`grep`, `python3`, `tail`), or probe data formats.
   Use the Read tool to read source files directly. If you need to understand a
   data format, read the code that writes it, not sample outputs.
-- **Target: ≤35 turns.** If you're past 30 turns and not done, stop exploring
-  and focus on completing implementation with what you know.
+  **This is enforced:** each `grep` via Bash wastes a turn. One Read call
+  replaces 3-4 grep commands.
+- **Target: ≤25 turns.** Simple rename/config tasks should take ≤15 turns.
+  If past 20 turns and not done, stop exploring and finish with what you know.
 
 ## Allowed File Modifications
 

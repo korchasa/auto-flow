@@ -1,6 +1,6 @@
-# Pipeline configuration — 9-node SDLC flow (FR-26, FR-33).
+# Pipeline configuration — 7-node SDLC flow (FR-26, FR-33).
 # DAG: specification → design → decision → implementation(build, verify)
-#      ; optimize(run_on:always) → finalize → review
+#      ; optimize(run_on:always), tech-lead-review(run_on:always)
 # See: documents/requirements.md for stage specifications.
 
 name: "auto-flow-sdlc"
@@ -26,7 +26,7 @@ defaults:
 phases:
   plan: [specification, design, decision]
   impl: [implementation]
-  report: [optimize, finalize, review]
+  report: [optimize, tech-lead-review]
 
 nodes:
   # Stage 1: Project Manager — specification
@@ -152,6 +152,7 @@ nodes:
       Update documents/meta.md with findings and fix outcomes.
       Write minimal changelog: {{node_dir}}/07-changelog.md
     run_on: always
+    after: "deno task dashboard --run-dir {{run_dir}} || true"
     settings:
       on_error: continue
     validate:
@@ -160,38 +161,18 @@ nodes:
       - type: file_not_empty
         path: "{{node_dir}}/07-changelog.md"
 
-  # Post-pipeline 2: Committer — commit + push + PR
-  finalize:
+  # Post-pipeline 2: Tech Lead Review — final review + CI gate + merge
+  tech-lead-review:
     type: agent
     phase: report
-    label: "Committer — Commit, Push & PR"
-    inputs: [optimize, specification]
-    prompt: "agents/committer/SKILL.md"
-    task_template: |
-      Commit all uncommitted changes, push, and ensure PR exists.
-      Read the spec at {{input.specification}}/01-spec.md for issue number.
-      Output: {{node_dir}}/06-summary.md
-    run_on: always
-    settings:
-      on_error: continue
-    validate:
-      - type: file_exists
-        path: "{{node_dir}}/06-summary.md"
-      - type: file_not_empty
-        path: "{{node_dir}}/06-summary.md"
-
-  # Post-pipeline 3: Code Review — quality check only (no merge)
-  review:
-    type: agent
-    phase: report
-    label: "Code Review — Quality Check"
-    inputs: [finalize, specification, decision]
-    prompt: "agents/code-reviewer/SKILL.md"
+    label: "Tech Lead Review — Final Review + CI + Merge"
+    inputs: [specification, decision]
+    prompt: "agents/tech-lead-review/SKILL.md"
     task_template: |
       Perform final code review of the PR.
       Read the spec at {{input.specification}}/01-spec.md for acceptance criteria.
       Read the decision at {{input.decision}}/04-decision.md for scope.
-      Post review as PR comment (approve or request-changes). Do NOT merge.
+      Check CI status. Merge PR if all checks pass, or leave open with review comments.
       Output: {{node_dir}}/08-review.md
     run_on: always
     settings:
