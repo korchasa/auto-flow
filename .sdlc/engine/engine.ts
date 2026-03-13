@@ -387,7 +387,8 @@ export class Engine {
     const inputArtifacts = await resolveInputArtifacts(ctx.input);
     this.output.verboseInputs(nodeId, inputArtifacts);
 
-    const streamLogPath = `${ctx.node_dir}/stream.log`;
+    const runDir = getRunDir(this.state.run_id);
+    const streamLogPath = `${runDir}/logs/${nodeId}.stream.log`;
 
     const result = await runAgent({
       node,
