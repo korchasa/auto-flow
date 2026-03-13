@@ -6,7 +6,7 @@ A locally-run system where `deno task run` triggers a DAG-based chain of special
 
 ## How It Works
 
-The pipeline engine (`.sdlc/engine/`, Deno/TypeScript) reads a YAML config (`.sdlc/pipeline.yaml`) and builds a directed acyclic graph (DAG) of nodes. Nodes are sorted topologically into parallel levels and executed concurrently (configurable `max_parallel`).
+The pipeline engine (`engine/`, Deno/TypeScript) reads a YAML config (`.sdlc/pipeline.yaml`) and builds a directed acyclic graph (DAG) of nodes. Nodes are sorted topologically into parallel levels and executed concurrently (configurable `max_parallel`).
 
 Four node types:
 
@@ -35,7 +35,7 @@ Inter-agent communication uses structured Markdown artifacts in `.sdlc/runs/<run
 
 ## Architecture
 
-- **Engine:** `.sdlc/engine/` — Deno/TypeScript DAG executor with YAML config, template interpolation, parallel levels, loop nodes, HITL support, resume capability
+- **Engine:** `engine/` — Deno/TypeScript DAG executor with YAML config, template interpolation, parallel levels, loop nodes, HITL support, resume capability
 - **Agent prompts:** `agents/<name>/SKILL.md` — 10 agents with YAML frontmatter; dual-use as pipeline prompts and Claude Code skills
 - **Artifact store:** `.sdlc/runs/<run-id>/<node-id>/` — per-run isolation, git-tracked
 - **State:** `.sdlc/runs/<run-id>/state.json` — tracks node completion for resume
