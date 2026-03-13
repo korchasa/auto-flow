@@ -57,7 +57,7 @@ Executor, QA, Presenter, Meta-Agent).
 
 - **Pattern:** Configurable DAG-based multi-agent pipeline with parallel levels,
   loop nodes, and human interaction nodes
-- **Pipeline Engine:** Deno/TypeScript engine (`.sdlc/engine/`) driven by YAML
+- **Pipeline Engine:** Deno/TypeScript engine (`engine/`) driven by YAML
   config (`.sdlc/pipeline.yaml`). Entry: `deno task run [--prompt "..."]`
 - **Node types:** `agent` (Claude CLI), `merge` (combine outputs), `loop`
   (iterative body with exit condition), `human` (terminal prompt)

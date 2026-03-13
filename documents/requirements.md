@@ -64,11 +64,11 @@
   - Every new requirement in `requirements.md` has a status marker.
   - No SDS-level details (implementation, data structures, algorithms) in the output.
 
-### 3.3 FR-3: Stage 2 — Tech Lead (Plan with Variants)
+### 3.3 FR-3: Stage 2 — Architect (Design-Solution Plan)
 
-- **Description:** The Tech Lead agent reads the specification and produces an implementation plan with 2-3 variants.
+- **Description:** The Architect agent (FR-26: renamed from Tech Lead) reads the specification and produces a design-solution plan with 2-3 implementation variants.
 - **Input:** `01-spec.md`, `documents/requirements.md`, `documents/design.md`, relevant source code.
-- **Output:** `.sdlc/pipeline/<issue-number>/02-plan.md`.
+- **Output:** `02-plan.md` in node output directory.
 - **Acceptance criteria:**
   - Agent reads all input artifacts listed above.
   - Agent produces `02-plan.md` containing:
@@ -81,27 +81,19 @@
   - Effort estimates are relative to each other (e.g., S/M/L), not absolute time.
   - Risk assessment mentions at least one risk per variant.
 
-### 3.4 FR-4: Stage 3 — Tech Lead Reviewer (Critique & Revision)
+### 3.4 FR-4: Plan Critique & Revision (absorbed into Tech Lead, FR-26)
 
-- **Description:** A separate Tech Lead agent reviews the plan critically, identifies flaws, and produces a revised plan that addresses the critique. Combines critique and revision in a single stage to reduce overhead.
-- **Input:** `02-plan.md`, `01-spec.md`, `documents/requirements.md`, `documents/design.md`, relevant source code.
-- **Output:** `.sdlc/pipeline/<issue-number>/03-revised-plan.md`.
+- **Description:** Plan critique and revision functionality is now absorbed into the Tech Lead agent (FR-5). The Tech Lead critiques the Architect's plan, selects a variant, and produces the task breakdown — all in one stage. Separate reviewer agent eliminated (FR-26).
+- **Previous input/output:** `02-plan.md` → `03-revised-plan.md` (no longer produced as separate artifact).
 - **Acceptance criteria:**
-  - Agent reads all input artifacts listed above.
-  - Agent produces `03-revised-plan.md` containing:
-    - **Critique section:** identified issues, risks, or gaps in each variant.
-    - **Revision section:** updated plan addressing critique points, with clear marks of what changed and why.
-    - Recommendation on which variant to prefer (with justification).
-- **Quality metrics:**
-  - Critique identifies at least one issue or gap per variant.
-  - Revision section explicitly references each critique point and states how it was addressed.
-  - Recommended variant has a justification referencing both technical and specification criteria.
+  - Critique is embedded in Tech Lead's `04-decision.md` body (at least one issue per variant).
+  - No separate reviewer node in `pipeline.yaml`.
 
-### 3.5 FR-5: Stage 4 — Architect (Variant Selection & Task Breakdown)
+### 3.5 FR-5: Stage 3 — Tech Lead (Decision + Branch + PR)
 
-- **Description:** The Architect agent selects the final implementation variant considering both technical and non-technical criteria (maintainability, alignment with vision, complexity budget) and produces a task breakdown for the executor.
-- **Input:** `03-revised-plan.md`, `01-spec.md`, `AGENTS.md`.
-- **Output:** `.sdlc/pipeline/<issue-number>/04-decision.md`.
+- **Description:** The Tech Lead agent (FR-26: renamed from Architect) critiques the Architect's plan, selects the final implementation variant, updates the SDS, creates a feature branch and draft PR, and produces a task breakdown for the Executor. Absorbs former reviewer (FR-4) and SDS-update (FR-6) responsibilities.
+- **Input:** `02-plan.md`, `01-spec.md`, `documents/requirements.md`, `documents/design.md`, `AGENTS.md`, relevant source code.
+- **Output:** `04-decision.md` in node output directory, updated `documents/design.md`, feature branch, draft PR.
 - **Decision document format:** Every `04-decision.md` MUST begin with YAML frontmatter:
   ```
   ---
@@ -119,42 +111,39 @@
     - `files`: array of strings — relative file paths the task will create or modify.
   - Tasks MUST be ordered by dependency (blocking tasks first).
   - Parsing file allowlist: `yq --front-matter=extract '.tasks[].files[]' 04-decision.md`.
+- **Branch naming:** `sdlc/issue-<N>` for issue-driven runs, `sdlc/{{run_id}}` for `--prompt` mode.
 - **Acceptance criteria:**
   - Agent reads all input artifacts listed above.
+  - Agent critiques each variant (at least one issue per variant).
   - Agent selects one variant with a justification covering:
-    - Technical fit (from the revised plan).
+    - Technical fit (from the plan).
     - Alignment with product vision and project conventions.
     - Complexity/maintainability trade-off.
-  - Agent produces `04-decision.md` starting with YAML frontmatter containing `variant` and `tasks` fields (see format above), followed by justification and detailed task descriptions.
+  - Agent produces `04-decision.md` starting with YAML frontmatter containing `variant` and `tasks` fields (see format above), followed by critique, justification, and detailed task descriptions.
+  - Agent updates `documents/design.md` with selected variant's design details.
+  - Agent creates feature branch and opens draft PR.
 - **Quality metrics:**
   - Justification references at least one point from `AGENTS.md`.
   - Task checklist is ordered by dependency (blocking tasks first).
   - Each task is atomic — achievable in a single commit.
-  - `architect.md` prompt MUST include a concrete YAML frontmatter example to ensure LLM compliance.
+  - Tech Lead prompt MUST include a concrete YAML frontmatter example to ensure LLM compliance.
 
-### 3.6 FR-6: Stage 5 — Tech Lead (SDS Update)
+### 3.6 FR-6: SDS Update (absorbed into Tech Lead, FR-26)
 
-- **Description:** The Tech Lead updates the Software Design Specification based on the selected variant and task breakdown.
-- **Input:** `04-decision.md`, `03-revised-plan.md`, `documents/design.md`.
-- **Output:** Updated `documents/design.md`, `.sdlc/pipeline/<issue-number>/04a-sds-diff.md`.
+- **Description:** SDS update functionality is now absorbed into the Tech Lead agent (FR-5). The Tech Lead updates `documents/design.md` as part of its decision-making stage. Separate sds-update agent eliminated (FR-26).
+- **Previous input/output:** `04-decision.md` → updated `documents/design.md` (now done by Tech Lead).
 - **Acceptance criteria:**
-  - Agent reads decision and revised plan.
-  - Agent updates `documents/design.md` with new/modified components, data structures, algorithms.
-  - Changes are scoped to the selected variant only.
-  - After the agent exits, stage script generates `04a-sds-diff.md` containing the unified diff of `documents/design.md` (via `git diff`). This artifact serves as an audit trail for the Meta-Agent and debugging.
-  - [ ] Engine `after` hook for `04a-sds-diff.md` must use `git diff HEAD -- documents/design.md` (diff against last commit, not index) to produce correct output under deferred commit strategy (FR-14). If no changes detected, file must contain explicit "No changes to documents/design.md" text, not be empty.
-- **Quality metrics:**
-  - Every new component in SDS has: purpose, interfaces, dependencies.
-  - No orphan references (every component mentioned in the plan exists in SDS after update).
+  - Tech Lead updates `documents/design.md` with selected variant's design details.
+  - No separate sds-update node in `pipeline.yaml`.
 
 ### 3.7 FR-7: Stage 6-7 — Executor + QA (Iterative Implementation Loop)
 
 - **Description:** The Executor and QA agents work as an iterative pair. Executor implements, QA verifies. If QA finds issues, Executor fixes them. The loop continues until QA passes or the iteration limit is reached.
-- **Orchestration:** The loop is managed by the engine's `loop` node type (`.sdlc/engine/loop.ts`). It invokes the Executor agent, then QA agent. Based on the QA verdict, it either exits the loop (on `PASS`) or re-invokes the Executor with the QA report (on `FAIL`). Legacy: `stage-6-executor.sh` calls `stage-7-qa.sh` as sub-step.
+- **Orchestration:** The loop is managed by the engine's `loop` node type (`engine/loop.ts`). It invokes the Executor agent, then QA agent. Based on the QA verdict, it either exits the loop (on `PASS`) or re-invokes the Executor with the QA report (on `FAIL`). Legacy: `stage-6-executor.sh` calls `stage-7-qa.sh` as sub-step.
 - **Executor Input:** `04-decision.md`, `documents/requirements.md`, `documents/design.md`, source code. On subsequent iterations: previous QA report (`05-qa-report-N.md`).
-- **Executor Output:** Code changes, tests, commits on feature branch.
+- **Executor Output:** Code changes, tests, commits and pushes on feature branch. PR comment with implementation summary.
 - **QA Input:** `01-spec.md`, `04-decision.md`, all changed files, test results.
-- **QA Output:** `.sdlc/pipeline/<issue-number>/05-qa-report-<iteration>.md`.
+- **QA Output:** `05-qa-report.md` in node output directory. PR review verdict (`gh pr review`: approve/request-changes).
 - **QA report format:** Every `05-qa-report-<iteration>.md` MUST begin with YAML frontmatter:
   ```
   ---
@@ -170,16 +159,18 @@
     - Agent reads all input artifacts listed above.
     - Agent implements changes following project code style rules (from CLAUDE.md).
     - Agent writes tests before or alongside implementation.
-    - Agent commits changes incrementally to the feature branch.
+    - Agent commits and pushes changes after each task (`git add`, `git commit`, `git push`). Commit format: `sdlc(impl): <summary>`.
+    - Agent posts PR comment with implementation summary after all tasks complete.
     - On iterations > 1: agent reads the previous QA report and fixes reported issues.
   - **QA:**
     - Agent runs `deno task check` and verifies it passes.
     - Agent verifies each acceptance criterion from the specification.
-    - Agent produces `05-qa-report-<iteration>.md` starting with YAML frontmatter containing `verdict: PASS` or `verdict: FAIL`, followed by:
+    - Agent produces `05-qa-report.md` starting with YAML frontmatter containing `verdict: PASS` or `verdict: FAIL`, followed by:
       - Pass/fail status per acceptance criterion.
       - List of issues found (if any).
       - `deno task check` output summary.
       - Verdict details (human-readable explanation).
+    - Agent posts verdict as PR review (`gh pr review --approve` or `--request-changes`).
     - If `PASS`: loop ends, proceeds to next stage.
     - If `FAIL`: loop repeats with the next Executor iteration.
   - **Loop config structure:**
@@ -199,20 +190,20 @@
 
 - **Description:** Each stage script wraps the Claude Code CLI invocation and validates the agent's output before considering the stage complete. If validation fails, the script re-invokes the agent in the same session using `--resume` with a description of the problem, giving the agent a chance to fix its output without starting from scratch.
 - **Acceptance criteria:**
-  - **Stage script responsibilities (engine path — `.sdlc/engine/`):**
-    1. [x] Invoke `claude` CLI with the stage prompt and input artifacts. Evidence: `.sdlc/engine/agent.ts:208-230` (`buildClaudeArgs`), `.sdlc/engine/agent.ts:75-117` (invocation loop)
+  - **Stage script responsibilities (engine path — `engine/`):**
+    1. [x] Invoke `claude` CLI with the stage prompt and input artifacts. Evidence: `engine/agent.ts:208-230` (`buildClaudeArgs`), `engine/agent.ts:75-117` (invocation loop)
     2. After the agent exits, run stage-specific validation checks:
-       - [x] **For Executor stage:** run `deno task check` via `custom_script` validation rule. If it fails, continuation is triggered. Evidence: `.sdlc/engine/validate.ts:49-50,127-162` (`checkCustomScript()`), `.sdlc/pipeline.yaml:126-127` (executor node `custom_script` config)
-       - [x] **For QA stage:** (1) verify `05-qa-report-N.md` exists and is non-empty, (2) extract verdict via frontmatter parsing, (3) if verdict is not exactly `PASS` or `FAIL` — treat as validation failure, trigger continuation on QA agent. Evidence: `.sdlc/engine/validate.ts:51-52,164-228` (`checkFrontmatterField()`), `.sdlc/engine/validate_test.ts:225-351` (6 tests)
-       - [x] **For all stages:** verify the expected output artifact exists and is non-empty. Evidence: `.sdlc/engine/validate.ts:60-88` (`file_exists`, `file_not_empty` rules), `.sdlc/pipeline.yaml` (per-node `validate` config)
-    3. [x] If validation fails: re-invoke `claude --resume <session-id>` with the validation error output appended as context. Evidence: `.sdlc/engine/agent.ts:94-116` (resume prompt construction + `invokeClaudeCli` with `resumeSessionId`)
-    4. [x] Repeat until validation passes or the continuation limit is reached. Evidence: `.sdlc/engine/agent.ts:75-91` (loop with `continuations < settings.max_continuations`)
+       - [x] **For Executor stage:** run `deno task check` via `custom_script` validation rule. If it fails, continuation is triggered. Evidence: `engine/validate.ts:49-50,127-162` (`checkCustomScript()`), `.sdlc/pipeline.yaml:126-127` (executor node `custom_script` config)
+       - [x] **For QA stage:** (1) verify `05-qa-report-N.md` exists and is non-empty, (2) extract verdict via frontmatter parsing, (3) if verdict is not exactly `PASS` or `FAIL` — treat as validation failure, trigger continuation on QA agent. Evidence: `engine/validate.ts:51-52,164-228` (`checkFrontmatterField()`), `engine/validate_test.ts:225-351` (6 tests)
+       - [x] **For all stages:** verify the expected output artifact exists and is non-empty. Evidence: `engine/validate.ts:60-88` (`file_exists`, `file_not_empty` rules), `.sdlc/pipeline.yaml` (per-node `validate` config)
+    3. [x] If validation fails: re-invoke `claude --resume <session-id>` with the validation error output appended as context. Evidence: `engine/agent.ts:94-116` (resume prompt construction + `invokeClaudeCli` with `resumeSessionId`)
+    4. [x] Repeat until validation passes or the continuation limit is reached. Evidence: `engine/agent.ts:75-91` (loop with `continuations < settings.max_continuations`)
   - **Continuation limits:**
-    - [x] Maximum continuations per stage: configurable (default 3). Evidence: `.sdlc/pipeline.yaml:9` (`max_continuations: 3`), `.sdlc/engine/agent.ts:82-91`
-    - [x] If limit reached: stage is marked as failed, pipeline stops, Meta-Agent is triggered (FR-11, FR-25). Evidence: `.sdlc/engine/engine.ts:96-109,613-619` (`collectRunOnNodes()`), `.sdlc/engine/types.ts:56-57` (`run_on` field), `.sdlc/engine/agent.ts:110-120` (continuation limit check)
+    - [x] Maximum continuations per stage: configurable (default 3). Evidence: `.sdlc/pipeline.yaml:9` (`max_continuations: 3`), `engine/agent.ts:82-91`
+    - [x] If limit reached: stage is marked as failed, pipeline stops, Meta-Agent is triggered (FR-11, FR-25). Evidence: `engine/engine.ts:96-109,613-619` (`collectRunOnNodes()`), `engine/types.ts:56-57` (`run_on` field), `engine/agent.ts:110-120` (continuation limit check)
   - **Session persistence:**
-    - [x] The `--resume` flag ensures the agent retains full conversation context from the initial invocation. Evidence: `.sdlc/engine/agent.ts:208-230` (`--resume` flag in `buildClaudeArgs`)
-    - [x] Each continuation adds only the validation error to the context, not the full prompt. Evidence: `.sdlc/engine/agent.ts:94-97` (resume prompt = failures only)
+    - [x] The `--resume` flag ensures the agent retains full conversation context from the initial invocation. Evidence: `engine/agent.ts:208-230` (`--resume` flag in `buildClaudeArgs`)
+    - [x] Each continuation adds only the validation error to the context, not the full prompt. Evidence: `engine/agent.ts:94-97` (resume prompt = failures only)
   - **Secret detection (moved to `deno task check`):**
     - [x] `gitleaks detect --no-git` runs as part of `scripts/check.ts` (after lint, before tests). `allowFailure=true` — skips if gitleaks binary not found. Evidence: `scripts/check.ts:87`
     - Scope check (`allowed_paths`) and engine-level `safetyCheckDiff()` removed. Rationale: engine no longer commits per-node; scope enforcement via agent prompts and QA validation.
@@ -258,11 +249,11 @@
   - [x] After each non-loop agent node completes successfully, the engine saves two files to `.sdlc/runs/<run-id>/logs/`:
     - `<node-id>.json` — full `ClaudeCliOutput` JSON object (`result`, `session_id`, `total_cost_usd`, `duration_ms`, `duration_api_ms`, `num_turns`, `is_error`).
     - `<node-id>.jsonl` — copy of the JSONL session transcript from `~/.claude/projects/<project-hash>/`, located by matching `session_id` in filenames.
-    - Evidence: `.sdlc/engine/engine.ts:266-270`, `.sdlc/engine/log.ts:18-47`
-  - [x] If the JSONL transcript file is not found: engine logs a warning and continues — pipeline does NOT fail. Evidence: `.sdlc/engine/log.ts:43-45`
+    - Evidence: `engine/engine.ts:266-270`, `engine/log.ts:18-47`
+  - [x] If the JSONL transcript file is not found: engine logs a warning and continues — pipeline does NOT fail. Evidence: `engine/log.ts:43-45`
   - [ ] Loop body nodes (executor, qa) must have logs saved after each iteration. Log files use iteration-qualified names: `<node-id>-iter-<N>.json` and `<node-id>-iter-<N>.jsonl`. `runLoop()` calls `saveAgentLog()` for each body node after successful completion.
   - [ ] `LoopResult` includes per-iteration `AgentResult` references (with `ClaudeCliOutput`) to enable log extraction by the engine.
-  - [x] Log-saving logic has unit tests covering: successful save, JSONL-not-found warning path. Evidence: `.sdlc/engine/log_test.ts:29-124` (5 tests)
+  - [x] Log-saving logic has unit tests covering: successful save, JSONL-not-found warning path. Evidence: `engine/log_test.ts:29-124` (5 tests)
 
 ### 3.11 FR-11: Meta-Agent (Prompt Optimization)
 
@@ -332,23 +323,22 @@
   - Legacy path: artifacts in `.sdlc/pipeline/<issue-number>/`.
   - The file system is the single source of truth for inter-stage communication. No manifest or registry.
   - Claude CLI's built-in context auto-compression handles large input sets; no manual context management is required.
-- **Commit strategy:**
-  - All pipeline work happens on a dedicated feature branch `agent/<run-id>`.
-  - Engine does NOT auto-commit after nodes. Commits happen at explicit committer agent nodes (`agents/committer/SKILL.md`).
-  - Three committer nodes in pipeline: `commit-plan` (after planning stages), `commit-impl` (after executor+QA loop), `commit-present` (after presenter). Committer nodes use `run_on: success` (FR-25) to prevent commits/PRs on pipeline failure.
-  - Each commit message follows the format: `sdlc(<phase>): <summary of changes>`.
-  - Executor agent is instructed NOT to make git commits.
+- **Commit strategy (FR-26):**
+  - Feature branch `sdlc/issue-<N>` created by Tech Lead agent. Fallback `sdlc/{{run_id}}` for `--prompt` mode.
+  - Engine does NOT auto-commit after nodes (invariant preserved).
+  - No dedicated committer agent nodes. Executor owns commits: `git add`, `git commit`, `git push` after each task. Commit format: `sdlc(impl): <summary>`.
+  - Tech Lead creates draft PR before impl-loop. Executor pushes to same branch.
+  - QA posts PR review verdicts. Tech-lead-review performs final review + merge.
   - Legacy scripts commit + push after each stage (unchanged).
 - **Branch lifecycle:**
-  - Branch is created at the start of Stage 1 (or checked out if it already exists from a previous run).
+  - Branch created by Tech Lead agent after variant selection.
   - On re-run, existing branch is reused — new commits overwrite previous artifacts (previous versions preserved in git history per FR-13).
-  - Branch is merged via PR created by the Presenter (Stage 8).
+  - Branch is merged via tech-lead-review post-pipeline agent.
 - **Acceptance criteria:**
-  - [x] Engine does NOT auto-commit after any node. Evidence: `engine.ts` — `commitIfNeeded()` removed
-  - [x] Committer agent created. Evidence: `agents/committer/SKILL.md`
-  - [x] Three committer nodes in pipeline YAML. Evidence: `.sdlc/pipeline.yaml` — `commit-plan`, `commit-impl`, `commit-present`
-  - [x] Executor prompt forbids commits. Evidence: `agents/executor/SKILL.md:14,39`
-  - Branch is created/reused automatically by the pipeline.
+  - [x] Engine does NOT auto-commit after any node. Evidence: `engine.ts` — no `commitIfNeeded()` calls
+  - Executor commits/pushes own code during implementation.
+  - Tech Lead creates feature branch and draft PR.
+  - Tech-lead-review merges PR if CI passes.
 
 ### 3.15 FR-15: Configuration
 
@@ -358,7 +348,7 @@
   - `SDLC_MAX_QA_ITERATIONS` — maximum Executor+QA loop iterations (default: `3`).
   - `SDLC_STAGE_TIMEOUT_MINUTES` — default timeout per stage in minutes (default: `30`).
 - **Acceptance criteria:**
-  - All variables have sensible defaults in `lib.sh` (legacy) and engine config (`.sdlc/engine/config.ts`).
+  - All variables have sensible defaults in `lib.sh` (legacy) and engine config (`engine/config.ts`).
   - Engine and stage scripts read configuration from environment, falling back to defaults.
 
 ### 3.16 FR-16: Secrets
@@ -377,12 +367,12 @@
 - **Description:** Project directory layout must reflect application structure, not be buried under a single `.sdlc/` prefix. Engine code, agent prompts, pipeline config, and run artifacts should be organized at the top level as distinct concerns.
 - **Motivation:** Current `.sdlc/` prefix conflates engine source code, configuration, runtime data, and legacy scripts. This hinders navigation, IDE support, and standard tooling (test runners, linters).
 - **Acceptance criteria:**
-  - [ ] Engine source code lives under a standard `src/` or dedicated top-level directory (not `.sdlc/engine/`).
+  - [x] Engine source code lives under a standard `src/` or dedicated top-level directory (not `.sdlc/engine/`). Evidence: `engine/` (top-level directory, 30 files moved via `git mv .sdlc/engine/ engine/`)
   - [ ] Agent prompts in a top-level `agents/` directory (not `.sdlc/agents/`).
   - [ ] Pipeline config (`pipeline.yaml`) at project root or in a config directory.
-  - [ ] Run artifacts in a gitignored data directory (e.g., `runs/` or `.runs/`).
+  - [ ] Run artifacts in a gitignored data directory (e.g., `runs/` or `.sdlc/runs/`); `.gitignore` updated.
   - [ ] Legacy shell scripts in a `scripts/` directory (not `.sdlc/scripts/`).
-  - [ ] `deno.json` tasks, imports, and test paths updated accordingly.
+  - [ ] `deno.json` tasks (`run`, `run:validate`, `test:engine`), imports, and test paths updated to reference new engine path.
   - [ ] All existing tests pass after restructuring.
   - [ ] SDS (`documents/design.md`) Appendix B updated to reflect new layout.
 
@@ -391,22 +381,22 @@
 - **Description:** With `-v` flag, engine output must provide full transparency into what is happening at every step — not just node start/stop, but the reasoning context: what input is being passed, what prompt is constructed, what validation is run, what the result is.
 - **Motivation:** Current verbose mode shows only lifecycle events (started/completed/failed). Debugging pipeline issues or understanding agent behavior requires reading log files after the fact.
 - **Acceptance criteria:**
-  - [x] `-v` shows the full task prompt text sent to each agent (after template interpolation). Evidence: `.sdlc/engine/output.ts:109-114` (`verbosePrompt()`), `.sdlc/engine/agent.ts:67-69`
-  - [x] `-v` shows the list of input artifacts resolved for each node (file paths + sizes). Evidence: `.sdlc/engine/output.ts:117-123` (`verboseInputs()`), `.sdlc/engine/engine.ts:280`
-  - [x] `-v` shows validation rule execution: which rules ran, pass/fail per rule, failure details. Evidence: `.sdlc/engine/output.ts:126-137` (`verboseValidation()`), `.sdlc/engine/agent.ts:98-104`
-  - [x] `-v` shows continuation context: why continuation was triggered, what error text is appended. Evidence: `.sdlc/engine/output.ts:140-151` (`verboseContinuation()`), `.sdlc/engine/agent.ts:126-135`
-  - [x] `-v` streams agent stdout in real-time (not buffered until completion). Evidence: `.sdlc/engine/output.ts` (`nodeOutput()` method — pre-existing)
-  - [x] `-v` shows safety check results: which files were diffed, any violations found. Evidence: `.sdlc/engine/output.ts:154-172` (`verboseSafety()`), `.sdlc/engine/engine.ts:326-330`
-  - [x] `-v` shows commit details: files staged, commit message, branch. Evidence: `.sdlc/engine/output.ts:175-188` (`verboseCommit()`), `.sdlc/engine/engine.ts:544-549`
-  - [x] Default mode (no `-v`) remains concise: node start/complete/fail + summary. Evidence: `.sdlc/engine/output_test.ts:175-197` (all 6 verbose methods produce zero output in default mode)
+  - [x] `-v` shows the full task prompt text sent to each agent (after template interpolation). Evidence: `engine/output.ts:109-114` (`verbosePrompt()`), `engine/agent.ts:67-69`
+  - [x] `-v` shows the list of input artifacts resolved for each node (file paths + sizes). Evidence: `engine/output.ts:117-123` (`verboseInputs()`), `engine/engine.ts:280`
+  - [x] `-v` shows validation rule execution: which rules ran, pass/fail per rule, failure details. Evidence: `engine/output.ts:126-137` (`verboseValidation()`), `engine/agent.ts:98-104`
+  - [x] `-v` shows continuation context: why continuation was triggered, what error text is appended. Evidence: `engine/output.ts:140-151` (`verboseContinuation()`), `engine/agent.ts:126-135`
+  - [x] `-v` streams agent stdout in real-time (not buffered until completion). Evidence: `engine/output.ts` (`nodeOutput()` method — pre-existing)
+  - [x] `-v` shows safety check results: which files were diffed, any violations found. Evidence: `engine/output.ts:154-172` (`verboseSafety()`), `engine/engine.ts:326-330`
+  - [x] `-v` shows commit details: files staged, commit message, branch. Evidence: `engine/output.ts:175-188` (`verboseCommit()`), `engine/engine.ts:544-549`
+  - [x] Default mode (no `-v`) remains concise: node start/complete/fail + summary. Evidence: `engine/output_test.ts:175-197` (all 6 verbose methods produce zero output in default mode)
 
 ### 3.19 FR-19: Agents as Skills
 
 - **Description:** Each pipeline agent is a Claude Code project skill, stored in `./agents/<name>/SKILL.md`. Skills are linked into `.claude/skills/` via symlinks for IDE integration. Each agent can be invoked standalone via `/agent-<name>` or used by the pipeline engine.
-- **Agents (9):** pm, tech-lead, tech-lead-reviewer, architect, tech-lead-sds, executor, qa, presenter, meta-agent.
+- **Agents (7):** pm, architect, tech-lead, tech-lead-review, executor, qa, meta-agent. (FR-26: reduced from 10-agent set; removed committer, tech-lead-reviewer, tech-lead-sds; presenter has no agent directory.)
 - **Acceptance criteria:**
-  - [ ] Each of 9 agents has a dedicated directory under `./agents/<name>/` with a `SKILL.md` file containing YAML frontmatter (name, description, disable-model-invocation) and role instructions.
-  - [ ] Symlinks exist: `.claude/skills/agent-<name>` → `../../agents/<name>/` for all 9 agents.
+  - [ ] Each of 7 agents has a dedicated directory under `./agents/<name>/` with a `SKILL.md` file containing YAML frontmatter (name, description, disable-model-invocation) and role instructions.
+  - [ ] Symlinks exist: `.claude/skills/agent-<name>` → `../../agents/<name>/` for all 7 agents.
   - [ ] Pipeline engine `prompt:` fields in `pipeline.yaml` and `pipeline-task.yaml` reference the new SKILL.md paths (e.g., `agents/pm/SKILL.md`).
   - [ ] Current `.sdlc/agents/*.md` files are migrated (content preserved, format adapted to SKILL.md with frontmatter).
   - [ ] `.sdlc/agents/` directory removed after migration.
@@ -436,14 +426,14 @@
   5. Engine resumes agent: `claude --resume <session_id> -p "<reply>"`. Agent continues with full session context.
 - **Key constraint:** Engine contains zero GitHub/Slack/email-specific code. All delivery/polling logic lives in pipeline scripts (`.sdlc/scripts/`).
 - **Acceptance criteria:**
-  - [x] Engine detects `AskUserQuestion` in `permission_denials` of Claude CLI JSON output after agent node completes. Evidence: `.sdlc/engine/hitl.ts:61-93` (`detectHitlRequest()`), `.sdlc/engine/engine.ts:316-319` (call in `executeAgentNode`)
-  - [x] Engine saves `session_id`, question JSON, and node status `waiting` to `state.json`. Evidence: `.sdlc/engine/state.ts:93-103` (`markNodeWaiting()`), `.sdlc/engine/engine.ts:324-325` (call + saveState), `.sdlc/engine/types.ts:104` (`question_json` field)
-  - [x] Engine invokes `ask_script` (path from `pipeline.yaml` `defaults.hitl`) with args: `--run-dir`, `--issue-source`, `--run-id`, `--node-id`, `--question-json`. Evidence: `.sdlc/engine/hitl.ts:111-125` (`buildScriptArgs("ask")`), `.sdlc/engine/hitl.ts:127-134` (ask invocation)
-  - [x] Engine enters poll loop calling `check_script` with args: `--run-dir`, `--issue-source`, `--run-id`, `--node-id`, `--bot-login`. Exit 0 = reply in stdout; exit 1 = no reply yet. Evidence: `.sdlc/engine/hitl.ts:137-175` (poll loop), `.sdlc/engine/hitl_test.ts:184-214` (poll test)
-  - [x] On reply: engine resumes agent via `claude --resume <session_id> -p "<reply>"`. Evidence: `.sdlc/engine/hitl.ts:158-172` (claudeRun with resumeSessionId)
-  - [x] Configurable `poll_interval` (default 60s) and `timeout` (default 7200s) per pipeline. Evidence: `.sdlc/engine/types.ts:170-175` (`HitlConfig`), `.sdlc/pipeline.yaml:16-20` (defaults.hitl)
-  - [x] On timeout: node fails, Meta-Agent triggered. Evidence: `.sdlc/engine/hitl.ts:183-188` (timeout return), `.sdlc/engine/engine.ts:342-347` (markNodeFailed on HITL failure), `.sdlc/engine/hitl_test.ts:216-230` (timeout test)
-  - [x] `deno task run` on a pipeline with `waiting` nodes auto-resumes polling (no manual `--resume` needed). Evidence: `.sdlc/engine/engine.ts:278-310` (wasWaiting resume path in executeAgentNode)
+  - [x] Engine detects `AskUserQuestion` in `permission_denials` of Claude CLI JSON output after agent node completes. Evidence: `engine/hitl.ts:61-93` (`detectHitlRequest()`), `engine/engine.ts:316-319` (call in `executeAgentNode`)
+  - [x] Engine saves `session_id`, question JSON, and node status `waiting` to `state.json`. Evidence: `engine/state.ts:93-103` (`markNodeWaiting()`), `engine/engine.ts:324-325` (call + saveState), `engine/types.ts:104` (`question_json` field)
+  - [x] Engine invokes `ask_script` (path from `pipeline.yaml` `defaults.hitl`) with args: `--run-dir`, `--issue-source`, `--run-id`, `--node-id`, `--question-json`. Evidence: `engine/hitl.ts:111-125` (`buildScriptArgs("ask")`), `engine/hitl.ts:127-134` (ask invocation)
+  - [x] Engine enters poll loop calling `check_script` with args: `--run-dir`, `--issue-source`, `--run-id`, `--node-id`, `--bot-login`. Exit 0 = reply in stdout; exit 1 = no reply yet. Evidence: `engine/hitl.ts:137-175` (poll loop), `engine/hitl_test.ts:184-214` (poll test)
+  - [x] On reply: engine resumes agent via `claude --resume <session_id> -p "<reply>"`. Evidence: `engine/hitl.ts:158-172` (claudeRun with resumeSessionId)
+  - [x] Configurable `poll_interval` (default 60s) and `timeout` (default 7200s) per pipeline. Evidence: `engine/types.ts:170-175` (`HitlConfig`), `.sdlc/pipeline.yaml:16-20` (defaults.hitl)
+  - [x] On timeout: node fails, Meta-Agent triggered. Evidence: `engine/hitl.ts:183-188` (timeout return), `engine/engine.ts:342-347` (markNodeFailed on HITL failure), `engine/hitl_test.ts:216-230` (timeout test)
+  - [x] `deno task run` on a pipeline with `waiting` nodes auto-resumes polling (no manual `--resume` needed). Evidence: `engine/engine.ts:278-310` (wasWaiting resume path in executeAgentNode)
   - [x] Pipeline scripts `hitl-ask.sh` and `hitl-check.sh` exist in `.sdlc/scripts/`. Evidence: `.sdlc/scripts/hitl-ask.sh`, `.sdlc/scripts/hitl-check.sh`
   - [x] `hitl-ask.sh` renders question JSON → markdown with HTML marker `<!-- hitl:<run-id>:<node-id> -->`, posts via `gh issue comment`. Evidence: `.sdlc/scripts/hitl-ask.sh:52-76` (markdown render + marker + gh post)
   - [x] `hitl-check.sh` finds first non-bot comment after marker, outputs body to stdout (exit 0) or exits 1 if no reply. Evidence: `.sdlc/scripts/hitl-check.sh:39-54` (jq filter + exit codes)
@@ -458,7 +448,7 @@
   - [ ] Prerequisites list: Deno, Docker/devcontainer, Claude Code CLI, `gh` CLI, Git.
   - [ ] Available `deno task` commands documented (run, check, test).
   - [ ] Configuration section references `pipeline.yaml` (not env vars).
-  - [ ] Project directory structure matches actual layout (`agents/`, `.sdlc/engine/`, `.sdlc/runs/`, `.claude/skills/`).
+  - [ ] Project directory structure matches actual layout (`agents/`, `engine/`, `.sdlc/runs/`, `.claude/skills/`).
   - [ ] Agents-as-skills mentioned with `/agent-<name>` slash command examples.
   - [ ] Installation/setup instructions are accurate for devcontainer workflow.
 
@@ -575,6 +565,148 @@
   - [ ] All existing engine tests pass; new tests cover `run_on` filtering logic.
   - [ ] `deno task check` passes.
 
+### 3.26 FR-26: Align Pipeline Git Workflow with Standard GitHub Practices
+
+- **Description:** Restructure pipeline agent roles and git workflow to match
+  standard GitHub development practices. Rename/merge agents to reflect
+  real-world roles, eliminate artificial agents (committer, reviewer), move git
+  operations (branch, commit, push, PR) to the agents that own the work, and
+  use PRs (not issues) as the primary communication channel for code review.
+- **Motivation:** Current pipeline diverges from standard practices: roles are
+  misnamed (tech-lead does architecture, architect does tech-lead work),
+  artificial roles exist (committer, reviewer), git operations are deferred to
+  separate committer nodes, and QA/review communication happens in issues
+  instead of PRs.
+- **Target pipeline flow:**
+  ```
+  pm → architect → tech-lead → impl-loop(executor, qa) → tech-lead-review
+                                                           ↑
+                                                    meta-agent (run_always)
+  ```
+  5 agent invocations in happy path (was 8): pm, architect, tech-lead,
+  executor, qa — plus tech-lead-review and meta-agent as post-pipeline.
+- **Role changes:**
+  - `tech-lead` node (current) → renamed to **`architect`** (designs solution
+    with variants). Prompt: `agents/architect/SKILL.md`.
+  - `reviewer` node → **removed**. Design review absorbed into new tech-lead.
+  - `architect` node (current) → renamed to **`tech-lead`** (reviews design,
+    selects variant, task breakdown, updates SDS, creates branch
+    `sdlc/issue-<N>`, opens draft PR). Absorbs reviewer + sds-update roles.
+  - `tech-lead-sds` node → **removed**. SDS update absorbed into new tech-lead.
+  - `committer` nodes → **removed**. Executor commits/pushes own code.
+  - New **`tech-lead-review`** node (`run_on: always`) — final code review in
+    PR, CI gate, merge if green.
+- **Git workflow changes:**
+  - **Tech-lead** creates feature branch `sdlc/issue-<N>` + opens draft PR
+    after making decision. Fallback branch `sdlc/<run-id>` for `--prompt` mode.
+  - **Executor** commits and pushes during implementation, posts progress as PR
+    comments.
+  - **QA** posts results as PR review (`gh pr review --approve` or
+    `--request-changes`), not issue comments.
+  - **Tech-lead-review** reviews PR diff, checks CI, merges or leaves open.
+- **File changes:**
+  - Rename `agents/tech-lead/` → `agents/architect/` (swap via temp name).
+  - Rename `agents/architect/` → `agents/tech-lead/` (expand with: design
+    review, SDS update, branch creation, draft PR).
+  - Delete `agents/tech-lead-reviewer/`, `agents/tech-lead-sds/`,
+    `agents/committer/`.
+  - Update `agents/executor/SKILL.md` — add commit/push, PR comments.
+  - Update `agents/qa/SKILL.md` — PR review instead of issue comments.
+  - New `agents/tech-lead-review/SKILL.md` — code review + CI gate + merge.
+  - Update `pipeline.yaml` — new DAG with fewer nodes.
+  - Update symlinks in `.claude/skills/`.
+- **Invariants (no changes):**
+  - `engine/` — engine remains domain-agnostic, no code changes.
+  - `agents/pm/` — no changes.
+  - `agents/meta-agent/` — no changes.
+- **Acceptance criteria:**
+  - [ ] Agent directory `agents/architect/` contains design-solution prompt. Evidence: `agents/architect/SKILL.md`
+  - [ ] Agent directory `agents/tech-lead/` contains expanded prompt: critique + variant selection + task breakdown + SDS update + branch creation + draft PR. Evidence: `agents/tech-lead/SKILL.md`
+  - [ ] `agents/tech-lead-reviewer/`, `agents/tech-lead-sds/`, `agents/committer/` deleted.
+  - [ ] `agents/tech-lead-review/SKILL.md` created with code review + CI gate + merge logic. Evidence: `agents/tech-lead-review/SKILL.md`
+  - [ ] `agents/executor/SKILL.md` updated: commits/pushes own code, posts PR comments, "do not commit" rule removed. Evidence: `agents/executor/SKILL.md`
+  - [ ] `agents/qa/SKILL.md` updated: posts PR reviews via `gh pr review`. Evidence: `agents/qa/SKILL.md`
+  - [ ] `pipeline.yaml` updated with new DAG: pm → architect → tech-lead → impl-loop(executor, qa); tech-lead-review as `run_on: always`; meta-agent as `run_on: always`. Evidence: `.sdlc/pipeline.yaml`
+  - [ ] `.claude/skills/` symlinks updated: removed stale links, added new `agent-tech-lead-review`.
+  - [ ] Pipeline produces 5 agent invocations in happy path (pm, architect, tech-lead, executor, qa) plus 2 post-pipeline (tech-lead-review, meta-agent).
+  - [ ] Executor creates commits on feature branch during implementation.
+  - [ ] QA posts review on PR (not issue comment).
+  - [ ] Tech-lead-review merges PR if CI green, or leaves open with comments.
+  - [ ] `--prompt` mode (no GitHub issue) uses fallback branch name `sdlc/<run-id>`.
+  - [ ] All existing engine tests pass (no engine code changes).
+  - [ ] `deno task check` passes.
+  - [ ] SRS, SDS updated to reflect new pipeline structure.
+
+### 3.27 FR-27: Per-Node Model Configuration
+
+- **Description:** Add `model` field to `PipelineDefaults` and `NodeConfig` in
+  pipeline config. Engine emits `--model <value>` flag when invoking Claude CLI
+  for agent nodes. Node-level `model` overrides default; absent = CLI default.
+  Enables cost optimization (cheap model for simple stages) and quality
+  optimization (strong model for complex stages).
+- **Motivation:** All nodes currently use the same model. Simple stages (PM, QA)
+  don't need expensive reasoning models. Complex stages (architect, tech-lead,
+  meta-agent) benefit from stronger models. Static per-node config is the
+  simplest approach.
+- **Config schema:**
+  ```yaml
+  defaults:
+    model: "claude-sonnet-4-6"  # default for all nodes
+  nodes:
+    architect:
+      model: "claude-opus-4-6"    # override for complex stages
+  ```
+- **Engine behavior:**
+  - On fresh invocation: if `model` resolved (node-level or default), append
+    `--model <value>` to Claude CLI args.
+  - On `--resume`: do NOT emit `--model`. Session inherits model from original
+    invocation.
+  - Loop body nodes: inherit loop node's `model` unless overridden in inline
+    `nodes` config.
+- **Acceptance criteria:**
+  - [ ] `PipelineDefaults` in `types.ts` has `model?: string` field.
+  - [ ] `NodeConfig` in `types.ts` has `model?: string` field.
+  - [ ] `config.ts` parses `model` from defaults and node configs.
+  - [ ] `agent.ts` `buildClaudeArgs()` emits `--model <value>` when model is set.
+  - [ ] `agent.ts` does NOT emit `--model` on `--resume` invocations.
+  - [ ] Loop body nodes resolve model from: own config > loop node config > defaults.
+  - [ ] `pipeline.yaml` updated: default model + per-node overrides for complex stages.
+  - [ ] All existing engine tests pass; new tests cover model flag emission and resolution.
+  - [ ] `deno task check` passes.
+
+### 3.29 FR-29: Engine-Pipeline Separation Invariant
+
+- **Description:** The pipeline engine (`engine/`) is a domain-agnostic DAG executor. It MUST be physically separated from pipeline-specific concerns (config, agents, run artifacts) by directory structure, not only by convention. This constraint is structural and must be enforced by the project layout.
+- **Rationale:** Issue #12 — collocating engine source with pipeline data under `.sdlc/` obscures boundaries, hinders tooling, and blocks future engine reuse.
+- **Rules:**
+  - Engine source lives in a dedicated top-level directory (e.g., `engine/` or a standardized path); no pipeline, agent, git, or GitHub-specific logic inside.
+  - Pipeline config (`pipeline.yaml`), agent prompts (`agents/`), and run artifacts (`runs/`) are domain-specific — must not be nested under the engine directory.
+  - `deno.json` tasks and imports reference the new layout consistently.
+- **Acceptance criteria:**
+  - [ ] Engine source directory contains only domain-agnostic DAG executor code.
+  - [ ] No `pipeline.yaml`, agent skill files, or run artifacts reside inside the engine directory.
+  - [ ] `deno task run` and `deno task test:engine` reference the new engine path.
+  - [ ] `deno task check` passes after restructure.
+
+### 3.28 FR-28: Accurate Dry-Run Output
+
+- **Description:** `--dry-run` flag displays execution plan that mirrors actual
+  engine execution order: regular levels (without `run_on` post-pipeline nodes)
+  shown first, followed by a separate "Post-pipeline" section listing `run_on`
+  nodes in topological order. Eliminates misleading display of post-pipeline
+  nodes intermixed with regular levels.
+- **Motivation:** Current dry-run path uses raw `buildLevels()` output, bypassing
+  the `run_on` collection and filtering applied in normal execution. This causes
+  operators to misread the execution order (e.g., `meta-agent` appears to run in
+  parallel with `pm`, `commit` appears as a regular level node).
+- **Acceptance criteria:**
+  - [ ] `--dry-run` output excludes `run_on`-configured nodes from regular level display.
+  - [ ] `--dry-run` output includes a "Post-pipeline" section listing `run_on` nodes in topological order.
+  - [ ] Dry-run applies the same `collectRunOnNodes()` filtering logic as normal execution.
+  - [ ] `OutputManager.dryRunPlan()` accepts and displays post-pipeline nodes separately.
+  - [ ] Engine unit tests cover dry-run output with `run_on` nodes present.
+  - [ ] `deno task check` passes.
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -592,7 +724,7 @@
   - `--output-format json` — returns structured JSON with `result`, `session_id`, `total_cost_usd`, `duration_ms`, `num_turns`, `is_error`.
   - `--resume <session-id>` — re-invokes agent in the same session for continuations (FR-8).
   - `-p "<prompt>"` — non-interactive mode, task description is passed as the prompt argument.
-- **Pipeline engine:** Deno/TypeScript engine (`.sdlc/engine/`) reads DAG config from `.sdlc/pipeline.yaml`, resolves node dependencies, executes nodes in topological order, manages state in `.sdlc/runs/<run-id>/state.json`.
+- **Pipeline engine:** Deno/TypeScript engine (`engine/`) reads DAG config from `.sdlc/pipeline.yaml`, resolves node dependencies, executes nodes in topological order, manages state in `.sdlc/runs/<run-id>/state.json`.
 - **Legacy stage scripts:** `.sdlc/scripts/stage-<N>-<role>.sh` — handle invocation, validation, continuation, artifact commit. Superseded by engine but preserved.
 - **Inter-stage communication:** Engine: artifacts in `.sdlc/runs/<run-id>/<node-id>/`, linked via templates. Legacy: `.sdlc/pipeline/<issue-number>/`. Filesystem is source of truth.
 - **Branching & commits:** All work on branch `agent/<run-id>`. Commits at dedicated committer agent nodes (not per-stage). Commit format: `sdlc(<phase>): <summary>`. Failed stages produce no commits.
@@ -612,66 +744,54 @@ The system is considered accepted if:
 
 ## Appendix A: Pipeline Stage Map
 
-| Stage | Role               | Artifact                       | Key Validation                               | Commit Contents                          |
-| ----- | ------------------ | ------------------------------ | -------------------------------------------- | ---------------------------------------- |
-| 1     | Project Manager    | `01-spec.md` + updated SRS     | Has all 4 sections, no SDS details           | `01-spec.md`, `requirements.md`, log     |
-| 2     | Tech Lead          | `02-plan.md`                   | 2-3 variants with concrete file refs         | `02-plan.md`, log                        |
-| 3     | Tech Lead Reviewer | `03-revised-plan.md`           | Critique + revision + recommendation         | `03-revised-plan.md`, log                |
-| 4     | Architect          | `04-decision.md`               | Vision-aligned justification + task list     | `04-decision.md`, log                    |
-| 5     | Tech Lead          | Updated SDS + `04a-sds-diff.md`| New components have purpose/interfaces/deps  | `design.md`, `04a-sds-diff.md`, log      |
-| 6-7   | Executor + QA      | Code + `05-qa-report-N.md`     | `deno task check` passes, all AC covered     | Code changes, tests, QA reports, log     |
-| 8     | Presenter          | `06-summary.md` + PR + comment | All diff files mentioned, no hallucinations  | `06-summary.md`, log                     |
-| 9*    | Meta-Agent         | `07-meta-report.md`            | Evidence-based suggestions with prompt diffs | `07-meta-report.md`, log                 |
+| Stage | Role             | Artifact                                | Key Validation                               |
+| ----- | ---------------- | --------------------------------------- | -------------------------------------------- |
+| 1     | Project Manager  | `01-spec.md` + updated SRS              | Has all 4 sections, no SDS details           |
+| 2     | Architect        | `02-plan.md`                            | 2-3 variants with concrete file refs         |
+| 3     | Tech Lead        | `04-decision.md` + SDS + branch + PR    | Variant selected, SDS updated, PR opened     |
+| 4-5   | Executor + QA    | Code + commits + `05-qa-report-N.md`    | `deno task check` passes, PR reviews posted  |
+| 6*    | Tech Lead Review | PR review + merge                       | CI green, code review passed                 |
+| 7*    | Meta-Agent       | `07-changelog.md` + prompt fixes        | Evidence-based suggestions with prompt diffs |
 
-\* Meta-Agent also runs on pipeline failure at any stage.
+\* Post-pipeline nodes. Tech Lead Review and Meta-Agent run as `run_on: always`.
 
 ## Appendix B: File Structure
 
 ```
 agents/                                  # Agent system prompts (versioned, SKILL.md)
   pm/SKILL.md
-  tech-lead/SKILL.md
-  tech-lead-reviewer/SKILL.md
-  architect/SKILL.md
-  tech-lead-sds/SKILL.md
-  executor/SKILL.md
-  qa/SKILL.md
+  architect/SKILL.md                     # Design solution with variants (was tech-lead)
+  tech-lead/SKILL.md                     # Review + decision + SDS + branch + PR (was architect)
+  tech-lead-review/SKILL.md              # Final code review + CI gate + merge (new)
+  executor/SKILL.md                      # Implementation + commits + push
+  qa/SKILL.md                            # QA via PR reviews
   presenter/SKILL.md
   meta-agent/SKILL.md
-  committer/SKILL.md
 .claude/skills/                          # Symlinks for Claude Code skill discovery
   agent-pm -> ../../agents/pm/
+  agent-architect -> ../../agents/architect/
   agent-tech-lead -> ../../agents/tech-lead/
-  agent-committer -> ../../agents/committer/
-  ...                                    # (10 symlinks total)
+  agent-tech-lead-review -> ../../agents/tech-lead-review/
+  agent-executor -> ../../agents/executor/
+  agent-qa -> ../../agents/qa/
+  agent-presenter -> ../../agents/presenter/
+  agent-meta-agent -> ../../agents/meta-agent/
 .sdlc/
-  scripts/                             # Stage orchestration scripts
+  scripts/                             # Stage orchestration & HITL scripts
     lib.sh                             # Shared functions (logging, continuation loop, git ops)
-    stage-1-pm.sh
-    stage-2-tech-lead.sh
-    stage-3-reviewer.sh
-    stage-4-architect.sh
-    stage-5-sds-update.sh
-    stage-6-executor.sh                # Loop controller: invokes executor + calls stage-7-qa.sh
-    stage-7-qa.sh                      # Called by stage-6, not directly by engine
-    stage-8-presenter.sh
-    stage-9-meta-agent.sh
+    hitl-ask.sh                        # HITL question delivery via GitHub issue
+    hitl-check.sh                      # HITL reply polling via GitHub issue
   engine/                              # Deno/TypeScript pipeline engine
-    cli.ts                             # Entry point: deno task run:{task|text|file}
+    cli.ts                             # Entry point: deno task run
     engine.ts                          # DAG executor
     ...
   runs/
     <run-id>/                          # Per-run artifacts (engine path)
-      <node-id>/                       # Node output directory
+      <phase>/<node-id>/               # Phase-grouped node output
       logs/
         <node-id>.json               # CLI JSON output (metadata)
         <node-id>.jsonl              # Full session transcript
       state.json                     # Run state (node statuses, session IDs)
-  pipeline/
-    <issue-number>/                    # Per-issue artifacts (legacy path, overwritten on re-run)
-      01-spec.md
-      02-plan.md
-      ...
   pipeline.yaml                        # DAG-based pipeline configuration
 ```
 

@@ -71,7 +71,7 @@ graph LR
 ```
 
 - **Subsystems:**
-  - **Pipeline Engine** (`.sdlc/engine/`): Deno/TypeScript DAG-based executor
+  - **Pipeline Engine** (`engine/`): Deno/TypeScript DAG-based executor
     with YAML config, template interpolation, parallel levels, loop nodes,
     human nodes, resume support
   - **Agent Runtime**: Claude Code CLI invocations with role-specific prompts
@@ -177,7 +177,7 @@ graph LR
 - **Constraint:** Symlinks are Linux-native; devcontainer runtime ensures
   consistent behavior (no Windows symlink issues).
 
-### 3.6 Pipeline Engine (`.sdlc/engine/`)
+### 3.6 Pipeline Engine (`engine/`)
 
 - **Purpose:** Configurable DAG-based pipeline executor. Replaces hardcoded
   shell script orchestration with YAML-driven node graph.
