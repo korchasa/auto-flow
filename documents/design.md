@@ -240,12 +240,19 @@ graph LR
   - `git.ts` — commit helper, branch query,
     `rollbackUncommitted()` for pre-post-pipeline cleanup
   - `output.ts` — terminal output manager (quiet/normal/verbose), verbose
-    methods for detailed agent-node diagnostics
+    methods for detailed agent-node diagnostics.
+    `dryRunPlan(levels, labels, postPipelineNodeIds?, runOnMap?)`: renders
+    regular DAG levels, then optional "Post-pipeline" section listing `run_on`
+    nodes with their conditions (FR-28)
   - `engine.ts` — main executor: level iteration, parallel dispatch, verbose
     input resolution, loop-node log saving via `onNodeComplete` callback,
     phase registry init (`setPhaseRegistry()` before `ensureRunDirs()` in both
     fresh and resume paths), phase subdir creation in `ensureRunDirs()`,
     pre-post-pipeline rollback + failed-node-id extraction.
+    Dry-run path (FR-28): applies `collectPostPipelineNodes()` +
+    `sortPostPipelineNodes()` + level filtering before calling
+    `dryRunPlan()`, passing filtered levels and post-pipeline node IDs with
+    `run_on` conditions — mirrors normal execution path's filtering logic.
     On config load: iterates all nodes; for loop nodes with `nodes`
     sub-object, flattens nested body node IDs into master ID list passed
     to `createRunState()` (ensures state.json tracks both top-level and
