@@ -1,6 +1,6 @@
 # Pipeline configuration — 7-node SDLC flow (FR-26, FR-33).
 # DAG: specification → design → decision → implementation(build, verify)
-#      ; optimize(run_on:always), review(run_on:always)
+#      ; optimize(run_on:always), tech-lead-review(run_on:always)
 # See: documents/requirements.md for stage specifications.
 
 name: "auto-flow-sdlc"
@@ -26,7 +26,7 @@ defaults:
 phases:
   plan: [specification, design, decision]
   impl: [implementation]
-  report: [optimize, review]
+  report: [optimize, tech-lead-review]
 
 nodes:
   # Stage 1: Project Manager — specification
@@ -161,7 +161,7 @@ nodes:
         path: "{{node_dir}}/07-changelog.md"
 
   # Post-pipeline 2: Tech Lead Review — final review + CI gate + merge
-  review:
+  tech-lead-review:
     type: agent
     phase: report
     label: "Tech Lead Review — Final Review + CI + Merge"

@@ -66,19 +66,19 @@ graph LR
     Spec["specification"] --> Design["design<br/>(solution plan)"]
     Design --> Decision["decision<br/>(critique+branch+PR)"]
     Decision --> Loop["implementation<br/>(build→verify)"]
-    Loop -.-> Review["review<br/>(run_on:always)"]
+    Loop -.-> Review["tech-lead-review<br/>(run_on:always)"]
     Loop -.-> Optimize["optimize<br/>(run_on:always)"]
 ```
 
 - **Node ID convention (FR-33):** Activity-based IDs reflect what work is done,
   not who does it. Mapping: `pm`→`specification`, `architect`→`design`,
   `tech-lead`→`decision`, `impl-loop`→`implementation`, `executor`→`build`,
-  `qa`→`verify`, `tech-lead-review`→`review`, `meta-agent`→`optimize`.
+  `qa`→`verify`, `tech-lead-review`→`tech-lead-review`, `meta-agent`→`optimize`.
 - **Phases (FR-33):** Top-level `phases:` key in `pipeline.yaml` declares named
   phase groups. Each phase lists member stage IDs:
   - `plan`: [specification, design, decision]
   - `impl`: [implementation]
-  - `report`: [review, optimize]
+  - `report`: [tech-lead-review, optimize]
   Phase grouping is declarative config; engine treats it as opaque data. Enables
   future phase-level `run_on` semantics and cleaner artifact reporting.
 
@@ -425,7 +425,7 @@ graph LR
     named phase groups with member stage IDs (e.g., `plan: [specification,
     design, decision]`). Engine treats `phases` as opaque config data.
     Node IDs use activity-based naming (FR-33): `specification`, `design`,
-    `decision`, `implementation`, `build`, `verify`, `review`, `optimize`
+    `decision`, `implementation`, `build`, `verify`, `tech-lead-review`, `optimize`
   - CommitResult: `{ commitHash, filesStaged: string[], message: string }`
     (enriched for verbose output)
   - ValidationRule: `{ type: "file_exists"|"file_not_empty"|"contains_section"|
@@ -553,7 +553,7 @@ graph LR
     - `plan`: specification, design, decision
     - `impl`: implementation (body nodes `build`, `verify` defined inline via
       `nodes` sub-object)
-    - `report`: optimize, review
+    - `report`: optimize, tech-lead-review
   - **Rollback Before Post-Pipeline Nodes**: When `pipelineSuccess === false`,
     engine calls `rollbackUncommitted()` before executing post-pipeline nodes.
     Reverts staged/unstaged modifications (`git checkout -- .` +
