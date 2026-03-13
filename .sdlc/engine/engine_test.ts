@@ -9,6 +9,7 @@ import {
   collectAllNodeIds,
   collectRunAlwaysNodes,
   Engine,
+  findNodeConfig,
   resolveInputArtifacts,
   sortRunAlwaysNodes,
 } from "./engine.ts";
@@ -408,4 +409,61 @@ Deno.test("collectAllNodeIds — no loop nodes returns top-level only", () => {
   };
   const ids = collectAllNodeIds(config);
   assertEquals(ids, ["a", "b"]);
+});
+
+// --- findNodeConfig tests ---
+
+Deno.test("findNodeConfig — finds top-level node", () => {
+  const config: PipelineConfig = {
+    name: "test",
+    version: "1",
+    nodes: {
+      pm: { type: "agent", label: "PM", task_template: "spec" },
+    },
+  };
+  const node = findNodeConfig(config, "pm");
+  assertEquals(node?.label, "PM");
+});
+
+Deno.test("findNodeConfig — finds loop body node", () => {
+  const config: PipelineConfig = {
+    name: "test",
+    version: "1",
+    nodes: {
+      "impl-loop": {
+        type: "loop",
+        label: "Loop",
+        condition_node: "qa",
+        condition_field: "verdict",
+        exit_value: "PASS",
+        nodes: {
+          executor: { type: "agent", label: "Executor", task_template: "impl" },
+          qa: {
+            type: "agent",
+            label: "QA",
+            task_template: "verify",
+            inputs: ["executor"],
+          },
+        },
+      },
+    },
+  };
+  const executor = findNodeConfig(config, "executor");
+  assertEquals(executor?.label, "Executor");
+
+  const qa = findNodeConfig(config, "qa");
+  assertEquals(qa?.label, "QA");
+  assertEquals(qa?.inputs, ["executor"]);
+});
+
+Deno.test("findNodeConfig — returns undefined for unknown node", () => {
+  const config: PipelineConfig = {
+    name: "test",
+    version: "1",
+    nodes: {
+      pm: { type: "agent", label: "PM", task_template: "spec" },
+    },
+  };
+  const node = findNodeConfig(config, "nonexistent");
+  assertEquals(node, undefined);
 });

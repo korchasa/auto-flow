@@ -536,12 +536,15 @@ export class Engine {
     return result.success;
   }
 
-  /** Build template context for a node. */
+  /** Build template context for a node (searches top-level and loop body nodes). */
   private buildContext(
     nodeId: string,
     loopIteration?: number,
   ): TemplateContext {
-    const node = this.config.nodes[nodeId];
+    const node = findNodeConfig(this.config, nodeId);
+    if (!node) {
+      throw new Error(`Node '${nodeId}' not found in pipeline config`);
+    }
     const input: Record<string, string> = {};
 
     // Map input node IDs to their output directories
@@ -682,6 +685,23 @@ export function sortRunAlwaysNodes(
  * Collect all node IDs including nested body nodes from loop `nodes` sub-objects.
  * Returns a flat list suitable for `createRunState()`.
  */
+/**
+ * Find a NodeConfig by ID, searching both top-level nodes and loop body nodes.
+ * Returns undefined if not found.
+ */
+export function findNodeConfig(
+  config: PipelineConfig,
+  nodeId: string,
+): NodeConfig | undefined {
+  if (config.nodes[nodeId]) return config.nodes[nodeId];
+  for (const node of Object.values(config.nodes)) {
+    if (node.type === "loop" && node.nodes && node.nodes[nodeId]) {
+      return node.nodes[nodeId];
+    }
+  }
+  return undefined;
+}
+
 export function collectAllNodeIds(config: PipelineConfig): string[] {
   const ids: string[] = [];
   for (const [id, node] of Object.entries(config.nodes)) {
