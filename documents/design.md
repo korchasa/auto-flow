@@ -243,9 +243,14 @@ graph LR
     methods for detailed agent-node diagnostics.
     `dryRunPlan(levels, labels, postPipelineNodeIds?, runOnMap?)`: renders
     regular DAG levels, then optional "Post-pipeline" section listing `run_on`
-    nodes with their conditions (FR-28)
+    nodes with their conditions (FR-28).
+    `nodeResult(nodeId, output: ClaudeCliOutput)`: one-line agent result
+    summary (FR-30). Guarded by `verbosity !== "quiet"`. Format:
+    `[HH:MM:SS] <nodeId padded>  RESULT: <first line ≤120 chars> | cost=$X.XXXX | duration=Xs | turns=N`.
+    Imports `ClaudeCliOutput` from `types.ts`
   - `engine.ts` — main executor: level iteration, parallel dispatch, verbose
-    input resolution, loop-node log saving via `onNodeComplete` callback,
+    input resolution, node result summary display (FR-30),
+    loop-node log saving via `onNodeComplete` callback,
     phase registry init (`setPhaseRegistry()` before `ensureRunDirs()` in both
     fresh and resume paths), phase subdir creation in `ensureRunDirs()`,
     pre-post-pipeline rollback + failed-node-id extraction.
@@ -499,6 +504,14 @@ graph LR
     `saveAgentLog()` errors caught and warned (non-fatal) — audit I/O must not
     break loop execution. `runDir` resolved via `getRunDir(this.state.run_id)`
     (already in engine scope).
+  - **Node Result Summary** (FR-30): After agent node completion, engine
+    displays one-line result summary via `OutputManager.nodeResult()`.
+    Two call sites: (1) `executeNode()` — after `markNodeCompleted()`, for
+    top-level agent nodes; `executeAgentNode()` returns `AgentResult | null`
+    (was `boolean`), `executeNode()` extracts `.output` field.
+    (2) `executeLoopNode()` `onNodeComplete` callback — calls `nodeResult()`
+    when `result.output` exists. Suppressed in quiet mode. Shown in default
+    and verbose modes.
   - **Verbose Edge Cases** (behavioral contracts verified by tests):
     - **Default mode (no `-v`):** All 6 verbose methods produce zero stderr
       output. `OutputManager` constructed with `verbose=false` suppresses all
