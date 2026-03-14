@@ -115,7 +115,7 @@ Specification artifact: ${spec_path}
 
 Instructions:
 1. Read ${spec_path} (the PM specification from Stage 1).
-2. Read documents/requirements.md and documents/design.md.
+2. Read documents/requirements-sdlc.md and documents/design-sdlc.md.
 3. Explore the codebase to identify affected files and modules.
 4. Create .sdlc/pipeline/${issue_number}/02-plan.md with 2-3 implementation variants.
    Each variant MUST include:

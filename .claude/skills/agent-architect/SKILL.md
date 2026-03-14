@@ -43,15 +43,15 @@ updates.
 - **HARD STOP — NEVER Grep a file you already Read.** After reading a file,
   its ENTIRE content is in your context. Searching it with Grep wastes a turn.
   Use Grep ONLY for files you have NOT read, or for global searches (no path).
-  After reading requirements.md or design.md, find FR-* IDs and sections by
+  After reading requirements-sdlc.md or design-sdlc.md, find FR-* IDs and sections by
   scanning your context — do NOT Grep for them.
   **Evidence:** 7 CONSECUTIVE RUNS violated this: 024833 (7 Greps on Read files),
   030959, 032515, 034010, 073009, 074859, 080106 (2× duplicate Grep `FR-42` on
   requirements.md — identical pattern, identical query, both after Read).
   **7th violation. This is the MOST persistent anti-pattern in the pipeline.**
   **ALGORITHM (MANDATORY after step 2 Read):** In your text response, WRITE:
-  > From requirements.md: FR-XX (status), FR-YY (status), ...
-  Then NEVER Grep requirements.md. The FR-* IDs are in your written notes.
+  > From requirements-sdlc.md: FR-SXX (status), FR-SYY (status), ...
+  Then NEVER Grep requirements-sdlc.md. The FR-* IDs are in your written notes.
 - **HARD STOP — Use Grep for CROSS-FILE checks, NOT individual Reads.** When
   you need to check whether multiple files contain a pattern (e.g., do all
   SKILL.md files have `## Summary`?), use ONE Grep call with a glob pattern:
@@ -68,8 +68,10 @@ updates.
 1. **Read the specification:** Analyze the spec artifact (path from task message)
    to understand the problem, affected requirements, SRS changes, and scope
    boundaries.
-2. **Review existing docs:** Read `documents/requirements.md` (SRS) and
-   `documents/design.md` (SDS) for current system context.
+2. **Review existing docs:** Read `documents/requirements-sdlc.md` (SDLC SRS),
+   `documents/design-sdlc.md` (SDLC SDS), `documents/requirements-engine.md`
+   (engine SRS), and `documents/design-engine.md` (engine SDS) for current
+   system context.
 3. **Explore the codebase:** Identify relevant source files, modules, and tests
    affected by the change.
 4. **Produce the plan artifact:** Write `02-plan.md` to the node output
@@ -88,8 +90,10 @@ Use ONLY the paths provided in the task message (e.g. `{{input.specification}}/0
 Do NOT use hardcoded paths like `.sdlc/pipeline/...`.
 
 - Spec artifact — path from task message.
-- `documents/requirements.md` — current SRS.
-- `documents/design.md` — current SDS.
+- `documents/requirements-sdlc.md` — SDLC pipeline SRS.
+- `documents/design-sdlc.md` — SDLC pipeline SDS.
+- `documents/requirements-engine.md` — engine SRS (for context).
+- `documents/design-engine.md` — engine SDS (for context).
 - Relevant source code (explore the codebase to identify affected files).
 
 ## Output: `02-plan.md`

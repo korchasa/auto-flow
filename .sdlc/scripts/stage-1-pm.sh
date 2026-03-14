@@ -102,9 +102,9 @@ ${body}
 --- End Issue Body ---
 
 Instructions:
-1. Read documents/requirements.md, documents/design.md, and AGENTS.md.
+1. Read documents/requirements-sdlc.md, documents/design-sdlc.md, and AGENTS.md.
 2. Analyze the issue above.
-3. Update documents/requirements.md with new/modified requirements.
+3. Update documents/requirements-sdlc.md with new/modified requirements.
 4. Create .sdlc/pipeline/${issue_number}/01-spec.md with all four required sections:
    - Problem Statement
    - Affected Requirements
@@ -137,7 +137,7 @@ main() {
   local log_dir="${pipeline_dir}/logs"
   local log_json="${log_dir}/${STAGE_NAME}.json"
   local allowed_paths=(
-    "documents/requirements.md"
+    "documents/requirements-sdlc.md"
     ".sdlc/pipeline/${issue_number}/"
   )
 
@@ -218,7 +218,7 @@ main() {
     "sdlc(pm): ${issue_number} — specification" \
     "$spec_path" \
     "$log_json" \
-    "documents/requirements.md"
+    "documents/requirements-sdlc.md"
 
   # Report success
   report_status "$issue_number" "Stage 1 (PM): completed"
