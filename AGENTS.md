@@ -42,7 +42,7 @@ GitHub Issue triage to merged, tested code — fully autonomous, no human gates
 between stages. A locally-run system where `deno task run` triggers a chain of
 specialized AI agents (Claude Code CLI), PM autonomously selects highest-priority
 open issue, each agent performing a distinct role (PM, Tech Lead, Architect,
-Executor, QA, Presenter, Meta-Agent).
+Developer, QA, Presenter, Meta-Agent).
 
 ## Project tooling Stack
 
@@ -82,7 +82,7 @@ Executor, QA, Presenter, Meta-Agent).
 - Agents are stateless — all context from file artifacts and system prompts
 - Pipeline is project-agnostic (designed for any repo, not just news-digester)
 - Meta-Agent suggests prompt improvements but does NOT auto-modify prompts
-- Diff-based safety checks in Executor stage (prevent scope creep, secret leaks)
+- Diff-based safety checks in Developer stage (prevent scope creep, secret leaks)
 - Deno/TypeScript engine replaced shell script orchestration (configurable,
   parallel, resumable)
 - YAML pipeline config defines node graph; no hardcoded stage order

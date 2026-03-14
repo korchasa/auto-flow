@@ -51,7 +51,7 @@ Deno.test("createRunState — initializes all nodes as pending", () => {
   const state = createRunState(
     "20260308T143022",
     ".sdlc/pipeline.yaml",
-    ["spec", "plan", "executor"],
+    ["spec", "plan", "developer"],
     { issue: "42" },
     { API_KEY: "test" },
   );
@@ -64,7 +64,7 @@ Deno.test("createRunState — initializes all nodes as pending", () => {
   assertEquals(Object.keys(state.nodes).length, 3);
   assertEquals(state.nodes.spec.status, "pending");
   assertEquals(state.nodes.plan.status, "pending");
-  assertEquals(state.nodes.executor.status, "pending");
+  assertEquals(state.nodes.developer.status, "pending");
 });
 
 Deno.test("getRunDir / getNodeDir / getStatePath", () => {
@@ -270,10 +270,10 @@ Deno.test("getResumableNodes — includes waiting nodes", () => {
 
 Deno.test("createRunState — tracks nested body node IDs from flat list", () => {
   // Engine passes flattened IDs including loop body nodes to createRunState
-  const allIds = ["pm", "impl-loop", "executor", "qa"];
+  const allIds = ["pm", "impl-loop", "developer", "qa"];
   const state = createRunState("test", "cfg.yaml", allIds, {}, {});
   assertEquals(Object.keys(state.nodes).length, 4);
-  assertEquals(state.nodes.executor.status, "pending");
+  assertEquals(state.nodes.developer.status, "pending");
   assertEquals(state.nodes.qa.status, "pending");
   assertEquals(state.nodes["impl-loop"].status, "pending");
   assertEquals(state.nodes.pm.status, "pending");

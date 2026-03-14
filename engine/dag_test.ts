@@ -134,18 +134,18 @@ nodes:
     condition_field: verdict
     exit_value: PASS
     nodes:
-      executor:
+      developer:
         type: agent
-        label: Executor
+        label: Developer
         task_template: "implement"
       qa:
         type: agent
         label: QA
         task_template: "verify"
-        inputs: [executor]
+        inputs: [developer]
 `);
   const levels = buildLevels(config);
-  // executor and qa should NOT appear in main levels
+  // developer and qa should NOT appear in main levels
   assertEquals(levels, [["spec"], ["impl-loop"]]);
 });
 
@@ -220,18 +220,18 @@ nodes:
     condition_field: verdict
     exit_value: PASS
     nodes:
-      executor:
+      developer:
         type: agent
-        label: Executor
+        label: Developer
         task_template: "implement"
       qa:
         type: agent
         label: QA
         task_template: "verify"
-        inputs: [executor]
+        inputs: [developer]
 `);
   const order = buildLoopBodyOrder(config, "impl-loop");
-  assertEquals(order, ["executor", "qa"]);
+  assertEquals(order, ["developer", "qa"]);
 });
 
 Deno.test("buildLoopBodyOrder — single body node", () => {

@@ -94,22 +94,22 @@ nodes:
     exit_value: PASS
     max_iterations: 3
     nodes:
-      executor:
+      developer:
         type: agent
-        label: Executor
+        label: Developer
         task_template: "implement"
       qa:
         type: agent
         label: QA
         task_template: "verify"
-        inputs: [executor]
+        inputs: [developer]
 `;
   const config = parseConfig(yaml);
   assertEquals(config.nodes["impl-loop"].type, "loop");
   assertEquals(config.nodes["impl-loop"].nodes != null, true);
   assertEquals(Object.keys(config.nodes["impl-loop"].nodes!).length, 2);
-  assertEquals(config.nodes["impl-loop"].nodes!.executor.type, "agent");
-  assertEquals(config.nodes["impl-loop"].nodes!.qa.inputs, ["executor"]);
+  assertEquals(config.nodes["impl-loop"].nodes!.developer.type, "agent");
+  assertEquals(config.nodes["impl-loop"].nodes!.qa.inputs, ["developer"]);
   assertEquals(config.nodes["impl-loop"].condition_node, "qa");
   assertEquals(config.nodes["impl-loop"].exit_value, "PASS");
 });
@@ -152,20 +152,20 @@ nodes:
     condition_field: verdict
     exit_value: PASS
     nodes:
-      executor:
+      developer:
         type: agent
-        label: Executor
+        label: Developer
         task_template: "implement"
         inputs: [spec]
       qa:
         type: agent
         label: QA
         task_template: "verify"
-        inputs: [executor]
+        inputs: [developer]
 `;
   // Should not throw — body node inputs referencing external top-level nodes are valid
   const config = parseConfig(yaml);
-  assertEquals(config.nodes["impl-loop"].nodes!.executor.inputs, ["spec"]);
+  assertEquals(config.nodes["impl-loop"].nodes!.developer.inputs, ["spec"]);
 });
 
 Deno.test("parseConfig — human node", () => {
@@ -370,7 +370,7 @@ nodes:
     condition_field: verdict
     exit_value: PASS
     nodes:
-      executor:
+      developer:
         type: agent
         label: E
         task_template: x
@@ -394,7 +394,7 @@ nodes:
     condition_field: verdict
     exit_value: PASS
     nodes:
-      executor:
+      developer:
         type: agent
         label: E
         task_template: x
@@ -682,20 +682,20 @@ nodes:
     condition_field: verdict
     exit_value: PASS
     nodes:
-      executor:
+      developer:
         type: agent
-        label: Executor
+        label: Developer
         prompt: .claude/skills/agent-pm/SKILL.md
       qa:
         type: agent
         label: QA
         task_template: "verify"
-        inputs: [executor]
+        inputs: [developer]
 `;
   const config = parseConfig(yaml);
   const content = Deno.readTextFileSync(".claude/skills/agent-pm/SKILL.md");
   assertEquals(
-    config.nodes["impl-loop"].nodes!.executor.prompt_content,
+    config.nodes["impl-loop"].nodes!.developer.prompt_content,
     content,
   );
   assertEquals(config.nodes["impl-loop"].nodes!.qa.prompt_content, undefined);
@@ -754,19 +754,19 @@ nodes:
     condition_field: verdict
     exit_value: PASS
     nodes:
-      executor:
+      developer:
         type: agent
-        label: Executor
-        prompt: nonexistent/executor/SKILL.md
+        label: Developer
+        prompt: nonexistent/developer/SKILL.md
       qa:
         type: agent
         label: QA
         task_template: "verify"
-        inputs: [executor]
+        inputs: [developer]
 `;
   assertThrows(
     () => parseConfig(yaml),
     Error,
-    "nonexistent/executor/SKILL.md",
+    "nonexistent/developer/SKILL.md",
   );
 });

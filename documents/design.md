@@ -21,7 +21,7 @@ graph LR
     S2 --> S3["Stage 3: Reviewer"]
     S3 --> S4["Stage 4: Architect"]
     S4 --> S5["Stage 5: SDS Update"]
-    S5 --> S6["Stage 6-7: Executor+QA Loop"]
+    S5 --> S6["Stage 6-7: Developer+QA Loop"]
     S6 --> S8["Stage 8: Presenter"]
     S8 --> S9["Stage 9: Meta-Agent"]
     S6 -->|"FAIL after max"| S9
@@ -72,7 +72,7 @@ graph LR
 
 - **Node ID convention (FR-33):** Activity-based IDs reflect what work is done,
   not who does it. Mapping: `pm`→`specification`, `architect`→`design`,
-  `tech-lead`→`decision`, `impl-loop`→`implementation`, `executor`→`build`,
+  `tech-lead`→`decision`, `impl-loop`→`implementation`, `developer`→`build`,
   `qa`→`verify`, `tech-lead-review`→`tech-lead-review`, `meta-agent`→`optimize`.
 - **Phases (FR-33):** Top-level `phases:` key in `pipeline.yaml` declares named
   phase groups. Each phase lists member stage IDs:
@@ -146,9 +146,9 @@ graph LR
     (`git checkout -b sdlc/issue-<N>`) + draft PR (`gh pr create --draft`) +
     task breakdown from selected variant. Uses `{{run_id}}` for `--prompt` mode
     fallback branch `sdlc/{{run_id}}`.
-  - `agent-executor` — implements tasks. Owns `git add`, `git commit`,
+  - `agent-developer` — implements tasks. Owns `git add`, `git commit`,
     `git push` after each task. Posts PR comment with implementation summary.
-  - `agent-qa` — verifies executor output. Posts verdict as PR review
+  - `agent-qa` — verifies developer output. Posts verdict as PR review
     (`gh pr review`: approve/request-changes).
   - `agent-tech-lead-review` — post-pipeline: final code review + CI gate
     check + merge. `run_on: always`. Handles missing-PR case gracefully.
@@ -317,7 +317,7 @@ graph LR
     exclude `--model` (session inherits original). Resolution chain:
     `node.model ?? defaults.model ?? undefined`. Centralized in
     `buildClaudeArgs()` via `InvokeOptions.model` field.
-- **Commit strategy:** Engine does not auto-commit. Executor agent owns commits
+- **Commit strategy:** Engine does not auto-commit. Developer agent owns commits
   (`git add`, `git commit`, `git push` per task). No dedicated committer nodes.
 - **Verbose Output (Direct Injection pattern):**
   - `output.ts` exposes 4 verbose-guarded methods on `OutputManager`:
@@ -484,7 +484,7 @@ graph LR
   - `contains_section`: Checks artifact file for presence of a markdown section.
     Supports `on_error: continue` (non-fatal). Used by meta-agent for
     "Fixes Applied" section validation.
-  - Executor node uses `custom_script` validation rule (not `after` hook) for
+  - Developer node uses `custom_script` validation rule (not `after` hook) for
     `deno task check`, enabling continuation-on-failure for check errors.
 - **Context management:** Claude CLI auto-compression handles large input sets.
 - **Template variables:** `{{node_dir}}`, `{{input.*}}`, `{{run_dir}}`,
@@ -500,11 +500,11 @@ graph LR
 
 - **Branch:** Feature branch created by tech-lead agent (`git checkout -b
   sdlc/issue-<N>`). Fallback for `--prompt` mode: `sdlc/{{run_id}}`.
-- **Commit cadence (FR-26):** Executor-owned commits. No dedicated committer
-  agent nodes. Executor runs `git add`, `git commit`, `git push` after each
+- **Commit cadence (FR-26):** Developer-owned commits. No dedicated committer
+  agent nodes. Developer runs `git add`, `git commit`, `git push` after each
   task. Commit messages follow `sdlc(impl): <summary>` format.
 - **PR creation:** Tech-lead creates draft PR (`gh pr create --draft`) before
-  impl-loop. Executor pushes to same branch. QA posts PR review verdicts.
+  impl-loop. Developer pushes to same branch. QA posts PR review verdicts.
 - **Post-pipeline:** Tech-lead-review performs final review + CI gate + merge.
 - **Engine invariant:** Engine does NOT auto-commit (FR-14 preserved). All git
   operations happen inside agent prompts.
@@ -522,8 +522,8 @@ graph LR
   - **Continuation Loop**: invoke agent -> validate -> if fail: resume with
     error context -> repeat (max N). If limit reached: fail node, trigger
     Meta-Agent.
-  - **Executor+QA Loop**: Executor implements -> QA verifies -> if FAIL:
-    Executor reads QA report, fixes -> repeat (max 3). Body nodes defined
+  - **Developer+QA Loop**: Developer implements -> QA verifies -> if FAIL:
+    Developer reads QA report, fixes -> repeat (max 3). Body nodes defined
     inline via loop's `nodes` sub-object (not top-level). Execution order
     determined by topo-sort of body nodes' `inputs` declarations.
   - **Secret Detection**: `gitleaks detect --no-git` runs as part of

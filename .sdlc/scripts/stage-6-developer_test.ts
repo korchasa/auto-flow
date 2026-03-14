@@ -1,4 +1,4 @@
-// Tests for stage-6-executor.sh — Stage 6 (Executor loop controller).
+// Tests for stage-6-developer.sh — Stage 6 (Developer loop controller).
 // Validates: argument parsing, allowlist extraction, diff validation,
 // build_task_prompt, shellcheck.
 // See: requirements.md FR-7, FR-8.
@@ -24,7 +24,7 @@ function assertStringIncludes(
   }
 }
 
-const SCRIPT_PATH = new URL("./stage-6-executor.sh", import.meta.url).pathname;
+const SCRIPT_PATH = new URL("./stage-6-developer.sh", import.meta.url).pathname;
 const LIB_PATH = new URL("./lib.sh", import.meta.url).pathname;
 
 async function runScript(
@@ -67,23 +67,23 @@ async function runLib(
 // Argument validation
 // ============================================================
 
-Deno.test("stage-6-executor: fails without issue number", async () => {
+Deno.test("stage-6-developer: fails without issue number", async () => {
   const result = await runScript([]);
   assertEquals(result.code, 1);
   assertStringIncludes(result.stderr, "Usage");
 });
 
-Deno.test("stage-6-executor: fails with non-numeric issue number", async () => {
+Deno.test("stage-6-developer: fails with non-numeric issue number", async () => {
   const result = await runScript(["abc"]);
   assertEquals(result.code, 1);
   assertStringIncludes(result.stderr, "numeric");
 });
 
 // ============================================================
-// extract_executor_allowlist()
+// extract_developer_allowlist()
 // ============================================================
 
-Deno.test("extract_executor_allowlist: extracts files from YAML frontmatter", async () => {
+Deno.test("extract_developer_allowlist: extracts files from YAML frontmatter", async () => {
   const tmp = await Deno.makeTempFile({ suffix: ".md" });
   await Deno.writeTextFile(
     tmp,
@@ -100,7 +100,7 @@ tasks:
 `,
   );
   const result = await runLib(
-    `source "${SCRIPT_PATH}" --source-only && extract_executor_allowlist "${tmp}"`,
+    `source "${SCRIPT_PATH}" --source-only && extract_developer_allowlist "${tmp}"`,
   );
   assertEquals(result.code, 0, `stderr: ${result.stderr}`);
   const output = result.stdout.trim();
@@ -139,12 +139,12 @@ Deno.test("build_task_prompt: includes QA report path on iteration > 1", async (
 // Script quality
 // ============================================================
 
-Deno.test("stage-6-executor.sh: is executable", async () => {
+Deno.test("stage-6-developer.sh: is executable", async () => {
   const info = await Deno.stat(SCRIPT_PATH);
   assertEquals((info.mode! & 0o111) !== 0, true, "Script must be executable");
 });
 
-Deno.test("stage-6-executor.sh: passes shellcheck", async () => {
+Deno.test("stage-6-developer.sh: passes shellcheck", async () => {
   const cmd = new Deno.Command("shellcheck", {
     args: ["-s", "bash", SCRIPT_PATH],
     stdout: "piped",

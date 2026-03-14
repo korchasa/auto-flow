@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # stage-7-qa.sh — Stage 7: QA (Quality Assurance).
-# Called by stage-6-executor.sh, NOT directly by CI/CD.
+# Called by stage-6-developer.sh, NOT directly by CI/CD.
 # Produces 05-qa-report-<iteration>.md with YAML frontmatter verdict.
 # See: requirements.md FR-7, FR-8.
 #

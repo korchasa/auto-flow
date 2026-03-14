@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# stage-6-executor.sh — Stage 6-7: Executor + QA iterative loop.
-# Loop controller: invokes Executor agent, then calls stage-7-qa.sh.
-# If QA verdict is FAIL, re-invokes Executor with QA report.
+# stage-6-developer.sh — Stage 6-7: Developer + QA iterative loop.
+# Loop controller: invokes Developer agent, then calls stage-7-qa.sh.
+# If QA verdict is FAIL, re-invokes Developer with QA report.
 # See: requirements.md FR-7, FR-8, FR-10, FR-14.
 #
-# Usage: stage-6-executor.sh <issue-number>
+# Usage: stage-6-developer.sh <issue-number>
 #
 # When sourced with --source-only, only defines functions (for testing).
 #
@@ -19,20 +19,20 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # shellcheck source=lib.sh disable=SC1091
 source "$SCRIPT_DIR/lib.sh"
 
-STAGE_NAME="stage-6-executor"
-AGENT_PROMPT="$REPO_ROOT/.claude/skills/agent-executor/SKILL.md"
+STAGE_NAME="stage-6-developer"
+AGENT_PROMPT="$REPO_ROOT/.claude/skills/agent-developer/SKILL.md"
 QA_SCRIPT="$SCRIPT_DIR/stage-7-qa.sh"
 
-# Paths forbidden for executor modifications
+# Paths forbidden for developer modifications
 FORBIDDEN_PATHS=(".github/" ".claude/skills/agent-*/" ".sdlc/scripts/" "CLAUDE.md")
 
 # ============================================================
-# extract_executor_allowlist()
+# extract_developer_allowlist()
 # Extracts file allowlist from 04-decision.md YAML frontmatter.
-# Usage: extract_executor_allowlist <decision-path>
+# Usage: extract_developer_allowlist <decision-path>
 # Outputs: one path per line to stdout.
 # ============================================================
-extract_executor_allowlist() {
+extract_developer_allowlist() {
   local decision_path="$1"
 
   # Extract YAML frontmatter (between first and second ---), then
@@ -44,13 +44,13 @@ extract_executor_allowlist() {
 }
 
 # ============================================================
-# validate_executor_diff()
-# Checks executor changes against allowlist from 04-decision.md.
+# validate_developer_diff()
+# Checks developer changes against allowlist from 04-decision.md.
 # Also checks for forbidden path modifications.
-# Usage: validate_executor_diff <decision-path> <issue-number>
+# Usage: validate_developer_diff <decision-path> <issue-number>
 # Returns: 0 if safe, 1 if violations found.
 # ============================================================
-validate_executor_diff() {
+validate_developer_diff() {
   local decision_path="$1"
   local issue_number="$2"
 
@@ -65,7 +65,7 @@ validate_executor_diff() {
   local violations=0
   for forbidden in "${FORBIDDEN_PATHS[@]}"; do
     if echo "$changed_files" | grep -q "^${forbidden}"; then
-      log ERROR "Executor modified forbidden path: ${forbidden}"
+      log ERROR "Developer modified forbidden path: ${forbidden}"
       violations=1
     fi
   done
@@ -76,7 +76,7 @@ validate_executor_diff() {
 
   # Standard safety check
   local allowed_files
-  allowed_files=$(extract_executor_allowlist "$decision_path")
+  allowed_files=$(extract_developer_allowlist "$decision_path")
 
   local allowed_paths=()
   while IFS= read -r f; do
@@ -100,7 +100,7 @@ build_task_prompt() {
 
   local prompt
   prompt=$(cat <<EOF
-Issue #${issue_number} — Executor Iteration ${iteration}
+Issue #${issue_number} — Developer Iteration ${iteration}
 
 Decision artifact: ${decision_path}
 
@@ -134,7 +134,7 @@ main() {
   local issue_number="${1:-}"
 
   if [[ -z "$issue_number" ]]; then
-    log ERROR "Usage: stage-6-executor.sh <issue-number>"
+    log ERROR "Usage: stage-6-developer.sh <issue-number>"
     exit 1
   fi
 
@@ -150,21 +150,21 @@ main() {
 
   mkdir -p "$pipeline_dir" "$log_dir"
 
-  log INFO "=== Stage 6-7: Executor + QA — Issue #${issue_number} ==="
+  log INFO "=== Stage 6-7: Developer + QA — Issue #${issue_number} ==="
 
   if ! validate_artifact "$decision_path"; then
     log ERROR "Stage 4 artifact missing: ${decision_path}"
-    report_status "$issue_number" "Stage 6 (Executor): FAILED — missing 04-decision.md"
+    report_status "$issue_number" "Stage 6 (Developer): FAILED — missing 04-decision.md"
     exit 1
   fi
 
-  report_status "$issue_number" "Stage 6-7 (Executor+QA): started"
+  report_status "$issue_number" "Stage 6-7 (Developer+QA): started"
 
   local iteration=1
   local verdict="FAIL"
 
   while (( iteration <= max_iterations )); do
-    log INFO "--- Executor+QA iteration ${iteration}/${max_iterations} ---"
+    log INFO "--- Developer+QA iteration ${iteration}/${max_iterations} ---"
 
     local log_json="${log_dir}/${STAGE_NAME}-${iteration}.json"
     local prev_qa_report=""
@@ -172,7 +172,7 @@ main() {
       prev_qa_report="${pipeline_dir}/05-qa-report-$((iteration - 1)).md"
     fi
 
-    # Build and run Executor
+    # Build and run Developer
     local task_prompt
     task_prompt=$(build_task_prompt "$issue_number" "$iteration" "$decision_path" "$prev_qa_report")
 
@@ -209,19 +209,19 @@ main() {
       check_exit=$?
     done
 
-    # Validate executor diff
-    if ! validate_executor_diff "$decision_path" "$issue_number"; then
-      log ERROR "Executor safety check failed"
-      report_status "$issue_number" "Stage 6 (Executor): FAILED — safety check failed at iteration ${iteration}"
+    # Validate developer diff
+    if ! validate_developer_diff "$decision_path" "$issue_number"; then
+      log ERROR "Developer safety check failed"
+      report_status "$issue_number" "Stage 6 (Developer): FAILED — safety check failed at iteration ${iteration}"
       exit 1
     fi
 
-    # Commit executor work
+    # Commit developer work
     commit_artifacts \
-      "sdlc(executor): ${issue_number} — implementation iteration ${iteration}" \
+      "sdlc(developer): ${issue_number} — implementation iteration ${iteration}" \
       "."
 
-    # Copy executor JSONL
+    # Copy developer JSONL
     if [[ -n "$session_id" ]]; then
       local jsonl_source
       jsonl_source=$(find "$HOME/.claude/projects/" -name "*.jsonl" -newer "$log_json" 2>/dev/null | head -1)
@@ -253,12 +253,12 @@ main() {
 
   if [[ "$verdict" != "PASS" ]]; then
     log ERROR "QA failed after ${max_iterations} iterations"
-    report_status "$issue_number" "Stage 6-7 (Executor+QA): FAILED — QA failed after ${max_iterations} iterations"
+    report_status "$issue_number" "Stage 6-7 (Developer+QA): FAILED — QA failed after ${max_iterations} iterations"
     exit 1
   fi
 
-  report_status "$issue_number" "Stage 6-7 (Executor+QA): completed"
-  log INFO "=== Stage 6-7: Executor + QA — completed ==="
+  report_status "$issue_number" "Stage 6-7 (Developer+QA): completed"
+  log INFO "=== Stage 6-7: Developer + QA — completed ==="
 }
 
 if [[ "${1:-}" != "--source-only" ]]; then

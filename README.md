@@ -2,7 +2,7 @@
 
 Fully autonomous software development pipeline: from GitHub Issue triage to merged PR — no human gates between stages.
 
-A locally-run system where `deno task run` triggers a DAG-based chain of specialized AI agents (Claude Code CLI). PM agent autonomously selects the highest-priority open issue; each agent performs a distinct SDLC role (PM, Tech Lead, Reviewer, Architect, SDS Update, Executor, QA, Presenter, Meta-Agent).
+A locally-run system where `deno task run` triggers a DAG-based chain of specialized AI agents (Claude Code CLI). PM agent autonomously selects the highest-priority open issue; each agent performs a distinct SDLC role (PM, Tech Lead, Reviewer, Architect, SDS Update, Developer, QA, Presenter, Meta-Agent).
 
 ## How It Works
 
@@ -12,7 +12,7 @@ Four node types:
 
 - **agent** — invokes Claude Code CLI with a role-specific prompt
 - **merge** — combines outputs from multiple predecessor nodes
-- **loop** — iterative body with frontmatter-based exit condition (e.g., Executor+QA cycle)
+- **loop** — iterative body with frontmatter-based exit condition (e.g., Developer+QA cycle)
 - **human** — terminal prompt for manual input; also supports Human-in-the-Loop (HITL) via GitHub issue comments
 
 Inter-agent communication uses structured Markdown artifacts in `.sdlc/runs/<run-id>/[<phase>/]<node-id>/`, linked via `{{input.<node-id>}}` template variables (e.g. `{{input.specification}}`, `{{input.decision}}`). On validation failure, the engine resumes the agent in the same session with error context (continuation mechanism).
@@ -24,7 +24,7 @@ Inter-agent communication uses structured Markdown artifacts in `.sdlc/runs/<run
 | `specification` | plan | Project Manager — Specification | `01-spec.md` |
 | `design` | plan | Architect — Design-Solution Plan | `02-plan.md` |
 | `decision` | plan | Tech Lead — Decision + Branch + PR | `04-decision.md` |
-| `implementation` | impl | Executor+QA loop (max 3 iterations) | implementation + `05-qa-report.md` |
+| `implementation` | impl | Developer+QA loop (max 3 iterations) | implementation + `05-qa-report.md` |
 | `review` | report | Tech Lead Review — Final Review + Merge (run_on: always) | `08-review.md` |
 | `optimize` | report | Meta-Agent — Prompt Optimization (run_on: always) | `07-changelog.md` |
 
@@ -35,7 +35,7 @@ Inter-agent communication uses structured Markdown artifacts in `.sdlc/runs/<run
 - **Artifact store:** `.sdlc/runs/<run-id>/<node-id>/` — per-run isolation, git-tracked
 - **State:** `.sdlc/runs/<run-id>/state.json` — tracks node completion for resume
 - **Validation:** Rule-based checks per node (file_exists, file_not_empty, contains_section, custom_script, frontmatter_field)
-- **Commit strategy:** Engine does not auto-commit; executor agent owns `git add`, `git commit`, `git push` per task
+- **Commit strategy:** Engine does not auto-commit; developer agent owns `git add`, `git commit`, `git push` per task
 - **Observability:** 3 verbosity levels (`-q` / default / `-v`); status lines with timestamps; final summary
 - **Legacy:** Shell scripts in `.sdlc/scripts/` preserved for backward compatibility, superseded by engine
 
@@ -100,7 +100,7 @@ Available commands:
 - `/agent-pm` — Project Manager (specification)
 - `/agent-architect` — Architect (design-solution plan)
 - `/agent-tech-lead` — Tech Lead (decision & branch & PR)
-- `/agent-executor` — Executor (implementation)
+- `/agent-developer` — Developer (implementation)
 - `/agent-qa` — QA (verification)
 - `/agent-tech-lead-review` — Tech Lead Review (final review & merge)
 - `/agent-meta-agent` — Meta-Agent (prompt optimization)
@@ -113,7 +113,7 @@ Available commands:
     agent-pm/SKILL.md
     agent-architect/SKILL.md
     agent-tech-lead/SKILL.md
-    agent-executor/SKILL.md
+    agent-developer/SKILL.md
     agent-qa/SKILL.md
     agent-tech-lead-review/SKILL.md
     agent-meta-agent/SKILL.md

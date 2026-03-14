@@ -90,9 +90,9 @@ Deno.test("saveAgentLog — no error when JSONL transcript not found", async () 
 Deno.test("saveAgentLog — creates logs directory if missing", async () => {
   await withTempRunDir(async (runDir) => {
     const output = makeSampleOutput();
-    await saveAgentLog(runDir, "executor", output);
+    await saveAgentLog(runDir, "developer", output);
 
-    const jsonPath = `${runDir}/logs/executor.json`;
+    const jsonPath = `${runDir}/logs/developer.json`;
     const stat = await Deno.stat(jsonPath);
     assertEquals(stat.isFile, true);
   });

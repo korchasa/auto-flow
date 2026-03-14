@@ -61,23 +61,23 @@ Deno.test("RunSummary — with failures", () => {
 Deno.test("verbosePrompt — emits prompt in verbose mode", () => {
   const cap = createCapture();
   const out = new OutputManager("verbose", cap.writer);
-  out.verbosePrompt("executor", "Do task #42");
+  out.verbosePrompt("developer", "Do task #42");
   assertEquals(cap.lines.length > 0, true);
-  assertEquals(cap.lines.some((l) => l.includes("executor")), true);
+  assertEquals(cap.lines.some((l) => l.includes("developer")), true);
   assertEquals(cap.lines.some((l) => l.includes("Do task #42")), true);
 });
 
 Deno.test("verbosePrompt — no-op in normal mode", () => {
   const cap = createCapture();
   const out = new OutputManager("normal", cap.writer);
-  out.verbosePrompt("executor", "Do task #42");
+  out.verbosePrompt("developer", "Do task #42");
   assertEquals(cap.lines.length, 0);
 });
 
 Deno.test("verboseInputs — emits input list in verbose mode", () => {
   const cap = createCapture();
   const out = new OutputManager("verbose", cap.writer);
-  out.verboseInputs("executor", [
+  out.verboseInputs("developer", [
     { path: "spec/01-spec.md", sizeBytes: 1024 },
     { path: "plan/02-plan.md", sizeBytes: 2048 },
   ]);
@@ -89,7 +89,7 @@ Deno.test("verboseInputs — emits input list in verbose mode", () => {
 Deno.test("verboseInputs — no-op in quiet mode", () => {
   const cap = createCapture();
   const out = new OutputManager("quiet", cap.writer);
-  out.verboseInputs("executor", [
+  out.verboseInputs("developer", [
     { path: "spec/01-spec.md", sizeBytes: 1024 },
   ]);
   assertEquals(cap.lines.length, 0);
@@ -119,7 +119,7 @@ Deno.test("verboseValidation — no-op in normal mode", () => {
 Deno.test("verboseContinuation — emits continuation context in verbose mode", () => {
   const cap = createCapture();
   const out = new OutputManager("verbose", cap.writer);
-  out.verboseContinuation("executor", 2, 3, [
+  out.verboseContinuation("developer", 2, 3, [
     "file_not_empty: output.md is empty",
   ]);
   assertEquals(cap.lines.length > 0, true);
@@ -133,7 +133,7 @@ Deno.test("verboseContinuation — emits continuation context in verbose mode", 
 Deno.test("nodeResult — emits result line in normal mode", () => {
   const cap = createCapture();
   const out = new OutputManager("normal", cap.writer);
-  out.nodeResult("executor", {
+  out.nodeResult("developer", {
     result: "Implementation complete",
     session_id: "s1",
     total_cost_usd: 0.0123,
@@ -153,7 +153,7 @@ Deno.test("nodeResult — emits result line in normal mode", () => {
 Deno.test("nodeResult — suppressed in quiet mode", () => {
   const cap = createCapture();
   const out = new OutputManager("quiet", cap.writer);
-  out.nodeResult("executor", {
+  out.nodeResult("developer", {
     result: "Done",
     session_id: "s1",
     total_cost_usd: 0.01,
@@ -187,7 +187,7 @@ Deno.test("nodeResult — truncates first line to 120 chars", () => {
   const cap = createCapture();
   const out = new OutputManager("normal", cap.writer);
   const longLine = "A".repeat(200);
-  out.nodeResult("executor", {
+  out.nodeResult("developer", {
     result: longLine,
     session_id: "s1",
     total_cost_usd: 0.01,
@@ -204,7 +204,7 @@ Deno.test("nodeResult — truncates first line to 120 chars", () => {
 Deno.test("nodeResult — uses first line only for multiline result", () => {
   const cap = createCapture();
   const out = new OutputManager("normal", cap.writer);
-  out.nodeResult("executor", {
+  out.nodeResult("developer", {
     result: "First line\nSecond line\nThird line",
     session_id: "s1",
     total_cost_usd: 0.01,
@@ -221,7 +221,7 @@ Deno.test("nodeResult — uses first line only for multiline result", () => {
 Deno.test("nodeResult — handles empty result string", () => {
   const cap = createCapture();
   const out = new OutputManager("normal", cap.writer);
-  out.nodeResult("executor", {
+  out.nodeResult("developer", {
     result: "",
     session_id: "s1",
     total_cost_usd: 0.0,

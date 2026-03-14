@@ -210,7 +210,7 @@ Deno.test("resolveInputArtifacts — skips subdirectories", async () => {
 Deno.test("collectPostPipelineNodes — collects nodes with run_on set", () => {
   const nodes: Record<string, NodeConfig> = {
     pm: { type: "agent", label: "PM" },
-    executor: { type: "agent", label: "Executor" },
+    developer: { type: "agent", label: "Developer" },
     "meta-agent": { type: "agent", label: "Meta-Agent", run_on: "always" },
   };
   const result = collectPostPipelineNodes(nodes);
@@ -220,7 +220,7 @@ Deno.test("collectPostPipelineNodes — collects nodes with run_on set", () => {
 Deno.test("collectPostPipelineNodes — returns empty when no run_on nodes", () => {
   const nodes: Record<string, NodeConfig> = {
     pm: { type: "agent", label: "PM" },
-    executor: { type: "agent", label: "Executor" },
+    developer: { type: "agent", label: "Developer" },
   };
   const result = collectPostPipelineNodes(nodes);
   assertEquals(result, []);
@@ -282,26 +282,26 @@ Deno.test("getNodesByStatus — extracts failed node IDs from run state", () => 
     env: {},
     nodes: {
       pm: { status: "completed" },
-      executor: { status: "failed", error: "Agent failed" },
+      developer: { status: "failed", error: "Agent failed" },
       qa: { status: "pending" },
       "meta-agent": { status: "pending" },
     },
   };
   const failed = getNodesByStatus(state, "failed");
-  assertEquals(failed, ["executor"]);
-  assertEquals(failed[0], "executor");
+  assertEquals(failed, ["developer"]);
+  assertEquals(failed[0], "developer");
 });
 
 Deno.test("failed-node.txt — written with failed node ID on pipeline failure", async () => {
   const tmpDir = await Deno.makeTempDir();
   try {
     // Simulate writing failed-node.txt (same logic as engine pre-step)
-    const failedNodeId = "executor";
+    const failedNodeId = "developer";
     const failedNodePath = `${tmpDir}/failed-node.txt`;
     await Deno.writeTextFile(failedNodePath, failedNodeId);
 
     const content = await Deno.readTextFile(failedNodePath);
-    assertEquals(content, "executor");
+    assertEquals(content, "developer");
   } finally {
     await Deno.remove(tmpDir, { recursive: true });
   }
@@ -317,7 +317,7 @@ Deno.test("failed-node.txt — not written when no failed nodes", () => {
     env: {},
     nodes: {
       pm: { status: "completed" },
-      executor: { status: "completed" },
+      developer: { status: "completed" },
     },
   };
   const failed = getNodesByStatus(state, "failed");
@@ -381,16 +381,16 @@ Deno.test("collectAllNodeIds — includes top-level and nested body node IDs", (
         condition_field: "verdict",
         exit_value: "PASS",
         nodes: {
-          executor: {
+          developer: {
             type: "agent",
-            label: "Executor",
+            label: "Developer",
             task_template: "implement",
           },
           qa: {
             type: "agent",
             label: "QA",
             task_template: "verify",
-            inputs: ["executor"],
+            inputs: ["developer"],
           },
         },
       },
@@ -399,7 +399,7 @@ Deno.test("collectAllNodeIds — includes top-level and nested body node IDs", (
   const ids = collectAllNodeIds(config);
   assertEquals(ids.includes("pm"), true);
   assertEquals(ids.includes("impl-loop"), true);
-  assertEquals(ids.includes("executor"), true);
+  assertEquals(ids.includes("developer"), true);
   assertEquals(ids.includes("qa"), true);
   assertEquals(ids.length, 4);
 });
@@ -443,23 +443,27 @@ Deno.test("findNodeConfig — finds loop body node", () => {
         condition_field: "verdict",
         exit_value: "PASS",
         nodes: {
-          executor: { type: "agent", label: "Executor", task_template: "impl" },
+          developer: {
+            type: "agent",
+            label: "Developer",
+            task_template: "impl",
+          },
           qa: {
             type: "agent",
             label: "QA",
             task_template: "verify",
-            inputs: ["executor"],
+            inputs: ["developer"],
           },
         },
       },
     },
   };
-  const executor = findNodeConfig(config, "executor");
-  assertEquals(executor?.label, "Executor");
+  const developer = findNodeConfig(config, "developer");
+  assertEquals(developer?.label, "Developer");
 
   const qa = findNodeConfig(config, "qa");
   assertEquals(qa?.label, "QA");
-  assertEquals(qa?.inputs, ["executor"]);
+  assertEquals(qa?.inputs, ["developer"]);
 });
 
 // --- run_on filtering tests ---
@@ -584,7 +588,7 @@ Deno.test("executeLoopNode onNodeComplete — calls nodeResult() for successful 
     }
   };
 
-  onNodeComplete("executor", 1, mockResult);
+  onNodeComplete("developer", 1, mockResult);
 
   const output = cap.lines.join("");
   assertEquals(output.includes("RESULT:"), true);
@@ -627,7 +631,7 @@ Deno.test("executeLoopNode onNodeComplete — suppresses nodeResult() in quiet m
     }
   };
 
-  onNodeComplete("executor", 1, mockResult);
+  onNodeComplete("developer", 1, mockResult);
 
   // quiet mode: status() and nodeResult() both suppressed; only errors shown
   assertEquals(cap.lines.length, 0);
@@ -658,7 +662,7 @@ Deno.test("executeLoopNode onNodeComplete — skips nodeResult() when result has
     }
   };
 
-  onNodeComplete("executor", 1, mockResult);
+  onNodeComplete("developer", 1, mockResult);
 
   const output = cap.lines.join("");
   assertEquals(output.includes("COMPLETED"), true);

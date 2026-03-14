@@ -38,7 +38,7 @@ Deno.test("AgentRunOptions — type structure with OutputManager", () => {
   const node: NodeConfig = {
     type: "agent",
     label: "Test agent",
-    prompt: ".claude/skills/agent-executor/SKILL.md",
+    prompt: ".claude/skills/agent-developer/SKILL.md",
     task_template: "Do task for issue #{{args.issue}}",
     validate: [
       { type: "file_exists", path: "{{node_dir}}/output.md" },
@@ -53,13 +53,13 @@ Deno.test("AgentRunOptions — type structure with OutputManager", () => {
     ctx: makeCtx(),
     settings: makeSettings(),
     output,
-    nodeId: "executor",
+    nodeId: "developer",
   };
 
   assertEquals(opts.node.type, "agent");
   assertEquals(opts.settings.max_continuations, 3);
   assertEquals(opts.output instanceof OutputManager, true);
-  assertEquals(opts.nodeId, "executor");
+  assertEquals(opts.nodeId, "developer");
 });
 
 Deno.test("AgentRunOptions — output and nodeId are optional", () => {
