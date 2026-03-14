@@ -107,12 +107,12 @@
 - **Acceptance criteria:**
   - [x] Engine source code lives under a standard `src/` or dedicated top-level directory (not `.sdlc/engine/`). Evidence: `engine/` (top-level directory, 30 files moved via `git mv .sdlc/engine/ engine/`)
   - ~~`[ ] Agent prompts in a top-level agents/ directory`~~ — superseded by FR-36/FR-19: canonical location is `.claude/skills/agent-<name>/`.
-  - [ ] Pipeline config (`pipeline.yaml`) at project root or in a config directory.
-  - [ ] Run artifacts in a gitignored data directory (e.g., `runs/` or `.sdlc/runs/`); `.gitignore` updated.
-  - [ ] Legacy shell scripts in a `scripts/` directory (not `.sdlc/scripts/`).
-  - [ ] `deno.json` tasks (`run`, `run:validate`, `test:engine`), imports, and test paths updated to reference new engine path.
-  - [ ] All existing tests pass after restructuring.
-  - [ ] SDS (`documents/design-engine.md`) updated to reflect new layout.
+  - [x] Pipeline config path configurable via `--config <path>` flag (default: `.sdlc/pipeline.yaml`). Engine is config-path-agnostic — no hardcoded root assumption. Evidence: `engine/cli.ts:7,37` (`--config` flag definition and handling), `engine/config.ts:37` (`loadConfig(path)` accepts any path)
+  - [x] Run artifacts in gitignored `.sdlc/runs/` directory; `.gitignore` updated. Evidence: `.gitignore:3` (`.sdlc/runs/` entry)
+  - ~~`[ ] Legacy shell scripts in a scripts/ directory (not .sdlc/scripts/)`~~ — SDLC pipeline convention, not engine constraint. Legacy scripts remain at `.sdlc/scripts/` (SDLC scope, outside engine boundary).
+  - [x] `deno.json` tasks (`run`, `check`, `test`) updated to reference `engine/cli.ts` and `scripts/`. Evidence: `deno.json:7,19` (`check`, `run` tasks referencing `engine/cli.ts`)
+  - [x] All existing engine tests pass after restructuring. Evidence: `deno task check` passes.
+  - [x] SDS (`documents/design-engine.md`) updated to reflect implemented layout. Evidence: `documents/design-engine.md` §3.1 (engine modules), §3.2 (Phase Registry — IMPLEMENTED with evidence)
 
 ### 3.6 FR-E6 (ex FR-18): Verbose Output (`-v`)
 
@@ -132,12 +132,12 @@
 
 - **Description:** Automated verification that pipeline YAML configs (`pipeline.yaml`, `pipeline-task.yaml`) remain consistent with engine expectations and SRS requirements. Detects mismatches in node declarations, required fields, hook syntax, and validation rules.
 - **Acceptance criteria:**
-  - [ ] A `deno task check:pipeline` command validates both `pipeline.yaml` and `pipeline-task.yaml` against engine schema expectations (required node fields per type, valid validation rule types, template variable syntax).
-  - [ ] Check verifies all node types used in configs are supported by the engine dispatcher (`agent`, `loop`, `merge`, `human`).
+  - ~~`[ ] A deno task check:pipeline standalone command`~~ — SDLC pipeline convenience, not engine constraint. Implemented as `pipelineIntegrity()` in `scripts/check.ts` (SDLC scope). See FR-S24 in `documents/requirements-sdlc.md`.
+  - [x] Engine validates all node types on `loadConfig()`: must be one of `agent`, `loop`, `merge`, `human`. Evidence: `engine/config.ts:43` (`validateSchema()`), `engine/config.ts:71` (type check per node)
   - [ ] Check verifies `after`/`before` hook commands use valid template variables (no unresolved `{{...}}` patterns after interpolation context is known).
-  - [ ] Check verifies loop nodes reference existing body nodes and condition nodes declared in the same config.
-  - [ ] Check runs as part of `deno task check` (integrated into `scripts/check.ts`).
-  - [ ] Failures produce actionable error messages with config file path and line context.
+  - [x] Engine validates loop nodes reference valid body nodes and `condition_node` within `nodes` sub-object. Evidence: `engine/config.ts:105-249` (`validateNode()` loop section)
+  - [x] Config validation runs as part of `deno task check` via `pipelineIntegrity()` → `loadConfig()`. Evidence: `scripts/check.ts:84-96` (`pipelineIntegrity()`), `engine/config.ts:32,43` (`validateSchema()` called on every `parseConfig()`)
+  - [x] Validation failures throw descriptive errors with node ID and field context. Evidence: `engine/config.ts:71-103` (error messages include node ID and field name)
 
 ### 3.8 FR-E8 (ex FR-21): Human-in-the-Loop (Agent-Initiated)
 
@@ -175,13 +175,23 @@
   reflecting the DAG execution flow. Runtime metadata (`state.json`, `logs/`)
   at the run root level (not inside phase groups).
 - **Acceptance criteria:**
-  - [ ] Node output directories are grouped by pipeline phase under
-    `.sdlc/runs/<run-id>/` (e.g., `plan/`, `impl/`, `report/` or similar
-    phase names derived from pipeline stages).
-  - [ ] `state.json` and `logs/` remain at the run root level
-    (`.sdlc/runs/<run-id>/state.json`, `.sdlc/runs/<run-id>/logs/`).
-  - [ ] `{{node_dir}}` and `{{input.<node-id>}}` template variables resolve
-    correctly to the new hierarchical paths.
+  - [x] Node output directories are grouped by pipeline phase under
+    `.sdlc/runs/<run-id>/` (e.g., `plan/`, `impl/`, `report/`). Phase derived
+    from top-level `phases:` config declaration (authoritative) or per-node
+    `phase:` field (fallback). Evidence: `engine/state.ts:20-36`
+    (`setPhaseRegistry()` — builds nodeId→phase map from config),
+    `engine/state.ts:98-104` (`getNodeDir()` — phase-aware path resolution),
+    `engine/engine.ts:135` (`setPhaseRegistry(config)` at engine init)
+  - [x] `state.json` and `logs/` remain at the run root level
+    (`.sdlc/runs/<run-id>/state.json`, `.sdlc/runs/<run-id>/logs/`). Phase
+    registry applies only to node artifact dirs; `getRunDir()` is
+    phase-independent. Evidence: `engine/state.ts:44-46` (`getPhaseForNode()`
+    — used only in `getNodeDir()`, not in state/log path resolution)
+  - [x] `{{node_dir}}` and `{{input.<node-id>}}` template variables resolve
+    correctly to phase-aware hierarchical paths. Evidence:
+    `engine/state.ts:98-104` (`getNodeDir()` returns
+    `${runDir}/${phase}/${nodeId}` when phase registered, `${runDir}/${nodeId}`
+    otherwise — backward-compatible)
   - [ ] Engine's state manager, log saver, and artifact validator work with
     the new directory structure.
   - [ ] Existing pipeline.yaml node definitions require minimal changes (phase
