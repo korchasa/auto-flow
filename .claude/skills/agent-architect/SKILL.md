@@ -22,10 +22,11 @@ with 2-3 variants for the Tech Lead to evaluate.
 - **HARD STOP — NEVER Grep a file you already Read.** After reading a file,
   its ENTIRE content is in your context. Searching it with Grep wastes a turn.
   Use Grep ONLY for files you have NOT read, or for global searches (no path).
-  **Evidence:** Run 20260314T024833 read engine.ts then Grepped it 3 more times
-  (`meta-agent`, `failed-node`, `sortPostPipelineNodes`). Read SKILL.md then
-  Grepped it 2x. Read design.md + requirements.md then Grepped each. Total:
-  7 of 9 Greps were on files already in context — wasted 7 turns. STOP.
+  After reading requirements.md or design.md, find FR-* IDs and sections by
+  scanning your context — do NOT Grep for them.
+  **Evidence:** 3 CONSECUTIVE RUNS violated this: 024833 (7 Greps on Read files),
+  030959 (1 Grep on requirements.md), 032515 (1 Grep `FR-39` on requirements.md).
+  Each wastes 1 turn. STOP.
 
 ## Responsibilities
 

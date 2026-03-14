@@ -863,6 +863,59 @@
     parallel node stacking, single-node edge case, missing-timing omission.
   - [ ] `deno task check` passes.
 
+### 3.38 FR-39: Turn Separators and Summary Footer in Stream Log
+
+- **Description:** Stream log files (`.sdlc/runs/<run-id>/logs/<node-id>.jsonl`)
+  must include visual turn boundaries between assistant message blocks and a
+  human-readable summary footer at the end of each log. Currently the log is a
+  flat sequence of JSON events; consecutive tool calls from different reasoning
+  steps blend together with no delineation, and cost/duration summary requires
+  opening a separate `logs/<node>.json` file.
+- **Rationale:** Operators analysing post-run logs spend extra time locating
+  turn boundaries and cross-referencing separate files for summary data. Inline
+  separators and a footer make stream logs self-contained for single-file triage.
+- **Acceptance criteria:**
+  - [ ] A separator line `--- turn N ---` (where N is 1-based turn index) is
+    written to the stream log file before each assistant message block.
+  - [ ] After the final JSON event (`result` type) is processed, a visual
+    separator line (e.g., `--- end ---`) followed by a one-line summary is
+    appended to the stream log. Summary format:
+    `status=<success|error> duration=<Xs> cost=$<X.XXXX> turns=<N>`.
+  - [ ] Summary is derived from the `result` event fields (`is_error`,
+    `duration_ms`, `total_cost_usd`, `num_turns`) — no additional CLI calls.
+  - [ ] Turn separators and footer are written to the stream log file only;
+    terminal output via `onOutput` callback is NOT modified.
+  - [ ] Unit tests cover: turn separator insertion, footer format, missing result
+    event (no footer written), multi-continuation appended log.
+  - [ ] `deno task check` passes.
+
+### 3.39 FR-40: Cost Breakdown Chart in Dashboard
+
+- **Description:** HTML dashboard must include a visual cost breakdown chart
+  (bar chart) showing cost per pipeline node. Chart must be self-contained
+  (inline SVG or HTML canvas; no external JS/CDN dependencies). Nodes with
+  zero or missing `cost_usd` are excluded from the chart. Total pipeline cost
+  is displayed alongside the chart.
+- **Rationale:** Per-node cost is already stored in `state.json` as
+  `nodes[*].cost_usd` (FR-32). Text-only cost values in node cards require
+  manual mental comparison; a chart makes cost distribution immediately visible
+  and highlights the most expensive nodes.
+- **Acceptance criteria:**
+  - [ ] Dashboard HTML includes a cost breakdown bar chart rendered in
+    `scripts/generate-dashboard.ts`.
+  - [ ] Chart displays cost per node as proportional bars (horizontal or
+    vertical); bar width/height proportional to `cost_usd` relative to the
+    maximum node cost.
+  - [ ] Nodes with zero cost or missing `cost_usd` are excluded from the chart.
+  - [ ] Total pipeline cost is displayed alongside the chart (sourced from
+    `state.total_cost_usd`).
+  - [ ] Chart is self-contained: no external JS/CDN dependencies; inline SVG
+    or HTML canvas only.
+  - [ ] `escHtml()` applied to all node labels rendered in the chart.
+  - [ ] Unit tests cover: bar proportions, zero-cost node exclusion, total cost
+    display, single-node case, all-zero-cost case (empty/hidden chart).
+  - [ ] `deno task check` passes.
+
 ---
 
 ## 4. Non-functional requirements

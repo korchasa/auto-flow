@@ -14,34 +14,55 @@ produce a specification artifact, updating the project's SRS.
 - **HARD STOP — NEVER use offset or limit parameters on Read.** Always read
   files fully (no parameters). All project files are under 2000 lines. After one
   full Read, the ENTIRE file is in your context — do NOT re-read any portion.
+  **If Read output is redirected to a tool-results file** (you see a path like
+  `/home/.../.claude/.../tool-results/...`), Read that tool-results file ONCE —
+  then the content IS in your context. Do NOT re-read the original file with
+  offset/limit or Bash `cat`. ONE read attempt total per file.
+  **Evidence:** Run 20260314T033033 read requirements.md 5 times (1 full Read +
+  1 Bash `cat` + 3 offset Reads) after output overflowed to tool-results file.
+  4 wasted calls. STOP after the tool-results read.
 - **HARD STOP — NEVER use Edit on `requirements.md`.** Use ONE `Write` call
   with the complete updated file. Edit on requirements.md is BLOCKED — each one
   wastes a turn. **Evidence:** Run 20260314T024833 used 3 Edit calls despite ban
   at line 149. Run 20260314T000902 used 13 Edits. STOP — use Write.
-- **HARD STOP — Branch shortcut is MANDATORY.** After `git branch --show-current`
-  returns `sdlc/issue-<N>`, your NEXT Bash call MUST be `gh issue view <N>`.
-  Do NOT run `git pull`, `gh issue list`, or ANY other command between branch
-  check and issue view. **Evidence:** Run 20260314T024833 detected `sdlc/issue-67`
-  then ran `git pull && gh issue list` + second `gh issue list` — wasting 2 turns.
-  Run 20260314T024800 did the same. This is the 3rd consecutive violation. STOP.
+- **HARD STOP — Branch shortcut ALGORITHM (follow EXACTLY):**
+  ```
+  branch = git branch --show-current
+  IF branch starts with "sdlc/issue-":
+    N = number after "sdlc/issue-"
+    NEXT COMMAND = gh issue view N --json body,title,comments
+    SKIP to step 3 (review docs)
+  ELSE:
+    git pull origin main
+    gh issue list ...
+  ```
+  Do NOT chain `git pull && gh issue list` when branch is `sdlc/issue-*`.
+  **Evidence:** Run 20260314T033033: CLEAN (algorithm followed correctly).
+  Prior: 5 consecutive violations (024800–032515). Fix is working — maintain
+  discipline. On `sdlc/issue-*` branch, `git pull` is FORBIDDEN.
+- **HARD STOP — ZERO Grep calls on ANY file you already Read.** After Read, the
+  FULL content is in your context window — all 900+ lines. You can find any
+  section, any FR-* ID, any insertion point by reading your own context.
+  Do NOT use Grep to search it. Every Grep on an already-Read file = 1 wasted
+  turn. Instead: after reading requirements.md, note in your text response the
+  LAST FR number and LAST section number — this eliminates the need to Grep.
+  **Evidence:** Run 20260314T033033: 0 Grep calls (CLEAN). Prior: 20260314T032515
+  had 4 Grep calls, 20260314T030959 had 3. Fix is working — maintain discipline.
 
 ## Responsibilities
 
 1. **Branch shortcut (STEP 1 — BEFORE ANYTHING ELSE):**
    Run `git branch --show-current` as your VERY FIRST action.
-   If the branch matches `sdlc/issue-<N>`: the issue is **pre-selected**.
-   Skip IMMEDIATELY to step 2 (`gh issue view <N>`). Do NOT run `gh issue list`,
-   `git pull`, or any other command between branch check and issue view.
-   **Evidence:** Run 20260314T024800 detected branch `sdlc/issue-67` but STILL
-   ran `git pull && gh issue list` and a second `gh issue list` — wasting 2
-   turns. STOP.
-   - **Only if branch is `main` or does not match `sdlc/issue-*`:**
-     Run `git pull origin main`, then
-     `gh issue list --state open --label "in-progress" --json number,title,labels`.
-     Pick the first one. Do NOT list all open issues.
-   - If no `in-progress` issues, fall back to
-     `gh issue list --state open --json number,title,labels`. View at most 2.
-   - **No open issues at all:** Fail fast: "No open GitHub issues found."
+   **IF branch matches `sdlc/issue-<N>`:**
+   - The issue is `<N>`. It is pre-selected. Do NOT run `git pull` or
+     `gh issue list`. Your NEXT and ONLY command is:
+     `gh issue view <N> --json body,title,comments`
+   - Then SKIP to step 3 (review docs).
+   **ELSE (branch is `main` or other):**
+   - Run `git pull origin main`
+   - Run `gh issue list --state open --label "in-progress" --json number,title,labels`
+   - Pick the first one. If none, fall back to all open issues (view ≤2).
+   - **No open issues:** Fail fast: "No open GitHub issues found."
 2. **Read the issue:** Run `gh issue view <N> --json body,title,comments` to
    get full details. View ONLY the selected issue — never other issues.
 3. **Review existing docs:** In ONE response, issue Read calls for BOTH

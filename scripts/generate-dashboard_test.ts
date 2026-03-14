@@ -1,10 +1,13 @@
 import { assertEquals } from "@std/assert";
 import {
+  computeCostBars,
   computeTimeline,
+  type CostBar,
   escHtml,
   readNodeLog,
   readRunState,
   renderCard,
+  renderCostChart,
   renderHtml,
   renderTimeline,
 } from "./generate-dashboard.ts";
@@ -469,4 +472,166 @@ Deno.test("renderTimeline — empty bars produces graceful empty state", () => {
   assertEquals(html.includes("timeline-empty"), true);
   // Should not contain a timeline-container (no bars to show)
   assertEquals(html.includes("timeline-container"), false);
+});
+
+// --- computeCostBars ---
+
+Deno.test("computeCostBars — proportional widths relative to max cost", () => {
+  const state: RunState = {
+    run_id: "r",
+    config_path: "",
+    started_at: "2024-01-01T00:00:00Z",
+    status: "completed",
+    args: {},
+    env: {},
+    nodes: {
+      cheap: { status: "completed", cost_usd: 1.0 },
+      expensive: { status: "completed", cost_usd: 4.0 },
+    },
+  };
+  const bars = computeCostBars(state);
+  assertEquals(bars.length, 2);
+  const cheap = bars.find((b) => b.nodeId === "cheap")!;
+  const expensive = bars.find((b) => b.nodeId === "expensive")!;
+  assertEquals(expensive.widthPct, 100);
+  assertEquals(cheap.widthPct, 25);
+});
+
+Deno.test("computeCostBars — zero-cost nodes excluded", () => {
+  const state: RunState = {
+    run_id: "r",
+    config_path: "",
+    started_at: "2024-01-01T00:00:00Z",
+    status: "completed",
+    args: {},
+    env: {},
+    nodes: {
+      zero: { status: "completed", cost_usd: 0 },
+      paid: { status: "completed", cost_usd: 0.5 },
+    },
+  };
+  const bars = computeCostBars(state);
+  assertEquals(bars.length, 1);
+  assertEquals(bars[0].nodeId, "paid");
+});
+
+Deno.test("computeCostBars — empty input returns empty array", () => {
+  const state: RunState = {
+    run_id: "r",
+    config_path: "",
+    started_at: "2024-01-01T00:00:00Z",
+    status: "completed",
+    args: {},
+    env: {},
+    nodes: {},
+  };
+  const bars = computeCostBars(state);
+  assertEquals(bars.length, 0);
+});
+
+// --- renderCostChart ---
+
+Deno.test("renderCostChart — SVG structure with rect and text", () => {
+  const bars: CostBar[] = [
+    { nodeId: "build", costUsd: 0.5, widthPct: 100 },
+  ];
+  const html = renderCostChart(bars, 0.5);
+  assertEquals(html.includes("<svg"), true);
+  assertEquals(html.includes("<rect"), true);
+  assertEquals(html.includes("<text"), true);
+});
+
+Deno.test("renderCostChart — total cost shown in header", () => {
+  const bars: CostBar[] = [
+    { nodeId: "build", costUsd: 0.1234, widthPct: 100 },
+  ];
+  const html = renderCostChart(bars, 0.1234);
+  assertEquals(html.includes("0.1234"), true);
+});
+
+Deno.test("renderCostChart — labels escaped via escHtml", () => {
+  const bars: CostBar[] = [
+    { nodeId: "<xss>", costUsd: 0.1, widthPct: 100 },
+  ];
+  const html = renderCostChart(bars, 0.1);
+  assertEquals(html.includes("<xss>"), false);
+  assertEquals(html.includes("&lt;xss&gt;"), true);
+});
+
+Deno.test("renderCostChart — empty bars produces no-cost-data message", () => {
+  const html = renderCostChart([], 0);
+  assertEquals(html.includes("No cost data"), true);
+  assertEquals(html.includes("<svg"), false);
+});
+
+// --- edge cases ---
+
+Deno.test("computeCostBars — single node gets 100% width", () => {
+  const state: RunState = {
+    run_id: "r",
+    config_path: "",
+    started_at: "2024-01-01T00:00:00Z",
+    status: "completed",
+    args: {},
+    env: {},
+    nodes: {
+      only: { status: "completed", cost_usd: 2.5 },
+    },
+  };
+  const bars = computeCostBars(state);
+  assertEquals(bars.length, 1);
+  assertEquals(bars[0].widthPct, 100);
+});
+
+Deno.test("computeCostBars — all-zero costs produces empty chart data", () => {
+  const state: RunState = {
+    run_id: "r",
+    config_path: "",
+    started_at: "2024-01-01T00:00:00Z",
+    status: "completed",
+    args: {},
+    env: {},
+    nodes: {
+      a: { status: "completed", cost_usd: 0 },
+      b: { status: "completed", cost_usd: 0 },
+    },
+  };
+  const bars = computeCostBars(state);
+  assertEquals(bars.length, 0);
+  const html = renderCostChart(bars, 0);
+  assertEquals(html.includes("No cost data"), true);
+});
+
+Deno.test("renderCostChart — escHtml on labels with special chars", () => {
+  const bars: CostBar[] = [
+    { nodeId: `a&b"c'`, costUsd: 0.1, widthPct: 100 },
+  ];
+  const html = renderCostChart(bars, 0.1);
+  assertEquals(html.includes(`a&b"c'`), false);
+  assertEquals(html.includes("&amp;"), true);
+  assertEquals(html.includes("&quot;"), true);
+  assertEquals(html.includes("&#39;"), true);
+});
+
+Deno.test("renderHtml — cost chart appears between timeline and main", () => {
+  const state: RunState = {
+    run_id: "run-cost",
+    config_path: "",
+    started_at: "2024-01-01T00:00:00Z",
+    status: "completed",
+    args: {},
+    env: {},
+    nodes: {
+      build: { status: "completed", cost_usd: 1.0 },
+    },
+  };
+  const html = renderHtml(state, {});
+  const timelineEnd = html.indexOf(
+    "</section>",
+    html.indexOf('class="timeline"'),
+  );
+  const costChartStart = html.indexOf('class="cost-chart"');
+  const mainStart = html.indexOf("<main>");
+  assertEquals(timelineEnd < costChartStart, true);
+  assertEquals(costChartStart < mainStart, true);
 });

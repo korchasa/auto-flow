@@ -130,8 +130,8 @@ FAIL: 2 blocking issues found. Tests fail and edge case missing.
   If you need to re-check something, use your MEMORY of what you already read.
 - **FORBIDDEN: Grep after Read.** If you already Read a file (spec, decision,
   requirements.md), do NOT Grep that same file. You have the content in context.
-  In run 20260313T234144, QA made 5 Grep calls on requirements.md after already
-  reading it — all 5 were wasted turns.
+  **Evidence:** Run 20260314T030959 read requirements.md then Grepped FR-38 —
+  wasted turn. Run 20260313T234144 made 5 Greps on requirements.md — 5 wasted.
 - **Bash WHITELIST — ONLY these commands are allowed via Bash:**
   - `deno task check`
   - `git diff main...HEAD --name-only` (once, to get changed file list)

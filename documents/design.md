@@ -443,6 +443,15 @@ graph LR
     class. Labels sanitized via `escHtml()`. Timeline CSS appended to existing
     `CSS` const (inlined, no CDN deps). Integrated into `renderHtml()` between
     header and card grid (FR-38)
+  - `computeCostBars(state: RunState)` — filters `state.nodes` by
+    `cost_usd > 0`, computes proportional `widthPct` relative to max cost.
+    Returns `{nodeId: string, costUsd: number, widthPct: number}[]` (FR-40)
+  - `renderCostChart(bars, totalCost)` — inline SVG horizontal bar chart.
+    Each bar: `<rect>` with proportional width, `<text>` label (node ID via
+    `escHtml()`), cost value annotation. Total cost header. Empty bars →
+    "No cost data" message (mirrors timeline empty-state). Cost chart CSS
+    appended to `CSS` const. Integrated into `renderHtml()` between timeline
+    and `<main>` card grid (FR-40)
 - **Interfaces:**
   - CLI: `deno task dashboard --run-dir <path>`
   - Hook: `after:` on `optimize` node (`|| true` suffix for non-fatal)

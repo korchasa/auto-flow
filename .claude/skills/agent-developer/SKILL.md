@@ -107,10 +107,13 @@ block direct invocations. Always use `deno task check`.
   20260314T022056: re-read requirements.md at offset=822 after full read.
   Run 20260314T020922: chunk-read temp file 4x. STOP DOING THIS.
 - **ONE READ PER FILE (MANDATORY).** After reading a file once, retain its
-  content in context. Do NOT Read the same file again. If an Edit fails, read
-  the error — do NOT re-read the whole file.
-  This applies to ALL files — source files, spec files, AND tool-result temp
-  files (paths like `/home/.../.claude/.../tool-results/*.txt`).
+  content in context. Do NOT Read the same file again — not even after writing
+  to it. If an Edit fails, read the error — do NOT re-read the whole file.
+  This applies to ALL files — source files, spec files, test files, AND
+  tool-result temp files (paths like `/home/.../.claude/.../tool-results/*.txt`).
+  **Evidence:** Run 20260314T030959 re-read generate-dashboard.ts and
+  generate-dashboard_test.ts (2 wasted Reads). You wrote the file — you know
+  what's in it.
 - **Plan before editing (MANDATORY for >3 files):** Before your first Edit/Write,
   output a checklist: `FILE → TOOL (Edit/Write/Edit+replace_all) → CHANGE`.
   Then execute one call per file, in order. No re-reads, no re-writes.
