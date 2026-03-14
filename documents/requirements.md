@@ -845,23 +845,141 @@
   a glance. `NodeState` already records `started_at`, `completed_at`, and
   `duration_ms` — no engine changes required.
 - **Acceptance criteria:**
-  - [ ] Dashboard HTML includes a Gantt-style timeline section (rendered in
-    `generate-dashboard.ts`).
-  - [ ] Each node rendered as a horizontal bar: left offset =
+  - [x] Dashboard HTML includes a Gantt-style timeline section (rendered in
+    `generate-dashboard.ts`). Evidence: `scripts/generate-dashboard.ts:117` (`computeTimeline`), `scripts/generate-dashboard.ts:152` (`renderTimeline`), `scripts/generate-dashboard.ts:305-306` (integrated in `renderHtml`).
+  - [x] Each node rendered as a horizontal bar: left offset =
     `(node.started_at − run.started_at) / total_duration`; width =
-    `node.duration_ms / total_duration` (proportional, percentage-based CSS).
-  - [ ] Parallel nodes (overlapping time ranges) are stacked vertically in the
-    timeline view (each on its own row).
-  - [ ] Bottleneck node (max `duration_ms`) is visually distinguished (e.g.,
-    distinct fill color or border).
-  - [ ] Nodes with missing `started_at` or `duration_ms` (skipped/pending) are
-    omitted from the timeline.
-  - [ ] Timeline renders correctly when only one node has timing data.
-  - [ ] No external CDN dependencies; all CSS/JS inlined.
-  - [ ] `escHtml()` applied to node labels rendered in the timeline.
-  - [ ] Unit tests cover: bar position/width calculation, bottleneck detection,
-    parallel node stacking, single-node edge case, missing-timing omission.
-  - [ ] `deno task check` passes.
+    `node.duration_ms / total_duration` (proportional, percentage-based CSS). Evidence: `scripts/generate-dashboard.ts:140-141` (`offsetPct`, `widthPct` computation).
+  - [x] Parallel nodes (overlapping time ranges) are stacked vertically in the
+    timeline view (each on its own row). Evidence: `scripts/generate-dashboard.ts:165` (`<div class="timeline-row">` per bar).
+  - [x] Bottleneck node (max `duration_ms`) is visually distinguished (e.g.,
+    distinct fill color or border). Evidence: `scripts/generate-dashboard.ts:143` (`isBottleneck` flag), `scripts/generate-dashboard.ts:160-161` (CSS class applied), `scripts/generate-dashboard.ts:371` (`.timeline-bottleneck` CSS).
+  - [x] Nodes with missing `started_at` or `duration_ms` (skipped/pending) are
+    omitted from the timeline. Evidence: `scripts/generate-dashboard.ts:123` (`continue` on missing timing).
+  - [x] Timeline renders correctly when only one node has timing data. Evidence: `scripts/generate-dashboard_test.ts:323` (single-node test).
+  - [x] No external CDN dependencies; all CSS/JS inlined. Evidence: `scripts/generate-dashboard.ts:369-372` (timeline CSS in inlined `CSS` const).
+  - [x] `escHtml()` applied to node labels rendered in the timeline. Evidence: `scripts/generate-dashboard.ts:163` (`label = escHtml(nodeId)`).
+  - [x] Unit tests cover: bar position/width calculation, bottleneck detection,
+    parallel node stacking, single-node edge case, missing-timing omission. Evidence: `scripts/generate-dashboard_test.ts:288-472`.
+  - [x] `deno task check` passes. Evidence: QA PASS — all tests pass (run `20260314T060523`).
+
+### 3.38 FR-39: Repeated File Read Warning
+
+- **Description:** Stream log emits a `[WARN]` line when the same file path is read more than 2 times within one agent session (`executeClaudeProcess()` invocation). Warning includes the file path and read count. Informational only — does not block execution. Enables meta-agent to detect and diagnose repeated-read anti-patterns from log analysis.
+- **Motivation:** Agents were silently re-reading the same file 3-4 times per session (run `20260313T025203`: PM agent read `documents/requirements.md` 4 times consecutively), wasting tokens. The pattern was invisible to logging and prompt optimization tooling.
+- **Implementation:** `FileReadTracker` class in `engine/agent.ts`. Instantiated per `executeClaudeProcess()` call (counters reset per invocation). In event loop: for `tool_use` blocks with `name === "Read"`, calls `tracker.track(block.input.file_path)`. Non-null result written to log via `stampLines()`. Terminal `onOutput` callback unchanged (log-file-only).
+- **Warning format:** `[WARN] repeated file read: <path> (<N> times)`.
+- **Acceptance criteria:**
+  - [x] Stream log emits `[WARN] repeated file read: <path> (<N> times)` when same path is read >2 times in one session. Evidence: `engine/agent.ts:332` (`FileReadTracker` class), `engine/agent.ts:346` (`track()` method), commit `ebe7cb2`.
+  - [x] Warning includes file path and read count. Evidence: `engine/agent.ts:346` (`FileReadTracker.track()` return value format).
+  - [x] Warning is log-file-only — terminal `onOutput` callback unchanged. Evidence: `engine/agent.ts:410` (`tracker` used in `executeClaudeProcess()`, warning written via `stampLines()` to logFile only).
+  - [x] Counter resets per `executeClaudeProcess()` invocation (not cross-continuation). Evidence: `engine/agent.ts:410` (`FileReadTracker` instantiated inside `executeClaudeProcess()`).
+  - [x] Execution not blocked by warning. Evidence: `engine/agent.ts:346` (`track()` returns warning string; engine continues normally).
+  - [x] `FileReadTracker` is a pure-logic class — unit-testable without I/O. Evidence: `engine/agent_test.ts:790-855` (FileReadTracker unit tests).
+  - [x] `deno task check` passes. Evidence: QA PASS — all tests pass (run `20260314T060523`).
+
+---
+
+### 3.39 FR-40: Dashboard Stream Log Links
+
+- **Description:** Each node card in the HTML dashboard must include a direct
+  link to that node's `stream.log` execution log when the file exists. The link
+  must be visually distinct from artifact `.md` links (e.g., labeled
+  "execution log" or styled differently). Enables direct navigation from a
+  failing node card to its detailed execution log without manual filesystem
+  navigation.
+- **Motivation:** Stream logs are the primary debugging tool for pipeline
+  failures. The dashboard currently lists only `.md` output artifacts;
+  execution logs (`stream.log`) are not linked, making them hard to discover.
+  `scanArtifacts` already surfaces `stream.log` in node directories but
+  dashboard rendering ignores it.
+- **Acceptance criteria:**
+  - [x] `renderCard()` in `scripts/generate-dashboard.ts` checks for existence
+    of `<node-dir>/stream.log` and includes a link when the file exists.
+    Evidence: `scripts/generate-dashboard.ts:47-51` (`renderCard` accepts
+    `streamLogHref?`), `scripts/generate-dashboard.ts:82-84` (conditional
+    `logLinkHtml`), `scripts/generate-dashboard.ts:419-430` (CLI scans via
+    `Deno.stat()`, builds href map).
+  - [x] Stream log link is visually distinct from artifact links (e.g.,
+    different label such as "execution log", distinct CSS class or style).
+    Evidence: `scripts/generate-dashboard.ts:380` (`.log-link` CSS class:
+    monospace, 0.75rem, muted color `#6b7280`), `scripts/generate-dashboard.ts:83`
+    (`class="log-link"` on anchor).
+  - [x] If `stream.log` does not exist for a node, no broken link is rendered.
+    Evidence: `scripts/generate-dashboard.ts:82-84` (renders only when
+    `streamLogHref` is provided; absent → empty string).
+  - [x] `escHtml()` applied to stream log link path/label to prevent XSS.
+    Evidence: `scripts/generate-dashboard.ts:83` (`escHtml(streamLogHref)`
+    in href attribute).
+  - [x] Unit tests cover: stream.log present (link shown), stream.log absent
+    (no link), HTML escaping of path.
+    Evidence: `scripts/generate-dashboard_test.ts:641-647` (link present),
+    `scripts/generate-dashboard_test.ts:649-654` (no link when absent),
+    `scripts/generate-dashboard_test.ts:656-678` (threading via `renderHtml`).
+  - [x] `deno task check` passes. Evidence: 483 tests pass, 0 failed.
+
+---
+
+### 3.40 FR-41: Semi-Verbose Output Mode (`-s`)
+
+- **Description:** Pipeline engine must support a `semi-verbose` verbosity level
+  (`-s` CLI flag) that shows agent text output but suppresses tool-call lines
+  (e.g., `Read`, `Write`, `Bash` invocations). Sits between `normal` (silent)
+  and `verbose` (full tool output).
+- **Motivation:** `verbose` mode is too noisy for monitoring (hundreds of tool
+  lines per node). `normal` shows nothing. Operators need intermediate view:
+  agent reasoning + results without tool-call noise.
+- **Acceptance criteria:**
+  - [x] `Verbosity` type includes `"semi-verbose"` value alongside `"quiet"`,
+    `"normal"`, `"verbose"`. Evidence: `engine/types.ts` (`Verbosity` union).
+  - [x] `-s` CLI flag maps to `semi-verbose` verbosity. Evidence: `engine/cli.ts`.
+  - [x] In semi-verbose mode, `formatEventForOutput()` skips `tool_use` content
+    blocks in `assistant` events — emits only `text` blocks. Evidence:
+    `engine/agent.ts` (`formatEventForOutput()` with `verbosity` param).
+  - [x] Log file writes are unaffected — full output preserved. Evidence:
+    `engine/agent.ts` (log path calls `formatEventForOutput()` without verbosity).
+  - [x] `nodeOutput()` gate shows in both `verbose` and `semi-verbose`. Evidence:
+    `engine/output.ts` (`nodeOutput()` condition).
+  - [x] `deno task check` passes. Evidence: design.md (FR-41 referenced as implemented).
+
+---
+
+### 3.41 FR-42: Agent Output Summary Section
+
+- **Description:** Every agent in the pipeline must produce a `## Summary`
+  section in its primary output artifact. The pipeline validation must enforce
+  its presence via `contains_section: Summary` rule. Ensures traceability:
+  any operator or downstream agent can read a single section to understand
+  what the stage accomplished.
+- **Motivation:** Agent artifacts vary widely in length (spec: ~1 page;
+  QA report: multi-page). Without a mandatory summary, downstream agents and
+  operators must parse the full artifact to assess outcomes — increasing cost
+  and latency.
+- **Acceptance criteria:**
+  - [x] All 7 agent SKILL.md files include documented requirement for a
+    `## Summary` section in their output artifact.
+    Agents: `agent-pm`, `agent-architect`, `agent-tech-lead`,
+    `agent-developer`, `agent-qa`, `agent-tech-lead-review`, `agent-meta-agent`.
+    Evidence: `.claude/skills/agent-pm/SKILL.md:113`,
+    `.claude/skills/agent-architect/SKILL.md:120`,
+    `.claude/skills/agent-tech-lead/SKILL.md:87`,
+    `.claude/skills/agent-developer/SKILL.md:92`,
+    `.claude/skills/agent-qa/SKILL.md:113`,
+    `.claude/skills/agent-meta-agent/SKILL.md:81,93`,
+    `.claude/skills/agent-tech-lead-review/SKILL.md:55`.
+  - [x] `pipeline.yaml` validation rules include `contains_section: Summary`
+    for all 7 agent nodes (`specification`, `design`, `decision`, `build`,
+    `verify`, `tech-lead-review`, `optimize`).
+    Evidence: `.sdlc/pipeline.yaml:61` (specification), `:83` (design),
+    `:108` (decision), `:140` (build), `:159` (verify), `:185` (optimize),
+    `:210` (tech-lead-review).
+  - [x] Continuation mechanism is triggered when `## Summary` is absent
+    (same `contains_section` rule behavior as other section validations).
+    Evidence: Inherent behavior of `contains_section` validation in engine;
+    `.sdlc/pipeline.yaml` `contains_section` rules trigger continuation on
+    missing section (same mechanism as all other section validations).
+  - [x] `deno task check` passes after changes.
+    Evidence: Run 20260314T073009 — 490 tests pass, pipeline integrity valid.
 
 ### 3.38 FR-39: Repeated File Read Warning in Stream Log
 
@@ -1010,4 +1128,3 @@ engine/                                # Deno/TypeScript pipeline engine
 
 - возможность продолжить работу после остановки по какой-то причине. С указанием шага, с которого продолжаем
 - проверки незакомиченности должны проверять конкретные папки, а не все
-

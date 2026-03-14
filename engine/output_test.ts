@@ -235,6 +235,53 @@ Deno.test("nodeResult — handles empty result string", () => {
   assertEquals(joined.includes("cost=$0.0000"), true);
 });
 
+// --- nodeOutput gating tests ---
+
+Deno.test("nodeOutput — shown in verbose mode", () => {
+  const cap = createCapture();
+  const out = new OutputManager("verbose", cap.writer);
+  out.nodeOutput("developer", "[stream] text: hello");
+  assertEquals(cap.lines.length > 0, true);
+  assertEquals(cap.lines.some((l) => l.includes("[stream] text: hello")), true);
+});
+
+Deno.test("nodeOutput — shown in semi-verbose mode", () => {
+  const cap = createCapture();
+  const out = new OutputManager("semi-verbose", cap.writer);
+  out.nodeOutput("developer", "[stream] text: hello");
+  assertEquals(cap.lines.length > 0, true);
+  assertEquals(cap.lines.some((l) => l.includes("[stream] text: hello")), true);
+});
+
+Deno.test("nodeOutput — hidden in normal mode", () => {
+  const cap = createCapture();
+  const out = new OutputManager("normal", cap.writer);
+  out.nodeOutput("developer", "[stream] text: hello");
+  assertEquals(cap.lines.length, 0);
+});
+
+Deno.test("nodeOutput — hidden in quiet mode", () => {
+  const cap = createCapture();
+  const out = new OutputManager("quiet", cap.writer);
+  out.nodeOutput("developer", "[stream] text: hello");
+  assertEquals(cap.lines.length, 0);
+});
+
+Deno.test("OutputManager — constructs with semi-verbose verbosity", () => {
+  const out = new OutputManager("semi-verbose");
+  assertEquals(typeof out, "object");
+});
+
+Deno.test("OutputManager — verbosityLevel getter returns correct value", () => {
+  const out = new OutputManager("semi-verbose");
+  assertEquals(out.verbosityLevel, "semi-verbose");
+});
+
+Deno.test("OutputManager — verbosityLevel returns verbose when verbose", () => {
+  const out = new OutputManager("verbose");
+  assertEquals(out.verbosityLevel, "verbose");
+});
+
 // --- AC8: Default mode (verbose=false) emits zero verbose output ---
 
 Deno.test("AC8 — default mode emits zero output from all verbose methods", () => {

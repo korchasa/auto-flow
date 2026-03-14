@@ -56,6 +56,9 @@ nodes:
       - type: contains_section
         path: "{{node_dir}}/01-spec.md"
         value: "Scope"
+      - type: contains_section
+        path: "{{node_dir}}/01-spec.md"
+        value: "Summary"
 
   # Stage 2: Architect — design-solution plan with variants
   design:
@@ -75,6 +78,9 @@ nodes:
         path: "{{node_dir}}/02-plan.md"
       - type: file_not_empty
         path: "{{node_dir}}/02-plan.md"
+      - type: contains_section
+        path: "{{node_dir}}/02-plan.md"
+        value: "Summary"
 
   # Stage 3: Tech Lead — critique, decision, SDS update, branch + draft PR
   decision:
@@ -97,6 +103,9 @@ nodes:
         path: "{{node_dir}}/04-decision.md"
       - type: file_not_empty
         path: "{{node_dir}}/04-decision.md"
+      - type: contains_section
+        path: "{{node_dir}}/04-decision.md"
+        value: "Summary"
 
   # Stages 4-5: Developer + QA loop (body nodes defined inline)
   implementation:
@@ -119,9 +128,16 @@ nodes:
           Read documents/requirements.md and documents/design.md.
           Implement the changes following the task breakdown.
           This is iteration {{loop.iteration}}.
+          After deno task check passes, write {{node_dir}}/06-impl-summary.md
+          with a ## Summary section listing files changed, tests added/modified, and check status.
         validate:
           - type: custom_script
             path: "deno task check"
+          - type: file_exists
+            path: "{{node_dir}}/06-impl-summary.md"
+          - type: contains_section
+            path: "{{node_dir}}/06-impl-summary.md"
+            value: "Summary"
       verify:
         type: agent
         label: "QA — Verification"
@@ -138,6 +154,9 @@ nodes:
             path: "{{node_dir}}/05-qa-report.md"
           - type: file_not_empty
             path: "{{node_dir}}/05-qa-report.md"
+          - type: contains_section
+            path: "{{node_dir}}/05-qa-report.md"
+            value: "Summary"
 
   # Post-pipeline 1: Meta-Agent — prompt optimization
   optimize:
@@ -161,6 +180,9 @@ nodes:
         path: "{{node_dir}}/07-changelog.md"
       - type: file_not_empty
         path: "{{node_dir}}/07-changelog.md"
+      - type: contains_section
+        path: "{{node_dir}}/07-changelog.md"
+        value: "Summary"
 
   # Post-pipeline 2: Tech Lead Review — final review + CI gate + merge
   tech-lead-review:
@@ -183,3 +205,6 @@ nodes:
         path: "{{node_dir}}/08-review.md"
       - type: file_not_empty
         path: "{{node_dir}}/08-review.md"
+      - type: contains_section
+        path: "{{node_dir}}/08-review.md"
+        value: "Summary"

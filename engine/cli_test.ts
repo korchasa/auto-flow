@@ -67,3 +67,24 @@ Deno.test("parseArgs — generic --key value arg", () => {
   const opts = parseArgs(["--foo", "bar"]);
   assertEquals(opts.args.foo, "bar");
 });
+
+Deno.test("parseArgs — -s sets semi-verbose", () => {
+  const opts = parseArgs(["-s"]);
+  assertEquals(opts.verbosity, "semi-verbose");
+});
+
+Deno.test("parseArgs — --semi-verbose sets semi-verbose", () => {
+  const opts = parseArgs(["--semi-verbose"]);
+  assertEquals(opts.verbosity, "semi-verbose");
+});
+
+Deno.test("parseArgs — -s combined with other flags", () => {
+  const opts = parseArgs(["-s", "--prompt", "Do something"]);
+  assertEquals(opts.verbosity, "semi-verbose");
+  assertEquals(opts.args.prompt, "Do something");
+});
+
+Deno.test("parseArgs — default verbosity is normal", () => {
+  const opts = parseArgs([]);
+  assertEquals(opts.verbosity, "normal");
+});

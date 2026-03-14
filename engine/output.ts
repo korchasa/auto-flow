@@ -70,9 +70,16 @@ export class OutputManager {
     this.status(nodeId, `ITERATION ${iteration}/${maxIterations}`);
   }
 
-  /** Log streaming output from a node (verbose only). */
+  /** Expose verbosity level for callers that need to thread it downstream. */
+  get verbosityLevel(): Verbosity {
+    return this.verbosity;
+  }
+
+  /** Log streaming output from a node (verbose and semi-verbose). */
   nodeOutput(nodeId: string, line: string): void {
-    if (this.verbosity !== "verbose") return;
+    if (this.verbosity !== "verbose" && this.verbosity !== "semi-verbose") {
+      return;
+    }
     const paddedId = `[${nodeId}]`.padEnd(18);
     this.write(`${paddedId} ${line}\n`);
   }

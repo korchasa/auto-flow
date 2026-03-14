@@ -42,11 +42,13 @@ const PREVIEW_LINES = 3;
  * Render an HTML card for a single pipeline node.
  * Multi-line results use <details>/<summary> with first 3 lines in summary.
  * Single-line results render inline without wrapper.
+ * When streamLogHref is provided, renders a link to the stream log after card-meta.
  */
 export function renderCard(
   nodeId: string,
   state: NodeState,
   log: ClaudeCliOutput | null,
+  streamLogHref?: string,
 ): string {
   const statusClass = state.status === "completed"
     ? "ok"
@@ -77,6 +79,10 @@ export function renderCard(
       `<details>\n<summary><pre class="result-preview">${preview}</pre></summary>\n<pre class="result-full">${full}</pre>\n</details>`;
   }
 
+  const logLinkHtml = streamLogHref
+    ? `\n<a class="log-link" href="${escHtml(streamLogHref)}">stream log</a>`
+    : "";
+
   return `<div class="card ${statusClass}">
 <div class="card-header">
   <span class="node-id">${escHtml(nodeId)}</span>
@@ -86,7 +92,7 @@ export function renderCard(
   <span>${escHtml(durationS)}</span>
   <span>${escHtml(cost)}</span>
   <span>turns: ${escHtml(String(turns))}</span>
-</div>
+</div>${logLinkHtml}
 ${resultHtml}
 </div>`;
 }
@@ -167,17 +173,85 @@ export function renderTimeline(bars: TimelineBar[]): string {
   return `<section class="timeline">\n<h2>Timeline</h2>\n<div class="timeline-container">\n${rows}\n</div>\n</section>`;
 }
 
+/** A single bar entry for the cost chart. */
+export interface CostBar {
+  nodeId: string;
+  /** Actual cost in USD. */
+  costUsd: number;
+  /** Bar width as percentage of max node cost (max node = 100%). */
+  widthPct: number;
+}
+
+/**
+ * Compute cost bars from run state.
+ * Nodes with cost_usd <= 0 or undefined are omitted.
+ * widthPct is relative to the node with the highest cost (= 100%).
+ */
+export function computeCostBars(state: RunState): CostBar[] {
+  const entries: Array<{ nodeId: string; costUsd: number }> = [];
+
+  for (const [nodeId, node] of Object.entries(state.nodes)) {
+    if (node.cost_usd != null && node.cost_usd > 0) {
+      entries.push({ nodeId, costUsd: node.cost_usd });
+    }
+  }
+
+  if (entries.length === 0) return [];
+
+  const maxCost = Math.max(...entries.map((e) => e.costUsd));
+
+  return entries.map(({ nodeId, costUsd }) => ({
+    nodeId,
+    costUsd,
+    widthPct: (costUsd / maxCost) * 100,
+  }));
+}
+
+const COST_ROW_HEIGHT = 32;
+const COST_BAR_HEIGHT = 24;
+
+/**
+ * Render an inline SVG horizontal bar chart for node costs.
+ * Each bar: <rect> with proportional width, <text> label (XSS-safe via escHtml()).
+ * Total cost shown in header. Empty bars → "No cost data" message.
+ */
+export function renderCostChart(bars: CostBar[], totalCost: number): string {
+  if (bars.length === 0) {
+    return `<section class="cost-chart">\n<h2>Cost by Node</h2>\n<p class="cost-chart-empty">No cost data available.</p>\n</section>`;
+  }
+
+  const totalHeight = bars.length * COST_ROW_HEIGHT;
+  const totalLabel = escHtml(`Total: $${totalCost.toFixed(4)}`);
+
+  const barSvgs = bars
+    .map(({ nodeId, costUsd, widthPct }, i) => {
+      const y = i * COST_ROW_HEIGHT;
+      const label = escHtml(nodeId);
+      const costLabel = `$${costUsd.toFixed(4)}`;
+      return `<g class="cost-bar-group"><rect x="0" y="${y}" width="${
+        widthPct.toFixed(2)
+      }%" height="${COST_BAR_HEIGHT}" class="cost-bar-rect"/><text x="4" y="${
+        y + COST_BAR_HEIGHT - 6
+      }" class="cost-bar-label">${label}: ${costLabel}</text></g>`;
+    })
+    .join("\n");
+
+  return `<section class="cost-chart">\n<h2>Cost by Node</h2>\n<p class="cost-chart-total">${totalLabel}</p>\n<svg width="100%" height="${totalHeight}" class="cost-chart-svg">\n${barSvgs}\n</svg>\n</section>`;
+}
+
 /**
  * Render the full self-contained HTML dashboard page.
  *
  * @param state - Parsed run state (provides run_id, timestamps, node statuses)
  * @param logs  - Map of nodeId → ClaudeCliOutput (or null if log unavailable)
  * @param phases - Optional phase grouping from pipeline config
+ * @param streamLogHrefs - Optional map of nodeId → relative href to stream.log
  */
 export function renderHtml(
   state: RunState,
   logs: Record<string, ClaudeCliOutput | null>,
   phases?: Record<string, string[]>,
+  streamLogHrefs?: Record<string, string>,
 ): string {
   const nodeIds = Object.keys(state.nodes);
 
@@ -199,7 +273,14 @@ export function renderHtml(
 
     bodySections = groups.map(({ label, ids }) => {
       const cards = ids
-        .map((id) => renderCard(id, state.nodes[id], logs[id] ?? null))
+        .map((id) =>
+          renderCard(
+            id,
+            state.nodes[id],
+            logs[id] ?? null,
+            streamLogHrefs?.[id],
+          )
+        )
         .join("\n");
       return `<section>\n<h2 class="phase-label">${
         escHtml(label)
@@ -207,7 +288,14 @@ export function renderHtml(
     }).join("\n");
   } else {
     const cards = nodeIds
-      .map((id) => renderCard(id, state.nodes[id], logs[id] ?? null))
+      .map((id) =>
+        renderCard(
+          id,
+          state.nodes[id],
+          logs[id] ?? null,
+          streamLogHrefs?.[id],
+        )
+      )
       .join("\n");
     bodySections =
       `<section>\n<div class="card-grid">\n${cards}\n</div>\n</section>`;
@@ -216,6 +304,8 @@ export function renderHtml(
   const completedAt = state.completed_at ?? "\u2014";
   const bars = computeTimeline(state);
   const timelineHtml = renderTimeline(bars);
+  const costBars = computeCostBars(state);
+  const costChartHtml = renderCostChart(costBars, state.total_cost_usd ?? 0);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -238,6 +328,7 @@ ${CSS}
   }</p>
 </header>
 ${timelineHtml}
+${costChartHtml}
 <main>
 ${bodySections}
 </main>
@@ -279,7 +370,15 @@ strong.aborted{color:#854d0e}
 .timeline-bar{position:absolute;top:0;height:100%;background:#60a5fa;border-radius:4px;display:flex;align-items:center;overflow:hidden;min-width:2px;box-sizing:border-box}
 .timeline-bar.timeline-bottleneck{background:#f87171}
 .timeline-label{font-size:.7rem;color:#fff;padding:0 .3rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-`.trim();
+.cost-chart{background:#fff;border-radius:8px;padding:1rem 1.5rem;margin-bottom:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.cost-chart h2{font-size:1rem;margin:0 0 .5rem;color:#333}
+.cost-chart-total{font-size:.85rem;color:#555;margin:0 0 .75rem}
+.cost-chart-empty{color:#999;font-size:.85rem;margin:0}
+.cost-chart-svg{display:block;overflow:visible}
+.cost-bar-rect{fill:#a78bfa}
+.cost-bar-label{font-size:.7rem;fill:#fff}
+.log-link{font-family:monospace;font-size:.75rem;color:#6b7280;display:inline-block;margin-bottom:.5rem}`
+  .trim();
 
 // --- CLI entry ---
 
@@ -307,13 +406,40 @@ if (import.meta.main) {
     // Config unreadable — proceed without phase grouping
   }
 
+  // Build reverse phase map: nodeId → phase
+  const nodePhaseMap: Record<string, string> = {};
+  if (phases) {
+    for (const [phase, members] of Object.entries(phases)) {
+      for (const nodeId of members) {
+        nodePhaseMap[nodeId] = phase;
+      }
+    }
+  }
+
+  // Scan stream.log existence and build href map
+  const streamLogHrefs: Record<string, string> = {};
+  for (const nodeId of Object.keys(state.nodes)) {
+    const phase = nodePhaseMap[nodeId];
+    const nodeDir = phase
+      ? `${runDir}/${phase}/${nodeId}`
+      : `${runDir}/${nodeId}`;
+    try {
+      await Deno.stat(`${nodeDir}/stream.log`);
+      streamLogHrefs[nodeId] = phase
+        ? `${phase}/${nodeId}/stream.log`
+        : `${nodeId}/stream.log`;
+    } catch {
+      // stream.log absent — skip
+    }
+  }
+
   // Read all node logs
   const logs: Record<string, ClaudeCliOutput | null> = {};
   for (const nodeId of Object.keys(state.nodes)) {
     logs[nodeId] = await readNodeLog(runDir, nodeId);
   }
 
-  const html = renderHtml(state, logs, phases);
+  const html = renderHtml(state, logs, phases, streamLogHrefs);
   const outPath = `${runDir}/index.html`;
   await Deno.writeTextFile(outPath, html);
   console.log(`Dashboard written to: ${outPath}`);

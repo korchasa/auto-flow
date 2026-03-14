@@ -56,7 +56,7 @@ graph TD
     end
 
     Dispatch --> Validate["Validation<br/>file checks"]
-    Dispatch --> Output["Output<br/>3 verbosity levels"]
+    Dispatch --> Output["Output<br/>4 verbosity levels"]
 ```
 
 ### 2.3 Pipeline DAG (FR-26, FR-33)
@@ -176,6 +176,26 @@ graph LR
   - Interactive: Claude Code discovers skills directly from
     `.claude/skills/agent-<name>/SKILL.md` → user invokes `/agent-<name>`.
     No symlinks required (canonical location).
+- **Agent Execution Summary (FR-40, FR-42):** All 7 agents must produce a `## Summary`
+  section in their output artifacts. Content: 2-5 bullet points (actions taken,
+  key decisions, artifacts produced, issues encountered). 6 agents (PM,
+  Architect, Tech Lead, QA, Meta-Agent, Tech Lead Review) append `## Summary`
+  to their markdown artifact files. Developer includes summary in commit message
+  body (no separate artifact file). Pipeline enforces via `contains_section:
+  Summary` validation on 6 nodes (`specification`, `design`, `decision`,
+  `verify`, `optimize`, `tech-lead-review`). Developer (`build`) excluded from
+  file-based validation — uses existing `custom_script: deno task check`.
+- **Voice Convention (FR-40, FR-43):** Each SKILL.md contains a `## Voice`
+  section (after `# Role:` heading, before `## Responsibilities`) mandating
+  first-person narrative ("I") in all agent outputs. Scope explicitly includes
+  GitHub issue comments, PR descriptions, and status updates (FR-43). Passive/
+  third-person prohibited in narrative text. YAML frontmatter and code blocks
+  excluded. Each agent's section includes 3 role-specific correct vs incorrect
+  example pairs: 2 anchored to artifacts/reports, 1 targeting GitHub
+  interactions specifically (e.g., PM: "I started the specification phase" not
+  "Specification phase started"; QA: "I verified all criteria" not "All criteria
+  were verified"). Hardcoded `gh issue comment --body` templates in SKILL.md
+  files must also use first-person (FR-43).
 - **Migration (FR-36):** Complete. Formerly `agents/<name>/SKILL.md` with
   symlinks from `.claude/skills/`. Migrated to canonical `.claude/skills/`
   layout; `agents/` directory removed; symlink indirection eliminated. Legacy
@@ -204,7 +224,8 @@ graph LR
     `RunState.total_cost_usd` (FR-32 aggregated run cost),
     `PipelineDefaults.on_failure_script` (FR-34 configurable failure hook),
     `HitlConfig.artifact_source` (renamed from `issue_source`),
-    `HitlConfig.exclude_login` (renamed from `bot_login`))
+    `HitlConfig.exclude_login` (renamed from `bot_login`),
+    `Verbosity` union: `"quiet"|"normal"|"semi-verbose"|"verbose"` (FR-41))
   - `template.ts` — `{{var}}` interpolation for prompts/paths
   - `config.ts` — YAML parsing, schema validation, defaults merge,
     `run_on` normalization. `validateNode()`: if `run_on` present, must be
@@ -249,7 +270,15 @@ graph LR
     Append semantics: multiple invocations (continuation) with same path
     produce concatenated JSONL. `--verbose` flag removed from
     `buildClaudeArgs()` (unrelated to streaming, changes stderr globally).
-    **Turn separators and summary footer (FR-39):** `executeClaudeProcess()`
+    **Repeated file read warning (FR-39):** `FileReadTracker` class in
+    `agent.ts`. `track(path): string | null` — maintains `Map<string, number>`,
+    returns `[WARN] repeated file read: <path> (<N> times)` when count >
+    threshold (default 2), else null. Instantiated per `executeClaudeProcess()`
+    call (counter resets per invocation). In event loop: for `tool_use` blocks
+    with `name === "Read"`, calls `tracker.track(block.input.file_path)`. Non-
+    null result written to `logFile` via `stampLines()`. Log-file-only (terminal
+    `onOutput` unchanged). Pure-logic class — unit-testable without I/O.
+    **Turn separators and summary footer (FR-40):** `executeClaudeProcess()`
     maintains `turnCount` counter. On each `event.type === "assistant"`:
     increments counter, writes `--- turn N ---` line to `logFile` via
     `stampLines()` (timestamped, consistent with existing log writes). After
@@ -257,7 +286,25 @@ graph LR
     `formatFooter(output: ClaudeCliOutput): string`. Footer format:
     `status=<ok|error> duration=<X>s cost=$<Y> turns=<N>`. Both separators and
     footer are log-file-only (terminal `onOutput` callback unchanged).
-    `formatFooter()` is a pure function — unit-testable without CLI
+    `formatFooter()` is a pure function — unit-testable without CLI.
+    **Repeated file read warning (FR-40):** `executeClaudeProcess()` maintains
+    `readCounts: Map<string, number>` tracking per-path `Read` tool-use events.
+    On each `assistant` event: iterates `message.content` blocks, detects
+    `tool_use` with `name === "Read"`, extracts `input.file_path`, increments
+    count. When count > 2: writes warning to `logFile` via `stampLines()`.
+    `checkRepeatedRead(readCounts, filePath): string | null` — helper: increments
+    map, returns formatted warning when count > 2, else null.
+    `formatRepeatedReadWarning(path, count): string` — pure function returning
+    `[WARN] repeated file read: <path> (<N> times)`. Exported for unit testing.
+    Warning is log-only (no `onOutput` callback). Counters reset per invocation
+    (map is local to `executeClaudeProcess()` call). Execution not blocked.
+    **Semi-verbose filtering (FR-41):** `formatEventForOutput(event,
+    verbosity?)` accepts optional `Verbosity` param. When
+    `verbosity === "semi-verbose"`, skips `tool_use` content blocks in
+    `assistant` events — emits only `text` blocks. Default `undefined` =
+    all blocks (backward-compatible). Log file writes call without verbosity
+    (full output preserved). `onOutput` callback path passes verbosity from
+    `AgentRunOptions` so terminal output is filtered at source
   - `loop.ts` — loop node execution with condition extraction, per-iteration
     `AgentResult` accumulation into `LoopResult.bodyResults`.
     `buildLoopBodyOrder()` reads from inline `nodes` sub-object (replaces
@@ -272,8 +319,12 @@ graph LR
   - ~~`git.ts`~~ — **deleted** (FR-29: domain-specific git code removed from
     engine). Functions relocated to `.sdlc/scripts/rollback-uncommitted.sh`.
     Failure handling replaced by configurable `on_failure_script` hook
-  - `output.ts` — terminal output manager (quiet/normal/verbose), verbose
-    methods for detailed agent-node diagnostics.
+  - `output.ts` — terminal output manager (quiet/normal/semi-verbose/verbose),
+    verbose methods for detailed agent-node diagnostics.
+    `nodeOutput()` gate: shown when `verbosity === "verbose"` or
+    `verbosity === "semi-verbose"`. In semi-verbose, tool-call lines already
+    excluded upstream by `formatEventForOutput()` — `nodeOutput()` passes
+    through whatever it receives.
     `dryRunPlan(levels, labels, postPipelineNodeIds?, runOnMap?)`: renders
     regular DAG levels, then optional "Post-pipeline" section listing `run_on`
     nodes with their conditions (FR-28).
@@ -302,7 +353,7 @@ graph LR
   - `mod.ts` — public API re-exports
 - **Interfaces:**
   - CLI: `deno task run [--prompt <text>] [--config <path>] [--resume <run-id>]
-    [--dry-run] [-v|-q] [--env KEY=VAL] [--skip nodes] [--only nodes]`
+    [--dry-run] [-v|-s|-q] [--env KEY=VAL] [--skip nodes] [--only nodes]`
   - Config: `.sdlc/pipeline.yaml` (YAML, version "1")
   - State: `.sdlc/runs/<run-id>/state.json` (JSON)
 - **Node types:** `agent`, `merge`, `loop` (with inline `nodes` sub-object
@@ -424,7 +475,7 @@ graph LR
   highest-priority open issue via `gh`.
 - **Deps:** Devcontainer, Claude CLI auth (OAuth or API key), `GITHUB_TOKEN`.
 
-### 3.10 Dashboard Generator (`scripts/generate-dashboard.ts`) (FR-33, FR-35)
+### 3.10 Dashboard Generator (`scripts/generate-dashboard.ts`) (FR-33, FR-35, FR-38, FR-40, issue #15)
 
 - **Purpose:** Generate self-contained HTML dashboard summarizing pipeline run
   results. Reads `state.json` + per-node `logs/*.json`. Produces `index.html`
@@ -433,11 +484,16 @@ graph LR
   - `readRunState(runDir)` — parse `state.json` → `RunState`
   - `readNodeLog(runDir, nodeId)` — parse `logs/<nodeId>.json` →
     `ClaudeCliOutput`
-  - `renderCard(nodeId, state, log)` — HTML card: status badge, timing, cost,
-    result summary via `<details><summary>` (first 3 lines preview, full text
-    in details body). Single-line results render without `<details>` wrapper.
-  - `renderHtml(runDir, state, logs)` — full page: run metadata header,
-    phase-grouped card grid, inlined CSS
+  - `renderCard(nodeId, state, log, streamLogHref?)` — HTML card: status badge,
+    timing, cost, result summary via `<details><summary>` (first 3 lines
+    preview, full text in details body). Single-line results render without
+    `<details>` wrapper. When `streamLogHref` provided: renders
+    `<a class="log-link" href="${escHtml(streamLogHref)}">stream log</a>` after
+    card-meta div. Omitted when absent (backward-compatible).
+  - `renderHtml(runDir, state, logs, streamLogHrefs?)` — full page: run metadata
+    header, phase-grouped card grid, inlined CSS. 4th param
+    `streamLogHrefs?: Record<string, string>` maps nodeId → relative href;
+    threaded to each `renderCard()` call via lookup
   - `escHtml(str)` — escape `<>&"'` for XSS-safe HTML embedding
   - `computeTimeline(state: RunState)` — iterates `state.nodes`, parses
     `started_at` ISO timestamps, computes `offsetPct`/`widthPct` relative to
@@ -450,6 +506,22 @@ graph LR
     class. Labels sanitized via `escHtml()`. Timeline CSS appended to existing
     `CSS` const (inlined, no CDN deps). Integrated into `renderHtml()` between
     header and card grid (FR-38)
+- **Stream log link flow (issue #15):** CLI entry point scans each node
+  directory for `stream.log` existence via `Deno.stat()`. For nodes with phases,
+  computes relative path as `<phase>/<nodeId>/stream.log`; without phase:
+  `<nodeId>/stream.log`. Builds `Record<string, string>` href map, passes to
+  `renderHtml()` → threaded to `renderCard()`. CSS: `.log-link` class (monospace,
+  smaller font, muted color — distinct from result text).
+- **Functions (continued):**
+  - `computeCostBars(state: RunState)` — filters `state.nodes` by
+    `cost_usd > 0`, computes proportional `widthPct` relative to max cost.
+    Returns `{nodeId: string, costUsd: number, widthPct: number}[]` (FR-40)
+  - `renderCostChart(bars, totalCost)` — inline SVG horizontal bar chart.
+    Each bar: `<rect>` with proportional width, `<text>` label (node ID via
+    `escHtml()`), cost value annotation. Total cost header. Empty bars →
+    "No cost data" message (mirrors timeline empty-state). Cost chart CSS
+    appended to `CSS` const. Integrated into `renderHtml()` between timeline
+    and `<main>` card grid (FR-40)
 - **Interfaces:**
   - CLI: `deno task dashboard --run-dir <path>`
   - Hook: `after:` on `optimize` node (`|| true` suffix for non-fatal)
@@ -689,3 +761,32 @@ graph LR
 - **Deferred:** Multi-repo support. Parallel pipelines for multiple issues.
   Issue size/complexity limits. Cost budget limits and alerts (per-node cost
   aggregation implemented in FR-32; budget enforcement deferred).
+
+## 8. SRS Evidence Status
+
+All FR evidence for issue #15 is complete:
+
+- **FR-35 (Dashboard Result Summary Display):** Implemented. SRS section 3.34
+  evidence recorded — `scripts/generate-dashboard.ts` (`renderCard`,
+  `escHtml`). Tests in `scripts/generate-dashboard_test.ts`.
+- **FR-38 (Timeline Visualization):** Implemented. SRS section 3.37 evidence
+  recorded — `scripts/generate-dashboard.ts` (`computeTimeline`,
+  `renderTimeline`, `.timeline-bottleneck` CSS). Tests in
+  `scripts/generate-dashboard_test.ts`. Evidence committed in `e493cbb`.
+- **FR-39 (Repeated File Read Warning):** Implemented. SRS section 3.38
+  evidence recorded — `engine/agent.ts` (`FileReadTracker` class). Tests in
+  `engine/agent_test.ts`. Evidence committed in `e493cbb`.
+- **FR-40 (Dashboard Stream Log Links):** Implemented. SRS section 3.39
+  evidence recorded — `scripts/generate-dashboard.ts` (`streamLogHref`,
+  `.log-link` CSS). Tests in `scripts/generate-dashboard_test.ts`.
+- **FR-42 (Agent Output Summary):** Already implemented. All 7 agent SKILL.md
+  files document `## Summary` in output format. `pipeline.yaml` enforces
+  `contains_section: Summary` on 6 agent nodes (`specification`, `design`,
+  `decision`, `verify`, `optimize`, `tech-lead-review`); Developer (`build`)
+  enforced via `custom_script: deno task check`. Evidence:
+  `.claude/skills/agent-*/SKILL.md` (7 files), `.sdlc/pipeline.yaml` (7 rules).
+- **FR-43 (Agent First-Person Voice — GitHub Interactions):** Voice sections
+  strengthened with explicit GitHub interaction scope + third example pair per
+  agent. Hardcoded `gh issue comment --body` templates in PM, Architect, Tech
+  Lead SKILL.md files updated to first-person. Evidence:
+  `.claude/skills/agent-*/SKILL.md` (7 files, `## Voice` sections).

@@ -2,6 +2,7 @@ import { assertEquals } from "@std/assert";
 import {
   buildClaudeArgs,
   extractClaudeOutput,
+  FileReadTracker,
   formatEventForOutput,
   formatFooter,
   stampLines,
@@ -522,6 +523,103 @@ Deno.test("formatFooter — zero values produce valid footer", () => {
   assertEquals(footer, "status=ok duration=0.0s cost=$0.0000 turns=0");
 });
 
+Deno.test("formatEventForOutput — semi-verbose suppresses tool_use blocks", () => {
+  const out = formatEventForOutput(
+    {
+      type: "assistant",
+      message: {
+        content: [
+          { type: "text", text: "Hello" },
+          { type: "tool_use", name: "Bash", input: { command: "ls" } },
+        ],
+      },
+    },
+    "semi-verbose",
+  );
+  assertEquals(out, "[stream] text: Hello");
+  assertEquals(out.includes("tool"), false);
+});
+
+Deno.test("formatEventForOutput — semi-verbose emits text blocks only", () => {
+  const out = formatEventForOutput(
+    {
+      type: "assistant",
+      message: {
+        content: [
+          { type: "tool_use", name: "Read", input: { file_path: "/a.ts" } },
+          { type: "text", text: "Done" },
+          { type: "tool_use", name: "Write", input: { file_path: "/b.ts" } },
+        ],
+      },
+    },
+    "semi-verbose",
+  );
+  assertEquals(out, "[stream] text: Done");
+});
+
+Deno.test("formatEventForOutput — semi-verbose with only tool_use returns empty", () => {
+  const out = formatEventForOutput(
+    {
+      type: "assistant",
+      message: {
+        content: [
+          { type: "tool_use", name: "Bash", input: { command: "pwd" } },
+        ],
+      },
+    },
+    "semi-verbose",
+  );
+  assertEquals(out, "");
+});
+
+Deno.test("formatEventForOutput — undefined verbosity emits all blocks (backward-compat)", () => {
+  const out = formatEventForOutput({
+    type: "assistant",
+    message: {
+      content: [
+        { type: "text", text: "Hi" },
+        { type: "tool_use", name: "Bash", input: { command: "ls" } },
+      ],
+    },
+  });
+  assertEquals(out.includes("[stream] text: Hi"), true);
+  assertEquals(out.includes("[stream] tool: Bash"), true);
+});
+
+Deno.test("formatEventForOutput — verbose verbosity emits all blocks", () => {
+  const out = formatEventForOutput(
+    {
+      type: "assistant",
+      message: {
+        content: [
+          { type: "text", text: "Hi" },
+          { type: "tool_use", name: "Bash", input: { command: "ls" } },
+        ],
+      },
+    },
+    "verbose",
+  );
+  assertEquals(out.includes("[stream] text: Hi"), true);
+  assertEquals(out.includes("[stream] tool: Bash"), true);
+});
+
+Deno.test("formatEventForOutput — normal verbosity emits all blocks", () => {
+  const out = formatEventForOutput(
+    {
+      type: "assistant",
+      message: {
+        content: [
+          { type: "text", text: "Hi" },
+          { type: "tool_use", name: "Bash", input: { command: "ls" } },
+        ],
+      },
+    },
+    "normal",
+  );
+  assertEquals(out.includes("[stream] text: Hi"), true);
+  assertEquals(out.includes("[stream] tool: Bash"), true);
+});
+
 Deno.test("turn separators + footer — stream log integration", async () => {
   const tmpPath = await Deno.makeTempFile({ suffix: ".jsonl" });
   try {
@@ -683,6 +781,151 @@ Deno.test("turn separators + footer — append semantics: two invocations", asyn
       endLines.length,
       2,
       "two invocations should produce 2 end markers",
+    );
+  } finally {
+    await Deno.remove(tmpPath);
+  }
+});
+
+// --- FileReadTracker unit tests ---
+
+Deno.test("FileReadTracker — threshold boundary: 2 reads = null, 3rd = warning", () => {
+  const tracker = new FileReadTracker();
+  assertEquals(tracker.track("/a.ts"), null, "1st read: no warning");
+  assertEquals(tracker.track("/a.ts"), null, "2nd read: no warning");
+  const warn = tracker.track("/a.ts");
+  assertEquals(warn !== null, true, "3rd read: should warn");
+  assertEquals(warn, "[WARN] repeated file read: /a.ts (3 times)");
+});
+
+Deno.test("FileReadTracker — per-path independence", () => {
+  const tracker = new FileReadTracker();
+  // path A: 3 reads → warns
+  tracker.track("/a.ts");
+  tracker.track("/a.ts");
+  const warnA = tracker.track("/a.ts");
+  assertEquals(warnA, "[WARN] repeated file read: /a.ts (3 times)");
+  // path B: 2 reads → no warning
+  tracker.track("/b.ts");
+  const warnB = tracker.track("/b.ts");
+  assertEquals(warnB, null, "path B at 2 reads should not warn");
+});
+
+Deno.test("FileReadTracker — warning format matches [WARN] repeated file read: <path> (<N> times)", () => {
+  const tracker = new FileReadTracker();
+  tracker.track("/engine/agent.ts");
+  tracker.track("/engine/agent.ts");
+  const warn = tracker.track("/engine/agent.ts");
+  assertEquals(
+    /^\[WARN\] repeated file read: .+ \(\d+ times\)$/.test(warn ?? ""),
+    true,
+    `unexpected format: ${warn}`,
+  );
+});
+
+Deno.test("FileReadTracker — consecutive warnings: 4th read returns (4 times)", () => {
+  const tracker = new FileReadTracker();
+  tracker.track("/x.ts");
+  tracker.track("/x.ts");
+  tracker.track("/x.ts"); // 3rd — first warning
+  const warn4 = tracker.track("/x.ts"); // 4th
+  assertEquals(warn4, "[WARN] repeated file read: /x.ts (4 times)");
+});
+
+Deno.test("FileReadTracker — reset clears counts", () => {
+  const tracker = new FileReadTracker();
+  tracker.track("/a.ts");
+  tracker.track("/a.ts");
+  tracker.track("/a.ts"); // 3rd — would warn
+  tracker.reset();
+  // After reset, counts restart
+  assertEquals(tracker.track("/a.ts"), null, "after reset: 1st read no warn");
+  assertEquals(tracker.track("/a.ts"), null, "after reset: 2nd read no warn");
+});
+
+Deno.test("FileReadTracker — custom threshold", () => {
+  const tracker = new FileReadTracker(1); // threshold=1: warn after 1st read (count>1 = 2nd)
+  assertEquals(tracker.track("/a.ts"), null, "1st read: no warning");
+  const warn = tracker.track("/a.ts");
+  assertEquals(warn, "[WARN] repeated file read: /a.ts (2 times)");
+});
+
+// --- Integration test: repeated reads produce warning lines in log file ---
+
+Deno.test("FileReadTracker — integration: repeated reads written to log file", async () => {
+  const tmpPath = await Deno.makeTempFile({ suffix: ".jsonl" });
+  try {
+    const logFile = await Deno.open(tmpPath, {
+      write: true,
+      create: true,
+      append: true,
+    });
+    const encoder = new TextEncoder();
+    const tracker = new FileReadTracker();
+
+    // Simulate the event loop logic from executeClaudeProcess
+    const events = [
+      {
+        type: "assistant",
+        message: {
+          content: [
+            { type: "tool_use", name: "Read", input: { file_path: "/a.ts" } },
+          ],
+        },
+      },
+      {
+        type: "assistant",
+        message: {
+          content: [
+            { type: "tool_use", name: "Read", input: { file_path: "/a.ts" } },
+          ],
+        },
+      },
+      {
+        type: "assistant",
+        message: {
+          content: [
+            { type: "tool_use", name: "Read", input: { file_path: "/a.ts" } }, // 3rd — triggers warning
+            { type: "tool_use", name: "Read", input: { file_path: "/b.ts" } }, // different path — no warning
+          ],
+        },
+      },
+    ];
+
+    for (const event of events) {
+      if (event.type === "assistant") {
+        const contents = event.message?.content;
+        if (Array.isArray(contents)) {
+          for (const block of contents) {
+            if (block.type === "tool_use" && block.name === "Read") {
+              const warn = tracker.track(block.input?.file_path);
+              if (warn) {
+                await logFile.write(
+                  encoder.encode(stampLines(warn) + "\n"),
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+    logFile.close();
+
+    const content = await Deno.readTextFile(tmpPath);
+    const lines = content.split("\n").filter((l) => l.trim());
+
+    // Should have exactly 1 warning line (for /a.ts on 3rd read)
+    assertEquals(lines.length, 1, "expected exactly 1 warning line");
+    assertEquals(
+      lines[0].includes("[WARN] repeated file read: /a.ts (3 times)"),
+      true,
+      `unexpected line: ${lines[0]}`,
+    );
+    // Warning line should have timestamp
+    assertEquals(
+      /^\[\d{2}:\d{2}:\d{2}\] /.test(lines[0]),
+      true,
+      `warning missing timestamp: ${lines[0]}`,
     );
   } finally {
     await Deno.remove(tmpPath);

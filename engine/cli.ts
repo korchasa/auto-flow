@@ -9,6 +9,7 @@
  *   --resume <run-id>     Resume a previous run from its state
  *   --dry-run             Print execution plan without running
  *   -v, --verbose         Show full streaming output
+ *   -s, --semi-verbose    Show text output only (suppress tool calls)
  *   -q, --quiet           Show errors only
  *   --env <KEY=VAL>       Set environment variable (repeatable)
  *   --skip <node-ids>     Comma-separated node IDs to skip
@@ -49,6 +50,10 @@ export function parseArgs(args: string[]): EngineOptions {
       case "-v":
       case "--verbose":
         verbosity = "verbose";
+        break;
+      case "-s":
+      case "--semi-verbose":
+        verbosity = "semi-verbose";
         break;
       case "-q":
       case "--quiet":
@@ -111,6 +116,7 @@ Options:
   --resume <run-id>     Resume a previous run
   --dry-run             Print execution plan without running
   -v, --verbose         Show full streaming output from agents
+  -s, --semi-verbose    Show text output only (suppress tool calls)
   -q, --quiet           Show errors only
   --env <KEY=VAL>       Set environment variable (repeatable)
   --skip <node-ids>     Comma-separated node IDs to skip

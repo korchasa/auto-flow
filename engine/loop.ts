@@ -6,6 +6,7 @@ import type {
   PipelineConfig,
   RunState,
   TemplateContext,
+  Verbosity,
 } from "./types.ts";
 import { buildLoopBodyOrder } from "./dag.ts";
 import { runAgent } from "./agent.ts";
@@ -39,6 +40,8 @@ export interface LoopRunOptions {
   onIteration?: (iteration: number, maxIterations: number) => void;
   /** OutputManager for verbose diagnostics (forwarded to runAgent). */
   output?: OutputManager;
+  /** Verbosity level for terminal output filtering (forwarded to runAgent). */
+  verbosity?: Verbosity;
   saveState?: () => Promise<void>;
 }
 
@@ -90,6 +93,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         output: opts.output,
         nodeId: bodyNodeId,
         streamLogPath,
+        verbosity: opts.verbosity,
       });
 
       bodyResults.push(result);

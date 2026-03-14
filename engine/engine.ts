@@ -440,6 +440,7 @@ export class Engine {
       output: this.output,
       nodeId,
       streamLogPath,
+      verbosity: this.options.verbosity,
     });
 
     if (!result.success) {
@@ -583,6 +584,7 @@ export class Engine {
       onIteration: (iteration, maxIterations) =>
         this.output.loopIteration(nodeId, iteration, maxIterations),
       output: this.output,
+      verbosity: this.options.verbosity,
       saveState: () => saveState(this.state),
     });
 

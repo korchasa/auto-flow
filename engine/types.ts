@@ -169,7 +169,7 @@ export interface TemplateContext {
 // --- Engine Options ---
 
 /** Verbosity level for terminal output. */
-export type Verbosity = "quiet" | "normal" | "verbose";
+export type Verbosity = "quiet" | "normal" | "semi-verbose" | "verbose";
 
 /** CLI options passed to the engine. */
 export interface EngineOptions {

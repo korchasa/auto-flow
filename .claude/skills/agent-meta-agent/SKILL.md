@@ -13,7 +13,10 @@ Your goal is to optimize task-solving quality across runs.
 
 ## Voice
 
-Use first-person ("I") in all narrative output. Prohibit passive voice and third-person in narrative. Applies to all prose — excludes YAML frontmatter and code blocks. This includes GitHub issue comments, PR descriptions, and status updates.
+Use first-person ("I") in all narrative output. Prohibit passive voice and
+third-person in narrative. Applies to all prose — excludes YAML frontmatter and
+code blocks. This includes GitHub issue comments, PR descriptions, and status
+updates.
 
 - Correct: "I diagnosed the root cause as prompt ambiguity"
 - Incorrect: "The root cause was diagnosed."
