@@ -1,35 +1,30 @@
 # Meta-Agent Memory
 
 ## Agent Baselines
-- pm (specification): 12t/$0.34/65s — stable ($0.30→$0.34).
-- architect (design): 13t/$0.26/72s — stable.
-- tech-lead (decision): 17t/$1.03/98s — REGRESSED ($0.30→$1.03). ToolSearch + double tool-results read.
-- developer (build): 14t/$0.49/63s — REGRESSED ($0.23→$0.49). ToolSearch + tail via Bash.
-- qa (verify): 21t/$0.52/126s — REGRESSED ($0.70→$0.52 cost but 21t). Double deno check (6th), 2× requirements.md read (forbidden), 3× duplicate Grep.
-- Total run cost: $2.64 (up from $1.83)
+- pm (specification): 12t/$0.33/59s — stable.
+- architect (design): 10t/$0.22/49s — IMPROVED (13t→10t, $0.26→$0.22).
+- tech-lead (decision): 15t/$0.38/93s — RECOVERED ($1.03→$0.38). ToolSearch fix worked.
+- developer (build): 9t/$0.21/37s — RECOVERED ($0.49→$0.21). ToolSearch fix worked.
+- qa (verify): 15t/$0.41/124s — IMPROVED (21t→15t, $0.52→$0.41). All WATCHING patterns clean.
+- Total run cost: $1.55 (record low, down from $2.64)
 - 1 iteration (QA passed first try)
 
 ## Active Patterns
-- pm-oversized-gh-output: RESOLVED. 1st clean run in 081855 (used `--jq '{title,body}'`).
-- qa-bash-grep-v3: NOT violated in 082012. 1st clean run (used Grep tool). WATCHING.
-- qa-double-deno-check: WATCHING, last seen 082012. 6th consecutive. `deno task check`
-  then `| tail -30`. Fix: explicit "pipe = second execution" + forbidden pipe ops.
-- qa-toolsearch: NOT violated in 082012. 1st clean run. WATCHING.
-- qa-unnecessary-reads: WATCHING, last seen 082012. 2nd consecutive. Read
-  requirements.md TWICE despite HARD STOP. Updated evidence + positive guidance.
-- qa-duplicate-grep: NEW, first seen 082012. `contains_section` 3×, `## Summary`
-  2× on same paths. Fix: mandate parallel Grep + pre-list algorithm.
-- tl-toolsearch: NEW, first seen 082012. ToolSearch("select:Write"). Fix: added
-  ToolSearch to FORBIDDEN list.
-- tl-double-tool-results-read: NEW, first seen 082012. Read same temp file twice.
-  Fix: ONE READ PER FILE rule for temp files.
-- dev-toolsearch: NEW, first seen 082012. ToolSearch("select:Read,Grep,..."). Fix:
-  added ToolSearch to FORBIDDEN list.
-- architect-grep-after-read-v2: NOT violated in 082012. 3rd clean run → RESOLVED.
-- tl-design-md-reread: NOT violated in 082012. 3rd clean run → RESOLVED.
-- dev-design-md-reread: NOT violated in 082012. 3rd clean run → RESOLVED.
+- qa-bash-grep-v3: 2nd clean run (083240). WATCHING → need 1 more clean.
+- qa-double-deno-check: 1st clean run (083240)! Was 6 consecutive. WATCHING.
+- qa-toolsearch: 2nd clean run (083240). WATCHING → need 1 more clean.
+- qa-unnecessary-reads: 1st clean run (083240). No requirements.md read. WATCHING.
+- qa-duplicate-grep: REDUCED in 083240. 4 Grep calls (2 slightly redundant on
+  pipeline.yaml) vs 5 before. Improving. WATCHING.
+- tl-toolsearch: 1st clean run (083240). WATCHING.
+- tl-double-tool-results-read: 1st clean run (083240). WATCHING.
+- dev-toolsearch: 1st clean run (083240). WATCHING.
 
 ## Resolved Patterns
+- pm-oversized-gh-output: RESOLVED (2+ clean runs)
+- architect-grep-after-read-v2: RESOLVED (4 clean runs)
+- tl-design-md-reread: RESOLVED (4 clean runs)
+- dev-design-md-reread: RESOLVED (4 clean runs)
 - developer-grep-after-read: RESOLVED (3+ clean runs)
 - tech-lead-write-rewrite: RESOLVED (3 clean runs)
 - tech-lead-git-stash: RESOLVED (3 clean runs)
@@ -55,13 +50,8 @@
 - tl-push-force-with-lease: RESOLVED (2 clean runs)
 - qa-bash-grep-v2: RESOLVED → MUTATED into qa-bash-grep-v3
 - qa-individual-file-reads-v2: RESOLVED (2 clean runs: 080106, 080440)
-- pm-oversized-gh-output: RESOLVED (clean in 081855 after pre-flight fix)
 - double-git-commit: RESOLVED (3 clean runs)
 - dev-bash-grep: RESOLVED (3 clean runs)
-- architect-grep-after-read-v2: RESOLVED (3 clean runs: 081855, 082012)
-- tl-design-md-reread: RESOLVED (3 clean runs)
-- dev-design-md-reread: RESOLVED (3 clean runs)
-- qa-individual-file-reads-v2: RESOLVED (3+ clean runs)
 
 ## Applied Fixes Log
 - 20260313T021326–20260314T062600: (compressed — see git history for details)
@@ -98,6 +88,9 @@
   forbidden pipe operators (6th consecutive). (2) requirements.md: updated
   evidence (2nd consecutive, read it TWICE). (3) duplicate Grep: mandate
   parallel calls + pre-list algorithm (3× contains_section, 2× ## Summary).
+- 20260314T083240: No fixes needed. Record-low $1.55 run. All WATCHING patterns
+  clean. ToolSearch fixes confirmed for tech-lead ($1.03→$0.38) and developer
+  ($0.49→$0.21). QA double-deno-check broken after 6 consecutive violations.
 
 ## Lessons Learned
 - Total pipeline cost baseline for M-effort issue: ~$2.25 (down from ~$5.00).
@@ -110,7 +103,7 @@
   behavior. Positive algorithm (WHAT to do) works.
 - **Skill tool is the most persistent anti-pattern.** Fix: anti-Skill as FIRST
   content (before # Role heading). 3 clean runs confirm.
-- **Cost trajectory:** $5.09→$2.31→$4.67→$5.73→$3.38→$3.16→$4.09→$3.16→$1.75→$2.25→$2.28→$1.96→$1.83→$2.64.
+- **Cost trajectory:** $5.09→$2.31→$4.67→$5.73→$3.38→$3.16→$4.09→$3.16→$1.75→$2.25→$2.28→$1.96→$1.83→$2.64→$1.55.
 - **Git archaeology is wasteful.** Agents should plan from current checkout.
 - **Scattered HARD STOPs cause rule fatigue.** Single execution algorithm better.
 - **Text checkpoint technique:** Requiring agent to WRITE analysis in text
