@@ -428,3 +428,11 @@ FR-S24 evidence (issue #96):
   phase-aware artifact path `.sdlc/runs/<run-id>/[<phase>/]<node-id>/`.
   SDS §2.2 already documents phase-aware layout. Engine FR-E9 implementation
   deferred (separate issue).
+- **FR-S25 (Phase-Organized SDLC Artifact Directories):** Pending engine FR-E9
+  implementation. Selected Variant A (FR-E9 Phase Registry only). Once phase
+  registry is active in `engine/state.ts`, artifact paths resolve to
+  `.sdlc/runs/<run-id>/<phase>/<node-id>/` for nodes with `phase:` field.
+  SDLC pipeline nodes already have `phase:` fields in `pipeline.yaml`
+  (`plan`, `impl`, `report`). Dashboard path computation
+  (`scripts/generate-dashboard.ts`) to be updated for phase-aware layout.
+  FR-E5 and FR-E7/FR-S24 deferred to separate issues.
