@@ -91,7 +91,9 @@ graph TD
     `clearPhaseRegistry()` — see §3.2),
     cost aggregation (`updateRunCost()` sums
     `nodes[*].cost_usd` → `total_cost_usd`; called from
-    `markNodeCompleted()` when optional `costUsd` param provided, FR-32)
+    `markNodeCompleted()` when optional `costUsd` param provided, FR-32).
+    `markNodeCompleted()` also accepts optional `result?: string` param
+    (FR-E22) — persists excerpt to `NodeState.result` in `state.json`
   - `agent.ts` — Claude CLI invocation, continuation loop, retry.
     `AgentRunOptions.model` and `InvokeOptions.model`: optional string for
     per-node model selection. `buildClaudeArgs()` emits `--model <value>` when
@@ -171,15 +173,29 @@ graph TD
     `dryRunPlan(levels, labels, postPipelineNodeIds?, runOnMap?)`: renders
     regular DAG levels, then optional "Post-pipeline" section listing `run_on`
     nodes with their conditions (FR-28).
+    `extractResultExcerpt(text: string, maxLines?: number, maxChars?: number): string`
+    (FR-E15): pure function — filters empty lines, takes first N non-empty
+    (default 3), joins with ` | ` separator, truncates to maxChars (default
+    400). Used by `nodeResult()` and `engine.ts` for state persistence.
     `nodeResult(nodeId, output: ClaudeCliOutput)`: one-line agent result
-    summary (FR-30). Guarded by `verbosity !== "quiet"`. Format:
-    `[HH:MM:SS] <nodeId padded>  RESULT: <first line ≤120 chars> | cost=$X.XXXX | duration=Xs | turns=N`.
+    summary (FR-E15). Guarded by `verbosity !== "quiet"`. Format:
+    `[HH:MM:SS] <nodeId padded>  RESULT: <excerpt ≤400 chars> | cost=$X.XXXX | duration=Xs | turns=N`.
+    Uses `extractResultExcerpt()` for multi-line extraction (replaces
+    first-line-only `split("\n")[0].slice(0, 120)` truncation).
+    `RunSummary.nodeResults?: Record<string, string>` (FR-E22): optional
+    per-node result excerpts. `summary()` renders per-node result lines after
+    "Nodes:" when `nodeResults` present: `  <nodeId padded>  <excerpt>`.
     Imports `ClaudeCliOutput` from `types.ts`
   - `engine.ts` — main executor: level iteration, sequential dispatch, verbose
-    input resolution, node result summary display (FR-30),
+    input resolution, node result summary display (FR-E15/E22),
     loop-node log saving via `onNodeComplete` callback,
     phase registry init via `setPhaseRegistry(config)` at engine startup,
     pre-post-pipeline `on_failure_script` execution.
+    `executeNode()`: passes `extractResultExcerpt(result.output.result)` to
+    `markNodeCompleted()` as `result` param (FR-E22).
+    `executeLoopNode()`: passes result excerpt in `onNodeComplete` callback.
+    `printSummary()`: builds `nodeResults` from `state.nodes[*].result`,
+    passes to `summary()` for per-node result rendering.
     Dry-run path (FR-28): applies `collectPostPipelineNodes()` +
     `sortPostPipelineNodes()` + level filtering before calling
     `dryRunPlan()`, passing filtered levels and post-pipeline node IDs with
@@ -302,9 +318,10 @@ graph TD
     a key in `nodes`. Body node ordering derived from `inputs` declarations
     via topo-sort (>1 entry requires at least one `inputs` reference to
     prevent disconnected graph with arbitrary order).
-  - NodeState: `{ ..., cost_usd?: number }` — per-node cost from
-    `ClaudeCliOutput.total_cost_usd`, set at completion via
-    `markNodeCompleted()` optional param (FR-32)
+  - NodeState: `{ ..., cost_usd?: number, result?: string }` — per-node cost
+    from `ClaudeCliOutput.total_cost_usd` and result excerpt (≤400 chars) from
+    `extractResultExcerpt()`, both set at completion via
+    `markNodeCompleted()` optional params (FR-32, FR-E22)
   - RunState: `{ ..., total_cost_usd?: number }` — sum of all
     `nodes[*].cost_usd`, recomputed by `updateRunCost()` on each node
     completion (FR-32)
@@ -360,14 +377,20 @@ graph TD
     `saveAgentLog()` errors caught and warned (non-fatal) — audit I/O must not
     break loop execution. `runDir` resolved via `getRunDir(this.state.run_id)`
     (already in engine scope).
-  - **Node Result Summary** (FR-30): After agent node completion, engine
-    displays one-line result summary via `OutputManager.nodeResult()`.
+  - **Node Result Summary** (FR-E15, FR-E22): After agent node completion,
+    engine displays one-line result summary via `OutputManager.nodeResult()`.
+    `nodeResult()` uses `extractResultExcerpt()` for multi-line extraction
+    (≤3 non-empty lines, ≤400 chars, collapsed via ` | ` separator).
     Two call sites: (1) `executeNode()` — after `markNodeCompleted()`, for
     top-level agent nodes; `executeAgentNode()` returns `AgentResult | null`
-    (was `boolean`), `executeNode()` extracts `.output` field.
+    (was `boolean`), `executeNode()` extracts `.output` field. Passes
+    `extractResultExcerpt(result.output.result)` to `markNodeCompleted()`
+    for state persistence.
     (2) `executeLoopNode()` `onNodeComplete` callback — calls `nodeResult()`
-    when `result.output` exists. Suppressed in quiet mode. Shown in default
-    and verbose modes.
+    when `result.output` exists; passes excerpt to `markNodeCompleted()`.
+    Suppressed in quiet mode. Shown in default and verbose modes.
+    `printSummary()` builds `nodeResults` from persisted `state.nodes[*].result`
+    and passes to `summary()` for per-node result lines in final summary block.
   - **Verbose Edge Cases** (behavioral contracts verified by tests):
     - **Default mode (no `-v`):** All 4 verbose methods produce zero stderr
       output. `OutputManager` constructed with `verbose=false` suppresses all
