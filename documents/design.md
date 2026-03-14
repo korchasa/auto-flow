@@ -734,3 +734,13 @@ graph LR
 - **Deferred:** Multi-repo support. Parallel pipelines for multiple issues.
   Issue size/complexity limits. Cost budget limits and alerts (per-node cost
   aggregation implemented in FR-32; budget enforcement deferred).
+
+## 8. SRS Evidence Status
+
+- **FR-38 (Timeline Visualization):** Implemented. SRS section 3.37 evidence
+  update pending — `scripts/generate-dashboard.ts` (`computeTimeline`,
+  `renderTimeline`, `.timeline-bottleneck` CSS). Tests in
+  `scripts/generate-dashboard_test.ts`.
+- **FR-39 (Repeated File Read Warning):** Implemented. SRS section 3.38
+  evidence update pending — `engine/agent.ts` (`FileReadTracker` class).
+  Tests in `engine/agent_test.ts`.
