@@ -833,6 +833,36 @@
   - [x] Documentation updated: `documents/requirements.md`, `documents/design.md`, `AGENTS.md` (if applicable), `README.md`, `documents/meta.md`. Evidence: commit `f0085df`; QA PASS run `20260314T000902` (436 tests)
   - [x] `deno task check` passes after all changes. Evidence: QA PASS run `20260314T000902` — 436 tests pass
 
+### 3.37 FR-38: Timeline Visualization in Dashboard
+
+- **Description:** HTML dashboard must include a Gantt-style timeline section
+  showing each pipeline node as a horizontal bar. Bar position reflects
+  `started_at` offset from run start; bar width reflects `duration_ms`.
+  Parallel nodes appear stacked vertically at the same horizontal offset. The
+  longest-duration node (bottleneck) is visually highlighted.
+- **Rationale:** Current dashboard renders node cards with no temporal view,
+  making it impossible to identify parallelism, sequencing, or bottlenecks at
+  a glance. `NodeState` already records `started_at`, `completed_at`, and
+  `duration_ms` — no engine changes required.
+- **Acceptance criteria:**
+  - [ ] Dashboard HTML includes a Gantt-style timeline section (rendered in
+    `generate-dashboard.ts`).
+  - [ ] Each node rendered as a horizontal bar: left offset =
+    `(node.started_at − run.started_at) / total_duration`; width =
+    `node.duration_ms / total_duration` (proportional, percentage-based CSS).
+  - [ ] Parallel nodes (overlapping time ranges) are stacked vertically in the
+    timeline view (each on its own row).
+  - [ ] Bottleneck node (max `duration_ms`) is visually distinguished (e.g.,
+    distinct fill color or border).
+  - [ ] Nodes with missing `started_at` or `duration_ms` (skipped/pending) are
+    omitted from the timeline.
+  - [ ] Timeline renders correctly when only one node has timing data.
+  - [ ] No external CDN dependencies; all CSS/JS inlined.
+  - [ ] `escHtml()` applied to node labels rendered in the timeline.
+  - [ ] Unit tests cover: bar position/width calculation, bottleneck detection,
+    parallel node stacking, single-node edge case, missing-timing omission.
+  - [ ] `deno task check` passes.
+
 ---
 
 ## 4. Non-functional requirements

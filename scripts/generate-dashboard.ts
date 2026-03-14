@@ -91,6 +91,82 @@ ${resultHtml}
 </div>`;
 }
 
+/** A single bar entry for the Gantt-style timeline. */
+export interface TimelineBar {
+  nodeId: string;
+  /** Bar left offset as percentage of total run duration. */
+  offsetPct: number;
+  /** Bar width as percentage of total run duration. */
+  widthPct: number;
+  durationMs: number;
+  /** True when this node has the longest duration_ms in the run. */
+  isBottleneck: boolean;
+}
+
+/**
+ * Compute timeline bars from run state.
+ * Nodes missing started_at or duration_ms are omitted.
+ * Percentages are relative to run start and total duration.
+ */
+export function computeTimeline(state: RunState): TimelineBar[] {
+  const entries: Array<
+    { nodeId: string; startMs: number; durationMs: number }
+  > = [];
+
+  for (const [nodeId, node] of Object.entries(state.nodes)) {
+    if (!node.started_at || node.duration_ms == null) continue;
+    const startMs = new Date(node.started_at).getTime();
+    entries.push({ nodeId, startMs, durationMs: node.duration_ms });
+  }
+
+  if (entries.length === 0) return [];
+
+  const runStartMs = new Date(state.started_at).getTime();
+  const endMs = Math.max(...entries.map((e) => e.startMs + e.durationMs));
+  const totalDuration = endMs - runStartMs;
+
+  if (totalDuration <= 0) return [];
+
+  const maxDuration = Math.max(...entries.map((e) => e.durationMs));
+
+  return entries.map(({ nodeId, startMs, durationMs }) => ({
+    nodeId,
+    offsetPct: ((startMs - runStartMs) / totalDuration) * 100,
+    widthPct: (durationMs / totalDuration) * 100,
+    durationMs,
+    isBottleneck: durationMs === maxDuration,
+  }));
+}
+
+/**
+ * Render a Gantt-style HTML timeline section.
+ * Bars are sorted by offsetPct. Bottleneck bar uses timeline-bottleneck class.
+ * Labels are XSS-safe via escHtml(). Empty bars array produces an empty state message.
+ */
+export function renderTimeline(bars: TimelineBar[]): string {
+  if (bars.length === 0) {
+    return `<section class="timeline">\n<h2>Timeline</h2>\n<p class="timeline-empty">No timing data available.</p>\n</section>`;
+  }
+
+  const sorted = [...bars].sort((a, b) => a.offsetPct - b.offsetPct);
+  const rows = sorted
+    .map(({ nodeId, offsetPct, widthPct, durationMs, isBottleneck }) => {
+      const cls = isBottleneck
+        ? "timeline-bar timeline-bottleneck"
+        : "timeline-bar";
+      const label = escHtml(nodeId);
+      const titleText = `${label}: ${(durationMs / 1000).toFixed(1)}s`;
+      return `<div class="timeline-row"><div class="${cls}" style="left:${
+        offsetPct.toFixed(2)
+      }%;width:${
+        widthPct.toFixed(2)
+      }%" title="${titleText}"><span class="timeline-label">${label}</span></div></div>`;
+    })
+    .join("\n");
+
+  return `<section class="timeline">\n<h2>Timeline</h2>\n<div class="timeline-container">\n${rows}\n</div>\n</section>`;
+}
+
 /**
  * Render the full self-contained HTML dashboard page.
  *
@@ -138,6 +214,8 @@ export function renderHtml(
   }
 
   const completedAt = state.completed_at ?? "\u2014";
+  const bars = computeTimeline(state);
+  const timelineHtml = renderTimeline(bars);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -159,6 +237,7 @@ ${CSS}
     escHtml(completedAt)
   }</p>
 </header>
+${timelineHtml}
 <main>
 ${bodySections}
 </main>
@@ -192,6 +271,14 @@ details[open] summary{margin-bottom:.5rem}
 strong.completed,strong.running{color:#166534}
 strong.failed{color:#991b1b}
 strong.aborted{color:#854d0e}
+.timeline{background:#fff;border-radius:8px;padding:1rem 1.5rem;margin-bottom:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.timeline h2{font-size:1rem;margin:0 0 .75rem;color:#333}
+.timeline-empty{color:#999;font-size:.85rem;margin:0}
+.timeline-container{position:relative}
+.timeline-row{position:relative;height:1.8rem;margin-bottom:.25rem}
+.timeline-bar{position:absolute;top:0;height:100%;background:#60a5fa;border-radius:4px;display:flex;align-items:center;overflow:hidden;min-width:2px;box-sizing:border-box}
+.timeline-bar.timeline-bottleneck{background:#f87171}
+.timeline-label{font-size:.7rem;color:#fff;padding:0 .3rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 `.trim();
 
 // --- CLI entry ---

@@ -423,6 +423,17 @@ graph LR
   - `renderHtml(runDir, state, logs)` — full page: run metadata header,
     phase-grouped card grid, inlined CSS
   - `escHtml(str)` — escape `<>&"'` for XSS-safe HTML embedding
+  - `computeTimeline(state: RunState)` — iterates `state.nodes`, parses
+    `started_at` ISO timestamps, computes `offsetPct`/`widthPct` relative to
+    run start/total duration. Identifies bottleneck (max `duration_ms`). Omits
+    nodes with missing timing. Returns `{nodeId, offsetPct, widthPct,
+    durationMs, isBottleneck}[]`
+  - `renderTimeline(bars)` — generates Gantt-style HTML timeline section:
+    container with relative positioning, bars absolutely-positioned per row
+    (sorted by `started_at`). Bottleneck bar gets `.timeline-bottleneck` CSS
+    class. Labels sanitized via `escHtml()`. Timeline CSS appended to existing
+    `CSS` const (inlined, no CDN deps). Integrated into `renderHtml()` between
+    header and card grid (FR-38)
 - **Interfaces:**
   - CLI: `deno task dashboard --run-dir <path>`
   - Hook: `after:` on `optimize` node (`|| true` suffix for non-fatal)

@@ -16,6 +16,16 @@ with 2-3 variants for the Tech Lead to evaluate.
   A single `Grep` call replaces an entire subagent session at 1% of the cost.
   **Evidence:** Runs 20260314T022056 AND 20260314T022619 both spawned Agent
   for a codebase grep. This wastes ~$0.10+ and ~30s each time. STOP.
+- **HARD STOP — NEVER use offset or limit parameters on Read.** Always read
+  files fully (no parameters). All project files are under 2000 lines. After one
+  full Read, the ENTIRE file is in your context — do NOT re-read any portion.
+- **HARD STOP — NEVER Grep a file you already Read.** After reading a file,
+  its ENTIRE content is in your context. Searching it with Grep wastes a turn.
+  Use Grep ONLY for files you have NOT read, or for global searches (no path).
+  **Evidence:** Run 20260314T024833 read engine.ts then Grepped it 3 more times
+  (`meta-agent`, `failed-node`, `sortPostPipelineNodes`). Read SKILL.md then
+  Grepped it 2x. Read design.md + requirements.md then Grepped each. Total:
+  7 of 9 Greps were on files already in context — wasted 7 turns. STOP.
 
 ## Responsibilities
 

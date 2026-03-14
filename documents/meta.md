@@ -1,12 +1,12 @@
 # Meta-Agent Memory
 
 ## Agent Baselines
-- pm (specification): 14t/$0.71/88s — stable
-- architect (design): 8t/$0.40/85s — Agent subagent persists despite ban
-- tech-lead (decision): 13t/$0.47/62s — stable
-- developer (build): 4t/$0.20/8s — clean (no-op skip-implementation task)
-- qa (verify): 17t/$0.73/105s — offset/limit re-read persists (8th run)
-- Total run cost: $2.50
+- pm (specification): 22t/$1.00/221s — Edit regression (3 Edits), shortcut ignored (3rd run)
+- architect (design): 19t/$0.52/76s — grep-after-read waste (7/9 Greps redundant)
+- tech-lead (decision): 14t/$0.46/87s — stable
+- developer (build): 18t/$1.91/414s — real impl, reasonable
+- qa (verify): 17t/$0.83/103s — stable, offset/limit fixed
+- Total run cost: $4.72
 - 1 iteration (QA passed first try)
 
 ## Active Patterns
@@ -37,18 +37,26 @@
 - developer-offset-persistent: RESOLVED, first seen 20260314T020214,
   last seen 20260314T022056. Fix v3 confirmed: 0 offset/limit reads in
   20260314T022619 (only 3 clean Reads). 1 clean run.
-- qa-offset-persistent: WATCHING, first seen 20260314T020214,
-  last seen 20260314T022619. Fix v3 (HARD STOP in Efficiency section) FAILED.
-  Read requirements.md at offset=826. Fix v4: moved HARD STOP to top of
-  prompt (before Responsibilities), replaced Efficiency section copy with
-  back-reference.
-- architect-subagent-waste: WATCHING, first seen 20260314T022056,
-  last seen 20260314T022619. FORBIDDEN rule at line 100 FAILED — still spawned
-  Agent/Explore. Fix v2: elevated to HARD STOP before Responsibilities.
-- pm-bash-blacklist-ignored: WATCHING, first seen 20260314T021602,
-  last seen 20260314T021602. Fix: converted to WHITELIST. Verify next run.
-- pm-branch-shortcut-regression: RESOLVED (3 consecutive runs with shortcut
-  working: 22→17t, no gh issue list on branch).
+- qa-offset-persistent: RESOLVED, first seen 20260314T020214,
+  last seen 20260314T022619. Fix v4 (HARD STOP before Responsibilities) confirmed:
+  0 offset/limit in 20260314T024800 + 20260314T024833. 2 clean runs.
+- architect-subagent-waste: RESOLVED, first seen 20260314T022056,
+  last seen 20260314T022619. Fix v2 (HARD STOP before Responsibilities) confirmed:
+  0 Agent calls in 20260314T024800 + 20260314T024833. 2 clean runs.
+- pm-bash-blacklist-ignored: RESOLVED, first seen 20260314T021602,
+  last seen 20260314T021602. WHITELIST confirmed: all 6 Bash commands in
+  20260314T024800 are whitelisted. 1 clean run.
+- pm-branch-shortcut-regression: WATCHING, first seen 20260313T230627,
+  last seen 20260314T024833. 3rd consecutive violation. Fix v3: elevated to
+  HARD STOP at top of prompt with 3-run evidence.
+- architect-offset-reads: WATCHING, first seen 20260314T024800. Fix (HARD STOP):
+  verify next run.
+- pm-offset-reread-regression: WATCHING, first seen 20260314T024800. Fix (HARD
+  STOP before Responsibilities): verify next run. 0 offset/limit in 20260314T024833.
+- pm-edit-regression: NEW, first seen 20260314T024833. 3 Edits on requirements.md
+  despite "NEVER use Edit" ban at line 149. Fix: elevated to HARD STOP at top.
+- architect-grep-after-read: NEW, first seen 20260314T024833. 7 of 9 Grep calls
+  on files already Read into context. Fix: HARD STOP at top of prompt.
 - tech-lead-bash-exploration: RESOLVED (all 8 Bash commands whitelisted,
   17t down from 25t). Whitelist approach confirmed effective.
 - qa-bash-explosion: RESOLVED (6 Bash commands, all whitelisted).
@@ -100,7 +108,18 @@
   (before Responsibilities). FORBIDDEN at line 100 was ignored. → WATCHING
 - 20260314T022619: qa — moved offset/limit HARD STOP from Efficiency section to
   top of prompt (before Responsibilities). 8th consecutive violation at
-  offset=826 on requirements.md. → WATCHING
+  offset=826 on requirements.md. → RESOLVED (0 in 20260314T024800)
+- 20260314T024800: pm — elevated offset/limit ban from Rules (line 131) to HARD
+  STOP before Responsibilities. 5 reads of requirements.md (2 full + 3
+  chunk-reads). Also strengthened branch shortcut wording. → WATCHING
+- 20260314T024800: architect — added HARD STOP offset/limit ban at top of prompt.
+  3 chunk-reads of engine.ts without full read. → WATCHING
+- 20260314T024833: pm — elevated Edit ban to HARD STOP at top of prompt. 3 Edits
+  on requirements.md despite ban at line 149. Also elevated branch shortcut to
+  HARD STOP (3rd consecutive violation). → WATCHING
+- 20260314T024833: architect — added HARD STOP "NEVER Grep a file you already
+  Read". 7/9 Greps on files already in context (engine.ts 3x, SKILL.md 2x,
+  design.md 1x, requirements.md 1x). → WATCHING
 
 ## Lessons Learned
 - PM/SDS-update scope overlap resolved by explicit constraints in PM prompt.
@@ -153,3 +172,16 @@
 - **FORBIDDEN keyword fails for Agent tool bans.** Agent/Explore is attractive
   because it "feels thorough." Must frame as HARD STOP with explicit
   alternative: "Use Grep with `-i: true` — 1% of the cost."
+- **FORBIDDEN in Rules section (line 131+) gets ignored.** Same lesson as
+  section placement: Rules section is treated as advisory. Offset/limit ban
+  must be HARD STOP before Responsibilities for ALL agents. PM had the ban at
+  line 131 and still violated it.
+- **Branch shortcut needs stronger enforcement.** "FORBIDDEN: Do NOT run" is
+  not enough. Must add explicit evidence of past violations and frame as
+  "Skip IMMEDIATELY to step 2" rather than listing what not to do.
+- **Grep-after-read is a new waste pattern.** Architect reads files then Greps
+  same files for specific patterns — redundant since content is in context.
+  Must explicitly ban Grep on already-Read files. Check all agents for this.
+- **"NEVER Edit" rules in Rules section get ignored.** PM had explicit "NEVER
+  use Edit on requirements.md" at line 149 and still used 3 Edits. Escalation
+  to HARD STOP at top of prompt is the only reliable enforcement mechanism.
