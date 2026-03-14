@@ -1,37 +1,16 @@
-# SDS
+# SDS: Engine
 
 ## 1. Intro
 
-- **Purpose:** Define implementation details for auto-flow: automated
-  multi-agent SDLC pipeline.
-- **Rel to SRS:** Implements all FRs from `documents/requirements.md`. Each
-  component maps to one or more FRs.
+- **Purpose:** Implementation details for the domain-agnostic DAG pipeline
+  engine.
+- **Rel to SRS:** Implements FRs from `documents/requirements-engine.md`.
 
-## 2. Arch
+## 2. Architecture
 
-- **Diagrams:**
+- **Diagram:**
 
-### 2.1 Legacy: Shell Script Pipeline (DEPRECATED — pre-FR-26)
-
-```mermaid
-graph LR
-    Issue["GitHub Issue"] --> CLI["deno task run"]
-    CLI --> S1["Stage 1: PM"]
-    S1 --> S2["Stage 2: Tech Lead"]
-    S2 --> S3["Stage 3: Reviewer"]
-    S3 --> S4["Stage 4: Architect"]
-    S4 --> S5["Stage 5: SDS Update"]
-    S5 --> S6["Stage 6-7: Developer+QA Loop"]
-    S6 --> S8["Stage 8: Presenter"]
-    S8 --> S9["Stage 9: Meta-Agent"]
-    S6 -->|"FAIL after max"| S9
-
-    subgraph Devcontainer["Devcontainer"]
-        S1; S2; S3; S4; S5; S6; S8; S9
-    end
-```
-
-### 2.2 Current: Configurable Node Engine (Deno/TypeScript)
+### 2.1 Configurable Node Engine (Deno/TypeScript)
 
 ```mermaid
 graph TD
@@ -59,157 +38,20 @@ graph TD
     Dispatch --> Output["Output<br/>4 verbosity levels"]
 ```
 
-### 2.3 Pipeline DAG (FR-26, FR-33)
-
-```mermaid
-graph LR
-    Spec["specification"] --> Design["design<br/>(solution plan)"]
-    Design --> Decision["decision<br/>(critique+branch+PR)"]
-    Decision --> Loop["implementation<br/>(build→verify)"]
-    Loop -.-> Review["tech-lead-review<br/>(run_on:always)"]
-    Loop -.-> Optimize["optimize<br/>(run_on:always)"]
-```
-
-- **Node ID convention (FR-33):** Activity-based IDs reflect what work is done,
-  not who does it. Mapping: `pm`→`specification`, `architect`→`design`,
-  `tech-lead`→`decision`, `impl-loop`→`implementation`, `developer`→`build`,
-  `qa`→`verify`, `tech-lead-review`→`tech-lead-review`, `meta-agent`→`optimize`.
-- **Phases (FR-33):** Top-level `phases:` key in `pipeline.yaml` declares named
-  phase groups. Each phase lists member stage IDs:
-  - `plan`: [specification, design, decision]
-  - `impl`: [implementation]
-  - `report`: [tech-lead-review, optimize]
-  Phase grouping is declarative config; engine treats it as opaque data. Enables
-  future phase-level `run_on` semantics and cleaner artifact reporting.
-
 - **Subsystems:**
   - **Pipeline Engine** (`engine/`): Deno/TypeScript DAG-based executor
     with YAML config, template interpolation, sequential levels, loop nodes,
     human nodes, resume support
-  - **Agent Runtime**: Claude Code CLI invocations with role-specific prompts
-    from `.claude/skills/agent-<name>/SKILL.md` (canonical, agentskills.io-
-    compliant; no symlinks)
   - **Artifact Store**: Git-tracked files in `.sdlc/runs/<run-id>/[<phase>/]<node-id>/`
     (phase subdir present when node has `phase` field in config)
   - **Validation Engine**: Rule-based checks (file_exists, file_not_empty,
     contains_section, custom_script, frontmatter_field)
   - **Continuation Engine**: `--resume` based re-invocation on validation
     failure or safety-check violation (shared `max_continuations` budget)
-  - **Legacy Shell Scripts** (`.sdlc/scripts/`): Preserved for backward
-    compatibility, superseded by engine
 
 ## 3. Components
 
-### 3.1 Docker Image
-
-- **Purpose:** Single runtime environment for all stages.
-- **Interfaces:** Contains `claude` CLI, `deno`, `git`, `gh`, `gitleaks`.
-- **Deps:** Node.js (for claude CLI install), Deno runtime.
-
-### 3.2 Stage Scripts (`.sdlc/scripts/`) — DEPRECATED
-
-- **Status:** Formally deprecated. Superseded by Deno/TypeScript pipeline engine
-  (`engine/`). Retained for backward compatibility only. Use `deno task run`.
-- **Purpose:** Legacy orchestration for each pipeline stage: prepare input,
-  invoke agent, validate, continue, commit.
-- **AGENT_PROMPT paths:** Updated to `.claude/skills/agent-<name>/SKILL.md`
-  (canonical, post-FR-36 migration).
-- **Interfaces:**
-  - Input: `<issue-number>` as CLI argument.
-  - Output: Committed artifacts + logs on feature branch.
-- **Deps:** `lib.sh` (shared functions), `claude` CLI, `git`, `gh`.
-
-### 3.3 Shared Library (`.sdlc/scripts/lib.sh`)
-
-- **Purpose:** Common functions for all stage scripts.
-- **Interfaces:** Functions: `log()`, `run_agent()`, `validate_artifact()`,
-  `continuation_loop()`, `commit_artifacts()`, `report_status()`,
-  `safety_check_diff()`, `retry_with_backoff()`.
-  - `retry_with_backoff()`: Generic retry wrapper for external CLI calls
-    (`claude`, `gh`). Max 3 attempts, 5s initial delay, 2x backoff. Retries on
-    non-zero exit (network/rate-limit errors). Does not retry validation
-    failures.
-- **Deps:** `claude` CLI, `git`, `gh`.
-
-### 3.4 Agent Skills (`.claude/skills/agent-*`) (FR-36)
-
-- **Purpose:** Versioned system prompts defining each agent's role and behavior.
-  Each agent lives in `.claude/skills/agent-<name>/SKILL.md` (canonical,
-  agentskills.io-compliant). Dual-use: pipeline-driven (via engine `prompt:`
-  config) and interactive (via Claude Code `/agent-<name>` slash commands).
-- **Directory structure:** `.claude/skills/agent-<name>/SKILL.md` — 7 agents:
-  - `agent-pm` — triages open GitHub issues, selects highest-priority, produces
-    spec.
-  - `agent-architect` — design-solution role: produces implementation plan with
-    2-3 variants, affected files, effort estimates, risk analysis.
-  - `agent-tech-lead` — critique + decision + SDS update + branch creation
-    (`git checkout -b sdlc/issue-<N>`) + draft PR (`gh pr create --draft`) +
-    task breakdown from selected variant. Uses `{{run_id}}` for `--prompt` mode
-    fallback branch `sdlc/{{run_id}}`.
-  - `agent-developer` — implements tasks. Owns `git add`, `git commit`,
-    `git push` after each task. Posts PR comment with implementation summary.
-  - `agent-qa` — verifies developer output. Posts verdict as PR review
-    (`gh pr review`: approve/request-changes).
-  - `agent-tech-lead-review` — post-pipeline: final code review + CI gate
-    check + merge. `run_on: always`. Handles missing-PR case gracefully.
-  - `agent-meta-agent` — prompt optimization, failure analysis.
-- **Removed agents (FR-26):** `tech-lead-reviewer`, `tech-lead-sds`,
-  `committer`, `code-reviewer`.
-- **SKILL.md frontmatter (agentskills.io-compliant):**
-  ```yaml
-  ---
-  name: "agent-<name>"
-  description: "<one-line role description>"
-  compatibility: ["claude-code"]
-  allowed-tools: []
-  ---
-  ```
-  - `compatibility: ["claude-code"]` — declares runtime compatibility.
-  - `allowed-tools: []` — no automatic tool grants; agents use tools available
-    in their execution context.
-- **Interfaces:**
-  - Pipeline: engine reads `prompt:` path from `pipeline.yaml` (now
-    `.claude/skills/agent-<name>/SKILL.md`), caches file content at config load
-    time (`prompt_content`), passes inline via
-    `claude --append-system-prompt`. Fallback to `--append-system-prompt-file`
-    for template paths.
-  - Interactive: Claude Code discovers skills directly from
-    `.claude/skills/agent-<name>/SKILL.md` → user invokes `/agent-<name>`.
-    No symlinks required (canonical location).
-- **Agent Execution Summary (FR-40, FR-42):** All 7 agents must produce a `## Summary`
-  section in their output artifacts. Content: 2-5 bullet points (actions taken,
-  key decisions, artifacts produced, issues encountered). 6 agents (PM,
-  Architect, Tech Lead, QA, Meta-Agent, Tech Lead Review) append `## Summary`
-  to their markdown artifact files. Developer includes summary in commit message
-  body (no separate artifact file). Pipeline enforces via `contains_section:
-  Summary` validation on 6 nodes (`specification`, `design`, `decision`,
-  `verify`, `optimize`, `tech-lead-review`). Developer (`build`) excluded from
-  file-based validation — uses existing `custom_script: deno task check`.
-- **Voice Convention (FR-40, FR-43):** Each SKILL.md contains a `## Voice`
-  section (after `# Role:` heading, before `## Responsibilities`) mandating
-  first-person narrative ("I") in all agent outputs. Scope explicitly includes
-  GitHub issue comments, PR descriptions, and status updates (FR-43). Passive/
-  third-person prohibited in narrative text. YAML frontmatter and code blocks
-  excluded. Each agent's section includes 3 role-specific correct vs incorrect
-  example pairs: 2 anchored to artifacts/reports, 1 targeting GitHub
-  interactions specifically (e.g., PM: "I started the specification phase" not
-  "Specification phase started"; QA: "I verified all criteria" not "All criteria
-  were verified"). Hardcoded `gh issue comment --body` templates in SKILL.md
-  files must also use first-person (FR-43).
-- **Migration (FR-36):** Complete. Formerly `agents/<name>/SKILL.md` with
-  symlinks from `.claude/skills/`. Migrated to canonical `.claude/skills/`
-  layout; `agents/` directory removed; symlink indirection eliminated. Legacy
-  stage scripts formally deprecated (co-location N/A for deprecated scripts).
-- **Voice directive (FR-40):** Each SKILL.md contains `## Voice` section
-  (before `## Rules`) mandating first-person ("I") narrative in all prose
-  output. Shared 3-line core directive (first-person mandate, prohibited
-  patterns, scope exclusions for YAML/code/tables) + 1 agent-specific
-  correct/incorrect example pair per file. Applies to: handoff artifacts,
-  PR/issue comments, QA reports, spec files. Excludes: YAML frontmatter,
-  code blocks, structured data, tables.
-- **Deps:** None (static content, versioned in git).
-
-### 3.6 Pipeline Engine (`engine/`)
+### 3.1 Pipeline Engine (`engine/`)
 
 - **Purpose:** Configurable DAG-based pipeline executor. Replaces hardcoded
   shell script orchestration with YAML-driven node graph.
@@ -245,7 +87,7 @@ graph LR
   - `validate.ts` — artifact validation rules (file_exists, not_empty,
     contains_section, custom_script, frontmatter_field)
   - `state.ts` — RunState persistence to `state.json`, resume logic,
-    phase registry (planned, not yet implemented — see §3.7),
+    phase registry (planned, not yet implemented — see §3.2),
     cost aggregation (`updateRunCost()` sums
     `nodes[*].cost_usd` → `total_cost_usd`; called from
     `markNodeCompleted()` when optional `costUsd` param provided, FR-32)
@@ -335,7 +177,7 @@ graph LR
   - `engine.ts` — main executor: level iteration, sequential dispatch, verbose
     input resolution, node result summary display (FR-30),
     loop-node log saving via `onNodeComplete` callback,
-    phase registry init (planned, not yet implemented — see §3.7),
+    phase registry init (planned, not yet implemented — see §3.2),
     pre-post-pipeline `on_failure_script` execution.
     Dry-run path (FR-28): applies `collectPostPipelineNodes()` +
     `sortPostPipelineNodes()` + level filtering before calling
@@ -361,8 +203,7 @@ graph LR
   - `run_on?: "always" | "success" | "failure"` — execution condition for
     post-pipeline nodes. When set, node is excluded from DAG levels and executes
     in a post-pipeline step after all DAG levels complete:
-    - `"always"` — execute regardless of pipeline outcome. Used for meta-agent
-      and tech-lead-review.
+    - `"always"` — execute regardless of pipeline outcome.
     - `"success"` — execute only if pipeline succeeded.
     - `"failure"` — execute only if pipeline failed. Skipped nodes get
       `markNodeSkipped()` status.
@@ -404,10 +245,6 @@ graph LR
     Forwarded to `runAgent()` calls. Enables prompt/validation/continuation
     verbose for loop body nodes. Safety/commit verbose for loop body nodes:
     deferred (loop body bypasses `executeAgentNode()`).
-  - `git.ts`: **Deleted** (FR-29). All git functions removed from engine.
-    Failure rollback replaced by `on_failure_script` hook (FR-34).
-    `CommitResult` type removed. Safety check and commit verbose methods
-    removed from `output.ts`.
   - `engine.ts`: `executeAgentNode()` resolves input artifact paths+sizes by
     walking `ctx.input` directories via `Deno.stat()`; calls
     `this.output.verboseInputs()` before `runAgent()`. Passes `this.output`
@@ -419,7 +256,7 @@ graph LR
   - All existing callers pass no `output` arg — zero behavioral change.
 - **Deps:** `claude` CLI, `deno`, `git`, `jsr:@std/yaml`.
 
-### 3.7 Phase Registry (`state.ts`) — NOT IMPLEMENTED
+### 3.2 Phase Registry (`state.ts`) — NOT IMPLEMENTED
 
 - **Status:** Designed but not implemented. `getNodeDir()` in `engine/state.ts`
   returns flat path `${runDir}/${nodeId}` without phase awareness. Phases are
@@ -443,107 +280,14 @@ graph LR
   templates, tests). Single-instance engine guarantee prevents sequential
   mutation. `clearPhaseRegistry()` ensures test isolation.
 
-### 3.8 HITL Pipeline Scripts (`.sdlc/scripts/hitl-*.sh`)
-
-- **Purpose:** Deliver agent questions to humans and poll for replies. Pipeline-
-  specific (GitHub), not engine code. Engine invokes via configurable paths.
-- **Scripts:**
-  - `hitl-ask.sh` — render question JSON → markdown, post to GitHub issue.
-    - Input: `--run-dir`, `--artifact-source`, `--run-id`, `--node-id`,
-      `--question-json`.
-    - Extracts issue: `yq '.issue' "$RUN_DIR/$ISSUE_SOURCE"`.
-    - Auto-detects repo: `gh repo view --json nameWithOwner`.
-    - Renders: header, blockquoted question, numbered options, HTML marker
-      `<!-- hitl:<run-id>:<node-id> -->`.
-    - Posts via `gh issue comment <N> --body "$md"`.
-    - Deps: `jq`, `yq`, `gh`.
-  - `hitl-check.sh` — poll GitHub issue for human reply after marker.
-    - Input: `--run-dir`, `--artifact-source`, `--run-id`, `--node-id`,
-      `--exclude-login`.
-    - Extracts issue: `yq '.issue' "$RUN_DIR/$ISSUE_SOURCE"`.
-    - Auto-detects repo: `gh repo view --json nameWithOwner`.
-    - Fetches comments: `gh api repos/{owner}/{repo}/issues/<N>/comments`.
-    - jq filter: find comment with marker, then first subsequent non-bot comment.
-    - Exit 0 + body on stdout = reply found. Exit 1 = no reply yet.
-    - Deps: `jq`, `yq`, `gh`.
-- **Interfaces:** Called by engine via `defaults.hitl.ask_script` /
-  `defaults.hitl.check_script` paths in `pipeline.yaml`.
-
-### 3.9 Pipeline Trigger
-
-- **Purpose:** Single entry point for pipeline. PM agent autonomously triages
-  open GitHub issues.
-- **Interfaces:** CLI: `deno task run [--prompt "..."]`. PM selects
-  highest-priority open issue via `gh`.
-- **Deps:** Devcontainer, Claude CLI auth (OAuth or API key), `GITHUB_TOKEN`.
-
-### 3.10 Dashboard Generator (`scripts/generate-dashboard.ts`) (FR-33, FR-35, FR-38, FR-40, issue #15)
-
-- **Purpose:** Generate self-contained HTML dashboard summarizing pipeline run
-  results. Reads `state.json` + per-node `logs/*.json`. Produces `index.html`
-  in run directory with all CSS inlined (no CDN deps).
-- **Functions:**
-  - `readRunState(runDir)` — parse `state.json` → `RunState`
-  - `readNodeLog(runDir, nodeId)` — parse `logs/<nodeId>.json` →
-    `ClaudeCliOutput`
-  - `renderCard(nodeId, state, log, streamLogHref?)` — HTML card: status badge,
-    timing, cost, result summary via `<details><summary>` (first 3 lines
-    preview, full text in details body). Single-line results render without
-    `<details>` wrapper. When `streamLogHref` provided: renders
-    `<a class="log-link" href="${escHtml(streamLogHref)}">stream log</a>` after
-    card-meta div. Omitted when absent (backward-compatible).
-  - `renderHtml(runDir, state, logs, streamLogHrefs?)` — full page: run metadata
-    header, phase-grouped card grid, inlined CSS. 4th param
-    `streamLogHrefs?: Record<string, string>` maps nodeId → relative href;
-    threaded to each `renderCard()` call via lookup
-  - `escHtml(str)` — escape `<>&"'` for XSS-safe HTML embedding
-  - `computeTimeline(state: RunState)` — iterates `state.nodes`, parses
-    `started_at` ISO timestamps, computes `offsetPct`/`widthPct` relative to
-    run start/total duration. Identifies bottleneck (max `duration_ms`). Omits
-    nodes with missing timing. Returns `{nodeId, offsetPct, widthPct,
-    durationMs, isBottleneck}[]`
-  - `renderTimeline(bars)` — generates Gantt-style HTML timeline section:
-    container with relative positioning, bars absolutely-positioned per row
-    (sorted by `started_at`). Bottleneck bar gets `.timeline-bottleneck` CSS
-    class. Labels sanitized via `escHtml()`. Timeline CSS appended to existing
-    `CSS` const (inlined, no CDN deps). Integrated into `renderHtml()` between
-    header and card grid (FR-38)
-- **Stream log link flow (issue #15):** CLI entry point scans each node
-  directory for `stream.log` existence via `Deno.stat()`. For nodes with phases,
-  computes relative path as `<phase>/<nodeId>/stream.log`; without phase:
-  `<nodeId>/stream.log`. Builds `Record<string, string>` href map, passes to
-  `renderHtml()` → threaded to `renderCard()`. CSS: `.log-link` class (monospace,
-  smaller font, muted color — distinct from result text).
-- **Functions (continued):**
-  - `computeCostBars(state: RunState)` — filters `state.nodes` by
-    `cost_usd > 0`, computes proportional `widthPct` relative to max cost.
-    Returns `{nodeId: string, costUsd: number, widthPct: number}[]` (FR-40)
-  - `renderCostChart(bars, totalCost)` — inline SVG horizontal bar chart.
-    Each bar: `<rect>` with proportional width, `<text>` label (node ID via
-    `escHtml()`), cost value annotation. Total cost header. Empty bars →
-    "No cost data" message (mirrors timeline empty-state). Cost chart CSS
-    appended to `CSS` const. Integrated into `renderHtml()` between timeline
-    and `<main>` card grid (FR-40)
-- **Interfaces:**
-  - CLI: `deno task dashboard --run-dir <path>`
-  - Hook: `after:` on `optimize` node (`|| true` suffix for non-fatal)
-- **Deps:** `engine/types.ts` (imports `RunState`, `ClaudeCliOutput` types
-  for parsing). No runtime engine dependency — reads JSON files directly.
-
 ## 4. Data
 
 - **Entities:**
-  - Handoff Artifact: Structured Markdown (01-spec.md through 07-changelog.md)
-  - Agent Log: Claude CLI JSON output (`.sdlc/runs/<run-id>/logs/<node-id>.json`)
-  - Agent Prompt: SKILL.md with YAML frontmatter (`.claude/skills/agent-<name>/SKILL.md`)
   - Run State: JSON (`.sdlc/runs/<run-id>/state.json`)
   - Pipeline Config: YAML (`.sdlc/pipeline.yaml`). Top-level keys: `name`,
-    `version`, `defaults`, `phases` (FR-33), `nodes`. `phases` key declares
-    named phase groups with member stage IDs (e.g., `plan: [specification,
-    design, decision]`). Engine treats `phases` as opaque config data.
-    Node IDs use activity-based naming (FR-33): `specification`, `design`,
-    `decision`, `implementation`, `build`, `verify`, `tech-lead-review`, `optimize`
-  - ~~CommitResult~~: **Deleted** (FR-29: engine no longer commits)
+    `version`, `defaults`, `phases`, `nodes`. `phases` key declares
+    named phase groups with member stage IDs. Engine treats `phases` as opaque
+    config data.
   - ValidationRule: `{ type: "file_exists"|"file_not_empty"|"contains_section"|
     "custom_script"|"frontmatter_field", path?, field?, allowed?, ... }`
   - LoopResult: `{ ..., bodyResults: AgentResult[] }` — accumulated per-iteration
@@ -573,8 +317,6 @@ graph LR
   template variable pointing to predecessor's output directory. No manifest.
 - **Directory structure:** `.sdlc/runs/<run-id>/[<phase>/]<node-id>/` per node
   output. Phase subdir present when node's `phase` field is set in config.
-  Example with phases: `.sdlc/runs/abc/plan/specification/`, `.sdlc/runs/abc/impl/build/`.
-  Without phase: `.sdlc/runs/abc/some-node/` (backward-compatible flat layout).
 - **Validation:** Engine validates output via configurable rules (file_exists,
   file_not_empty, contains_section, custom_script, frontmatter_field) after
   each node. Validation failures trigger continuation (resume with error
@@ -583,53 +325,21 @@ graph LR
     `^---\n([\s\S]*?)\n---` regex, parses target field, checks value against
     allowed set. Config: `{ type: "frontmatter_field", path, field, allowed }`.
   - `contains_section`: Checks artifact file for presence of a markdown section.
-    Supports `on_error: continue` (non-fatal). Used by meta-agent for
-    "Fixes Applied" section validation.
-  - Developer node uses `custom_script` validation rule (not `after` hook) for
-    `deno task check`, enabling continuation-on-failure for check errors.
+    Supports `on_error: continue` (non-fatal).
+  - `custom_script`: Validation via external script execution, enabling
+    continuation-on-failure for check errors.
 - **Context management:** Claude CLI auto-compression handles large input sets.
 - **Template variables:** `{{node_dir}}`, `{{input.*}}`, `{{run_dir}}`,
   `{{run_id}}`, `{{args.*}}`, `{{env.*}}`, `{{loop.iteration}}`.
 - **After-hook conventions:** Commands run from repo root (no `cd {{run_dir}}`
   prefix needed). Use `|| true` suffix to prevent hook failure from killing
-  the node. Example (sds-update diff capture):
-  `git diff HEAD -- documents/design.md > {{node_dir}}/04a-sds-diff.md;
-  [ -s {{node_dir}}/04a-sds-diff.md ] || echo "No changes" >
-  {{node_dir}}/04a-sds-diff.md || true`.
-
-### 4.2 Commit Strategy
-
-- **Branch:** Feature branch created by tech-lead agent (`git checkout -b
-  sdlc/issue-<N>`). Fallback for `--prompt` mode: `sdlc/{{run_id}}`.
-- **Commit cadence (FR-26):** Developer-owned commits. No dedicated committer
-  agent nodes. Developer runs `git add`, `git commit`, `git push` after each
-  task. Commit messages follow `sdlc(impl): <summary>` format.
-- **PR creation:** Tech-lead creates draft PR (`gh pr create --draft`) before
-  impl-loop. Developer pushes to same branch. QA posts PR review verdicts.
-- **Post-pipeline:** Tech-lead-review performs final review + CI gate + merge.
-- **Engine invariant:** Engine does NOT auto-commit (FR-14 preserved). All git
-  operations happen inside agent prompts.
-- **Failure behavior:** Failed nodes produce no commits. On_error: "fail" stops
-  pipeline; "continue" proceeds to next nodes. Each failed `NodeState` gets
-  `error_category?: ErrorCategory` — domain-agnostic enum:
-  `continuations_exhausted | timeout | cli_crash | hook_failure | hitl_timeout |
-  aborted | unknown`. Set by engine at failure point; downstream agents map
-  categories to domain actions.
-- **Resume:** `--resume <run-id>` skips completed nodes per state.json.
+  the node.
 
 ## 5. Logic
 
 - **Algos:**
   - **Continuation Loop**: invoke agent -> validate -> if fail: resume with
-    error context -> repeat (max N). If limit reached: fail node, trigger
-    Meta-Agent.
-  - **Developer+QA Loop**: Developer implements -> QA verifies -> if FAIL:
-    Developer reads QA report, fixes -> repeat (max 3). Body nodes defined
-    inline via loop's `nodes` sub-object (not top-level). Execution order
-    determined by topo-sort of body nodes' `inputs` declarations.
-  - **Secret Detection**: `gitleaks detect --no-git` runs as part of
-    `deno task check` (`scripts/check.ts`). `allowFailure=true` — skips if
-    gitleaks binary not found. Engine-level `safetyCheckDiff()` removed.
+    error context -> repeat (max N). If limit reached: fail node.
   - **Verbose Output Flow** (`-v` mode, agent nodes only): In
     `executeAgentNode()`: (1) resolve input artifact file paths+sizes from
     `ctx.input` dirs via `Deno.stat()` → `verboseInputs()`, (2) `runAgent()`
@@ -637,8 +347,6 @@ graph LR
     `verboseValidation()` → on failure: `verboseContinuation()` → retry.
     All verbose methods guarded by `verbosity !== "verbose"` — no-op in
     default/quiet. Output: human-readable stderr lines with section headers.
-    Note: safety check and auto-commit verbose removed (engine no longer
-    performs these operations).
   - **Loop Node Log Saving** (callback-based, no I/O in `loop.ts`):
     `runLoop()` accumulates `AgentResult` per body-node iteration into
     `LoopResult.bodyResults[]` (pure data, no filesystem ops). In
@@ -664,21 +372,6 @@ graph LR
       `verboseInputs()` reports `0 files` without error. No `Deno.stat()` calls.
     - **Missing file stat:** `Deno.stat()` failure on input artifact →
       graceful skip, verbose output includes error detail for affected path.
-  - **Phase Registry Init (NOT IMPLEMENTED)**: Planned: `setPhaseRegistry(config)`
-    called before `ensureRunDirs()` in `engine.ts` `run()`. Currently `getNodeDir()`
-    returns flat `${runDir}/${nodeId}` path. See §3.7 for planned design.
-    Phase assignment (default pipeline config, FR-26, FR-33):
-    - `plan`: specification, design, decision
-    - `impl`: implementation (body nodes `build`, `verify` defined inline via
-      `nodes` sub-object)
-    - `report`: optimize, tech-lead-review
-  - **Failure Hook Before Post-Pipeline Nodes (FR-34)**: When
-    `pipelineSuccess === false`, engine executes `config.defaults.on_failure_script`
-    (if configured) via `runFailureHook()` before post-pipeline nodes. Script
-    is pipeline-specific (e.g., `.sdlc/scripts/rollback-uncommitted.sh` performs
-    `git checkout -- . && git reset HEAD`). Engine treats it as opaque
-    `Deno.Command` invocation — domain-agnostic. Failed node IDs available via
-    `state.json` (`nodes[*].status === "failed"`) — no engine-written artifacts.
   - **Post-Pipeline Node Collection & Ordering**: `collectPostPipelineNodes()`
     collects nodes where `run_on !== undefined` (replaces `run_always`-based
     collection). `sortPostPipelineNodes()` sorts them topologically using
@@ -691,17 +384,6 @@ graph LR
       `markNodeSkipped()`.
     - `run_on: "failure"` → skip if `pipelineSuccess`, call
       `markNodeSkipped()`.
-  - **Meta-Agent Trigger**: Engine executes meta-agent via `run_on: "always"`.
-    After all DAG levels complete (success or failure), engine collects
-    post-pipeline nodes, sorts topologically, filters by condition (see above),
-    and executes in order. Meta-agent identifies failed nodes via `state.json`
-    (`nodes[*].status === "failed"`). Edits `.claude/skills/agent-*/SKILL.md` to fix diagnosed problems. Produces
-    minimal `07-changelog.md` listing applied fixes. Updates persistent memory
-    in `documents/meta.md`. Posts 2-3 line summary to GitHub issue.
-  - **Tech-Lead-Review Node**: Post-pipeline agent (`run_on: always`). Performs
-    final code review, checks CI gates, merges PR if all pass. Handles
-    missing-PR case gracefully (no-op with clear message when pipeline failed
-    before tech-lead created PR).
   - **HITL via AskUserQuestion Interception** (FR-21):
     Engine detects agent HITL requests by inspecting `permission_denials` in
     Claude CLI JSON output. Flow:
@@ -718,16 +400,8 @@ graph LR
     6. Engine resumes agent: `claude --resume <session_id> -p "<reply>"
        --output-format json`. Agent sees full previous context + reply as new
        user message.
-    7. On `timeout` exceeded: node marked `failed`, Meta-Agent triggered.
-    Experimentally verified (see `documents/rnd/human-in-the-loop.md`):
-    - `AskUserQuestion` denied in `-p` mode regardless of `--dangerously-skip-
-      permissions` (cause: no terminal, not permissions).
-    - Question JSON in `permission_denials[0].tool_input`: `{questions: [{
-      question, header, options: [{label, description}], multiSelect}]}`.
-    - `--resume <session_id> -p "<answer>"` preserves full session context;
-      agent correctly interprets answer in context of its original question.
-    - Cost per HITL roundtrip: ~$0.08 (question turn + resume turn).
-    Pipeline config:
+    7. On `timeout` exceeded: node marked `failed`.
+    Pipeline config example:
     ```yaml
     defaults:
       on_failure_script: .sdlc/scripts/rollback-uncommitted.sh
@@ -738,22 +412,33 @@ graph LR
         poll_interval: 60
         timeout: 7200
     ```
+  - **Phase Registry Init (NOT IMPLEMENTED)**: Planned: `setPhaseRegistry(config)`
+    called before `ensureRunDirs()` in `engine.ts` `run()`. Currently `getNodeDir()`
+    returns flat `${runDir}/${nodeId}` path. See §3.2 for planned design.
+  - **Failure Hook Before Post-Pipeline Nodes (FR-34)**: When
+    `pipelineSuccess === false`, engine executes `config.defaults.on_failure_script`
+    (if configured) via `runFailureHook()` before post-pipeline nodes. Script
+    is pipeline-specific. Engine treats it as opaque
+    `Deno.Command` invocation — domain-agnostic. Failed node IDs available via
+    `state.json` (`nodes[*].status === "failed"`) — no engine-written artifacts.
+  - **Semi-verbose filtering (FR-41):** `formatEventForOutput(event,
+    verbosity?)` accepts optional `Verbosity` param. When
+    `verbosity === "semi-verbose"`, skips `tool_use` content blocks in
+    `assistant` events — emits only `text` blocks. Default `undefined` =
+    all blocks (backward-compatible). Log file writes call without verbosity
+    (full output preserved). `onOutput` callback path passes verbosity from
+    `AgentRunOptions` so terminal output is filtered at source.
 - **Rules:**
   - Artifacts overwritten on re-run (git history preserves previous).
   - QA iteration numbering restarts on re-run.
-  - Meta-Agent runs on both success and failure.
-  - Meta-Agent auto-applies prompt improvements to `.claude/skills/agent-*/SKILL.md`.
-    Human review at PR merge via tech-lead-review.
 
 ## 6. Non-Functional
 
-- **Scale:** Single pipeline per issue. Sequential stages (no parallel agents).
-- **Fault:** Stage failure stops pipeline, Meta-Agent analyzes, failure reported
-  on issue.
-- **Sec:** Secret detection via `gitleaks detect --no-git` in `deno task check`
-  (`scripts/check.ts`). Engine-level scope checks removed. Agents run with
-  local user's permissions.
-- **Logs:** Full transcripts per stage in `.sdlc/runs/<run-id>/logs/`.
+- **Scale:** Single pipeline per run. Sequential stages (no parallel agents).
+- **Fault:** Node failure stops pipeline (unless `on_error: continue`). Failure
+  reported via state.json. Configurable `on_failure_script` hook runs before
+  post-pipeline nodes.
+- **Logs:** Full transcripts per node in `.sdlc/runs/<run-id>/logs/`.
 
 ## 7. Constraints
 
@@ -761,32 +446,3 @@ graph LR
 - **Deferred:** Multi-repo support. Parallel pipelines for multiple issues.
   Issue size/complexity limits. Cost budget limits and alerts (per-node cost
   aggregation implemented in FR-32; budget enforcement deferred).
-
-## 8. SRS Evidence Status
-
-All FR evidence for issue #15 is complete:
-
-- **FR-35 (Dashboard Result Summary Display):** Implemented. SRS section 3.34
-  evidence recorded — `scripts/generate-dashboard.ts` (`renderCard`,
-  `escHtml`). Tests in `scripts/generate-dashboard_test.ts`.
-- **FR-38 (Timeline Visualization):** Implemented. SRS section 3.37 evidence
-  recorded — `scripts/generate-dashboard.ts` (`computeTimeline`,
-  `renderTimeline`, `.timeline-bottleneck` CSS). Tests in
-  `scripts/generate-dashboard_test.ts`. Evidence committed in `e493cbb`.
-- **FR-39 (Repeated File Read Warning):** Implemented. SRS section 3.38
-  evidence recorded — `engine/agent.ts` (`FileReadTracker` class). Tests in
-  `engine/agent_test.ts`. Evidence committed in `e493cbb`.
-- **FR-40 (Dashboard Stream Log Links):** Implemented. SRS section 3.39
-  evidence recorded — `scripts/generate-dashboard.ts` (`streamLogHref`,
-  `.log-link` CSS). Tests in `scripts/generate-dashboard_test.ts`.
-- **FR-42 (Agent Output Summary):** Already implemented. All 7 agent SKILL.md
-  files document `## Summary` in output format. `pipeline.yaml` enforces
-  `contains_section: Summary` on 6 agent nodes (`specification`, `design`,
-  `decision`, `verify`, `optimize`, `tech-lead-review`); Developer (`build`)
-  enforced via `custom_script: deno task check`. Evidence:
-  `.claude/skills/agent-*/SKILL.md` (7 files), `.sdlc/pipeline.yaml` (7 rules).
-- **FR-43 (Agent First-Person Voice — GitHub Interactions):** Voice sections
-  strengthened with explicit GitHub interaction scope + third example pair per
-  agent. Hardcoded `gh issue comment --body` templates in PM, Architect, Tech
-  Lead SKILL.md files updated to first-person. Evidence:
-  `.claude/skills/agent-*/SKILL.md` (7 files, `## Voice` sections).

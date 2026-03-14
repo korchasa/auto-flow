@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # stage-5-sds-update.sh — Stage 5: Tech Lead SDS Update.
-# Updates documents/design.md, generates 04a-sds-diff.md audit trail.
+# Updates documents/design-sdlc.md, generates 04a-sds-diff.md audit trail.
 # See: requirements.md FR-6, FR-8, FR-10, FR-14.
 #
 # Usage: stage-5-sds-update.sh <issue-number>
@@ -29,10 +29,10 @@ AGENT_PROMPT="$REPO_ROOT/.claude/skills/agent-tech-lead-sds/SKILL.md"
 # ============================================================
 validate_sds_updated() {
   local diff_output
-  diff_output=$(git -C "$REPO_ROOT" diff -- documents/design.md)
+  diff_output=$(git -C "$REPO_ROOT" diff -- documents/design-sdlc.md)
 
   if [[ -z "$diff_output" ]]; then
-    log ERROR "documents/design.md was not modified"
+    log ERROR "documents/design-sdlc.md was not modified"
     return 1
   fi
 
@@ -73,7 +73,7 @@ generate_sds_diff() {
   local output_path="$1"
 
   local diff_output
-  diff_output=$(git -C "$REPO_ROOT" diff -- documents/design.md)
+  diff_output=$(git -C "$REPO_ROOT" diff -- documents/design-sdlc.md)
 
   {
     echo "# SDS Diff (Stage 5 Audit Trail)"
@@ -105,8 +105,8 @@ Revised plan artifact: ${revised_path}
 Instructions:
 1. Read ${decision_path} (the Architect's decision from Stage 4).
 2. Read ${revised_path} (the revised plan from Stage 3).
-3. Read documents/design.md (current SDS).
-4. Update documents/design.md:
+3. Read documents/design-sdlc.md (current SDS).
+4. Update documents/design-sdlc.md:
    - Add/modify components for the selected variant.
    - Every new component must have: purpose, interfaces, dependencies.
    - Scope changes to the selected variant only.
@@ -135,11 +135,11 @@ main() {
   local decision_path="${pipeline_dir}/04-decision.md"
   local revised_path="${pipeline_dir}/03-revised-plan.md"
   local sds_diff_path="${pipeline_dir}/04a-sds-diff.md"
-  local sds_path="$REPO_ROOT/documents/design.md"
+  local sds_path="$REPO_ROOT/documents/design-sdlc.md"
   local log_dir="${pipeline_dir}/logs"
   local log_json="${log_dir}/${STAGE_NAME}.json"
   local allowed_paths=(
-    "documents/design.md"
+    "documents/design-sdlc.md"
   )
 
   mkdir -p "$pipeline_dir" "$log_dir"
@@ -175,12 +175,12 @@ main() {
     fi
 
     (( cont++ ))
-    local error_msg="documents/design.md must be modified with new components. Every component needs: purpose, interfaces, dependencies."
+    local error_msg="documents/design-sdlc.md must be modified with new components. Every component needs: purpose, interfaces, dependencies."
 
     log WARN "Continuation ${cont}/${max_cont}: ${error_msg}"
     output=$(retry_with_backoff claude \
       --resume "$session_id" \
-      -p "Validation failed: ${error_msg} Fix the issues in documents/design.md." \
+      -p "Validation failed: ${error_msg} Fix the issues in documents/design-sdlc.md." \
       --output-format json)
     echo "$output" > "$log_json"
   done

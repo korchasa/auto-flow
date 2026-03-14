@@ -2,14 +2,39 @@
 
 **CRITICAL:** MEMORY RESETS. DOCS = ONLY LINK TO PAST. MAINTAIN ACCURACY.
 
+## Scope Separation
+
+Project has two documentation scopes:
+
+- **Engine** — domain-agnostic DAG executor (`engine/`). Core features: node
+  types, validation, continuation, resume, HITL, CLI, template interpolation.
+- **SDLC Pipeline** — example pipeline using the engine. SDLC-specific agents,
+  prompts, GitHub workflow, dashboard, devcontainer.
+
+Each scope has its own SRS and SDS files.
+
+### GitHub Issue Rules
+
+- **Title prefix:** `engine:`, `sdlc:`, or `engine+sdlc:`. Mandatory.
+- **Labels:** Every issue MUST have scope label(s):
+  - Single scope: `scope: engine` or `scope: sdlc`.
+  - Mixed: both `scope: engine` AND `scope: sdlc`.
+- **FR reference:** If issue relates to an existing FR, include `FR-E<N>` or
+  `FR-S<N>` in the title or body.
+- **When to use `engine+sdlc:`:** Cross-cutting tasks that touch both scopes
+  and cannot be meaningfully split. Prefer separate issues when scopes are
+  independent.
+
 ## Hierarchy
 
 1. **`AGENTS.md`**: "Why" & "For Whom". Long-term goal/value. READ-ONLY.
-2. **Software Requirements Specification (SRS)** (`documents/requirements.md`):
-   "What" & "Why". Source of truth. Depends on VISION.
-3. **Software Design Specification (SDS)** (`documents/design.md`): "How".
-   Implementation details. Depends on SRS.
-4. **Whiteboard** (`documents/whiteboard.md`): Temporary notes.
+2. **SRS Engine** (`documents/requirements-engine.md`): "What" & "Why" for
+   engine. Source of truth. FR-E numbering.
+3. **SRS SDLC** (`documents/requirements-sdlc.md`): "What" & "Why" for SDLC
+   pipeline. Source of truth. FR-S numbering.
+4. **SDS Engine** (`documents/design-engine.md`): "How" for engine.
+5. **SDS SDLC** (`documents/design-sdlc.md`): "How" for SDLC pipeline.
+6. **Whiteboard** (`documents/whiteboard.md`): Temporary notes.
 
 ## Rules
 
@@ -21,85 +46,62 @@
   `- [x] Criterion text. Evidence: \`path/to/file.ts:42\`,
   \`other/file.md:10\``Without evidence, criterion stays`[ ]`.
 
-## SRS Format (`documents/requirements.md`)
+## SRS Format
+
+Separate files per scope. Same structure in each:
 
 ```markdown
-# SRS
+# SRS: Engine (or SDLC Pipeline)
+
+## 0. Resolved Design Decisions
 
 ## 1. Intro
-
 - **Desc:**
 - **Def/Abbr:**
 
 ## 2. General
-
 - **Context:**
 - **Assumptions/Constraints:**
 
 ## 3. Functional Reqs
-
-### 3.1 FR-1
-
+### 3.1 FR-E1 (ex FR-8): Title
 - **Desc:**
-- **Scenario:**
 - **Acceptance:**
 
----
-
 ## 4. Non-Functional
-
-- **Perf/Reliability/Sec/Scale/UX:**
-
 ## 5. Interfaces
 
-- **API/Proto/UI:**
-
-## 6. Acceptance
-
-- **Criteria:**
+## Appendix: FR Cross-Reference
 ```
 
-## SDS Format (`documents/design.md`)
+FR numbering: `FR-E<N>` for engine, `FR-S<N>` for SDLC pipeline. Existing
+`FR-<N>` numbers preserved as aliases (e.g., `FR-E1 (ex FR-8)`).
+
+## SDS Format
+
+Separate files per scope. Same structure in each:
 
 ```markdown
-# SDS
+# SDS: Engine (or SDLC Pipeline)
 
 ## 1. Intro
-
 - **Purpose:**
 - **Rel to SRS:**
 
 ## 2. Arch
-
 - **Diagram:**
 - **Subsystems:**
 
 ## 3. Components
-
 ### 3.1 Comp A
-
 - **Purpose:**
 - **Interfaces:**
-- **Deps:** ...
+- **Deps:**
 
 ## 4. Data
-
-- **Entities:**
-- **ERD:**
-- **Migration:**
-
 ## 5. Logic
-
-- **Algos:**
-- **Rules:**
-
 ## 6. Non-Functional
-
-- **Scale/Fault/Sec/Logs:**
-
 ## 7. Constraints
-
-- **Simplified/Deferred:**
 ```
 
 ## Whiteboard (`documents/whiteboard.md`)

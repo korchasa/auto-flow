@@ -233,7 +233,7 @@ FAIL — 1/2 criteria passed, 2 blocking issues: test failure + missing edge cas
   `git diff` with content output, `git log`, `git show`. Use Read/Grep tools.
 - **FORBIDDEN: Agent, ToolSearch, TaskOutput tools.** You already have all tools
   you need (Read, Write, Grep, Glob, Bash). ToolSearch wastes a turn.
-- **HARD STOP — Do NOT Read requirements.md or pipeline.yaml.** You have
+- **HARD STOP — Do NOT Read requirements-sdlc.md or pipeline.yaml.** You have
   the spec (`01-spec.md`) and decision (`04-decision.md`) — those contain ALL
   acceptance criteria.
 - **HARD STOP — Do NOT Read SKILL.md files.** You do NOT need to read agent

@@ -106,7 +106,7 @@ Decision artifact: ${decision_path}
 
 Instructions:
 1. Read ${decision_path} (task breakdown from Architect).
-2. Read documents/requirements.md and documents/design.md.
+2. Read documents/requirements-sdlc.md and documents/design-sdlc.md.
 3. Implement tasks in order from the YAML frontmatter.
 4. Follow TDD: write tests first, then implementation.
 5. Run \`deno task check\` after each task and fix any failures.

@@ -37,12 +37,16 @@
 
 ## Project Vision
 
-Automate the full software development lifecycle for feature requests: from
-GitHub Issue triage to merged, tested code — fully autonomous, no human gates
-between stages. A locally-run system where `deno task run` triggers a chain of
-specialized AI agents (Claude Code CLI), PM autonomously selects highest-priority
-open issue, each agent performing a distinct role (PM, Architect, Tech Lead,
-Developer, QA, Tech Lead Review, Meta-Agent).
+Universal DAG-based engine for orchestrating AI agents. Define agent workflows
+as YAML configs — engine handles execution, inter-agent communication,
+validation, loops, and resume. Domain-agnostic: no git/GitHub/SDLC logic in
+engine; any workflow expressible as a DAG of agent/merge/loop/human nodes.
+
+The engine is developed using its own SDLC pipeline (dogfooding): a chain of
+specialized AI agents (PM, Architect, Tech Lead, Developer, QA, Tech Lead
+Review, Meta-Agent) that automates the full development lifecycle from GitHub
+Issue to merged PR. This pipeline serves as both the development method and a
+reference example of engine usage.
 
 ## Project tooling Stack
 
@@ -55,47 +59,66 @@ Developer, QA, Tech Lead Review, Meta-Agent).
 
 ## Architecture
 
-- **Pattern:** Configurable DAG-based multi-agent pipeline with sequential level
-  execution, loop nodes, and human interaction nodes
-- **Pipeline Engine:** Deno/TypeScript engine (`engine/`) driven by YAML
-  config (`.sdlc/pipeline.yaml`). Entry: `deno task run [--prompt "..."]`
+- **Core:** Domain-agnostic DAG executor engine (`engine/`, Deno/TypeScript).
+  Reads YAML pipeline configs. Entry: `deno task run [--prompt "..."]`
 - **Node types:** `agent` (Claude CLI), `merge` (combine outputs), `loop`
   (iterative body with exit condition), `human` (terminal prompt)
 - **Inter-agent communication:** Structured artifacts in
-  `.sdlc/runs/<run-id>/<node-id>/`, linked via `{{input.<node-id>}}` templates
+  `<runs-dir>/<run-id>/<node-id>/`, linked via `{{input.<node-id>}}` templates
 - **Execution:** DAG topological sort into levels; nodes execute sequentially
   (parallel execution deferred)
-- **Continuation mechanism:** `--resume` flag for re-invoking agents within same
-  session on validation failure (max N per node)
+- **Continuation:** Re-invoking agents within same session on validation failure
+  (max N per node)
 - **Resume:** Failed/interrupted runs resumable via `--resume <run-id>`;
   completed nodes skipped based on `state.json`
-- **Observability:** 4 verbosity levels (`-q`/default/`-s`/`-v`); status lines
-  with timestamps; final summary
-- **Legacy:** Shell scripts in `.sdlc/scripts/` preserved for backward
-  compatibility, superseded by engine
-- **Docker image:** Single image with claude CLI, deno, git, gh — all stages use
-  same image
+- **Observability:** 3 verbosity levels (`-q`/default/`-v`); status lines with
+  timestamps; final summary
+- **SDLC pipeline (example):** `.sdlc/pipeline.yaml` — 7 agents automating
+  full development lifecycle. Agent prompts in `.claude/skills/agent-*/SKILL.md`
+- **Docker image:** Single image with claude CLI, deno, git, gh
+
+## Scope Separation
+
+Two scopes with strict boundary:
+
+- **Engine** (`scope: engine`) — domain-agnostic DAG executor (`engine/`).
+  Node types, validation, continuation, resume, HITL, CLI, templates.
+  SRS: `documents/requirements-engine.md`. SDS: `documents/design-engine.md`.
+  GitHub label: `scope: engine`.
+- **SDLC Pipeline** (`scope: sdlc`) — example pipeline using the engine.
+  Agents, prompts, GitHub workflow, dashboard, devcontainer.
+  SRS: `documents/requirements-sdlc.md`. SDS: `documents/design-sdlc.md`.
+  GitHub label: `scope: sdlc`.
+
+FR numbering: `FR-E<N>` (engine), `FR-S<N>` (SDLC). Existing `FR-<N>` kept
+as aliases during migration.
+
+## GitHub Issue Rules
+
+- **Title prefix:** `engine:`, `sdlc:`, or `engine+sdlc:`. Mandatory.
+- **Labels:** Every issue MUST have scope label(s):
+  - Single scope: `scope: engine` or `scope: sdlc`.
+  - Mixed: both `scope: engine` AND `scope: sdlc`.
+- **FR reference:** If issue relates to an existing FR, include `FR-E<N>` or
+  `FR-S<N>` in the title or body.
+- **When to use `engine+sdlc:`:** Refactoring, documentation, or infra tasks
+  that touch both scopes and cannot be meaningfully split (e.g., cross-cutting
+  rename, shared tooling changes). Prefer separate issues when scopes are
+  independent.
 
 ## Key Decisions
 
-- Single Docker image for all stages (simplicity, consistency)
+- **Engine is domain-agnostic:** Generic DAG executor. MUST NOT contain git,
+  GitHub, branch, PR, or any domain-specific logic. All domain workflows are
+  implemented exclusively via agent nodes wired in pipeline YAML configs
+- **Engine is pipeline-independent:** MUST NOT depend on any specific pipeline
+  config. One engine, many pipelines. Engine code must not reference concrete
+  node names, artifact filenames, or pipeline structure
 - Agents are stateless — all context from file artifacts and system prompts
-- Pipeline is project-agnostic (designed for any repo, not just news-digester)
-- Meta-Agent suggests prompt improvements but does NOT auto-modify prompts
-- Diff-based safety checks in Developer stage (prevent scope creep, secret leaks)
-- Deno/TypeScript engine replaced shell script orchestration (configurable,
-  sequential, resumable)
 - YAML pipeline config defines node graph; no hardcoded stage order
-- Artifacts stored in `.sdlc/runs/<run-id>/` (per-run isolation)
-- **Engine is domain-agnostic:** Engine is a generic DAG executor. It MUST NOT
-  contain git, GitHub, branch, PR, or any other domain-specific logic. All
-  git/GitHub workflow (branches, commits, PRs, merges, CI gates) is implemented
-  exclusively via agent nodes wired in `pipeline.yaml`
-- **Engine is pipeline-independent:** Engine MUST NOT depend on any specific
-  pipeline config. There can be many pipelines, but the engine is one. Engine
-  code must not reference concrete node names, artifact filenames, or pipeline
-  structure. All pipeline-specific knowledge lives in `.sdlc/pipeline.yaml`
-  and agent prompts (`.claude/skills/agent-*/SKILL.md`)
+- Artifacts stored per-run for isolation
+- SDLC pipeline specifics (diff safety checks, Meta-Agent restrictions, etc.)
+  are pipeline-level concerns, not engine-level
 
 ## Planning Rules
 

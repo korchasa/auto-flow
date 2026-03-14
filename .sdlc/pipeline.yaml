@@ -1,7 +1,7 @@
 # Pipeline configuration — 7-node SDLC flow (FR-26, FR-33).
 # DAG: specification → design → decision → implementation(build, verify)
 #      ; optimize(run_on:always), tech-lead-review(run_on:always)
-# See: documents/requirements.md for stage specifications.
+# See: documents/requirements-sdlc.md for stage specifications.
 
 name: "auto-flow-sdlc"
 version: "1"
@@ -41,7 +41,7 @@ nodes:
       Output:
         - {{node_dir}}/01-spec.md (YAML frontmatter with `issue: <N>`,
           then problem, affected requirements, SRS changes, scope)
-        - Update documents/requirements.md with new/modified requirements
+        - Update documents/requirements-sdlc.md with new/modified requirements
     validate:
       - type: file_exists
         path: "{{node_dir}}/01-spec.md"
@@ -70,7 +70,7 @@ nodes:
     prompt: ".claude/skills/agent-architect/SKILL.md"
     task_template: |
       Read the specification at {{input.specification}}/01-spec.md.
-      Read documents/requirements.md and documents/design.md.
+      Read documents/requirements-sdlc.md and documents/design-sdlc.md.
       Produce an implementation plan with 2-3 variants.
       Output: {{node_dir}}/02-plan.md
     validate:
@@ -93,9 +93,9 @@ nodes:
     task_template: |
       Read the plan at {{input.design}}/02-plan.md.
       Read the spec at {{input.specification}}/01-spec.md.
-      Read documents/requirements.md, documents/design.md, and AGENTS.md.
+      Read documents/requirements-sdlc.md, documents/design-sdlc.md, and AGENTS.md.
       Critique the plan, select a variant, produce task breakdown (04-decision.md).
-      Update documents/design.md with selected variant's design details.
+      Update documents/design-sdlc.md with selected variant's design details.
       Create feature branch and draft PR.
       Output: {{node_dir}}/04-decision.md
     validate:
@@ -125,7 +125,7 @@ nodes:
         prompt: ".claude/skills/agent-developer/SKILL.md"
         task_template: |
           Read the decision at {{input.decision}}/04-decision.md.
-          Read documents/requirements.md and documents/design.md.
+          Read documents/requirements-sdlc.md and documents/design-sdlc.md.
           Implement the changes following the task breakdown.
           This is iteration {{loop.iteration}}.
           After deno task check passes, write {{node_dir}}/06-impl-summary.md

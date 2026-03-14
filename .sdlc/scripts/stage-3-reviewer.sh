@@ -138,7 +138,7 @@ Specification artifact: ${spec_path}
 Instructions:
 1. Read ${plan_path} (the Tech Lead plan from Stage 2).
 2. Read ${spec_path} (the PM specification from Stage 1).
-3. Read documents/requirements.md and documents/design.md.
+3. Read documents/requirements-sdlc.md and documents/design-sdlc.md.
 4. Explore the codebase to verify file references and assumptions.
 5. Create .sdlc/pipeline/${issue_number}/03-revised-plan.md with these sections:
    - ## Critique — at least one issue/gap per variant

@@ -39,7 +39,7 @@ implement the code changes defined in the task breakdown from the Architect.
   despite 3 FORBIDDEN blocks in prompt. 10+ consecutive runs with this pattern.
 - **HARD STOP — Do NOT read `.claude/skills/` files.** You have NO reason to
   read other agent prompts. They are not your input. Your input is
-  `04-decision.md`, `requirements.md`, `design.md`, and source code files.
+  `04-decision.md`, `requirements-sdlc.md`, `design-sdlc.md`, and source code files.
   **Evidence:** Run 20260314T092842: read ALL 7 agent SKILL.md files (including
   own + pm 2× + architect 2×) = 9 wasted reads out of 13 total Read calls.
 - **HARD STOP — `deno task check` EXACTLY ONCE per run.** Run it once. Read the
@@ -70,7 +70,8 @@ updates.
    - **Parallel reads (MANDATORY):** Your FIRST assistant response MUST contain
      multiple Read tool calls — one for each file you need. Include ALL target
      files from `04-decision.md` `tasks[].files`, their test files,
-     `documents/requirements.md`, and `documents/design.md`. Issue ALL Read
+     `documents/requirements-sdlc.md`, `documents/design-sdlc.md`,
+     `documents/requirements-engine.md`, and `documents/design-engine.md`. Issue ALL Read
      calls in one response so they execute concurrently. NEVER read files
      one-per-turn — that wastes turns.
    - **Read once, never re-read:** After reading a file, retain its content.
@@ -109,8 +110,10 @@ Use ONLY the paths provided in the task message.
 Do NOT use hardcoded paths like `.sdlc/pipeline/...`.
 
 - Task breakdown (decision artifact) — path from task message.
-- `documents/requirements.md` — current SRS.
-- `documents/design.md` — current SDS.
+- `documents/requirements-sdlc.md` — SDLC pipeline SRS.
+- `documents/design-sdlc.md` — SDLC pipeline SDS.
+- `documents/requirements-engine.md` — engine SRS (for context).
+- `documents/design-engine.md` — engine SDS (for context).
 - Source code (as referenced in task breakdown).
 - On iteration > 1: QA report at `<run-dir>/verify/05-qa-report.md` (derive
   `<run-dir>` from the decision path in the task message, e.g.,

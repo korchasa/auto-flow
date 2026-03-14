@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # lib.sh — Shared functions for SDLC pipeline stage scripts.
-# See: documents/design.md §3.3, documents/requirements.md FR-8, FR-12, FR-15.
+# See: documents/design-sdlc.md §3.3, documents/requirements-sdlc.md FR-8, FR-12, FR-15.
 set -euo pipefail
 
 # ============================================================
