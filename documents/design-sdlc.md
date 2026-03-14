@@ -207,7 +207,7 @@ graph LR
   highest-priority open issue via `gh`.
 - **Deps:** Devcontainer, Claude CLI auth (OAuth or API key), `GITHUB_TOKEN`.
 
-### 3.7 Dashboard Generator (`scripts/generate-dashboard.ts`) (FR-33, FR-35, FR-38, FR-40, issue #15)
+### 3.7 Dashboard Generator (`scripts/generate-dashboard.ts`) (FR-33, FR-35, FR-38, FR-40, FR-S26, issue #15, issue #93)
 
 - **Purpose:** Generate self-contained HTML dashboard summarizing pipeline run
   results. Reads `state.json` + per-node `logs/*.json`. Produces `index.html`
@@ -216,6 +216,14 @@ graph LR
   - `readRunState(runDir)` — parse `state.json` → `RunState`
   - `readNodeLog(runDir, nodeId)` — parse `logs/<nodeId>.json` →
     `ClaudeCliOutput`
+  - `groupNodesByPhase(nodeIds, phases?)` — extract phase-grouping logic into
+    standalone exported function (FR-S26). Signature:
+    `groupNodesByPhase(nodeIds: string[], phases?: Record<string, string[]>): Array<{ label: string; ids: string[] }>`.
+    Iterates `phases` entries, filters to nodes present in `nodeIds`, collects
+    ungrouped nodes into `"other"` group. When `phases` absent/empty, returns
+    single group with all `nodeIds` (empty label). Array return type preserves
+    phase ordering by construction. Unit-tested independently (4 scenarios:
+    phased grouping, unphased "other" group, empty nodeIds, no phases config).
   - `renderCard(nodeId, state, log, streamLogHref?)` — HTML card: status badge,
     timing, cost, result summary via `<details><summary>` (first 3 lines
     preview, full text in details body). Single-line results render without
@@ -223,7 +231,10 @@ graph LR
     `<a class="log-link" href="${escHtml(streamLogHref)}">stream log</a>` after
     card-meta div. Omitted when absent (backward-compatible).
   - `renderHtml(runDir, state, logs, streamLogHrefs?)` — full page: run metadata
-    header, phase-grouped card grid, inlined CSS. 4th param
+    header, phase-grouped card grid, inlined CSS. Delegates phase-grouping to
+    `groupNodesByPhase(Object.keys(state.nodes), phases)` — no inline
+    phase-grouping logic remains. Single `groups.map()` path generates
+    `<section>` HTML per group (collapses former if/else branch). 4th param
     `streamLogHrefs?: Record<string, string>` maps nodeId → relative href;
     threaded to each `renderCard()` call via lookup
   - `escHtml(str)` — escape `<>&"'` for XSS-safe HTML embedding
