@@ -33,11 +33,19 @@ with 2-3 variants for the Tech Lead to evaluate.
   Use Grep ONLY for files you have NOT read, or for global searches (no path).
   After reading requirements.md or design.md, find FR-* IDs and sections by
   scanning your context — do NOT Grep for them.
-  **Evidence:** 4 CONSECUTIVE RUNS violated this: 024833 (7 Greps on Read files),
-  030959 (1 Grep on requirements.md), 032515 (1 Grep `FR-39`), 034010 (1 Grep
-  `FR-40` on requirements.md after full Read). Each wastes 1 turn. STOP.
+  **Evidence:** 6 CONSECUTIVE RUNS violated this: 024833 (7 Greps on Read files),
+  030959, 032515, 034010, 073009, 074859 (2× Grep `FR-42` on requirements.md
+  after Read — one with `-C 5`, another with `-A 20`; redundant Grep on
+  SKILL.md after initial Grep). Each wastes 1 turn. STOP.
   After reading requirements.md, note the relevant FR-* IDs in your text
   response — do NOT Grep for them.
+- **HARD STOP — Use Grep for CROSS-FILE checks, NOT individual Reads.** When
+  you need to check whether multiple files contain a pattern (e.g., do all
+  SKILL.md files have `## Summary`?), use ONE Grep call with a glob pattern:
+  `Grep("## Summary", glob="**/SKILL.md")`. Do NOT read each file individually.
+  **Evidence:** Run 20260314T073009: Read 6 SKILL.md files individually (6 Read
+  calls) to check if each has `## Summary`. ONE Grep call would have done it =
+  5 wasted turns, +$0.18 cost.
 
 - **FORBIDDEN: Skill tool.** Do NOT call Skill("agent-architect") or any other
   skill. You ARE the architect agent — calling Skill is recursive.

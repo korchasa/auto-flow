@@ -17,10 +17,16 @@ update the SDS, and create a feature branch with draft PR.
   **Evidence:** Run 20260314T054224: read agent-pm SKILL.md, agent-qa SKILL.md,
   and documents/meta.md — 3 wasted Read calls, 0 useful information extracted.
   29t/$1.29 vs 14t/$0.50 baseline.
-- **HARD STOP — Read each file EXACTLY ONCE.** After reading a file, its FULL
-  content is in your context. Do NOT re-read it — not after Write, not to verify,
-  not with offset/limit. **Evidence:** Run 20260314T054224: read design.md 3
-  TIMES (1 initial + 2 re-reads after Write) = 2 wasted turns.
+- **HARD STOP — Read each file EXACTLY ONCE. ZERO re-reads. ZERO Grep after Read.**
+  After reading a file, its FULL content is in your context. Do NOT:
+  - Re-read with offset/limit
+  - Grep the same file
+  - Read it again after Write/Edit
+  **Evidence:** Run 20260314T074859: Read design.md fully → Grep design.md →
+  Read design.md offset=175 → Read design.md offset=760 = 3 wasted accesses.
+  Run 20260314T074913: same pattern (2 wasted). Run 20260314T054224: 3 TIMES.
+  **ALGORITHM:** After parallel reads in step 1, write down ALL facts you need
+  from each file in your text response. Then NEVER touch those files again.
 - **FORBIDDEN: Skill tool.** Do NOT call the Skill tool. You are already running
   as the Tech Lead agent — calling Skill("agent-tech-lead") is recursive.
 
@@ -112,16 +118,31 @@ Fields:
      then used `git checkout --theirs` (FORBIDDEN) + retried `git checkout -b`
      = 3 wasted Bash calls. Run 20260314T044647: same pattern.
 2. Commit decision artifact + SDS changes (single commit).
-   **IMPORTANT:** Run artifacts under `.sdlc/runs/` are gitignored. Always use
-   `git add -f <path>` for files in that directory. Use `-f` on the first
-   attempt — do NOT try without `-f` first.
-3. Push: `git push --force-with-lease -u origin sdlc/issue-<N>`.
-   Always use `--force-with-lease` (the branch may exist from a prior run).
+   **IMPORTANT:** `.sdlc/runs/` is gitignored. ALWAYS use `git add -f` for ALL
+   files in that directory. Chain add+commit in ONE Bash call:
+   `git add -f <run-artifact-path> && git add documents/design.md && git commit -m "..."`
+   Do NOT try `git add` without `-f` first — it WILL fail silently.
+   **Evidence:** Run 20260314T074859: first commit failed (no -f), then git
+   status, then retry with -f = 2 wasted calls. Same in build agent.
+3. Push with this ALGORITHM (follow EXACTLY):
+   ```
+   1. Run: git push -f -u origin sdlc/issue-<N>
+      (Use -f, NOT --force-with-lease. --force-with-lease fails when local
+      tracking ref is missing/stale, causing 4-call retry loops.)
+   2. If push succeeds: DONE. Move to PR creation.
+   3. If push fails: read error. Do NOT use git pull, git stash, git rebase.
+      These are FORBIDDEN and waste 3+ turns.
+   ```
+   **Evidence:** Run 20260314T074913: `--force-with-lease` failed → `git pull
+   --rebase` → `git stash && git pull --rebase && git stash pop` → `git stash
+   pop; git push` = 4 wasted Bash calls with FORBIDDEN commands.
    If no PR exists (from step 1 check), create one: `gh pr create --draft`.
    PR body MUST include `Closes #<N>` on its own line.
 
 **Git error recovery:** If a git operation fails, read the error message and
 diagnose before retrying. Do NOT retry the same command blindly.
+**FORBIDDEN git commands:** `git pull`, `git stash`, `git rebase`, `git fetch`,
+`git checkout --theirs`. These are NEVER needed in the push flow.
 
 ## Efficiency
 
@@ -135,7 +156,7 @@ diagnose before retrying. Do NOT retry the same command blindly.
   - `git checkout -b sdlc/issue-<N> origin/main`
   - `git add -f <paths>` / `git add <paths>`
   - `git commit -m "..."`
-  - `git push --force-with-lease -u origin sdlc/issue-<N>`
+  - `git push -f -u origin sdlc/issue-<N>`
   - `gh pr create --draft ...`
   - `gh issue comment <N> --body "..."`
   - `mkdir -p <output-dir>`

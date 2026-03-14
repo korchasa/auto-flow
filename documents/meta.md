@@ -1,35 +1,33 @@
 # Meta-Agent Memory
 
 ## Agent Baselines
-- pm (specification): 19t/$0.95/233s — REGRESSION from 12t/$0.57. Branch shortcut + Grep violations
-- architect (design): 18t/$0.46/85s — IMPROVED from 23t/$0.91. Git archaeology fix working (8→1 git cmd)
-- tech-lead (decision): 17t/$0.63/146s — stable
-- developer (build): 13t/$0.68/117s — slight regression from 10t/$0.61 (2 Grep-after-Read)
-- qa (verify): 15t/$0.43/75s — IMPROVED from 18t/$0.65
-- Total run cost: $3.16 (improved from $3.38)
+- pm (specification): 12t/$0.37/77s — stable. 2 Grep after Read remain.
+- architect (design): 13t/$0.29/69s — stable. 2 Grep after Read on requirements.md.
+- tech-lead (decision): 21t/$0.53/119s — REGRESSED (19→21t, $0.39→$0.53). Triple design.md access + double git commit.
+- developer (build): 15t/$0.31/69s — REGRESSED (6→15t, $0.17→$0.31). 4 searches on pipeline.yaml + double git commit. (Previous run was verify-and-close = less work.)
+- qa (verify): 23 calls/$0.75/91s — REGRESSED ($0.58→$0.75). 7 individual SKILL.md reads + background deno check + ToolSearch/TaskOutput.
+- Total run cost: $2.25 (up from $1.75 but previous was verify-and-close)
 - 1 iteration (QA passed first try)
 
 ## Active Patterns
-- pm-branch-shortcut-v2: WATCHING, first seen 20260314T062600. On `sdlc/issue-15`,
-  PM ran git pull + 2x gh issue list despite branch shortcut rule existing in TWO
-  places. 8th consecutive violation. Fix: restructured PM prompt from scattered
-  HARD STOPs to single EXECUTION ALGORITHM with mandatory text checkpoint after
-  git branch output.
-- pm-grep-after-read-v2: WATCHING, first seen 20260314T054224, last seen
-  20260314T062600. REGRESSED from 1 Grep to 4 Grep calls on requirements.md.
-  Fix: integrated into execution algorithm with mandatory "Content loaded" text
-  checkpoint after Read step.
-- pm-tool-results-reread-v2: WATCHING, first seen 20260314T062600. Read same
-  tool-results file twice. Fix: integrated into execution algorithm step 3.
-- architect-git-archaeology: WATCHING (improving), first seen 20260314T062340,
-  last seen 20260314T062600. Down from 8 git commands to 1 (`git log --oneline`).
-  Fix: switched from blacklist to WHITELIST for Bash commands.
-- architect-reread-offset: NEW, first seen 20260314T062600. Read requirements.md
-  fully, then re-read with offset=836/limit=80. Fix: added evidence to existing
-  HARD STOP rule.
-- pm-edit-requirements: RESOLVED (2 clean runs: 062340, 062600)
-- recursive-skill-call: RESOLVED (2 clean runs: 062340, 062600)
-- tech-lead-merge-conflicts: RESOLVED (2 clean runs: 062340, 062600)
+- pm-grep-after-read-v3: WATCHING, last seen 074859. Still 2 Grep calls on
+  requirements.md after Read. 4th consecutive violation.
+- qa-individual-file-reads-v2: WATCHING, last seen 074859. QA read 7 SKILL.md
+  files individually. Fix: added HARD STOP "Do NOT Read SKILL.md files" + scope
+  clarification (verify implementation, not agent prompts).
+- qa-background-deno-check: WATCHING, last seen 074859. 2nd consecutive run.
+  Fix: stronger FOREGROUND mandate with exact Bash call syntax.
+- tl-design-md-reread: WATCHING, last seen 074859. 2nd consecutive run. Triple
+  access (Read + Grep + 2 partial Reads). Fix: added ALGORITHM requiring text
+  extraction after parallel reads.
+- double-git-commit: NEW, first seen 074859. Both tech-lead and developer tried
+  `git add` without `-f` for .sdlc/runs/ paths, failed, retried. Fix: explicit
+  chained `git add -f` + commit in one Bash call in both prompts.
+- dev-bash-grep: NEW, first seen 074859. Developer used `grep -A1` + `grep -A3`
+  via Bash on pipeline.yaml after 2 Grep tool calls = 4 total searches. Fix:
+  added ALGORITHM for single-call search with sufficient context.
+- architect-grep-after-read-v2: WATCHING, last seen 074859. 6th consecutive
+  violation. 2 Greps on requirements.md after Read. Evidence updated.
 
 ## Resolved Patterns
 - developer-grep-after-read: RESOLVED (3+ clean runs)
@@ -43,42 +41,59 @@
 - pm-tool-results-reread: RESOLVED (3 clean runs)
 - pm-branch-shortcut-regression: RESOLVED (3 clean runs)
 - qa-grep-after-read-v3: RESOLVED (3 clean runs)
-- qa-deno-check-double: RESOLVED (2 clean runs)
-- pm-edit-requirements: RESOLVED (2 clean runs)
-- recursive-skill-call: RESOLVED (2 clean runs)
-- tech-lead-merge-conflicts: RESOLVED (2 clean runs)
+- qa-deno-check-double: RESOLVED → MUTATED into qa-background-deno-check
+- pm-edit-requirements-v2: RESOLVED (3 clean runs: 073009, 074913, 074859)
+- pm-skill-self-invocation: RESOLVED (3 clean runs: 073009, 074913, 074859)
+- qa-skill-self-invocation: RESOLVED (3 clean runs: 073009, 074913, 074859)
+- pm-branch-shortcut-v3: RESOLVED (3 clean runs: 073009, 074913, 074859)
+- recursive-skill-call: RESOLVED (3+ clean runs)
+- tech-lead-merge-conflicts: RESOLVED (3+ clean runs)
+- architect-git-archaeology: RESOLVED (3+ clean runs)
+- architect-reread-offset: RESOLVED (3+ clean runs)
+- dev-individual-file-reads: RESOLVED (3 clean runs: 073009, 074913, 074859)
+- architect-bulk-file-reads: RESOLVED (3 clean runs: 073009, 074913, 074859)
+- tl-push-force-with-lease: RESOLVED (1 clean run: 074859). git push -f worked.
+- qa-bash-grep-v2: WATCHING → not violated in 074859. Keep watching.
 
 ## Applied Fixes Log
-- 20260313T021326–20260314T054224: (compressed — see git history for details)
-- 20260314T054156: pm — positive ALGORITHM for Grep-after-Read. developer/qa —
-  FORBIDDEN Skill moved to absolute top of prompt.
-- 20260314T062340: architect — added HARD STOP against git archaeology (git log,
-  git show, git branch, git diff HEAD..origin). Evidence: 8 git commands → 1.
-- 20260314T062600: pm — MAJOR RESTRUCTURE: replaced 8 scattered HARD STOP blocks
-  (65 lines) with single EXECUTION ALGORITHM (numbered steps with mandatory text
-  checkpoints). Each step tells agent WHAT to do + inline prohibitions. Addresses
-  branch shortcut (8 consecutive violations), Grep-after-Read (4 violations),
-  tool-results re-read (1 violation). architect — switched git archaeology ban
-  from blacklist to Bash WHITELIST (only gh issue comment, mkdir, ls allowed).
-  Added evidence for offset/limit re-read violation.
+- 20260313T021326–20260314T062600: (compressed — see git history for details)
+- 20260314T072450: pm/qa — anti-Skill before # Role heading. dev — Grep-first.
+- 20260314T073009: qa — deno check algorithm + Bash grep prohibition.
+  architect — HARD STOP for cross-file checks.
+- 20260314T074913: qa — FOREGROUND mandatory, banned ToolSearch/TaskOutput.
+  tech-lead — git push -f, forbidden git commands, read-once evidence.
+- 20260314T074859: qa — HARD STOP "Do NOT Read SKILL.md files" (7 individual
+  reads → should be 0 or 1 Grep). Stronger FOREGROUND mandate with exact Bash
+  syntax. ToolSearch/TaskOutput prohibition with causal link to background mode.
+  tech-lead — text-extraction ALGORITHM after parallel reads (triple design.md
+  access). Chained `git add -f && commit` in one Bash call.
+  developer — ALGORITHM for single-call Grep with sufficient context (4 searches
+  → 1). Chained `git add -f` for .sdlc/runs/ artifacts.
+  architect — updated Grep-after-Read evidence (6th consecutive violation).
 
 ## Lessons Learned
-- Total pipeline cost baseline for M-effort issue: ~$2.30 (down from ~$5.00).
+- Total pipeline cost baseline for M-effort issue: ~$2.25 (down from ~$5.00).
 - Run artifacts under .sdlc/runs/ are gitignored — agents must use `git add -f`.
 - QA self-approval fails (same user can't approve own PR). Need fallback path.
 - **Blacklist approach fails for Bash commands.** WHITELIST is correct.
-- **Rule placement matters.** HARD STOP before Responsibilities = strongest.
+- **Rule placement matters.** Before # Role heading = strongest position.
 - **Cross-agent patterns:** Fix in one agent, apply to ALL.
 - **Positive algorithms > prohibition.** Ban-only HARD STOP fails for entrenched
   behavior. Positive algorithm (WHAT to do) works.
-- **Skill tool is a trap.** Fix: FORBIDDEN + positive first-action at absolute
-  top of prompt (before Role description). Confirmed working in 062340+062600.
-- **Cost trajectory:** $5.09→$2.31→$4.67→$5.73→$3.38→$3.16. Trend recovering.
-- **Git archaeology is wasteful.** Agents should plan from current checkout +
-  spec, not explore git history for prior implementations.
-- **Scattered HARD STOPs cause rule fatigue.** 8 separate prohibition blocks
-  spanning 65 lines are less effective than a single numbered execution algorithm
-  with mandatory text checkpoints. Agent follows steps, not a list of don'ts.
+- **Skill tool is the most persistent anti-pattern.** Fix: anti-Skill as FIRST
+  content (before # Role heading). 3 clean runs confirm.
+- **Cost trajectory:** $5.09→$2.31→$4.67→$5.73→$3.38→$3.16→$4.09→$3.16→$1.75→$2.25.
+- **Git archaeology is wasteful.** Agents should plan from current checkout.
+- **Scattered HARD STOPs cause rule fatigue.** Single execution algorithm better.
 - **Text checkpoint technique:** Requiring agent to WRITE analysis in text
-  response ("Branch: X. Issue: N.") before next tool call creates a commitment
-  device that prevents skipping the conditional logic.
+  response creates commitment device.
+- **Grep-first for multi-file verification.** One Grep replaces N Reads.
+- **--force-with-lease fails without tracking ref.** Use `git push -f`.
+- **Background Bash is an anti-pattern for short commands.** deno task check
+  takes ~30s — not worth background mode overhead.
+- **Double git commit pattern:** `.sdlc/runs/` is gitignored. Agents must use
+  `git add -f` on FIRST attempt, not try without -f then retry. Chain
+  `git add -f <path> && git commit` in one Bash call to prevent this.
+- **Incremental context search is wasteful.** When searching for a pattern, use
+  sufficient `-A`/`-C` from the first call. Don't do Grep(-C 0) → Grep(-A 5) →
+  bash grep -A1 → bash grep -A3.
