@@ -6,15 +6,14 @@ import type {
   PipelineConfig,
   RunState,
 } from "./types.ts";
+import { resolveInputArtifacts } from "./agent.ts";
+import { collectAllNodeIds, findNodeConfig } from "./config.ts";
+import { Engine } from "./engine.ts";
 import {
-  collectAllNodeIds,
   collectPostPipelineNodes,
-  Engine,
-  findNodeConfig,
-  resolveInputArtifacts,
   runFailureHook,
   sortPostPipelineNodes,
-} from "./engine.ts";
+} from "./post-pipeline.ts";
 import type { AgentResult } from "./agent.ts";
 import {
   createRunState,

@@ -36,6 +36,35 @@ export async function readNodeLog(
   }
 }
 
+/**
+ * Group node IDs by declared phases.
+ * Returns Array<{label, ids}> preserving phase ordering by construction.
+ * When phases absent/empty: single group with all nodeIds and empty label.
+ * Nodes not listed in any phase are collected into an "other" group.
+ * Empty nodeIds always returns [].
+ */
+export function groupNodesByPhase(
+  nodeIds: string[],
+  phases?: Record<string, string[]>,
+): Array<{ label: string; ids: string[] }> {
+  if (nodeIds.length === 0) return [];
+  if (!phases || Object.keys(phases).length === 0) {
+    return [{ label: "", ids: nodeIds }];
+  }
+  const assigned = new Set<string>();
+  const groups: Array<{ label: string; ids: string[] }> = [];
+  for (const [phase, members] of Object.entries(phases)) {
+    const present = members.filter((id) => nodeIds.includes(id));
+    if (present.length > 0) {
+      groups.push({ label: phase, ids: present });
+      for (const id of present) assigned.add(id);
+    }
+  }
+  const ungrouped = nodeIds.filter((id) => !assigned.has(id));
+  if (ungrouped.length > 0) groups.push({ label: "other", ids: ungrouped });
+  return groups;
+}
+
 const PREVIEW_LINES = 3;
 
 /**
@@ -241,6 +270,7 @@ export function renderCostChart(bars: CostBar[], totalCost: number): string {
 
 /**
  * Render the full self-contained HTML dashboard page.
+ * Delegates phase-grouping to groupNodesByPhase(); no inline grouping logic.
  *
  * @param state - Parsed run state (provides run_id, timestamps, node statuses)
  * @param logs  - Map of nodeId → ClaudeCliOutput (or null if log unavailable)
@@ -255,39 +285,9 @@ export function renderHtml(
 ): string {
   const nodeIds = Object.keys(state.nodes);
 
-  let bodySections: string;
-  if (phases && Object.keys(phases).length > 0) {
-    const phaseAssigned = new Set<string>();
-    const groups: Array<{ label: string; ids: string[] }> = [];
-
-    for (const [phase, members] of Object.entries(phases)) {
-      const present = members.filter((id) => state.nodes[id]);
-      if (present.length > 0) {
-        groups.push({ label: phase, ids: present });
-        for (const id of present) phaseAssigned.add(id);
-      }
-    }
-
-    const ungrouped = nodeIds.filter((id) => !phaseAssigned.has(id));
-    if (ungrouped.length > 0) groups.push({ label: "other", ids: ungrouped });
-
-    bodySections = groups.map(({ label, ids }) => {
-      const cards = ids
-        .map((id) =>
-          renderCard(
-            id,
-            state.nodes[id],
-            logs[id] ?? null,
-            streamLogHrefs?.[id],
-          )
-        )
-        .join("\n");
-      return `<section>\n<h2 class="phase-label">${
-        escHtml(label)
-      }</h2>\n<div class="card-grid">\n${cards}\n</div>\n</section>`;
-    }).join("\n");
-  } else {
-    const cards = nodeIds
+  const groups = groupNodesByPhase(nodeIds, phases);
+  const bodySections = groups.map(({ label, ids }) => {
+    const cards = ids
       .map((id) =>
         renderCard(
           id,
@@ -297,9 +297,11 @@ export function renderHtml(
         )
       )
       .join("\n");
-    bodySections =
-      `<section>\n<div class="card-grid">\n${cards}\n</div>\n</section>`;
-  }
+    const heading = label
+      ? `\n<h2 class="phase-label">${escHtml(label)}</h2>`
+      : "";
+    return `<section>${heading}\n<div class="card-grid">\n${cards}\n</div>\n</section>`;
+  }).join("\n");
 
   const completedAt = state.completed_at ?? "\u2014";
   const bars = computeTimeline(state);

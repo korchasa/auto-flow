@@ -14,7 +14,34 @@ import {
   runValidations,
   type ValidationResult,
 } from "./validate.ts";
-import type { OutputManager } from "./output.ts";
+import type { OutputManager, VerboseInput } from "./output.ts";
+
+/**
+ * Resolve input artifact file paths and sizes from input directories.
+ * Walks each input directory (non-recursive), collects file path + size.
+ */
+export async function resolveInputArtifacts(
+  inputs: Record<string, string>,
+): Promise<VerboseInput[]> {
+  const result: VerboseInput[] = [];
+  for (const [_nodeId, dir] of Object.entries(inputs)) {
+    try {
+      for await (const entry of Deno.readDir(dir)) {
+        if (!entry.isFile) continue;
+        const filePath = `${dir}/${entry.name}`;
+        try {
+          const stat = await Deno.stat(filePath);
+          result.push({ path: filePath, sizeBytes: stat.size });
+        } catch {
+          // File may have been removed between readDir and stat
+        }
+      }
+    } catch {
+      // Directory may not exist
+    }
+  }
+  return result;
+}
 
 /** Result of an agent node execution. */
 export interface AgentResult {

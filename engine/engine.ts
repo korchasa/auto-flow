@@ -7,8 +7,23 @@ import type {
   TemplateContext,
 } from "./types.ts";
 import type { AgentResult } from "./agent.ts";
-import { loadConfig } from "./config.ts";
-import { buildLevels, topoSort } from "./dag.ts";
+import { resolveInputArtifacts, runAgent } from "./agent.ts";
+import { collectAllNodeIds, findNodeConfig, loadConfig } from "./config.ts";
+import { buildLevels } from "./dag.ts";
+import { handleAgentHitl } from "./hitl-handler.ts";
+import { detectHitlRequest } from "./hitl.ts";
+import { runHuman, terminalInput } from "./human.ts";
+import type { UserInput } from "./human.ts";
+import { acquireLock, defaultLockPath, releaseLock } from "./lock.ts";
+import { saveAgentLog } from "./log.ts";
+import { runLoop } from "./loop.ts";
+import { OutputManager } from "./output.ts";
+import type { RunSummary } from "./output.ts";
+import {
+  collectPostPipelineNodes,
+  executePostPipeline,
+  sortPostPipelineNodes,
+} from "./post-pipeline.ts";
 import {
   createRunState,
   generateRunId,
@@ -20,22 +35,12 @@ import {
   markNodeFailed,
   markNodeSkipped,
   markNodeStarted,
-  markNodeWaiting,
   markRunAborted,
   markRunCompleted,
   markRunFailed,
   saveState,
   setPhaseRegistry,
 } from "./state.ts";
-import { acquireLock, defaultLockPath, releaseLock } from "./lock.ts";
-import { runAgent } from "./agent.ts";
-import { saveAgentLog } from "./log.ts";
-import { detectHitlRequest, runHitlLoop } from "./hitl.ts";
-import { runLoop } from "./loop.ts";
-import { runHuman, terminalInput } from "./human.ts";
-import type { UserInput } from "./human.ts";
-import { OutputManager } from "./output.ts";
-import type { RunSummary, VerboseInput } from "./output.ts";
 
 /** Main pipeline engine. Orchestrates node execution across DAG levels. */
 export class Engine {
@@ -169,48 +174,15 @@ export class Engine {
     }
 
     // Execute post-pipeline nodes (filtered by run_on condition)
-    if (postPipelineNodeIds.length > 0) {
-      // Pre-step: on failure, run failure hook
-      if (!pipelineSuccess) {
-        await runFailureHook(
-          this.config.defaults?.on_failure_script,
-          this.output,
-        );
-      }
-
-      for (const nodeId of postPipelineNodeIds) {
-        if (isNodeCompleted(this.state, nodeId)) continue;
-
-        // Filter by run_on condition
-        const nodeRunOn = this.config.nodes[nodeId].run_on;
-        if (nodeRunOn === "success" && !pipelineSuccess) {
-          markNodeSkipped(this.state, nodeId);
-          this.output.nodeSkipped(
-            nodeId,
-            "skipped: run_on=success but pipeline failed",
-          );
-          await saveState(this.state);
-          continue;
-        }
-        if (nodeRunOn === "failure" && pipelineSuccess) {
-          markNodeSkipped(this.state, nodeId);
-          this.output.nodeSkipped(
-            nodeId,
-            "skipped: run_on=failure but pipeline succeeded",
-          );
-          await saveState(this.state);
-          continue;
-        }
-
-        try {
-          await this.executeNode(nodeId);
-        } catch (err) {
-          this.output.warn(
-            `Post-pipeline node ${nodeId} failed: ${(err as Error).message}`,
-          );
-        }
-      }
-    }
+    await executePostPipeline({
+      nodeIds: postPipelineNodeIds,
+      nodes: this.config.nodes,
+      state: this.state,
+      pipelineSuccess,
+      failureScript: this.config.defaults?.on_failure_script,
+      output: this.output,
+      executeNode: (nodeId) => this.executeNode(nodeId),
+    });
 
     // Finalize run state
     if (pipelineSuccess) {
@@ -371,16 +343,6 @@ export class Engine {
 
     // Resume path: node was waiting for human reply
     if (wasWaiting) {
-      const nodeState = this.state.nodes[nodeId];
-      if (!nodeState.session_id || !nodeState.question_json) {
-        markNodeFailed(
-          this.state,
-          nodeId,
-          "Waiting node missing session_id or question_json",
-          "unknown",
-        );
-        return null;
-      }
       if (!hitlConfig) {
         markNodeFailed(
           this.state,
@@ -390,42 +352,19 @@ export class Engine {
         );
         return null;
       }
-
-      const question = JSON.parse(nodeState.question_json);
-      const hitlResult = await runHitlLoop({
-        config: hitlConfig,
+      return await handleAgentHitl({
+        mode: "resume",
         nodeId,
-        runId: this.state.run_id,
-        runDir: getRunDir(this.state.run_id),
-        env: this.state.env,
-        sessionId: nodeState.session_id,
-        question,
+        hitlConfig,
+        state: this.state,
+        saveState: () => saveState(this.state),
         node,
         ctx,
         settings,
         claudeArgs: this.config.defaults?.claude_args,
         model: effectiveModel,
         output: this.output,
-      }, true /* skipAsk — question already delivered */);
-
-      if (!hitlResult.success) {
-        markNodeFailed(
-          this.state,
-          nodeId,
-          hitlResult.error ?? "HITL resume failed",
-          hitlResult.error_category ?? "unknown",
-        );
-        return null;
-      }
-
-      if (hitlResult.session_id) {
-        this.state.nodes[nodeId].session_id = hitlResult.session_id;
-      }
-      if (hitlResult.output) {
-        const runDir = getRunDir(this.state.run_id);
-        await saveAgentLog(runDir, nodeId, hitlResult.output);
-      }
-      return hitlResult;
+      });
     }
 
     // Normal path: run agent
@@ -461,7 +400,6 @@ export class Engine {
     if (result.output) {
       const hitlQuestion = detectHitlRequest(result.output);
       if (hitlQuestion) {
-        // Fail fast if hitl config absent
         if (!hitlConfig) {
           markNodeFailed(
             this.state,
@@ -471,49 +409,21 @@ export class Engine {
           );
           return null;
         }
-
-        const sessionId = result.output.session_id;
-        const questionJson = JSON.stringify(hitlQuestion);
-
-        // Mark node as waiting and persist
-        markNodeWaiting(this.state, nodeId, sessionId, questionJson);
-        await saveState(this.state);
-
-        // Enter HITL poll loop
-        const hitlResult = await runHitlLoop({
-          config: hitlConfig,
+        return await handleAgentHitl({
+          mode: "detect",
           nodeId,
-          runId: this.state.run_id,
-          runDir: getRunDir(this.state.run_id),
-          env: this.state.env,
-          sessionId,
-          question: hitlQuestion,
+          hitlQuestion,
+          agentSessionId: result.output.session_id,
+          hitlConfig,
+          state: this.state,
+          saveState: () => saveState(this.state),
           node,
           ctx,
           settings,
           claudeArgs: this.config.defaults?.claude_args,
           model: effectiveModel,
           output: this.output,
-        }, false /* skipAsk=false — deliver question */);
-
-        if (!hitlResult.success) {
-          markNodeFailed(
-            this.state,
-            nodeId,
-            hitlResult.error ?? "HITL failed",
-            hitlResult.error_category ?? "unknown",
-          );
-          return null;
-        }
-
-        if (hitlResult.session_id) {
-          this.state.nodes[nodeId].session_id = hitlResult.session_id;
-        }
-        if (hitlResult.output) {
-          const runDir = getRunDir(this.state.run_id);
-          await saveAgentLog(runDir, nodeId, hitlResult.output);
-        }
-        return hitlResult;
+        });
       }
     }
 
@@ -709,128 +619,6 @@ export class Engine {
       skipped: nodes.filter((n) => n.status === "skipped").length,
     };
     this.output.summary(summary);
-  }
-}
-
-/**
- * Resolve input artifact file paths and sizes from input directories.
- * Walks each input directory (non-recursive), collects file path + size.
- */
-export async function resolveInputArtifacts(
-  inputs: Record<string, string>,
-): Promise<VerboseInput[]> {
-  const result: VerboseInput[] = [];
-  for (const [_nodeId, dir] of Object.entries(inputs)) {
-    try {
-      for await (const entry of Deno.readDir(dir)) {
-        if (!entry.isFile) continue;
-        const filePath = `${dir}/${entry.name}`;
-        try {
-          const stat = await Deno.stat(filePath);
-          result.push({ path: filePath, sizeBytes: stat.size });
-        } catch {
-          // File may have been removed between readDir and stat
-        }
-      }
-    } catch {
-      // Directory may not exist
-    }
-  }
-  return result;
-}
-
-/**
- * Collect node IDs with `run_on` set from pipeline config.
- * These nodes execute in a final post-pipeline step after all DAG levels complete.
- */
-export function collectPostPipelineNodes(
-  nodes: Record<string, NodeConfig>,
-): string[] {
-  return Object.entries(nodes)
-    .filter(([_, node]) => node.run_on !== undefined)
-    .map(([id]) => id);
-}
-
-/**
- * Sort post-pipeline nodes topologically using their `inputs` field.
- * Only considers dependencies within the post-pipeline subset.
- * Guarantees e.g. post-B (inputs: [post-A]) runs after post-A.
- */
-export function sortPostPipelineNodes(
-  postPipelineIds: string[],
-  nodes: Record<string, NodeConfig>,
-): string[] {
-  const subset = new Set(postPipelineIds);
-  const deps = new Map<string, Set<string>>();
-  for (const id of postPipelineIds) {
-    const node = nodes[id];
-    const internalInputs = (node.inputs ?? []).filter((inp) => subset.has(inp));
-    deps.set(id, new Set(internalInputs));
-  }
-  const levels = topoSort(deps);
-  return levels.flat();
-}
-
-/**
- * Collect all node IDs including nested body nodes from loop `nodes` sub-objects.
- * Returns a flat list suitable for `createRunState()`.
- */
-/**
- * Find a NodeConfig by ID, searching both top-level nodes and loop body nodes.
- * Returns undefined if not found.
- */
-export function findNodeConfig(
-  config: PipelineConfig,
-  nodeId: string,
-): NodeConfig | undefined {
-  if (config.nodes[nodeId]) return config.nodes[nodeId];
-  for (const node of Object.values(config.nodes)) {
-    if (node.type === "loop" && node.nodes && node.nodes[nodeId]) {
-      return node.nodes[nodeId];
-    }
-  }
-  return undefined;
-}
-
-export function collectAllNodeIds(config: PipelineConfig): string[] {
-  const ids: string[] = [];
-  for (const [id, node] of Object.entries(config.nodes)) {
-    ids.push(id);
-    if (node.type === "loop" && node.nodes) {
-      for (const bodyId of Object.keys(node.nodes)) {
-        ids.push(bodyId);
-      }
-    }
-  }
-  return ids;
-}
-
-/**
- * Execute the on_failure_script hook (domain-agnostic).
- * Swallows errors — failure hook must not crash the engine.
- */
-export async function runFailureHook(
-  script: string | undefined,
-  output: OutputManager,
-): Promise<void> {
-  if (!script) return;
-  try {
-    const cmd = new Deno.Command(script, {
-      stdout: "piped",
-      stderr: "piped",
-    });
-    const result = await cmd.output();
-    const stdout = new TextDecoder().decode(result.stdout).trim();
-    const stderr = new TextDecoder().decode(result.stderr).trim();
-    if (stdout) output.status("engine", `Hook stdout: ${stdout}`);
-    if (stderr) output.warn(`Hook stderr: ${stderr}`);
-    if (!result.success) {
-      output.warn(`Failure hook exited with code ${result.code}`);
-    } else {
-      output.status("engine", "Failure hook completed");
-    }
-  } catch (err) {
-    output.warn(`Failure hook error: ${(err as Error).message}`);
   }
 }
 

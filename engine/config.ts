@@ -408,6 +408,40 @@ export function collectPromptPaths(config: PipelineConfig): string[] {
   return paths;
 }
 
+/**
+ * Find a NodeConfig by ID, searching both top-level nodes and loop body nodes.
+ * Returns undefined if not found.
+ */
+export function findNodeConfig(
+  config: PipelineConfig,
+  nodeId: string,
+): NodeConfig | undefined {
+  if (config.nodes[nodeId]) return config.nodes[nodeId];
+  for (const node of Object.values(config.nodes)) {
+    if (node.type === "loop" && node.nodes && node.nodes[nodeId]) {
+      return node.nodes[nodeId];
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Collect all node IDs including nested body nodes from loop `nodes` sub-objects.
+ * Returns a flat list suitable for `createRunState()`.
+ */
+export function collectAllNodeIds(config: PipelineConfig): string[] {
+  const ids: string[] = [];
+  for (const [id, node] of Object.entries(config.nodes)) {
+    ids.push(id);
+    if (node.type === "loop" && node.nodes) {
+      for (const bodyId of Object.keys(node.nodes)) {
+        ids.push(bodyId);
+      }
+    }
+  }
+  return ids;
+}
+
 /** Extract NodeSettings fields from PipelineDefaults (exclude pipeline-only fields). */
 function extractNodeSettings(defaults: PipelineDefaults): NodeSettings {
   const { max_parallel: _, claude_args: _ca, hitl: _hitl, ...settings } =
