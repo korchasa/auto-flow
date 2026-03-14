@@ -635,3 +635,44 @@ Deno.test("renderHtml — cost chart appears between timeline and main", () => {
   assertEquals(timelineEnd < costChartStart, true);
   assertEquals(costChartStart < mainStart, true);
 });
+
+// --- stream log link (issue #49) ---
+
+Deno.test("renderCard — with streamLogHref renders log-link anchor", () => {
+  const state: NodeState = { status: "completed" };
+  const html = renderCard("build", state, null, "plan/build/stream.log");
+  assertEquals(html.includes('<a class="log-link"'), true);
+  assertEquals(html.includes('href="plan/build/stream.log"'), true);
+  assertEquals(html.includes("stream log"), true);
+});
+
+Deno.test("renderCard — without streamLogHref does not render log-link", () => {
+  const state: NodeState = { status: "completed" };
+  const html = renderCard("build", state, null);
+  assertEquals(html.includes("log-link"), false);
+  assertEquals(html.includes("stream log"), false);
+});
+
+Deno.test("renderHtml — streamLogHrefs threads links to mapped nodes only", () => {
+  const state: RunState = {
+    run_id: "run-links",
+    config_path: "",
+    started_at: "2024-01-01T00:00:00Z",
+    status: "completed",
+    args: {},
+    env: {},
+    nodes: {
+      spec: { status: "completed" },
+      build: { status: "completed" },
+    },
+  };
+  const streamLogHrefs: Record<string, string> = {
+    build: "impl/build/stream.log",
+  };
+  const html = renderHtml(state, {}, undefined, streamLogHrefs);
+  // build has a link
+  assertEquals(html.includes("impl/build/stream.log"), true);
+  // spec does not have a log-link — count occurrences: only 1 log-link anchor
+  const linkCount = (html.match(/class="log-link"/g) ?? []).length;
+  assertEquals(linkCount, 1);
+});

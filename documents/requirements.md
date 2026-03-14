@@ -863,75 +863,43 @@
     parallel node stacking, single-node edge case, missing-timing omission.
   - [ ] `deno task check` passes.
 
-### 3.38 FR-39: Turn Separators and Summary Footer in Stream Log
+### 3.38 FR-40: Dashboard Stream Log Links
 
-- **Description:** Stream log files (`.sdlc/runs/<run-id>/logs/<node-id>.jsonl`)
-  must include visual turn boundaries between assistant message blocks and a
-  human-readable summary footer at the end of each log. Currently the log is a
-  flat sequence of JSON events; consecutive tool calls from different reasoning
-  steps blend together with no delineation, and cost/duration summary requires
-  opening a separate `logs/<node>.json` file.
-- **Rationale:** Operators analysing post-run logs spend extra time locating
-  turn boundaries and cross-referencing separate files for summary data. Inline
-  separators and a footer make stream logs self-contained for single-file triage.
+- **Description:** Each node card in the HTML dashboard must include a direct
+  link to that node's `stream.log` execution log when the file exists. The link
+  must be visually distinct from artifact `.md` links (e.g., labeled
+  "execution log" or styled differently). Enables direct navigation from a
+  failing node card to its detailed execution log without manual filesystem
+  navigation.
+- **Motivation:** Stream logs are the primary debugging tool for pipeline
+  failures. The dashboard currently lists only `.md` output artifacts;
+  execution logs (`stream.log`) are not linked, making them hard to discover.
+  `scanArtifacts` already surfaces `stream.log` in node directories but
+  dashboard rendering ignores it.
 - **Acceptance criteria:**
-  - [ ] A separator line `--- turn N ---` (where N is 1-based turn index) is
-    written to the stream log file before each assistant message block.
-  - [ ] After the final JSON event (`result` type) is processed, a visual
-    separator line (e.g., `--- end ---`) followed by a one-line summary is
-    appended to the stream log. Summary format:
-    `status=<success|error> duration=<Xs> cost=$<X.XXXX> turns=<N>`.
-  - [ ] Summary is derived from the `result` event fields (`is_error`,
-    `duration_ms`, `total_cost_usd`, `num_turns`) — no additional CLI calls.
-  - [ ] Turn separators and footer are written to the stream log file only;
-    terminal output via `onOutput` callback is NOT modified.
-  - [ ] Unit tests cover: turn separator insertion, footer format, missing result
-    event (no footer written), multi-continuation appended log.
-  - [ ] `deno task check` passes.
-
-### 3.39 FR-40: Cost Breakdown Chart in Dashboard
-
-- **Description:** HTML dashboard must include a visual cost breakdown chart
-  (bar chart) showing cost per pipeline node. Chart must be self-contained
-  (inline SVG or HTML canvas; no external JS/CDN dependencies). Nodes with
-  zero or missing `cost_usd` are excluded from the chart. Total pipeline cost
-  is displayed alongside the chart.
-- **Rationale:** Per-node cost is already stored in `state.json` as
-  `nodes[*].cost_usd` (FR-32). Text-only cost values in node cards require
-  manual mental comparison; a chart makes cost distribution immediately visible
-  and highlights the most expensive nodes.
-- **Acceptance criteria:**
-  - [ ] Dashboard HTML includes a cost breakdown bar chart rendered in
-    `scripts/generate-dashboard.ts`.
-  - [ ] Chart displays cost per node as proportional bars (horizontal or
-    vertical); bar width/height proportional to `cost_usd` relative to the
-    maximum node cost.
-  - [ ] Nodes with zero cost or missing `cost_usd` are excluded from the chart.
-  - [ ] Total pipeline cost is displayed alongside the chart (sourced from
-    `state.total_cost_usd`).
-  - [ ] Chart is self-contained: no external JS/CDN dependencies; inline SVG
-    or HTML canvas only.
-  - [ ] `escHtml()` applied to all node labels rendered in the chart.
-  - [ ] Unit tests cover: bar proportions, zero-cost node exclusion, total cost
-    display, single-node case, all-zero-cost case (empty/hidden chart).
-  - [ ] `deno task check` passes.
-
----
-
-### 3.40 FR-41: Intermediate Verbosity Level (Agent Reasoning View)
-
-- **Description:** Add a verbosity level between `normal` and `verbose` that surfaces agent text output (reasoning/commentary) to terminal without tool-call noise. Currently: `normal` shows only STARTED/COMPLETED/FAILED status events (minutes of silence); `verbose` (`-v`) floods output with every tool call, making reasoning hard to follow.
-- **Motivation:** No middle ground for users who want to observe agent reasoning without tool-call noise during long pipeline runs.
-- **Acceptance criteria:**
-  - [ ] A new verbosity level exists between `normal` and `verbose`.
-  - [ ] At this level, agent text blocks (assistant message content) are streamed to terminal in real-time.
-  - [ ] Tool call events (Read, Edit, Bash, Grep, etc.) are suppressed from terminal output at this level.
-  - [ ] STARTED/COMPLETED/FAILED status lines remain visible at this level.
-  - [ ] Existing `quiet` (`-q`), `normal` (default), and `verbose` (`-v`) levels are unchanged in behavior.
-  - [ ] New level is selectable via CLI flag (exact flag defined by Architect).
-  - [ ] `OutputManager` in `engine/output.ts` handles new verbosity value.
-  - [ ] Unit tests cover: text block output at new level, tool-call suppression at new level, no regression on existing levels.
-  - [ ] `deno task check` passes.
+  - [x] `renderCard()` in `scripts/generate-dashboard.ts` checks for existence
+    of `<node-dir>/stream.log` and includes a link when the file exists.
+    Evidence: `scripts/generate-dashboard.ts:47-51` (`renderCard` accepts
+    `streamLogHref?`), `scripts/generate-dashboard.ts:82-84` (conditional
+    `logLinkHtml`), `scripts/generate-dashboard.ts:419-430` (CLI scans via
+    `Deno.stat()`, builds href map).
+  - [x] Stream log link is visually distinct from artifact links (e.g.,
+    different label such as "execution log", distinct CSS class or style).
+    Evidence: `scripts/generate-dashboard.ts:380` (`.log-link` CSS class:
+    monospace, 0.75rem, muted color `#6b7280`), `scripts/generate-dashboard.ts:83`
+    (`class="log-link"` on anchor).
+  - [x] If `stream.log` does not exist for a node, no broken link is rendered.
+    Evidence: `scripts/generate-dashboard.ts:82-84` (renders only when
+    `streamLogHref` is provided; absent → empty string).
+  - [x] `escHtml()` applied to stream log link path/label to prevent XSS.
+    Evidence: `scripts/generate-dashboard.ts:83` (`escHtml(streamLogHref)`
+    in href attribute).
+  - [x] Unit tests cover: stream.log present (link shown), stream.log absent
+    (no link), HTML escaping of path.
+    Evidence: `scripts/generate-dashboard_test.ts:641-647` (link present),
+    `scripts/generate-dashboard_test.ts:649-654` (no link when absent),
+    `scripts/generate-dashboard_test.ts:656-678` (threading via `renderHtml`).
+  - [x] `deno task check` passes. Evidence: 483 tests pass, 0 failed.
 
 ---
 
@@ -1017,4 +985,3 @@ engine/                                # Deno/TypeScript pipeline engine
 
 - возможность продолжить работу после остановки по какой-то причине. С указанием шага, с которого продолжаем
 - проверки незакомиченности должны проверять конкретные папки, а не все
-

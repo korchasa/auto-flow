@@ -429,7 +429,7 @@ graph LR
   highest-priority open issue via `gh`.
 - **Deps:** Devcontainer, Claude CLI auth (OAuth or API key), `GITHUB_TOKEN`.
 
-### 3.10 Dashboard Generator (`scripts/generate-dashboard.ts`) (FR-33, FR-35)
+### 3.10 Dashboard Generator (`scripts/generate-dashboard.ts`) (FR-33, FR-35, FR-40, issue #49)
 
 - **Purpose:** Generate self-contained HTML dashboard summarizing pipeline run
   results. Reads `state.json` + per-node `logs/*.json`. Produces `index.html`
@@ -438,11 +438,16 @@ graph LR
   - `readRunState(runDir)` — parse `state.json` → `RunState`
   - `readNodeLog(runDir, nodeId)` — parse `logs/<nodeId>.json` →
     `ClaudeCliOutput`
-  - `renderCard(nodeId, state, log)` — HTML card: status badge, timing, cost,
-    result summary via `<details><summary>` (first 3 lines preview, full text
-    in details body). Single-line results render without `<details>` wrapper.
-  - `renderHtml(runDir, state, logs)` — full page: run metadata header,
-    phase-grouped card grid, inlined CSS
+  - `renderCard(nodeId, state, log, streamLogHref?)` — HTML card: status badge,
+    timing, cost, result summary via `<details><summary>` (first 3 lines
+    preview, full text in details body). Single-line results render without
+    `<details>` wrapper. When `streamLogHref` provided: renders
+    `<a class="log-link" href="${escHtml(streamLogHref)}">stream log</a>` after
+    card-meta div. Omitted when absent (backward-compatible).
+  - `renderHtml(runDir, state, logs, streamLogHrefs?)` — full page: run metadata
+    header, phase-grouped card grid, inlined CSS. 4th param
+    `streamLogHrefs?: Record<string, string>` maps nodeId → relative href;
+    threaded to each `renderCard()` call via lookup
   - `escHtml(str)` — escape `<>&"'` for XSS-safe HTML embedding
   - `computeTimeline(state: RunState)` — iterates `state.nodes`, parses
     `started_at` ISO timestamps, computes `offsetPct`/`widthPct` relative to
@@ -455,6 +460,13 @@ graph LR
     class. Labels sanitized via `escHtml()`. Timeline CSS appended to existing
     `CSS` const (inlined, no CDN deps). Integrated into `renderHtml()` between
     header and card grid (FR-38)
+- **Stream log link flow (issue #49):** CLI entry point scans each node
+  directory for `stream.log` existence via `Deno.stat()`. For nodes with phases,
+  computes relative path as `<phase>/<nodeId>/stream.log`; without phase:
+  `<nodeId>/stream.log`. Builds `Record<string, string>` href map, passes to
+  `renderHtml()` → threaded to `renderCard()`. CSS: `.log-link` class (monospace,
+  smaller font, muted color — distinct from result text).
+- **Functions (continued):**
   - `computeCostBars(state: RunState)` — filters `state.nodes` by
     `cost_usd > 0`, computes proportional `widthPct` relative to max cost.
     Returns `{nodeId: string, costUsd: number, widthPct: number}[]` (FR-40)

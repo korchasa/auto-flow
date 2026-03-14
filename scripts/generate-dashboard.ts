@@ -42,11 +42,13 @@ const PREVIEW_LINES = 3;
  * Render an HTML card for a single pipeline node.
  * Multi-line results use <details>/<summary> with first 3 lines in summary.
  * Single-line results render inline without wrapper.
+ * When streamLogHref is provided, renders a link to the stream log after card-meta.
  */
 export function renderCard(
   nodeId: string,
   state: NodeState,
   log: ClaudeCliOutput | null,
+  streamLogHref?: string,
 ): string {
   const statusClass = state.status === "completed"
     ? "ok"
@@ -77,6 +79,10 @@ export function renderCard(
       `<details>\n<summary><pre class="result-preview">${preview}</pre></summary>\n<pre class="result-full">${full}</pre>\n</details>`;
   }
 
+  const logLinkHtml = streamLogHref
+    ? `\n<a class="log-link" href="${escHtml(streamLogHref)}">stream log</a>`
+    : "";
+
   return `<div class="card ${statusClass}">
 <div class="card-header">
   <span class="node-id">${escHtml(nodeId)}</span>
@@ -86,7 +92,7 @@ export function renderCard(
   <span>${escHtml(durationS)}</span>
   <span>${escHtml(cost)}</span>
   <span>turns: ${escHtml(String(turns))}</span>
-</div>
+</div>${logLinkHtml}
 ${resultHtml}
 </div>`;
 }
@@ -239,11 +245,13 @@ export function renderCostChart(bars: CostBar[], totalCost: number): string {
  * @param state - Parsed run state (provides run_id, timestamps, node statuses)
  * @param logs  - Map of nodeId → ClaudeCliOutput (or null if log unavailable)
  * @param phases - Optional phase grouping from pipeline config
+ * @param streamLogHrefs - Optional map of nodeId → relative href to stream.log
  */
 export function renderHtml(
   state: RunState,
   logs: Record<string, ClaudeCliOutput | null>,
   phases?: Record<string, string[]>,
+  streamLogHrefs?: Record<string, string>,
 ): string {
   const nodeIds = Object.keys(state.nodes);
 
@@ -265,7 +273,14 @@ export function renderHtml(
 
     bodySections = groups.map(({ label, ids }) => {
       const cards = ids
-        .map((id) => renderCard(id, state.nodes[id], logs[id] ?? null))
+        .map((id) =>
+          renderCard(
+            id,
+            state.nodes[id],
+            logs[id] ?? null,
+            streamLogHrefs?.[id],
+          )
+        )
         .join("\n");
       return `<section>\n<h2 class="phase-label">${
         escHtml(label)
@@ -273,7 +288,14 @@ export function renderHtml(
     }).join("\n");
   } else {
     const cards = nodeIds
-      .map((id) => renderCard(id, state.nodes[id], logs[id] ?? null))
+      .map((id) =>
+        renderCard(
+          id,
+          state.nodes[id],
+          logs[id] ?? null,
+          streamLogHrefs?.[id],
+        )
+      )
       .join("\n");
     bodySections =
       `<section>\n<div class="card-grid">\n${cards}\n</div>\n</section>`;
@@ -354,7 +376,9 @@ strong.aborted{color:#854d0e}
 .cost-chart-empty{color:#999;font-size:.85rem;margin:0}
 .cost-chart-svg{display:block;overflow:visible}
 .cost-bar-rect{fill:#a78bfa}
-.cost-bar-label{font-size:.7rem;fill:#fff}`.trim();
+.cost-bar-label{font-size:.7rem;fill:#fff}
+.log-link{font-family:monospace;font-size:.75rem;color:#6b7280;display:inline-block;margin-bottom:.5rem}`
+  .trim();
 
 // --- CLI entry ---
 
@@ -382,13 +406,40 @@ if (import.meta.main) {
     // Config unreadable — proceed without phase grouping
   }
 
+  // Build reverse phase map: nodeId → phase
+  const nodePhaseMap: Record<string, string> = {};
+  if (phases) {
+    for (const [phase, members] of Object.entries(phases)) {
+      for (const nodeId of members) {
+        nodePhaseMap[nodeId] = phase;
+      }
+    }
+  }
+
+  // Scan stream.log existence and build href map
+  const streamLogHrefs: Record<string, string> = {};
+  for (const nodeId of Object.keys(state.nodes)) {
+    const phase = nodePhaseMap[nodeId];
+    const nodeDir = phase
+      ? `${runDir}/${phase}/${nodeId}`
+      : `${runDir}/${nodeId}`;
+    try {
+      await Deno.stat(`${nodeDir}/stream.log`);
+      streamLogHrefs[nodeId] = phase
+        ? `${phase}/${nodeId}/stream.log`
+        : `${nodeId}/stream.log`;
+    } catch {
+      // stream.log absent — skip
+    }
+  }
+
   // Read all node logs
   const logs: Record<string, ClaudeCliOutput | null> = {};
   for (const nodeId of Object.keys(state.nodes)) {
     logs[nodeId] = await readNodeLog(runDir, nodeId);
   }
 
-  const html = renderHtml(state, logs, phases);
+  const html = renderHtml(state, logs, phases, streamLogHrefs);
   const outPath = `${runDir}/index.html`;
   await Deno.writeTextFile(outPath, html);
   console.log(`Dashboard written to: ${outPath}`);
