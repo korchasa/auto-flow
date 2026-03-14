@@ -113,6 +113,12 @@ FAIL: 2 blocking issues found. Tests fail and edge case missing.
 - **ONE READ PER FILE (MANDATORY).** After reading a file, do NOT read it again.
   This applies to ALL files — source files, spec files, AND tool-result temp
   files (paths like `/home/.../.claude/.../tool-results/*.txt`).
+  **FORBIDDEN: Re-reading with offset/limit.** Do NOT split reads into partial
+  chunks (limit=100 then offset=820). Read each file ONCE with NO offset/limit
+  (all project files are under 2000 lines). Do NOT re-read sections you already
+  have in context.
+  **Evidence:** Run 20260314T020214 read requirements.md with limit=100 (only
+  100 of 919 lines), then re-read at offset=820 — 2 reads instead of 1.
 - **CRITICAL: `deno task check` output.** The Bash tool stores large output in a
   temp file. You MUST read it AT MOST ONCE. Extract pass/fail counts and any
   failure details in that single read, then NEVER touch that file path again.

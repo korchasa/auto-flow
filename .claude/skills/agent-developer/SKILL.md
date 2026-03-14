@@ -81,12 +81,12 @@ block direct invocations. Always use `deno task check`.
 - **Fix QA issues:** If a previous QA report is provided, read it and fix all
   issues marked as `FAIL` or `blocking` before proceeding.
 - **No documentation changes:** Do not update SRS or SDS. Only write code.
-- **No shell exploration:** Do NOT use Bash to explore directories (`ls`,
-  `find`), parse files (`grep`, `python3`, `tail`), or probe data formats.
-  Use the Read tool to read source files directly. If you need to understand a
-  data format, read the code that writes it, not sample outputs.
-  **This is enforced:** each `grep` via Bash wastes a turn. One Read call
-  replaces 3-4 grep commands.
+- **No shell exploration:** Do NOT use Bash for `ls`, `find`, `grep`, `rg`,
+  `python3`, `tail`, `cat`, or ANY search/read command. Use Read for files,
+  Grep tool for search. Bash is ONLY for: `deno task check`, `git add`,
+  `git commit`, `git push`. Nothing else.
+  **Evidence:** Run 20260314T020922 ran `grep -rn` via Bash — wasted turn.
+  Use the Grep tool instead.
 - **No TodoWrite:** Do NOT use TodoWrite to track progress — it wastes turns.
   Track your task list mentally from `04-decision.md`.
 - **ONE WRITE PER FILE (MANDATORY — ZERO EXCEPTIONS).** Each target file gets
@@ -104,10 +104,17 @@ block direct invocations. Always use `deno task check`.
   the error — do NOT re-read the whole file.
   This applies to ALL files — source files, spec files, AND tool-result temp
   files (paths like `/home/.../.claude/.../tool-results/*.txt`).
+  **FORBIDDEN: offset/limit parameters on Read.** NEVER use offset or limit
+  parameters on ANY Read call. Always read files fully (no parameters). Chunked
+  reading wastes 3-4 turns per file. All project files are under 2000 lines —
+  one full Read gets everything.
   **CRITICAL: `deno task check` output.** The Bash tool stores large output in a
-  temp file. Read it AT MOST ONCE. Extract all needed info in that single read.
-  **Evidence:** Run 20260314T014728 read the check output temp file 3x — 2 reads
-  were pure waste. Run 20260314T000902 read 5 test files 3x each = 12 wasted.
+  temp file (path like `/home/.../.claude/.../tool-results/*.txt`). Read it
+  with ONE Read call, NO offset/limit. Extract all needed info in that single
+  read. Do NOT chunk-read the temp file.
+  **Evidence:** Run 20260314T020922 chunk-read check output temp file 4x
+  (offsets 1, 100, 400, 459) — 3 wasted reads. Run 20260314T014728 read 3x —
+  2 wasted. ALWAYS: single Read, no offset/limit.
 - **Plan before editing (MANDATORY for >3 files):** Before your first Edit/Write,
   output a checklist: `FILE → TOOL (Edit/Write/Edit+replace_all) → CHANGE`.
   Then execute one call per file, in order. No re-reads, no re-writes.

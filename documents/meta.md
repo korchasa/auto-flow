@@ -1,12 +1,12 @@
 # Meta-Agent Memory
 
 ## Agent Baselines
-- pm (specification): 14t/$0.70/94s — ISSUE: 4 offset/limit re-reads of SRS
-- architect (design): 16t/$0.45/77s — stable
-- tech-lead (decision): 13t/$0.42/77s — stable
-- developer (build): 11t/$0.51/47s — stable (no temp-file re-reads)
-- qa (verify): 13t/$0.39/51s — stable (temp-file fix confirmed 2 runs)
-- Total run cost: $2.47
+- pm (specification): 10t/$0.47/55s — stable
+- architect (design): 14t/$0.40/53s — stable
+- tech-lead (decision): 13t/$0.42/64s — stable
+- developer (build): 12t/$0.51/61s — improved (was 17t), chunk-read waste remains
+- qa (verify): 16t/$0.54/79s — improved (was 19t), offset/limit fix confirmed
+- Total run cost: $2.34
 - 1 iteration (QA passed first try)
 
 ## Active Patterns
@@ -23,9 +23,19 @@
   (was 21t/7 reads). Explicit path pattern + evidence in prompt = effective.
 - developer-temp-reread: RESOLVED, first seen 20260314T014728,
   last seen 20260314T014728. Fix confirmed: 0 temp re-reads in 20260314T014914.
-- pm-offset-reread: NEW, first seen 20260314T014914. PM re-reads SRS 4x with
-  offset/limit after full read (919-line file). Fix applied: explicit FORBIDDEN
-  rule for offset/limit re-reads + evidence. WATCHING.
+- pm-offset-reread: RESOLVED, first seen 20260314T014914,
+  last seen 20260314T014914. Fix confirmed: 0 offset/limit re-reads in
+  20260314T020000 (2 Reads total, no offset/limit). 2 clean runs.
+- developer-offset-reread: WATCHING, first seen 20260314T020214,
+  last seen 20260314T020922. Previous fix insufficient — developer chunk-read
+  temp file 4x (never did full read, used offset/limit from start). Fix v2:
+  banned ALL offset/limit params, not just "re-reads after full read".
+- qa-offset-reread: RESOLVED, first seen 20260314T020214,
+  last seen 20260314T020214. Fix confirmed: 0 offset/limit reads in
+  20260314T020922. 3 Reads total, all clean.
+- developer-grep-via-bash: NEW, first seen 20260314T020922. Developer ran
+  `grep -rn` via Bash despite existing ban. Fix: rewrote rule as explicit
+  Bash whitelist (only deno task check, git add/commit/push).
 - pm-branch-shortcut-regression: RESOLVED (3 consecutive runs with shortcut
   working: 22→17t, no gh issue list on branch).
 - tech-lead-bash-exploration: RESOLVED (all 8 Bash commands whitelisted,
@@ -56,7 +66,15 @@
 - 20260314T014728: developer — added explicit temp-file re-read prevention
   (mirroring QA fix). 3 re-reads of check output temp file. → RESOLVED (0 in 20260314T014914)
 - 20260314T014914: pm — added FORBIDDEN offset/limit re-read rule. PM read
-  requirements.md 5x (1 full + 4 offset/limit). WATCHING.
+  requirements.md 5x (1 full + 4 offset/limit). → RESOLVED (0 in 20260314T020000)
+- 20260314T020000: no fixes needed — all agents within acceptable ranges
+- 20260314T020214: developer — added FORBIDDEN offset/limit re-read rule.
+  Re-read requirements.md at offset=822 after full read. → FAILED (chunk-read
+  temp file 4x in 20260314T020922; rule only covered "after full read")
+- 20260314T020214: qa — added FORBIDDEN offset/limit + no-partial-reads rule.
+  Read requirements.md with limit=100, then offset=820. → RESOLVED (0 in 20260314T020922)
+- 20260314T020922: developer — banned ALL offset/limit params on Read + rewrote
+  Bash rule as explicit whitelist. Chunk-read temp file 4x + grep via Bash. → WATCHING
 
 ## Lessons Learned
 - PM/SDS-update scope overlap resolved by explicit constraints in PM prompt.
@@ -92,3 +110,9 @@
 - **Offset/limit re-reads are a distinct waste pattern.** Agent reads full file
   (under 2000 lines), then re-reads sections with offset/limit — believing
   it needs "focused" reads. Must explicitly forbid offset/limit after full read.
+- **Offset/limit re-read is a cross-agent pattern.** PM fix (20260314T014914)
+  was not proactively applied to developer/QA. Same pattern recurred in both.
+  When fixing a waste pattern in one agent, ALWAYS apply to ALL agents.
+- **"After full read" condition is too narrow.** Developer never did a full
+  read — it chunk-read from the start with offset/limit. Rule must ban
+  offset/limit unconditionally, not just "after a full read".
