@@ -12,17 +12,22 @@
 ## Active Patterns
 - pm-oversized-gh-output: RESOLVED. 1st clean run in 081855 (used `--jq '{title,body}'`).
 - qa-bash-grep-v3: NOT violated in 082012. 1st clean run (used Grep tool). WATCHING.
-- qa-double-deno-check: NOT violated in 081855. 1st clean run (ran once, read overflow once).
-- qa-toolsearch: NEW, first seen 081855. Called ToolSearch("select:Bash,Read,Write").
-  Fix: added ToolSearch to FORBIDDEN list at top of prompt.
-- qa-unnecessary-reads: NEW, first seen 081855. Read requirements.md + pipeline.yaml
-  (unnecessary, ~1000 lines). Fix: HARD STOP rule added.
-- architect-grep-after-read-v2: NOT violated in 081855. 2nd clean run.
-- tl-design-md-reread: NOT violated in 081855. 2nd clean run.
-- dev-design-md-reread: NOT violated in 081855. 2nd clean run.
-- double-git-commit: NOT violated in 081855. 3rd clean run → RESOLVED.
-- dev-bash-grep: NOT violated in 081855. 3rd clean run → RESOLVED.
-- qa-individual-file-reads-v2: RESOLVED (2 clean runs: 080106, 080440).
+- qa-double-deno-check: WATCHING, last seen 082012. 6th consecutive. `deno task check`
+  then `| tail -30`. Fix: explicit "pipe = second execution" + forbidden pipe ops.
+- qa-toolsearch: NOT violated in 082012. 1st clean run. WATCHING.
+- qa-unnecessary-reads: WATCHING, last seen 082012. 2nd consecutive. Read
+  requirements.md TWICE despite HARD STOP. Updated evidence + positive guidance.
+- qa-duplicate-grep: NEW, first seen 082012. `contains_section` 3×, `## Summary`
+  2× on same paths. Fix: mandate parallel Grep + pre-list algorithm.
+- tl-toolsearch: NEW, first seen 082012. ToolSearch("select:Write"). Fix: added
+  ToolSearch to FORBIDDEN list.
+- tl-double-tool-results-read: NEW, first seen 082012. Read same temp file twice.
+  Fix: ONE READ PER FILE rule for temp files.
+- dev-toolsearch: NEW, first seen 082012. ToolSearch("select:Read,Grep,..."). Fix:
+  added ToolSearch to FORBIDDEN list.
+- architect-grep-after-read-v2: NOT violated in 082012. 3rd clean run → RESOLVED.
+- tl-design-md-reread: NOT violated in 082012. 3rd clean run → RESOLVED.
+- dev-design-md-reread: NOT violated in 082012. 3rd clean run → RESOLVED.
 
 ## Resolved Patterns
 - developer-grep-after-read: RESOLVED (3+ clean runs)
@@ -53,6 +58,10 @@
 - pm-oversized-gh-output: RESOLVED (clean in 081855 after pre-flight fix)
 - double-git-commit: RESOLVED (3 clean runs)
 - dev-bash-grep: RESOLVED (3 clean runs)
+- architect-grep-after-read-v2: RESOLVED (3 clean runs: 081855, 082012)
+- tl-design-md-reread: RESOLVED (3 clean runs)
+- dev-design-md-reread: RESOLVED (3 clean runs)
+- qa-individual-file-reads-v2: RESOLVED (3+ clean runs)
 
 ## Applied Fixes Log
 - 20260313T021326–20260314T062600: (compressed — see git history for details)
@@ -81,6 +90,14 @@
   (2) Replaced bash grep prohibition with MANDATORY ALGORITHM + exact Grep
   syntax (5th consecutive). (3) HARD STOP for requirements.md/pipeline.yaml
   reads (unnecessary context inflation, ~$0.10).
+- 20260314T082012: tech-lead — (1) ToolSearch added to FORBIDDEN (1st violation,
+  $1.03 vs $0.30 baseline). (2) ONE READ PER FILE for tool-results temp files
+  (double read of same gh pr list output).
+  developer — ToolSearch added to FORBIDDEN (1st violation, $0.49 vs $0.23).
+  qa — (1) double deno check: added "pipe = second execution" explanation +
+  forbidden pipe operators (6th consecutive). (2) requirements.md: updated
+  evidence (2nd consecutive, read it TWICE). (3) duplicate Grep: mandate
+  parallel calls + pre-list algorithm (3× contains_section, 2× ## Summary).
 
 ## Lessons Learned
 - Total pipeline cost baseline for M-effort issue: ~$2.25 (down from ~$5.00).
@@ -93,7 +110,7 @@
   behavior. Positive algorithm (WHAT to do) works.
 - **Skill tool is the most persistent anti-pattern.** Fix: anti-Skill as FIRST
   content (before # Role heading). 3 clean runs confirm.
-- **Cost trajectory:** $5.09→$2.31→$4.67→$5.73→$3.38→$3.16→$4.09→$3.16→$1.75→$2.25→$2.28→$1.96→$1.83.
+- **Cost trajectory:** $5.09→$2.31→$4.67→$5.73→$3.38→$3.16→$4.09→$3.16→$1.75→$2.25→$2.28→$1.96→$1.83→$2.64.
 - **Git archaeology is wasteful.** Agents should plan from current checkout.
 - **Scattered HARD STOPs cause rule fatigue.** Single execution algorithm better.
 - **Text checkpoint technique:** Requiring agent to WRITE analysis in text
@@ -114,3 +131,6 @@
   a self-check step ("before calling Bash, verify X is absent") works better.
 - **Positive alternatives with exact syntax.** Bash grep persists because agents
   don't know the Grep tool equivalent. Providing exact call syntax eliminates gap.
+- **ToolSearch for built-in tools is a cross-agent anti-pattern.** Read, Write,
+  Edit, Bash, Grep, Glob are always available. Applied ban to tech-lead, developer,
+  QA. Must monitor all agents for this.
