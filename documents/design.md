@@ -185,14 +185,17 @@ graph LR
   Summary` validation on 6 nodes (`specification`, `design`, `decision`,
   `verify`, `optimize`, `tech-lead-review`). Developer (`build`) excluded from
   file-based validation — uses existing `custom_script: deno task check`.
-- **Voice Convention (FR-40):** Each SKILL.md contains a `## Voice` section
-  (after `# Role:` heading, before `## Responsibilities`) mandating first-person
-  narrative ("I") in all agent outputs (GitHub comments, artifacts, reports).
-  Passive/third-person prohibited in narrative text. YAML frontmatter and code
-  blocks excluded. Each agent's section includes 2-3 role-specific correct vs
-  incorrect examples anchored to that agent's typical output types (e.g., PM:
-  "I selected issue #42" not "Issue #42 was selected"; QA: "I verified all
-  criteria" not "All criteria were verified").
+- **Voice Convention (FR-40, FR-43):** Each SKILL.md contains a `## Voice`
+  section (after `# Role:` heading, before `## Responsibilities`) mandating
+  first-person narrative ("I") in all agent outputs. Scope explicitly includes
+  GitHub issue comments, PR descriptions, and status updates (FR-43). Passive/
+  third-person prohibited in narrative text. YAML frontmatter and code blocks
+  excluded. Each agent's section includes 3 role-specific correct vs incorrect
+  example pairs: 2 anchored to artifacts/reports, 1 targeting GitHub
+  interactions specifically (e.g., PM: "I started the specification phase" not
+  "Specification phase started"; QA: "I verified all criteria" not "All criteria
+  were verified"). Hardcoded `gh issue comment --body` templates in SKILL.md
+  files must also use first-person (FR-43).
 - **Migration (FR-36):** Complete. Formerly `agents/<name>/SKILL.md` with
   symlinks from `.claude/skills/`. Migrated to canonical `.claude/skills/`
   layout; `agents/` directory removed; symlink indirection eliminated. Legacy
@@ -775,3 +778,8 @@ All FR evidence for issue #15 is complete:
   `decision`, `verify`, `optimize`, `tech-lead-review`); Developer (`build`)
   enforced via `custom_script: deno task check`. Evidence:
   `.claude/skills/agent-*/SKILL.md` (7 files), `.sdlc/pipeline.yaml` (7 rules).
+- **FR-43 (Agent First-Person Voice — GitHub Interactions):** Voice sections
+  strengthened with explicit GitHub interaction scope + third example pair per
+  agent. Hardcoded `gh issue comment --body` templates in PM, Architect, Tech
+  Lead SKILL.md files updated to first-person. Evidence:
+  `.claude/skills/agent-*/SKILL.md` (7 files, `## Voice` sections).
