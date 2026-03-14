@@ -25,6 +25,7 @@ import {
   markRunCompleted,
   markRunFailed,
   saveState,
+  setPhaseRegistry,
 } from "./state.ts";
 import { acquireLock, defaultLockPath, releaseLock } from "./lock.ts";
 import { runAgent } from "./agent.ts";
@@ -125,6 +126,9 @@ export class Engine {
     levels: string[][],
     _lockPath: string,
   ): Promise<RunState> {
+    // Initialize phase registry before creating any node dirs (FR-E9)
+    setPhaseRegistry(this.config);
+
     // Create run directory structure
     await this.ensureRunDirs(levels);
     await saveState(this.state);

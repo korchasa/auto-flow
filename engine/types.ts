@@ -12,6 +12,9 @@ export interface PipelineConfig {
   defaults?: PipelineDefaults;
   env?: Record<string, string>;
   nodes: Record<string, NodeConfig>;
+  /** Optional phase grouping: maps phase name → list of node IDs.
+   * Enables phase-organized artifact directories (FR-E9, FR-S25). */
+  phases?: Record<string, string[]>;
 }
 
 /** Global defaults applied to all nodes unless overridden. */
@@ -59,6 +62,11 @@ export interface NodeConfig {
   question?: string;
   options?: string[];
   abort_on?: string[];
+
+  /** Optional phase this node belongs to. Used by phase registry to determine
+   * artifact directory: `<runDir>/<phase>/<nodeId>/`. Falls back to top-level
+   * `phases:` config. When absent, flat `<runDir>/<nodeId>/` is used. */
+  phase?: string;
 
   // post-pipeline execution
   /** When set, node executes after all DAG levels complete.

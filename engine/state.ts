@@ -2,8 +2,48 @@ import type {
   ErrorCategory,
   NodeState,
   NodeStatus,
+  PipelineConfig,
   RunState,
 } from "./types.ts";
+
+// --- FR-E9: Phase Registry ---
+
+/** Module-scoped phase registry: nodeId → phase name.
+ * Populated once per run via setPhaseRegistry(). */
+const _phaseRegistry = new Map<string, string>();
+
+/**
+ * Build phase registry from pipeline config.
+ * Merges top-level `phases:` declaration (authoritative) with per-node `phase:` fields.
+ * Called once at run start, before ensureRunDirs().
+ */
+export function setPhaseRegistry(config: PipelineConfig): void {
+  _phaseRegistry.clear();
+  // Top-level phases declaration is authoritative
+  if (config.phases) {
+    for (const [phase, nodeIds] of Object.entries(config.phases)) {
+      for (const nodeId of nodeIds) {
+        _phaseRegistry.set(nodeId, phase);
+      }
+    }
+  }
+  // Per-node phase fields as fallback for nodes not in top-level phases
+  for (const [nodeId, node] of Object.entries(config.nodes)) {
+    if (node.phase && !_phaseRegistry.has(nodeId)) {
+      _phaseRegistry.set(nodeId, node.phase);
+    }
+  }
+}
+
+/** Clear the phase registry. Used for test isolation. */
+export function clearPhaseRegistry(): void {
+  _phaseRegistry.clear();
+}
+
+/** Return the phase for a node, or undefined if not registered. */
+export function getPhaseForNode(nodeId: string): string | undefined {
+  return _phaseRegistry.get(nodeId);
+}
 
 /** Generate a run ID from the current timestamp with optional label.
  * Format: YYYYMMDDTHHMMSS or YYYYMMDDTHHMMSS-<label> when label provided.
@@ -52,8 +92,14 @@ export function getRunDir(runId: string): string {
   return `.sdlc/runs/${runId}`;
 }
 
-/** Get the node output directory path. */
+/** Get the node output directory path.
+ * Returns `<runDir>/<phase>/<nodeId>/` when node has a phase in the registry,
+ * otherwise flat `<runDir>/<nodeId>/` (backward-compatible). */
 export function getNodeDir(runId: string, nodeId: string): string {
+  const phase = getPhaseForNode(nodeId);
+  if (phase) {
+    return `${getRunDir(runId)}/${phase}/${nodeId}`;
+  }
   return `${getRunDir(runId)}/${nodeId}`;
 }
 

@@ -260,6 +260,26 @@ graph LR
 - **Deps:** `engine/types.ts` (imports `RunState`, `ClaudeCliOutput` types
   for parsing). No runtime engine dependency — reads JSON files directly.
 
+### 3.8 Pipeline Config Validation (FR-S24)
+
+- **Purpose:** Validate `.sdlc/pipeline.yaml` against engine schema as part of
+  `deno task check`. Prevents config drift causing runtime failures.
+- **Implementation:** `pipelineIntegrity()` in `scripts/check.ts` delegates to
+  engine's `loadConfig()` (`engine/config.ts`). The engine validation covers:
+  - Node type validation (agent, merge, loop, human)
+  - Required field validation per node type
+  - `inputs` reference validation (referenced nodes must exist)
+  - `run_on` enum validation
+  - Loop body node validation
+  - Phase configuration validation
+  - Prompt file existence check
+- **Validation flow:** `pipelineIntegrity()` → `loadConfig()` →
+  `validateSchema()` → `validateNode()` (per node). Errors thrown as exceptions
+  with descriptive messages; `pipelineIntegrity()` catches and reports.
+- **Interfaces:** Called as part of `deno task check` pipeline. No separate CLI
+  entry point (deferred).
+- **Deps:** `engine/config.ts` (`loadConfig` function).
+
 ## 4. Data
 
 ### 4.1 Commit Strategy
@@ -396,3 +416,23 @@ Engine FR evidence (issue #99):
   No code or design changes. Variant A (batch single-pass) selected. FR-E11
   completed (commits `ba99362`, `232dc53`). Remaining: FR-E2 (2 ACs), FR-E10
   (12 ACs), FR-E13 (6 ACs), FR-E19 (7 ACs) — 27 ACs total.
+
+FR-S24 evidence (issue #96):
+
+- **FR-S24 (Pipeline Config Validation):** Existing implementation satisfies
+  all acceptance criteria. `scripts/check.ts:84-96` (`pipelineIntegrity()`
+  calls `loadConfig()`), `engine/config.ts:43-103` (schema validation),
+  `engine/config.ts:105-249` (node validation — types, inputs, run_on).
+  No new code required — Variant A (evidence-only) selected.
+- **FR-S11 (Inter-Stage Data Flow):** SRS text updated by PM to reflect
+  phase-aware artifact path `.sdlc/runs/<run-id>/[<phase>/]<node-id>/`.
+  SDS §2.2 already documents phase-aware layout. Engine FR-E9 implementation
+  deferred (separate issue).
+- **FR-S25 (Phase-Organized SDLC Artifact Directories):** Pending engine FR-E9
+  implementation. Selected Variant A (FR-E9 Phase Registry only). Once phase
+  registry is active in `engine/state.ts`, artifact paths resolve to
+  `.sdlc/runs/<run-id>/<phase>/<node-id>/` for nodes with `phase:` field.
+  SDLC pipeline nodes already have `phase:` fields in `pipeline.yaml`
+  (`plan`, `impl`, `report`). Dashboard path computation
+  (`scripts/generate-dashboard.ts`) to be updated for phase-aware layout.
+  FR-E5 and FR-E7/FR-S24 deferred to separate issues.

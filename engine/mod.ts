@@ -22,13 +22,16 @@ export { DEFAULT_SETTINGS, loadConfig, parseConfig } from "./config.ts";
 export { buildLevels, buildLoopBodyOrder } from "./dag.ts";
 export { allPassed, formatFailures, runValidations } from "./validate.ts";
 export {
+  clearPhaseRegistry,
   createRunState,
   generateRunId,
   getNodeDir,
+  getPhaseForNode,
   getRunDir,
   getStatePath,
   loadState,
   saveState,
+  setPhaseRegistry,
 } from "./state.ts";
 export { runAgent } from "./agent.ts";
 export type { AgentResult } from "./agent.ts";

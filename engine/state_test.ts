@@ -1,9 +1,11 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import {
+  clearPhaseRegistry,
   createRunState,
   generateRunId,
   getNodeDir,
   getNodesByStatus,
+  getPhaseForNode,
   getResumableNodes,
   getRunDir,
   getStatePath,
@@ -16,9 +18,11 @@ import {
   markRunAborted,
   markRunCompleted,
   markRunFailed,
+  setPhaseRegistry,
   updateNodeState,
   updateRunCost,
 } from "./state.ts";
+import type { PipelineConfig } from "./types.ts";
 
 Deno.test("generateRunId — format YYYYMMDDTHHMMSS without label", () => {
   const id = generateRunId();
@@ -325,4 +329,115 @@ Deno.test("updateRunCost — total is 0 when no nodes have cost", () => {
   updateRunCost(state);
 
   assertEquals(state.total_cost_usd, 0);
+});
+
+// --- FR-E9: Phase Registry tests ---
+
+/** Minimal PipelineConfig stub for phase registry tests. */
+function makeConfig(
+  phases?: Record<string, string[]>,
+  nodePhases?: Record<string, string>,
+): PipelineConfig {
+  const nodes: PipelineConfig["nodes"] = {};
+  const allNodeIds = new Set<string>([
+    ...(phases ? Object.values(phases).flat() : []),
+    ...(nodePhases ? Object.keys(nodePhases) : []),
+  ]);
+  for (const id of allNodeIds) {
+    nodes[id] = {
+      type: "agent",
+      label: id,
+      phase: nodePhases?.[id],
+    };
+  }
+  return {
+    name: "test",
+    version: "1",
+    nodes,
+    phases,
+  };
+}
+
+Deno.test("getNodeDir — flat path when no phase registry", () => {
+  clearPhaseRegistry();
+  assertEquals(
+    getNodeDir("20260308T143022", "spec"),
+    ".sdlc/runs/20260308T143022/spec",
+  );
+});
+
+Deno.test("getNodeDir — phase-aware path when node has phase in registry", () => {
+  clearPhaseRegistry();
+  const config = makeConfig({ plan: ["spec", "design"] });
+  setPhaseRegistry(config);
+  assertEquals(
+    getNodeDir("run-1", "spec"),
+    ".sdlc/runs/run-1/plan/spec",
+  );
+  assertEquals(
+    getNodeDir("run-1", "design"),
+    ".sdlc/runs/run-1/plan/design",
+  );
+  clearPhaseRegistry();
+});
+
+Deno.test("getNodeDir — flat path for node not in registry", () => {
+  clearPhaseRegistry();
+  const config = makeConfig({ plan: ["spec"] });
+  setPhaseRegistry(config);
+  assertEquals(
+    getNodeDir("run-1", "other"),
+    ".sdlc/runs/run-1/other",
+  );
+  clearPhaseRegistry();
+});
+
+Deno.test("setPhaseRegistry — builds map from top-level phases", () => {
+  clearPhaseRegistry();
+  const config = makeConfig({
+    plan: ["spec", "design"],
+    impl: ["build"],
+  });
+  setPhaseRegistry(config);
+  assertEquals(getPhaseForNode("spec"), "plan");
+  assertEquals(getPhaseForNode("design"), "plan");
+  assertEquals(getPhaseForNode("build"), "impl");
+  clearPhaseRegistry();
+});
+
+Deno.test("setPhaseRegistry — falls back to per-node phase field", () => {
+  clearPhaseRegistry();
+  const config = makeConfig(undefined, { "my-node": "report" });
+  setPhaseRegistry(config);
+  assertEquals(getPhaseForNode("my-node"), "report");
+  clearPhaseRegistry();
+});
+
+Deno.test("setPhaseRegistry — top-level phases take priority over per-node phase", () => {
+  clearPhaseRegistry();
+  const config: PipelineConfig = {
+    name: "test",
+    version: "1",
+    phases: { plan: ["spec"] },
+    nodes: {
+      spec: { type: "agent", label: "spec", phase: "wrong-phase" },
+    },
+  };
+  setPhaseRegistry(config);
+  // Top-level phases declaration wins
+  assertEquals(getPhaseForNode("spec"), "plan");
+  clearPhaseRegistry();
+});
+
+Deno.test("clearPhaseRegistry — resets to empty state", () => {
+  const config = makeConfig({ plan: ["spec"] });
+  setPhaseRegistry(config);
+  assertEquals(getPhaseForNode("spec"), "plan");
+  clearPhaseRegistry();
+  assertEquals(getPhaseForNode("spec"), undefined);
+});
+
+Deno.test("getPhaseForNode — returns undefined for unknown node", () => {
+  clearPhaseRegistry();
+  assertEquals(getPhaseForNode("nonexistent"), undefined);
 });
