@@ -4,6 +4,7 @@ import {
   computeTimeline,
   type CostBar,
   escHtml,
+  groupNodesByPhase,
   readNodeLog,
   readRunState,
   renderCard,
@@ -675,4 +676,39 @@ Deno.test("renderHtml — streamLogHrefs threads links to mapped nodes only", ()
   // spec does not have a log-link — count occurrences: only 1 log-link anchor
   const linkCount = (html.match(/class="log-link"/g) ?? []).length;
   assertEquals(linkCount, 1);
+});
+
+// --- groupNodesByPhase ---
+
+Deno.test("groupNodesByPhase — phased nodes grouped correctly", () => {
+  const nodeIds = ["spec", "build", "verify"];
+  const phases = { plan: ["spec"], impl: ["build", "verify"] };
+  const groups = groupNodesByPhase(nodeIds, phases);
+  assertEquals(groups.length, 2);
+  assertEquals(groups[0].label, "plan");
+  assertEquals(groups[0].ids, ["spec"]);
+  assertEquals(groups[1].label, "impl");
+  assertEquals(groups[1].ids, ["build", "verify"]);
+});
+
+Deno.test("groupNodesByPhase — unphased nodes placed in 'other' group", () => {
+  const nodeIds = ["spec", "build", "orphan"];
+  const phases = { plan: ["spec"], impl: ["build"] };
+  const groups = groupNodesByPhase(nodeIds, phases);
+  assertEquals(groups.length, 3);
+  assertEquals(groups[2].label, "other");
+  assertEquals(groups[2].ids, ["orphan"]);
+});
+
+Deno.test("groupNodesByPhase — empty nodeIds returns empty array", () => {
+  const groups = groupNodesByPhase([], { plan: ["spec"] });
+  assertEquals(groups.length, 0);
+});
+
+Deno.test("groupNodesByPhase — no phases config returns single group with all nodeIds and empty label", () => {
+  const nodeIds = ["spec", "build"];
+  const groups = groupNodesByPhase(nodeIds);
+  assertEquals(groups.length, 1);
+  assertEquals(groups[0].label, "");
+  assertEquals(groups[0].ids, ["spec", "build"]);
 });
