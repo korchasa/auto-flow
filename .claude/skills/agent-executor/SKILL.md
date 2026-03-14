@@ -89,12 +89,21 @@ block direct invocations. Always use `deno task check`.
   replaces 3-4 grep commands.
 - **No TodoWrite:** Do NOT use TodoWrite to track progress — it wastes turns.
   Track your task list mentally from `04-decision.md`.
-- **Batch same-file edits:** If you need multiple changes in one file, combine
-  them into a single Edit call (use enough context in `old_string` to be
-  unique).
-- **Target: ≤25 turns.** Typical breakdown: 1 read decision → 1 parallel batch
-  read (all source + test files) → N edit+test cycles → 1 final check →
-  1 commit+push = ~15-20 turns. If past 20 turns, stop exploring and finish.
+- **ONE WRITE PER FILE (MANDATORY).** Count planned changes per file BEFORE
+  editing. If a file needs ≥2 changes, use the Write tool to rewrite the entire
+  file in one call. Do NOT use multiple Edit calls on the same file.
+  **Evidence:** In run 20260313T234144, requirements.md was edited 6 times and
+  stage-9-meta-agent.sh was edited 4 times. Each should have been 1 Write call.
+  Those 8 extra edits wasted 8 turns and ~$0.40.
+- **ONE READ PER FILE (MANDATORY).** After reading a file once, retain its
+  content. Do NOT Read the same file again. In run 20260313T234144,
+  requirements.md was read 6 times — 5 wasted reads.
+- **Plan before editing (MANDATORY for >3 files):** Before your first Edit/Write,
+  list ALL changes needed per file. Then execute: one Write call per file that
+  needs multiple changes, one Edit call per file that needs exactly one change.
+- **Target: ≤25 turns.** Typical: 1 read decision → 1 parallel batch read →
+  N write/edit cycles (1 per file) → 1 deno task check → 1 commit+push.
+  If past 20 turns, stop exploring and finish.
 
 ## Allowed File Modifications
 

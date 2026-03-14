@@ -110,27 +110,32 @@ FAIL: 2 blocking issues found. Tests fail and edge case missing.
   ALL Read calls for changed files in ONE response. NEVER read files
   one-per-turn — that wastes turns. First response should also read spec +
   decision in parallel.
-- **No Bash for file inspection:** Do NOT use `grep`, `cat`, `head`, `tail`
-  via Bash. Use the Read tool or Grep tool instead. Each Bash grep wastes a
-  turn that a Read/Grep tool call handles better.
-- **No unnecessary exploration:** Do NOT run `gh issue view`, `gh issue comment
-  --list`, or explore issue history. You have the spec and decision — that is
-  sufficient context.
-- **FORBIDDEN: Agent tool.** Do NOT use the Agent tool (subagents). All
-  verification is direct. Subagents waste tokens and turns.
-- **FORBIDDEN: Bash file inspection.** Do NOT use `cat`, `grep`, `tail`,
-  `head`, or any file-reading command via Bash. Use Read/Grep tools only.
-  This is strictly enforced — each violation wastes a turn.
-- **Trust `deno task check`:** If all tests/lint/format pass, do not
-  re-verify things already covered by tests (e.g., import correctness,
-  syntax). Focus manual checks on acceptance criteria not testable by CI.
-- **No re-reading:** After reading a file, do NOT read it again. You have
-  the content in context. If you need to check a specific line, search your
-  context — do NOT issue another Read.
-- Target: ≤12 turns. Typical flow: 1 parallel read (spec+decision) →
-  1 deno task check → 1 parallel read (changed files from requirements.md
-  acceptance criteria evidence paths) → 1 write report → 1 post verdict
-  = ~7 turns.
+- **ONE READ PER FILE (MANDATORY).** After reading a file, do NOT read it again.
+  This includes `deno task check` output — read it ONCE, extract all needed info,
+  move on. In run 20260313T234144, QA read the check output file 7 times — 6
+  were pure waste (6 turns, ~$0.30).
+- **FORBIDDEN: Grep after Read.** If you already Read a file (spec, decision,
+  requirements.md), do NOT Grep that same file. You have the content in context.
+  In run 20260313T234144, QA made 5 Grep calls on requirements.md after already
+  reading it — all 5 were wasted turns.
+- **Bash WHITELIST — ONLY these commands are allowed via Bash:**
+  - `deno task check`
+  - `git diff main...HEAD --name-only` (once, to get changed file list)
+  - `gh pr list --head ... --json number`
+  - `gh pr review <N> --approve/--request-changes --body "..."`
+  - `gh issue comment <N> --body "..."`
+  - `mkdir -p <output-dir>`
+  **FORBIDDEN: ALL other Bash commands.** Specifically: `grep`, `cat`, `head`,
+  `tail`, `ls`, `ls -la`, `file`, `find`, `for` loops, `git diff` with content
+  output, `git log`, `git show`. Use Read/Grep tools for file inspection.
+- **FORBIDDEN: Agent tool.** Do NOT use subagents.
+- **Trust `deno task check`:** If all tests pass, do not manually re-verify
+  things covered by tests. Focus on acceptance criteria not testable by CI.
+- **No unnecessary exploration:** Do NOT run `gh issue view`, explore issue
+  history, check symlinks, or probe file types. You have the spec and decision.
+- Target: ≤10 turns. Typical flow: 1 parallel read (spec+decision) →
+  1 deno task check + git diff --name-only (parallel) → 1 parallel read
+  (changed files) → 1 write report → 1 post verdict = ~6 turns.
 
 ## Rules
 

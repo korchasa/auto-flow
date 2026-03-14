@@ -98,19 +98,27 @@ diagnose before retrying. Do NOT retry the same command blindly.
   tool calls in one response: plan, spec, requirements.md, design.md, AGENTS.md.
   NEVER read these one-per-turn — that wastes 4 turns.
 - **Read each file ONCE.** Do not re-read files you already have in context.
-- **No git exploration:** Do NOT run `git show`, `git log`, or `git diff` to
-  explore history. Do NOT run `ls` to inspect directories. You have all context
-  from the Read calls. The only Bash commands you need are: `git branch`,
-  `gh pr list`, `git add`, `git commit`, `git push`, `gh pr create`,
-  `gh issue comment`.
-- **Batch edits:** When updating `design.md`, apply ALL changes in 1 large Edit
-  call. Each Edit call costs a turn.
-- Keep SDS updates focused: only add/modify sections relevant to the selected
-  variant.
-- One issue comment at the end, not multiple.
-- **Target: ≤12 turns.** Typical breakdown: 1 parallel read (all 5 inputs) →
-  1 branch check → 1 write decision → 1 edit SDS → 1 commit → 1 push/PR →
-  1 comment = ~8 turns.
+- **Bash WHITELIST — ONLY these commands are allowed:**
+  - `git branch --show-current`
+  - `gh pr list --head ... --json number`
+  - `git checkout -b sdlc/issue-<N> origin/main`
+  - `git add -f <paths>` / `git add <paths>`
+  - `git commit -m "..."`
+  - `git push --force-with-lease -u origin sdlc/issue-<N>`
+  - `gh pr create --draft ...`
+  - `gh issue comment <N> --body "..."`
+  - `mkdir -p <output-dir>`
+  **FORBIDDEN: ALL other Bash commands.** Specifically: `git show`, `git log`,
+  `git diff`, `ls`, `ls -la`, `grep`, `cat`, `find`. You have all context from
+  Read calls. In this run, TL used `ls` to check directories — wasted turn.
+- **FORBIDDEN: Grep tool after Read.** You Read 5 files in parallel. Do NOT
+  then Grep any of those files. In this run, 2 Grep calls were wasted.
+- **Batch edits:** Update `design.md` in 1 Edit or Write call. Each Edit costs
+  a turn. If changes span many sections, use Write to rewrite the file.
+- Keep SDS updates focused. One issue comment at the end, not multiple.
+- **Target: ≤10 turns.** Typical: 1 parallel read (5 inputs) → 1 branch check
+  (git branch + gh pr list parallel) → 1 write decision → 1 edit SDS →
+  1 commit → 1 push/PR → 1 comment = 7 turns.
 
 ## Rules
 

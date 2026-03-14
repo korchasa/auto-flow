@@ -6,6 +6,10 @@
 # Usage: stage-2-tech-lead.sh <issue-number>
 #
 # When sourced with --source-only, only defines functions (for testing).
+#
+# DEPRECATED: This script is superseded by the Deno/TypeScript pipeline engine.
+# Use `deno task run` instead. Retained for backward compatibility only.
+#
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,7 +22,7 @@ source "$SCRIPT_DIR/lib.sh"
 # Constants
 # ============================================================
 STAGE_NAME="stage-2-tech-lead"
-AGENT_PROMPT="$REPO_ROOT/.sdlc/agents/tech-lead.md"
+AGENT_PROMPT="$REPO_ROOT/.claude/skills/agent-tech-lead/SKILL.md"
 
 # ============================================================
 # validate_plan_variants()

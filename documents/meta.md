@@ -1,75 +1,61 @@
 # Meta-Agent Memory
 
 ## Agent Baselines
-- pm (specification): 15t/$0.47/82s ← REGRESSED from 2t; branch shortcut not followed
-- architect (design): 8t/$0.48/91s (stable, no fix needed)
-- tech-lead (decision): 17t/$0.49/86s ← down from 21t, target ≤12
-- executor (build): 18t/$0.51/68s (iter1) + 20t/$0.64/101s (iter2, fix)
-- qa (verify): 20t/$0.45/89s (iter1, FAIL) + 24t/$0.57/147s (iter2, PASS)
-- Total run cost: ~$2.65 (down from $3.21; best so far)
-- 2 iterations needed (QA found real bug in loop.ts model resolution)
+- pm (specification): 17t/$0.99/233s — improved from 22t; branch shortcut works
+- architect (design): 8t/$0.52/133s (stable, no fix needed)
+- tech-lead (decision): 17t/$0.59/113s — improved from 25t; whitelist works
+- executor (build): 53t/$3.01/593s — down from 67t but still 2x target
+- qa (verify): 27t/$0.89/146s — 1 iteration (PASS), down from 34t
+- Total run cost: ~$6.00 (stable vs $6.20 last run)
+- 1 iteration (QA passed first try)
 
 ## Active Patterns
-- pm-branch-shortcut-regression: NEW, first seen 20260313T224909. PM had 2t
-  with branch shortcut last run, now 15t. Still ran `gh issue list` despite
-  being on sdlc/issue-21. Also did 4 Grep calls on files already Read.
-  Fix: made shortcut a HARD STOP ("do NOT run gh issue list"), added "no Grep
-  after Read" rule, lowered target to ≤8.
-- tech-lead-git-exploration: PARTIAL, first seen 20260313T161422,
-  last seen 20260313T224909. Improved 21→17t. No longer does stash/checkout-main
-  (FORBIDDEN fix worked!). But now wastes turns on `git show`, `git log`,
-  double `ls`. Fix: explicitly banned git exploration commands, listed allowed
-  Bash commands exhaustively.
-- qa-agent-tool-violation: NEW, first seen 20260313T224909. QA used Agent tool
-  in verify-iter-2 despite "Do NOT use the Agent tool" in prompt. Also used
-  `cat` via Bash. Fix: changed to "FORBIDDEN: Agent tool" + "FORBIDDEN: Bash
-  file inspection" with specific command names listed.
-- qa-high-turns: WATCHING, first seen 20260313T223344, last seen 20260313T224909.
-  20t (iter1) + 24t (iter2) vs target ≤12. Grep via Bash persisted in iter-1
-  despite ban. Fix strengthened with FORBIDDEN keyword + "no re-reading" rule.
-- executor-serial-reads: WATCHING→CHECK, first seen 20260313T204755,
-  last seen 20260313T224909. Build-iter-2 had 14 parallel turns (vs 0 last run).
-  Significant improvement. Validate next run for consistency.
-- all-agents-no-parallelism: PARTIAL→IMPROVED. Parallel turns observed:
-  spec=8, decision=8, build1=8, build2=14, verify1=13, verify2=14.
-  Major improvement from 0 parallel turns last run.
+- pm-multi-edit-srs: NEW, first seen 20260313T234144. 3 Edits on requirements.md
+  instead of 1 Write. Fix: added "ONE WRITE for SRS" rule.
+- executor-multi-edit-waste: PERSISTS, first seen 20260313T230627,
+  last seen 20260313T234144. requirements.md edited 6x (should be 1 Write),
+  stage-9 edited 4x. "FORBIDDEN multiple edits" ignored. Fix: reworded to
+  "ONE WRITE PER FILE (MANDATORY)" with concrete evidence.
+- qa-reread-waste: NEW, first seen 20260313T234144. deno check output read 7x
+  (6 wasted). 5 Grep after Read on requirements.md. Fix: added explicit
+  "ONE READ PER FILE" rule + "FORBIDDEN Grep after Read" with evidence.
+- pm-branch-shortcut-regression: RESOLVED (3 consecutive runs with shortcut
+  working: 22→17t, no gh issue list on branch).
+- tech-lead-bash-exploration: RESOLVED (all 8 Bash commands whitelisted,
+  17t down from 25t). Whitelist approach confirmed effective.
+- qa-bash-explosion: RESOLVED (6 Bash commands, all whitelisted).
+  Whitelist approach confirmed effective.
 
 ## Applied Fixes Log
 - 20260313T021326: pm — CRITICAL HARD CONSTRAINT on design.md → RESOLVED
 - 20260313T023047: executor — efficiency guidance → RESOLVED
-- 20260313T161422: tech-lead — simplified git workflow → PARTIAL (43→29→32→21→17)
-- 20260313T195608: pm — stop-exploring → superseded by branch shortcut
-- 20260313T195608: qa — trust deno task check → regressed (17→20→20/24)
-- 20260313T204755: pm — branch shortcut → REGRESSED (2→15); shortcut ignored
-- 20260313T204755: tech-lead — force-with-lease + batch edits → PARTIAL
-- 20260313T204755: executor — parallel reads + ban TodoWrite → IMPROVED
-  (parallelism working: 14 parallel turns in iter-2)
+- 20260313T161422: tech-lead — simplified git workflow → RESOLVED (17t stable)
 - 20260313T223344: tech-lead — FORBIDDEN stash/checkout/pull → RESOLVED
-  (no stash/checkout observed). But git exploration persists.
-- 20260313T223344: executor — strengthened parallel read → IMPROVED (14 parallel)
-- 20260313T223344: qa — banned Bash file inspection → PARTIAL (still used grep
-  via Bash in iter-1, Agent tool in iter-2)
-- 20260313T224909: pm — HARD STOP on gh issue list when on branch, ban Grep
-  after Read, target ≤8 → WATCHING
-- 20260313T224909: tech-lead — banned git show/log/ls, listed allowed Bash
-  commands, target ≤12 → WATCHING
-- 20260313T224909: qa — FORBIDDEN Agent tool + FORBIDDEN Bash file inspection
-  (with keyword), no re-reading rule, target ≤12 → WATCHING
+- 20260313T224909: qa — FORBIDDEN Agent+Bash → superseded by whitelist
+- 20260313T230627: pm — reordered steps (shortcut=step1) → RESOLVED (17t)
+- 20260313T230627: tech-lead — Bash WHITELIST → RESOLVED (all 8 cmds valid)
+- 20260313T230627: executor — FORBIDDEN multi-edit + re-reads → FAILED (ignored)
+- 20260313T230627: qa — Bash WHITELIST → RESOLVED (6 cmds, all valid)
+- 20260313T234144: executor — ONE WRITE PER FILE mandatory, pre-edit planning,
+  evidence from this run (req.md 6x edit, stage-9 4x edit). Target ≤25 → WATCHING
+- 20260313T234144: qa — ONE READ PER FILE mandatory, FORBIDDEN Grep after Read
+  with evidence (check output 7x read, 5 Grep after Read). Target ≤10 → WATCHING
+- 20260313T234144: pm — ONE WRITE for SRS mandatory, target adjusted ≤8 → WATCHING
 
 ## Lessons Learned
 - PM/SDS-update scope overlap resolved by explicit constraints in PM prompt.
 - Engine loop bug (buildContext node lookup) fixed in commit f9c9983.
-- Total pipeline cost baseline for M-effort issue: ~$2.65-$5.10.
+- Total pipeline cost baseline for M-effort issue: ~$6.00.
 - Pipeline config gap: build node has no input from verify for iter > 1.
-  Workaround: hardcoded relative path in executor prompt.
 - Run artifacts under .sdlc/runs/ are gitignored — agents must use `git add -f`.
 - QA self-approval fails (same user can't approve own PR). Need fallback path.
-- TodoWrite in executor is pure overhead. Banned — confirmed 0 calls (2 runs).
-- "Parallel" language alone is insufficient but "MANDATORY"/"FIRST response MUST"
-  phrasing DOES work — parallelism improved from 0 to 8-14 parallel turns.
-- FORBIDDEN keyword works for hard bans (stash/checkout stopped). Must use
-  it for all strict prohibitions, not just "do not".
-- "No Grep after Read" needed: agents Read a file then Grep it 4 times for
-  content they already have in context.
-- Cost improved 18% ($3.21→$2.65) but 2 iterations inflated total. Single-iter
-  cost would be ~$1.95 (best possible with current prompts).
+- TodoWrite in executor is pure overhead. Banned — confirmed 0 calls (3 runs).
+- **Blacklist approach fails for Bash commands.** WHITELIST is correct — now
+  confirmed effective for tech-lead (3 runs) and QA (2 runs).
+- **Step ordering matters.** Put fast-path shortcuts FIRST. Confirmed effective.
+- **"FORBIDDEN" keyword is insufficient for multi-edit waste.** Agents ignore
+  "FORBIDDEN multiple edits" because each individual Edit feels justified.
+  Reframed as "ONE WRITE PER FILE (MANDATORY)" — positive instruction > ban.
+- **Re-read waste is a distinct pattern from multi-edit waste.** QA re-reads
+  tool output files (not source files) — need explicit rule covering ALL file
+  types including tool-result temp files.

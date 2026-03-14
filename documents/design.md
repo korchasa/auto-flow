@@ -106,10 +106,14 @@ graph LR
 - **Interfaces:** Contains `claude` CLI, `deno`, `git`, `gh`, `gitleaks`.
 - **Deps:** Node.js (for claude CLI install), Deno runtime.
 
-### 3.2 Stage Scripts (`.sdlc/scripts/`)
+### 3.2 Stage Scripts (`.sdlc/scripts/`) — DEPRECATED
 
-- **Purpose:** Orchestrate each pipeline stage: prepare input, invoke agent,
-  validate, continue, commit.
+- **Status:** Formally deprecated. Superseded by Deno/TypeScript pipeline engine
+  (`engine/`). Retained for backward compatibility only. Use `deno task run`.
+- **Purpose:** Legacy orchestration for each pipeline stage: prepare input,
+  invoke agent, validate, continue, commit.
+- **AGENT_PROMPT paths:** Updated to `.claude/skills/agent-<name>/SKILL.md`
+  (canonical, post-FR-36 migration).
 - **Interfaces:**
   - Input: `<issue-number>` as CLI argument.
   - Output: Committed artifacts + logs on feature branch.
@@ -172,9 +176,10 @@ graph LR
   - Interactive: Claude Code discovers skills directly from
     `.claude/skills/agent-<name>/SKILL.md` → user invokes `/agent-<name>`.
     No symlinks required (canonical location).
-- **Migration (FR-36):** Formerly `agents/<name>/SKILL.md` with symlinks from
-  `.claude/skills/`. Migrated to canonical `.claude/skills/` layout; `agents/`
-  top-level directory removed. Symlink indirection eliminated.
+- **Migration (FR-36):** Complete. Formerly `agents/<name>/SKILL.md` with
+  symlinks from `.claude/skills/`. Migrated to canonical `.claude/skills/`
+  layout; `agents/` directory removed; symlink indirection eliminated. Legacy
+  stage scripts formally deprecated (co-location N/A for deprecated scripts).
 - **Deps:** None (static content, versioned in git).
 
 ### 3.6 Pipeline Engine (`engine/`)

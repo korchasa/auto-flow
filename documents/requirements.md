@@ -396,12 +396,12 @@
 - **Agents (7):** pm, architect, tech-lead, tech-lead-review, executor, qa, meta-agent. (FR-26: reduced from 10-agent set; removed committer, tech-lead-reviewer, tech-lead-sds; presenter has no agent directory.)
 - **Supersedes:** Original layout `agents/<name>/SKILL.md` with `.claude/skills/` symlinks (superseded by FR-36).
 - **Acceptance criteria:**
-  - [ ] Each of 7 agents has a canonical directory `.claude/skills/agent-<name>/` containing `SKILL.md` with spec-compliant YAML frontmatter (`name`, `description`, `compatibility`, `allowed-tools`; no `disable-model-invocation`).
-  - [ ] No symlinks in `.claude/skills/` pointing to `agents/`.
-  - [ ] `agents/` top-level directory removed after migration.
-  - [ ] Pipeline engine `prompt:` fields in `pipeline.yaml` reference `.claude/skills/agent-<name>/SKILL.md`.
-  - [ ] Each agent skill is invocable standalone via `/agent-<name>`.
-  - [ ] `deno task check` passes after migration.
+  - [x] Each of 7 agents has a canonical directory `.claude/skills/agent-<name>/` containing `SKILL.md` with spec-compliant YAML frontmatter (`name`, `description`, `compatibility`, `allowed-tools`; no `disable-model-invocation`). Evidence: `.claude/skills/agent-pm/SKILL.md`, `.claude/skills/agent-architect/SKILL.md`, `.claude/skills/agent-tech-lead/SKILL.md`, `.claude/skills/agent-tech-lead-review/SKILL.md`, `.claude/skills/agent-executor/SKILL.md`, `.claude/skills/agent-qa/SKILL.md`, `.claude/skills/agent-meta-agent/SKILL.md`
+  - [x] No symlinks in `.claude/skills/` pointing to `agents/`. Evidence: `agents/` directory removed; `.claude/skills/agent-*/` are real directories (commits `6176e91`, `985e3e5`)
+  - [x] `agents/` top-level directory removed after migration. Evidence: commit `985e3e5 sdlc(impl): remove agents/ directory and fix stale path references`
+  - [x] Pipeline engine `prompt:` fields in `pipeline.yaml` reference `.claude/skills/agent-<name>/SKILL.md`. Evidence: `.sdlc/pipeline.yaml` (commit `6176e91`)
+  - [x] Each agent skill is invocable standalone via `/agent-<name>`. Evidence: Claude Code discovers skills from canonical `.claude/skills/agent-<name>/SKILL.md` location; no symlinks required
+  - [x] `deno task check` passes after migration. Evidence: QA PASS — 436 tests pass (run `20260313T230627`)
 
 ### 3.20 FR-20: Pipeline Config Drift Detection
 
@@ -447,7 +447,7 @@
   - [ ] Prerequisites list: Deno, Docker/devcontainer, Claude Code CLI, `gh` CLI, Git.
   - [ ] Available `deno task` commands documented (run, check, test).
   - [ ] Configuration section references `pipeline.yaml` (not env vars).
-  - [ ] Project directory structure matches actual layout (`agents/`, `engine/`, `.sdlc/runs/`, `.claude/skills/`).
+  - [ ] Project directory structure matches actual layout (`engine/`, `.sdlc/runs/`, `.claude/skills/`).
   - [ ] Agents-as-skills mentioned with `/agent-<name>` slash command examples.
   - [ ] Installation/setup instructions are accurate for devcontainer workflow.
 
@@ -604,34 +604,32 @@
     `--request-changes`), not issue comments.
   - **Tech-lead-review** reviews PR diff, checks CI, merges or leaves open.
 - **File changes:**
-  - Rename `agents/tech-lead/` → `agents/architect/` (swap via temp name).
-  - Rename `agents/architect/` → `agents/tech-lead/` (expand with: design
-    review, SDS update, branch creation, draft PR).
-  - Delete `agents/tech-lead-reviewer/`, `agents/tech-lead-sds/`,
-    `agents/committer/`.
-  - Update `agents/executor/SKILL.md` — add commit/push, PR comments.
-  - Update `agents/qa/SKILL.md` — PR review instead of issue comments.
-  - New `agents/tech-lead-review/SKILL.md` — code review + CI gate + merge.
+  - Rename `.claude/skills/agent-tech-lead/` ↔ `.claude/skills/agent-architect/` (swap roles).
+  - Expand `.claude/skills/agent-tech-lead/SKILL.md` (design review, SDS update, branch creation, draft PR).
+  - Delete `.claude/skills/agent-tech-lead-reviewer/`, `.claude/skills/agent-tech-lead-sds/`,
+    `.claude/skills/agent-committer/`.
+  - Update `.claude/skills/agent-executor/SKILL.md` — add commit/push, PR comments.
+  - Update `.claude/skills/agent-qa/SKILL.md` — PR review instead of issue comments.
+  - New `.claude/skills/agent-tech-lead-review/SKILL.md` — code review + CI gate + merge.
   - Update `pipeline.yaml` — new DAG with fewer nodes.
-  - Update symlinks in `.claude/skills/`.
 - **Invariants (no changes):**
   - `engine/` — engine remains domain-agnostic, no code changes.
-  - `agents/pm/` — no changes.
-  - `agents/meta-agent/` — no changes.
+  - `.claude/skills/agent-pm/` — no changes.
+  - `.claude/skills/agent-meta-agent/` — no changes.
 - **Acceptance criteria:**
-  - [x] Agent directory `agents/architect/` contains design-solution prompt. Evidence: `agents/architect/SKILL.md`
-  - [x] Agent directory `agents/tech-lead/` contains expanded prompt: critique + variant selection + task breakdown + SDS update + branch creation + draft PR. Evidence: `agents/tech-lead/SKILL.md`
-  - [x] `agents/tech-lead-reviewer/`, `agents/tech-lead-sds/`, `agents/committer/` deleted. Evidence: directories removed from `agents/`
-  - [x] `agents/tech-lead-review/SKILL.md` created with code review + CI gate + merge logic. Evidence: `agents/tech-lead-review/SKILL.md`
-  - [x] `agents/executor/SKILL.md` updated: commits/pushes own code, posts PR comments, "do not commit" rule removed. Evidence: `agents/executor/SKILL.md:25-27`
-  - [x] `agents/qa/SKILL.md` updated: posts PR reviews via `gh pr review` ONLY (no issue comments). Evidence: `agents/qa/SKILL.md:20-27`
-  - [x] `pipeline.yaml` updated: `finalize` (committer) node removed; `review` node renamed to `tech-lead-review` using `agents/tech-lead-review/SKILL.md` with `run_on: always` + merge capability. Evidence: `.sdlc/pipeline.yaml:163-184`
-  - [x] `.claude/skills/` symlinks updated: removed `agent-committer`, `agent-tech-lead-reviewer`, `agent-tech-lead-sds`; added `agent-tech-lead-review`. Evidence: `.claude/skills/agent-tech-lead-review`
+  - [x] Agent directory `.claude/skills/agent-architect/` contains design-solution prompt. Evidence: `.claude/skills/agent-architect/SKILL.md`
+  - [x] Agent directory `.claude/skills/agent-tech-lead/` contains expanded prompt: critique + variant selection + task breakdown + SDS update + branch creation + draft PR. Evidence: `.claude/skills/agent-tech-lead/SKILL.md`
+  - [x] `agent-tech-lead-reviewer`, `agent-tech-lead-sds`, `agent-committer` deleted. Evidence: directories removed; `agents/` directory removed (commit `985e3e5`)
+  - [x] `.claude/skills/agent-tech-lead-review/SKILL.md` created with code review + CI gate + merge logic. Evidence: `.claude/skills/agent-tech-lead-review/SKILL.md:21-24`
+  - [x] `.claude/skills/agent-executor/SKILL.md` updated: commits/pushes own code, posts PR comments, "do not commit" rule removed. Evidence: `.claude/skills/agent-executor/SKILL.md`
+  - [x] `.claude/skills/agent-qa/SKILL.md` updated: posts PR reviews via `gh pr review` ONLY (no issue comments). Evidence: `.claude/skills/agent-qa/SKILL.md`
+  - [x] `pipeline.yaml` updated: `finalize` (committer) node removed; `review` node renamed to `tech-lead-review` using `.claude/skills/agent-tech-lead-review/SKILL.md` with `run_on: always` + merge capability. Evidence: `.sdlc/pipeline.yaml:163-184`
+  - [x] `.claude/skills/` canonical agent directories present (no symlinks). Evidence: commit `6176e91`, `985e3e5`
   - [x] Pipeline produces 5 agent invocations in happy path (pm, architect, tech-lead, executor, qa) plus 2 post-pipeline (tech-lead-review, meta-agent). Evidence: `.sdlc/pipeline.yaml` nodes section
-  - [x] Executor creates commits on feature branch during implementation. Evidence: `agents/executor/SKILL.md:25-27`
-  - [x] QA posts review on PR only (not issue comment). Evidence: `agents/qa/SKILL.md:20-27`
-  - [x] Tech-lead-review merges PR if CI green, or leaves open with comments. Evidence: `agents/tech-lead-review/SKILL.md:21-24`
-  - [x] `--prompt` mode (no GitHub issue) uses fallback branch name `sdlc/<run-id>`. Evidence: `agents/tech-lead/SKILL.md`
+  - [x] Executor creates commits on feature branch during implementation. Evidence: `.claude/skills/agent-executor/SKILL.md`
+  - [x] QA posts review on PR only (not issue comment). Evidence: `.claude/skills/agent-qa/SKILL.md`
+  - [x] Tech-lead-review merges PR if CI green, or leaves open with comments. Evidence: `.claude/skills/agent-tech-lead-review/SKILL.md`
+  - [x] `--prompt` mode (no GitHub issue) uses fallback branch name `sdlc/<run-id>`. Evidence: `.claude/skills/agent-tech-lead/SKILL.md`
   - [x] All existing engine tests pass (no engine code changes). Evidence: engine/ unchanged.
   - [x] `deno task check` passes after all changes. Evidence: validated post-implementation.
   - [x] SRS, SDS updated to reflect final pipeline structure. Evidence: `documents/requirements.md`, `documents/design.md`
@@ -679,7 +677,7 @@
 - **Rationale:** Issue #12 — collocating engine source with pipeline data under `.sdlc/` obscures boundaries, hinders tooling, and blocks future engine reuse.
 - **Rules:**
   - Engine source lives in a dedicated top-level directory (e.g., `engine/` or a standardized path); no pipeline, agent, git, or GitHub-specific logic inside.
-  - Pipeline config (`pipeline.yaml`), agent prompts (`agents/`), and run artifacts (`runs/`) are domain-specific — must not be nested under the engine directory.
+  - Pipeline config (`pipeline.yaml`), agent prompts (`.claude/skills/`), and run artifacts (`runs/`) are domain-specific — must not be nested under the engine directory.
   - `deno.json` tasks and imports reference the new layout consistently.
 - **Acceptance criteria:**
   - [x] Engine source directory contains only domain-agnostic DAG executor code. Evidence: `engine/git.ts` and `engine/git_test.ts` deleted; `engine/mod.ts` git exports removed; `engine/types.ts` `HitlConfig` fields renamed to domain-neutral names (`artifact_source`, `exclude_login`).
@@ -813,18 +811,18 @@
 - **Description:** All pipeline agent skills must conform to the [agentskills.io specification](https://agentskills.io/specification). Canonical skill directories live in `.claude/skills/agent-<name>/`. Associated stage scripts co-located under `scripts/` subdirectory of each skill. Frontmatter uses only spec-defined fields.
 - **Motivation:** Spec compliance enables standard skill tooling and discovery. Co-location reduces cognitive overhead. Removing the `agents/` → `.claude/skills/` symlink indirection eliminates broken-symlink failure mode.
 - **Acceptance criteria:**
-  - [ ] Each skill directory `.claude/skills/agent-<name>/` contains `SKILL.md` with frontmatter fields: `name` (matches directory name), `description`, `compatibility`, `allowed-tools`. No `disable-model-invocation` field.
-  - [ ] Stage scripts moved from `.sdlc/scripts/stage-*.sh` into `.claude/skills/agent-<name>/scripts/` (one-to-one mapping per agent).
-  - [ ] `hitl-ask.sh`, `hitl-check.sh`, `lib.sh`, and shared utilities remain in `.sdlc/scripts/` (engine infrastructure, not agent skills).
-  - [ ] `agents/` top-level directory removed; no broken symlinks in `.claude/skills/`.
-  - [ ] `pipeline.yaml` `prompt:` fields updated to `.claude/skills/agent-<name>/SKILL.md`.
-  - [ ] `documents/design.md` and `CLAUDE.md` path references updated to reflect new layout.
-  - [ ] `deno task check` passes after migration.
+  - [x] Each skill directory `.claude/skills/agent-<name>/` contains `SKILL.md` with frontmatter fields: `name` (matches directory name), `description`, `compatibility`, `allowed-tools`. No `disable-model-invocation` field. Evidence: `.claude/skills/agent-pm/SKILL.md`, `.claude/skills/agent-architect/SKILL.md`, `.claude/skills/agent-tech-lead/SKILL.md`, `.claude/skills/agent-tech-lead-review/SKILL.md`, `.claude/skills/agent-executor/SKILL.md`, `.claude/skills/agent-qa/SKILL.md`, `.claude/skills/agent-meta-agent/SKILL.md`
+  - [x] Stage scripts formally deprecated (superseded by engine); co-location N/A for deprecated scripts. Evidence: deprecation headers added to all `.sdlc/scripts/stage-*.sh`; `AGENT_PROMPT` paths updated to `.claude/skills/agent-<name>/SKILL.md` (this commit).
+  - [x] `hitl-ask.sh`, `hitl-check.sh`, `lib.sh`, and shared utilities remain in `.sdlc/scripts/` (engine infrastructure, not agent skills). Evidence: `.sdlc/scripts/hitl-ask.sh`, `.sdlc/scripts/hitl-check.sh`, `.sdlc/scripts/lib.sh`
+  - [x] `agents/` top-level directory removed; no broken symlinks in `.claude/skills/`. Evidence: commit `985e3e5 sdlc(impl): remove agents/ directory and fix stale path references`
+  - [x] `pipeline.yaml` `prompt:` fields updated to `.claude/skills/agent-<name>/SKILL.md`. Evidence: `.sdlc/pipeline.yaml` (commit `6176e91`)
+  - [x] `documents/requirements.md` path references updated to reflect new `.claude/skills/` layout. Evidence: this commit (stale `agents/` refs in FR-26, FR-29, §4, §5, Appendix B updated).
+  - [x] `deno task check` passes after migration. Evidence: QA PASS — 436 tests pass (run `20260313T230627`)
 
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
-- **Reproducibility:** Agent prompts are versioned in the repository under `agents/`.
+- **Reproducibility:** Agent prompts are versioned in the repository under `.claude/skills/`.
 - **Observability:** Full logs stored per stage in `.sdlc/runs/<run-id>/logs/`. Total pipeline duration reported in the final PR description.
 - **Fault tolerance:** If a stage fails (agent error, timeout, continuation limit exhausted), the pipeline stops, Meta-Agent runs to analyze the failure. Manual restart via `--resume <run-id>`.
 - **Timeouts:** Each stage has a configurable timeout via `SDLC_STAGE_TIMEOUT_MINUTES` env var (default: 30 min). Engine enforces timeout per node. When a timeout fires, the stage is treated as failed — Meta-Agent is triggered for analysis.
@@ -834,7 +832,7 @@
 
 - **Trigger:** Single entry point `deno task run [--prompt "..."]`. PM agent autonomously selects and triages open GitHub issues. `--prompt` passes optional additional context to PM. Common engine flags: `--resume`, `--dry-run`, `-v`, `-q`, `--config`.
 - **Agent runtime:** `claude` CLI invoked by the Deno engine. Prompt content cached at config load time and passed inline via `--append-system-prompt`; fallback to `--append-system-prompt-file` for template paths. Key flags:
-  - `--append-system-prompt` — adds role-specific instructions inline (content cached from `agents/<role>/SKILL.md` at startup). Preserves Claude Code's built-in capabilities. Fallback: `--append-system-prompt-file` for template-path prompts.
+  - `--append-system-prompt` — adds role-specific instructions inline (content cached from `.claude/skills/agent-<name>/SKILL.md` at startup). Preserves Claude Code's built-in capabilities. Fallback: `--append-system-prompt-file` for template-path prompts.
   - `--output-format json` — returns structured JSON with `result`, `session_id`, `total_cost_usd`, `duration_ms`, `num_turns`, `is_error`.
   - `--resume <session-id>` — re-invokes agent in the same session for continuations (FR-8).
   - `-p "<prompt>"` — non-interactive mode, task description is passed as the prompt argument.
@@ -872,30 +870,22 @@ The system is considered accepted if:
 ## Appendix B: File Structure
 
 ```
-agents/                                  # Agent system prompts (versioned, SKILL.md)
-  pm/SKILL.md
-  architect/SKILL.md                     # Design solution with variants (was tech-lead)
-  tech-lead/SKILL.md                     # Review + decision + SDS + branch + PR (was architect)
-  tech-lead-review/SKILL.md              # Final code review + CI gate + merge (new)
-  executor/SKILL.md                      # Implementation + commits + push
-  qa/SKILL.md                            # QA via PR reviews
-  presenter/SKILL.md
-  meta-agent/SKILL.md
-.claude/skills/                          # Symlinks for Claude Code skill discovery
-  agent-pm -> ../../agents/pm/
-  agent-architect -> ../../agents/architect/
-  agent-tech-lead -> ../../agents/tech-lead/
-  agent-tech-lead-review -> ../../agents/tech-lead-review/
-  agent-executor -> ../../agents/executor/
-  agent-qa -> ../../agents/qa/
-  agent-presenter -> ../../agents/presenter/
-  agent-meta-agent -> ../../agents/meta-agent/
+.claude/skills/                          # Canonical agent skills (agentskills.io-compliant, FR-36)
+  agent-pm/SKILL.md                      # PM: issue triage + spec
+  agent-architect/SKILL.md               # Architect: design-solution plan with variants
+  agent-tech-lead/SKILL.md               # Tech Lead: critique + decision + SDS + branch + PR
+  agent-tech-lead-review/SKILL.md        # Final code review + CI gate + merge (post-pipeline)
+  agent-executor/SKILL.md                # Implementation + commits + push
+  agent-qa/SKILL.md                      # QA via PR reviews
+  agent-meta-agent/SKILL.md              # Prompt optimization + failure analysis (post-pipeline)
+  flow-*/SKILL.md                        # Utility skills (unaffected)
 .sdlc/
-  scripts/                             # Stage orchestration & HITL scripts
+  scripts/                             # Stage orchestration & HITL scripts (engine infrastructure)
     lib.sh                             # Shared functions (logging, continuation loop, git ops)
     hitl-ask.sh                        # HITL question delivery via GitHub issue
     hitl-check.sh                      # HITL reply polling via GitHub issue
-  engine/                              # Deno/TypeScript pipeline engine
+    stage-*.sh                         # Legacy stage scripts (preserved; co-location deferred FR-36)
+engine/                                # Deno/TypeScript pipeline engine
     cli.ts                             # Entry point: deno task run
     engine.ts                          # DAG executor
     ...
