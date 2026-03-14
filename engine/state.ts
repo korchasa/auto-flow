@@ -156,11 +156,12 @@ export function updateRunCost(state: RunState): void {
   );
 }
 
-/** Mark a node as completed. Optionally records per-node cost and updates run total. */
+/** Mark a node as completed. Optionally records per-node cost and result excerpt. */
 export function markNodeCompleted(
   state: RunState,
   nodeId: string,
   costUsd?: number,
+  result?: string,
 ): void {
   const node = state.nodes[nodeId];
   const startedAt = node.started_at
@@ -174,6 +175,9 @@ export function markNodeCompleted(
   if (costUsd !== undefined) {
     state.nodes[nodeId].cost_usd = costUsd;
     updateRunCost(state);
+  }
+  if (result !== undefined) {
+    state.nodes[nodeId].result = result;
   }
 }
 

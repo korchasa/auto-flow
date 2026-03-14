@@ -13,6 +13,21 @@ export interface VerboseValidationResult {
   detail?: string;
 }
 
+/**
+ * Extract a multi-line excerpt from agent result text (FR-E15).
+ * Filters empty lines, takes first maxLines non-empty lines,
+ * joins with " | ", truncates to maxChars.
+ */
+export function extractResultExcerpt(
+  text: string,
+  maxLines = 3,
+  maxChars = 400,
+): string {
+  const nonEmpty = text.split("\n").filter((l) => l.trim() !== "");
+  const excerpt = nonEmpty.slice(0, maxLines).join(" | ");
+  return excerpt.slice(0, maxChars);
+}
+
 /** Terminal output manager with configurable verbosity levels. */
 export class OutputManager {
   private verbosity: Verbosity;
@@ -107,6 +122,11 @@ export class OutputManager {
     if (stats.failed > 0) this.write(`, ${stats.failed} failed`);
     if (stats.skipped > 0) this.write(`, ${stats.skipped} skipped`);
     this.write("\n");
+    if (stats.nodeResults) {
+      for (const [nodeId, excerpt] of Object.entries(stats.nodeResults)) {
+        this.write(`  ${nodeId.padEnd(16)}  ${excerpt}\n`);
+      }
+    }
     this.write(`${"=".repeat(60)}\n`);
   }
 
@@ -160,12 +180,12 @@ export class OutputManager {
   /** Show one-line agent result summary after node completion (FR-30). Suppressed in quiet mode. */
   nodeResult(nodeId: string, output: ClaudeCliOutput): void {
     if (this.verbosity === "quiet") return;
-    const firstLine = (output.result ?? "").split("\n")[0].slice(0, 120);
+    const excerpt = extractResultExcerpt(output.result ?? "");
     const cost = output.total_cost_usd.toFixed(4);
     const durationS = Math.round(output.duration_ms / 1000);
     this.status(
       nodeId,
-      `  RESULT: ${firstLine} | cost=$${cost} | duration=${durationS}s | turns=${output.num_turns}`,
+      `  RESULT: ${excerpt} | cost=$${cost} | duration=${durationS}s | turns=${output.num_turns}`,
     );
   }
 
@@ -234,4 +254,6 @@ export interface RunSummary {
   completed: number;
   failed: number;
   skipped: number;
+  /** Per-node result excerpts for display in run summary (FR-E22). */
+  nodeResults?: Record<string, string>;
 }

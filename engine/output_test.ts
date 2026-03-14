@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { OutputManager } from "./output.ts";
+import { extractResultExcerpt, OutputManager } from "./output.ts";
 import type { RunSummary } from "./output.ts";
 
 /** Capture output lines from an OutputManager. */
@@ -128,6 +128,58 @@ Deno.test("verboseContinuation — emits continuation context in verbose mode", 
   assertEquals(cap.lines.some((l) => l.includes("output.md")), true);
 });
 
+// --- extractResultExcerpt tests (FR-E15) ---
+
+Deno.test("extractResultExcerpt — empty string returns empty string", () => {
+  assertEquals(extractResultExcerpt(""), "");
+});
+
+Deno.test("extractResultExcerpt — single line returns that line", () => {
+  assertEquals(
+    extractResultExcerpt("Implementation complete"),
+    "Implementation complete",
+  );
+});
+
+Deno.test("extractResultExcerpt — multi-line joins first 3 with separator", () => {
+  const result = extractResultExcerpt(
+    "Line one\nLine two\nLine three\nLine four",
+  );
+  assertEquals(result, "Line one | Line two | Line three");
+});
+
+Deno.test("extractResultExcerpt — filters blank lines", () => {
+  const result = extractResultExcerpt("\nLine one\n\nLine two\n");
+  assertEquals(result, "Line one | Line two");
+});
+
+Deno.test("extractResultExcerpt — filters whitespace-only lines", () => {
+  const result = extractResultExcerpt("   \nLine one\n\t\nLine two");
+  assertEquals(result, "Line one | Line two");
+});
+
+Deno.test("extractResultExcerpt — more than 3 non-empty lines takes first 3", () => {
+  const result = extractResultExcerpt("A\nB\nC\nD\nE");
+  assertEquals(result, "A | B | C");
+});
+
+Deno.test("extractResultExcerpt — truncates to 400 chars", () => {
+  const longLine = "X".repeat(500);
+  const result = extractResultExcerpt(longLine);
+  assertEquals(result.length, 400);
+  assertEquals(result, "X".repeat(400));
+});
+
+Deno.test("extractResultExcerpt — respects custom maxLines", () => {
+  const result = extractResultExcerpt("A\nB\nC\nD", 2);
+  assertEquals(result, "A | B");
+});
+
+Deno.test("extractResultExcerpt — respects custom maxChars", () => {
+  const result = extractResultExcerpt("Hello world", 3, 5);
+  assertEquals(result, "Hello");
+});
+
 // --- nodeResult tests (FR-30) ---
 
 Deno.test("nodeResult — emits result line in normal mode", () => {
@@ -183,10 +235,10 @@ Deno.test("nodeResult — emits result line in verbose mode", () => {
   assertEquals(joined.includes("turns=2"), true);
 });
 
-Deno.test("nodeResult — truncates first line to 120 chars", () => {
+Deno.test("nodeResult — truncates excerpt to 400 chars", () => {
   const cap = createCapture();
   const out = new OutputManager("normal", cap.writer);
-  const longLine = "A".repeat(200);
+  const longLine = "A".repeat(500);
   out.nodeResult("developer", {
     result: longLine,
     session_id: "s1",
@@ -197,11 +249,11 @@ Deno.test("nodeResult — truncates first line to 120 chars", () => {
     is_error: false,
   });
   const joined = cap.lines.join("");
-  assertEquals(joined.includes("A".repeat(120)), true);
-  assertEquals(joined.includes("A".repeat(121)), false);
+  assertEquals(joined.includes("A".repeat(400)), true);
+  assertEquals(joined.includes("A".repeat(401)), false);
 });
 
-Deno.test("nodeResult — uses first line only for multiline result", () => {
+Deno.test("nodeResult — includes multiple non-empty lines in excerpt", () => {
   const cap = createCapture();
   const out = new OutputManager("normal", cap.writer);
   out.nodeResult("developer", {
@@ -215,7 +267,8 @@ Deno.test("nodeResult — uses first line only for multiline result", () => {
   });
   const joined = cap.lines.join("");
   assertEquals(joined.includes("First line"), true);
-  assertEquals(joined.includes("Second line"), false);
+  assertEquals(joined.includes("Second line"), true);
+  assertEquals(joined.includes("Third line"), true);
 });
 
 Deno.test("nodeResult — handles empty result string", () => {
@@ -304,4 +357,76 @@ Deno.test("AC8 — default mode emits zero output from all verbose methods", () 
     0,
     "Default mode must produce zero verbose output",
   );
+});
+
+// --- summary() with nodeResults tests (FR-E22) ---
+
+Deno.test("summary — renders node results when nodeResults present", () => {
+  const cap = createCapture();
+  const out = new OutputManager("normal", cap.writer);
+  const stats: RunSummary = {
+    name: "test-pipeline",
+    runId: "20260308T143022",
+    status: "completed",
+    durationMs: 60000,
+    total: 2,
+    completed: 2,
+    failed: 0,
+    skipped: 0,
+    nodeResults: {
+      developer: "Implemented feature X | Added tests",
+      qa: "All checks passed",
+    },
+  };
+  out.summary(stats);
+  const joined = cap.lines.join("");
+  assertEquals(joined.includes("developer"), true);
+  assertEquals(joined.includes("Implemented feature X"), true);
+  assertEquals(joined.includes("qa"), true);
+  assertEquals(joined.includes("All checks passed"), true);
+});
+
+Deno.test("summary — omits node results section when nodeResults absent", () => {
+  const cap = createCapture();
+  const out = new OutputManager("normal", cap.writer);
+  const stats: RunSummary = {
+    name: "test-pipeline",
+    runId: "20260308T143022",
+    status: "completed",
+    durationMs: 60000,
+    total: 2,
+    completed: 2,
+    failed: 0,
+    skipped: 0,
+  };
+  out.summary(stats);
+  const joined = cap.lines.join("");
+  // Should still have the standard fields
+  assertEquals(joined.includes("Pipeline:"), true);
+  assertEquals(joined.includes("Status:"), true);
+  // No extra result lines
+  assertEquals(joined.includes("RESULT:"), false);
+});
+
+Deno.test("summary — renders standard fields correctly", () => {
+  const cap = createCapture();
+  const out = new OutputManager("normal", cap.writer);
+  const stats: RunSummary = {
+    name: "my-pipeline",
+    runId: "20260308T143022",
+    status: "failed",
+    durationMs: 125000,
+    total: 5,
+    completed: 3,
+    failed: 1,
+    skipped: 1,
+  };
+  out.summary(stats);
+  const joined = cap.lines.join("");
+  assertEquals(joined.includes("my-pipeline"), true);
+  assertEquals(joined.includes("20260308T143022"), true);
+  assertEquals(joined.includes("failed"), true);
+  assertEquals(joined.includes("3/5 completed"), true);
+  assertEquals(joined.includes("1 failed"), true);
+  assertEquals(joined.includes("1 skipped"), true);
 });

@@ -441,3 +441,49 @@ Deno.test("getPhaseForNode — returns undefined for unknown node", () => {
   clearPhaseRegistry();
   assertEquals(getPhaseForNode("nonexistent"), undefined);
 });
+
+// --- FR-E22: markNodeCompleted result persistence tests ---
+
+Deno.test("markNodeCompleted — with result persists result to node state", () => {
+  const state = createRunState("test", "cfg.yaml", ["a"], {}, {});
+  markNodeStarted(state, "a");
+  markNodeCompleted(state, "a", 0.01, "excerpt text");
+
+  assertEquals(state.nodes.a.result, "excerpt text");
+  assertEquals(state.nodes.a.cost_usd, 0.01);
+  assertEquals(state.nodes.a.status, "completed");
+});
+
+Deno.test("markNodeCompleted — without result leaves result undefined", () => {
+  const state = createRunState("test", "cfg.yaml", ["a"], {}, {});
+  markNodeStarted(state, "a");
+  markNodeCompleted(state, "a", 0.01);
+
+  assertEquals(state.nodes.a.result, undefined);
+});
+
+Deno.test("markNodeCompleted — result round-trip via state JSON", async () => {
+  const state = createRunState("test-result", "cfg.yaml", ["a"], {}, {});
+  markNodeStarted(state, "a");
+  markNodeCompleted(state, "a", 0.005, "Line one | Line two | Line three");
+
+  const tmpDir = await Deno.makeTempDir();
+  try {
+    const statePath = `${tmpDir}/state.json`;
+    await Deno.writeTextFile(statePath, JSON.stringify(state, null, 2) + "\n");
+    const loaded = JSON.parse(await Deno.readTextFile(statePath));
+    assertEquals(loaded.nodes.a.result, "Line one | Line two | Line three");
+  } finally {
+    await Deno.remove(tmpDir, { recursive: true });
+  }
+});
+
+Deno.test("markNodeCompleted — backward compat: no result param still works", () => {
+  const state = createRunState("test", "cfg.yaml", ["a"], {}, {});
+  markNodeStarted(state, "a");
+  markNodeCompleted(state, "a");
+
+  assertEquals(state.nodes.a.status, "completed");
+  assertEquals(state.nodes.a.result, undefined);
+  assertEquals(state.nodes.a.cost_usd, undefined);
+});

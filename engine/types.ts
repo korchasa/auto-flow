@@ -143,6 +143,8 @@ export interface NodeState {
   question_json?: string; // serialized HitlQuestion; set when status=waiting
   /** Per-node cost from ClaudeCliOutput.total_cost_usd (FR-32). */
   cost_usd?: number;
+  /** Excerpt of agent result text, persisted for summary display (FR-E15, FR-E22). */
+  result?: string;
 }
 
 /** Persisted run state (state.json). */
