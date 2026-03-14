@@ -1,7 +1,8 @@
 ---
 name: "agent-executor"
 description: "Executor — implements code changes following task breakdown with TDD"
-disable-model-invocation: true
+compatibility: ["claude-code"]
+allowed-tools: []
 ---
 
 # Role: Executor (Implementation)
@@ -13,14 +14,15 @@ implement the code changes defined in the task breakdown from the Architect.
 
 1. **Read task breakdown:** Follow `04-decision.md` — implement tasks in order.
 2. **Read efficiently:**
-   - **Parallel reads:** Read ALL target files from `04-decision.md`
-     `tasks[].files` plus their corresponding test files in a SINGLE parallel
-     batch. Do NOT read files one at a time across separate turns — that wastes
-     one turn per file. Also read `documents/requirements.md` and
-     `documents/design.md` in this same batch.
-   - **Read once, edit immediately:** After reading a file, retain its content.
-     Do NOT re-read a file before editing it. If an Edit fails, check the error
-     message — do not default to re-reading the whole file.
+   - **Parallel reads (MANDATORY):** Your FIRST assistant response MUST contain
+     multiple Read tool calls — one for each file you need. Include ALL target
+     files from `04-decision.md` `tasks[].files`, their test files,
+     `documents/requirements.md`, and `documents/design.md`. Issue ALL Read
+     calls in one response so they execute concurrently. NEVER read files
+     one-per-turn — that wastes turns.
+   - **Read once, never re-read:** After reading a file, retain its content.
+     Do NOT re-read the same file. If an Edit fails, check the error message —
+     do not re-read the whole file.
    - Do NOT read planning artifacts not in the task file list.
    - **Data format discovery:** Read the **source code** that produces data
      (e.g., `engine/log.ts`) — NOT old run data.
@@ -71,7 +73,7 @@ block direct invocations. Always use `deno task check`.
   - `.sdlc/scripts/`
   - `CLAUDE.md`
 - **Self-referential safety:** If the task involves migrating or modifying
-  pipeline agent prompts (files under `agents/` or `.sdlc/agents/`), do NOT
+  pipeline agent prompts (files under `.claude/skills/agent-*/`), do NOT
   delete old prompt files during the pipeline run. The engine may still
   reference them for later nodes. Instead, create the new files and update
   references, but leave old files in place. Deletion should be a separate
@@ -87,12 +89,21 @@ block direct invocations. Always use `deno task check`.
   replaces 3-4 grep commands.
 - **No TodoWrite:** Do NOT use TodoWrite to track progress — it wastes turns.
   Track your task list mentally from `04-decision.md`.
-- **Batch same-file edits:** If you need multiple changes in one file, combine
-  them into a single Edit call (use enough context in `old_string` to be
-  unique).
-- **Target: ≤25 turns.** Typical breakdown: 1 read decision → 1 parallel batch
-  read (all source + test files) → N edit+test cycles → 1 final check →
-  1 commit+push = ~15-20 turns. If past 20 turns, stop exploring and finish.
+- **ONE WRITE PER FILE (MANDATORY).** Count planned changes per file BEFORE
+  editing. If a file needs ≥2 changes, use the Write tool to rewrite the entire
+  file in one call. Do NOT use multiple Edit calls on the same file.
+  **Evidence:** In run 20260313T234144, requirements.md was edited 6 times and
+  stage-9-meta-agent.sh was edited 4 times. Each should have been 1 Write call.
+  Those 8 extra edits wasted 8 turns and ~$0.40.
+- **ONE READ PER FILE (MANDATORY).** After reading a file once, retain its
+  content. Do NOT Read the same file again. In run 20260313T234144,
+  requirements.md was read 6 times — 5 wasted reads.
+- **Plan before editing (MANDATORY for >3 files):** Before your first Edit/Write,
+  list ALL changes needed per file. Then execute: one Write call per file that
+  needs multiple changes, one Edit call per file that needs exactly one change.
+- **Target: ≤25 turns.** Typical: 1 read decision → 1 parallel batch read →
+  N write/edit cycles (1 per file) → 1 deno task check → 1 commit+push.
+  If past 20 turns, stop exploring and finish.
 
 ## Allowed File Modifications
 
@@ -102,6 +113,5 @@ block direct invocations. Always use `deno task check`.
 Explicitly forbidden (unless listed in `04-decision.md` `tasks[].files`):
 
 - `.github/`
-- `agents/`
 - `.sdlc/scripts/`
 - `CLAUDE.md`

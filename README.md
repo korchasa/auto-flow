@@ -31,7 +31,7 @@ Inter-agent communication uses structured Markdown artifacts in `.sdlc/runs/<run
 ## Architecture
 
 - **Engine:** `engine/` — Deno/TypeScript DAG executor with YAML config, template interpolation, parallel levels, loop nodes, HITL support, resume capability
-- **Agent prompts:** `agents/<name>/SKILL.md` — 7 agents with YAML frontmatter; dual-use as pipeline prompts and Claude Code skills
+- **Agent prompts:** `.claude/skills/agent-<name>/SKILL.md` — 7 agents with YAML frontmatter (agentskills.io-compliant); dual-use as pipeline prompts and Claude Code skills
 - **Artifact store:** `.sdlc/runs/<run-id>/<node-id>/` — per-run isolation, git-tracked
 - **State:** `.sdlc/runs/<run-id>/state.json` — tracks node completion for resume
 - **Validation:** Rule-based checks per node (file_exists, file_not_empty, contains_section, custom_script, frontmatter_field)
@@ -93,7 +93,7 @@ Options:
 
 ## Agents as Skills
 
-All 7 pipeline agents are also available as Claude Code slash commands via `.claude/skills/agent-<name>` symlinks pointing to `agents/<name>/`.
+All 7 pipeline agents are also available as Claude Code slash commands via `.claude/skills/agent-<name>/SKILL.md` (canonical location, no symlinks).
 
 Available commands:
 
@@ -108,21 +108,20 @@ Available commands:
 ## Project Structure
 
 ```
-agents/                    # Agent prompts (7 agents)
-  pm/SKILL.md
-  architect/SKILL.md
-  tech-lead/SKILL.md
-  executor/SKILL.md
-  qa/SKILL.md
-  tech-lead-review/SKILL.md
-  meta-agent/SKILL.md
+.claude/
+  skills/                  # Agent prompts (canonical location, agentskills.io-compliant)
+    agent-pm/SKILL.md
+    agent-architect/SKILL.md
+    agent-tech-lead/SKILL.md
+    agent-executor/SKILL.md
+    agent-qa/SKILL.md
+    agent-tech-lead-review/SKILL.md
+    agent-meta-agent/SKILL.md
 .sdlc/
   engine/                  # Pipeline engine (Deno/TypeScript)
   pipeline.yaml            # Pipeline DAG configuration
   runs/                    # Per-run artifacts and state
   scripts/                 # Legacy shell scripts + HITL scripts
-.claude/
-  skills/                  # Symlinks: agent-<name> -> ../../agents/<name>/
 documents/
   requirements.md          # Software Requirements Specification (SRS)
   design.md                # Software Design Specification (SDS)

@@ -38,7 +38,7 @@ Deno.test("AgentRunOptions — type structure with OutputManager", () => {
   const node: NodeConfig = {
     type: "agent",
     label: "Test agent",
-    prompt: "agents/executor/SKILL.md",
+    prompt: ".claude/skills/agent-executor/SKILL.md",
     task_template: "Do task for issue #{{args.issue}}",
     validate: [
       { type: "file_exists", path: "{{node_dir}}/output.md" },
@@ -176,7 +176,7 @@ Deno.test("buildClaudeArgs — promptContent uses --append-system-prompt inline"
 Deno.test("buildClaudeArgs — promptContent takes priority over promptFile", () => {
   const args = buildClaudeArgs(
     makeInvokeOpts({
-      promptFile: "agents/pm/SKILL.md",
+      promptFile: ".claude/skills/agent-pm/SKILL.md",
       promptContent: "Cached content here.",
     }),
   );

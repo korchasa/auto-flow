@@ -5,7 +5,7 @@ title = "auto-flow gitleaks config"
   paths = [
     '''documents/requirements\.md''',
     '''documents/design\.md''',
-    '''agents/.*\.md''',
+    '''\.claude/skills/agent-.*/SKILL\.md''',
     '''\.sdlc/tasks/.*\.md''',
     '''\.sdlc/runs/.*''',
     '''CLAUDE\.md''',

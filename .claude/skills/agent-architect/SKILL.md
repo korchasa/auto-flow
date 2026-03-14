@@ -1,7 +1,8 @@
 ---
 name: "agent-architect"
 description: "Architect — analyzes specification, produces implementation plan with 2-3 variants"
-disable-model-invocation: true
+compatibility: ["claude-code"]
+allowed-tools: []
 ---
 
 # Role: Architect (Design-Solution Plan with Variants)

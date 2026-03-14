@@ -6,6 +6,10 @@
 # Usage: stage-8-presenter.sh <issue-number>
 #
 # When sourced with --source-only, only defines functions (for testing).
+#
+# DEPRECATED: This script is superseded by the Deno/TypeScript pipeline engine.
+# Use `deno task run` instead. Retained for backward compatibility only.
+#
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,7 +19,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
 STAGE_NAME="stage-8-presenter"
-AGENT_PROMPT="$REPO_ROOT/.sdlc/agents/presenter.md"
+AGENT_PROMPT="$REPO_ROOT/.claude/skills/agent-presenter/SKILL.md"
 
 REQUIRED_SECTIONS=("Executive Summary" "Key Changes" "Testing Summary")
 

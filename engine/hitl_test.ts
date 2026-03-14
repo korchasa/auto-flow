@@ -119,7 +119,7 @@ function makeBaseOpts(overrides?: Partial<HitlRunOptions>): HitlRunOptions {
     node: {
       type: "agent",
       label: "PM",
-      prompt: "agents/pm/SKILL.md",
+      prompt: ".claude/skills/agent-pm/SKILL.md",
       task_template: "do something",
     },
     ctx: {

@@ -6,6 +6,10 @@
 # Usage: stage-3-reviewer.sh <issue-number>
 #
 # When sourced with --source-only, only defines functions (for testing).
+#
+# DEPRECATED: This script is superseded by the Deno/TypeScript pipeline engine.
+# Use `deno task run` instead. Retained for backward compatibility only.
+#
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,7 +22,7 @@ source "$SCRIPT_DIR/lib.sh"
 # Constants
 # ============================================================
 STAGE_NAME="stage-3-reviewer"
-AGENT_PROMPT="$REPO_ROOT/.sdlc/agents/tech-lead-reviewer.md"
+AGENT_PROMPT="$REPO_ROOT/.claude/skills/agent-tech-lead-reviewer/SKILL.md"
 
 # Required H2 sections in 03-revised-plan.md
 REQUIRED_SECTIONS=("Critique" "Revised Plan" "Recommendation")
