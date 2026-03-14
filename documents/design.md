@@ -176,7 +176,7 @@ graph LR
   - Interactive: Claude Code discovers skills directly from
     `.claude/skills/agent-<name>/SKILL.md` → user invokes `/agent-<name>`.
     No symlinks required (canonical location).
-- **Agent Execution Summary (FR-40):** All 7 agents must produce a `## Summary`
+- **Agent Execution Summary (FR-40, FR-42):** All 7 agents must produce a `## Summary`
   section in their output artifacts. Content: 2-5 bullet points (actions taken,
   key decisions, artifacts produced, issues encountered). 6 agents (PM,
   Architect, Tech Lead, QA, Meta-Agent, Tech Lead Review) append `## Summary`
@@ -761,3 +761,7 @@ All FR evidence for issue #15 is complete:
 - **FR-40 (Dashboard Stream Log Links):** Implemented. SRS section 3.39
   evidence recorded — `scripts/generate-dashboard.ts` (`streamLogHref`,
   `.log-link` CSS). Tests in `scripts/generate-dashboard_test.ts`.
+- **FR-42 (Agent Output Summary):** Already implemented. All 7 agent SKILL.md
+  files document `## Summary` in output format. `pipeline.yaml` enforces
+  `contains_section: Summary` on all 7 agent nodes. Evidence:
+  `.claude/skills/agent-*/SKILL.md` (7 files), `.sdlc/pipeline.yaml` (7 rules).
