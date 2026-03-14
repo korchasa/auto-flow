@@ -1,5 +1,4 @@
 import { assertEquals } from "@std/assert";
-import { hostname } from "node:os";
 import {
   acquireLock,
   type LockInfo,
@@ -16,7 +15,7 @@ Deno.test("acquireLock — creates lock file with pid, hostname, and run_id", as
   const info = await readLockInfo(lockPath);
   assertEquals(info.run_id, "run-001");
   assertEquals(info.pid, Deno.pid);
-  assertEquals(info.hostname, hostname());
+  assertEquals(info.hostname, Deno.hostname());
   assertEquals(typeof info.started_at, "string");
 
   await releaseLock(lockPath);
@@ -30,7 +29,7 @@ Deno.test("acquireLock — fails if same-host live process holds lock", async ()
   // Write a lock with current PID and hostname (simulates another running process)
   const fakeLock: LockInfo = {
     pid: Deno.pid,
-    hostname: hostname(),
+    hostname: Deno.hostname(),
     run_id: "run-existing",
     started_at: new Date().toISOString(),
   };
@@ -49,29 +48,27 @@ Deno.test("acquireLock — fails if same-host live process holds lock", async ()
   await Deno.remove(tmpDir, { recursive: true });
 });
 
-Deno.test("acquireLock — fails if different-host holds lock (conservative)", async () => {
+Deno.test("acquireLock — reclaims stale lock from different host (dead PID)", async () => {
   const tmpDir = await Deno.makeTempDir();
   const lockPath = `${tmpDir}/.lock`;
 
-  // Lock from a different hostname — should be treated as alive regardless of PID
+  // Lock from a different hostname with dead PID — should be reclaimed
   const remoteLock: LockInfo = {
-    pid: 99999999, // PID doesn't exist locally, but hostname differs
+    pid: 99999999, // PID doesn't exist locally
     hostname: "docker-container-abc123",
     run_id: "run-remote",
     started_at: new Date().toISOString(),
   };
   await Deno.writeTextFile(lockPath, JSON.stringify(remoteLock));
 
-  let caught = false;
-  try {
-    await acquireLock(lockPath, "run-local");
-  } catch (err) {
-    caught = true;
-    assertEquals((err as Error).message.includes("run-remote"), true);
-    assertEquals((err as Error).message.includes("already running"), true);
-  }
-  assertEquals(caught, true);
+  // Dead PID → stale lock, reclaim regardless of hostname
+  await acquireLock(lockPath, "run-local");
 
+  const info = await readLockInfo(lockPath);
+  assertEquals(info.run_id, "run-local");
+  assertEquals(info.pid, Deno.pid);
+
+  await releaseLock(lockPath);
   await Deno.remove(tmpDir, { recursive: true });
 });
 
@@ -82,7 +79,7 @@ Deno.test("acquireLock — reclaims stale lock (dead PID, same host)", async () 
   // Lock with dead PID on same hostname — stale, should be reclaimed
   const staleLock: LockInfo = {
     pid: 99999999,
-    hostname: hostname(),
+    hostname: Deno.hostname(),
     run_id: "run-stale",
     started_at: new Date().toISOString(),
   };
@@ -94,7 +91,7 @@ Deno.test("acquireLock — reclaims stale lock (dead PID, same host)", async () 
   const info = await readLockInfo(lockPath);
   assertEquals(info.run_id, "run-fresh");
   assertEquals(info.pid, Deno.pid);
-  assertEquals(info.hostname, hostname());
+  assertEquals(info.hostname, Deno.hostname());
 
   await releaseLock(lockPath);
   await Deno.remove(tmpDir, { recursive: true });

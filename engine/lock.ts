@@ -1,9 +1,7 @@
 /** Pipeline lock to prevent parallel runs.
  * Lock file contains JSON with PID, hostname, run_id, and timestamp.
- * Stale detection: same hostname → PID check; different hostname → lock is
- * treated as live (conservative: container PIDs are invisible from host). */
-
-import { hostname } from "node:os";
+ * Stale detection: always PID check. Hostname is stored for diagnostics only.
+ * Rationale: lock file lives on local FS, so if readable — PID is checkable. */
 
 /** Lock file content structure. */
 export interface LockInfo {
@@ -37,14 +35,9 @@ export async function readLockInfo(lockPath: string): Promise<LockInfo> {
 }
 
 /** Check if an existing lock is still held by a live process.
- * Same hostname → PID check. Different hostname → assume alive. */
+ * Always checks PID directly — lock file on local FS guarantees
+ * PID namespace is shared. Hostname stored for diagnostics only. */
 function isLockAlive(existing: LockInfo): boolean {
-  const currentHost = hostname();
-  if (existing.hostname && existing.hostname !== currentHost) {
-    // Different host (e.g. container vs host) — cannot verify PID, assume alive
-    return true;
-  }
-  // Same host or missing hostname (backward compat) — check PID
   return isProcessAlive(existing.pid);
 }
 
@@ -79,7 +72,7 @@ export async function acquireLock(
 
   const info: LockInfo = {
     pid: Deno.pid,
-    hostname: hostname(),
+    hostname: Deno.hostname(),
     run_id: runId,
     started_at: new Date().toISOString(),
   };
