@@ -554,6 +554,15 @@
     to all 7 `## Voice` sections. Evidence: all 7 SKILL.md files listed above.
   - [x] `deno task check` passes.
 
+### 3.23 FR-S23: SDLC Documentation Accuracy
+
+- **Description:** SDLC SDS (`documents/design-sdlc.md`) must accurately reflect the current pipeline architecture. Deprecated components must be explicitly labeled with deprecation reason and superseding FR, or removed entirely. References in SDS must match current `deno.json` task state.
+- **Rationale:** Legacy diagrams and stubs for removed pipeline stages (removed per FR-S15) create architectural confusion for new contributors. `deno.json` task references in SDS 3.2 that no longer match actual state undermine doc trustworthiness.
+- **Acceptance criteria:**
+  - [ ] SDS section 2.1 legacy shell pipeline diagram marked "(DEPRECATED — pre-FR-S15)" or removed. Affected nodes: Stage 3 (Reviewer), Stage 4 (Architect), Stage 5 (SDS Update), Stage 8 (Presenter) — all absorbed/removed after FR-S15 pipeline restructure.
+  - [ ] SDS section 3.2 (Stage Scripts) `deno.json` task references aligned with current state: 9 `test:*` legacy tasks accurately documented with DEPRECATED status.
+  - [ ] `deno task check` passes.
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -660,3 +669,4 @@ engine/                                # Deno/TypeScript pipeline engine
 | FR-40  | FR-S20 | Dashboard Stream Log Links |
 | FR-42  | FR-S21 | Agent Output Summary Section |
 | FR-43  | FR-S22 | Agent First-Person Voice in GitHub Interactions |
+| —      | FR-S23 | SDLC Documentation Accuracy |

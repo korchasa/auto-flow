@@ -8,25 +8,11 @@
 
 ## 2. Architecture
 
-### 2.1 Legacy: Shell Script Pipeline (DEPRECATED — pre-FR-26)
+### 2.1 Legacy: Shell Script Pipeline (REMOVED — superseded by FR-S15)
 
-```mermaid
-graph LR
-    Issue["GitHub Issue"] --> CLI["deno task run"]
-    CLI --> S1["Stage 1: PM"]
-    S1 --> S2["Stage 2: Tech Lead"]
-    S2 --> S3["Stage 3: Reviewer"]
-    S3 --> S4["Stage 4: Architect"]
-    S4 --> S5["Stage 5: SDS Update"]
-    S5 --> S6["Stage 6-7: Developer+QA Loop"]
-    S6 --> S8["Stage 8: Presenter"]
-    S8 --> S9["Stage 9: Meta-Agent"]
-    S6 -->|"FAIL after max"| S9
-
-    subgraph Devcontainer["Devcontainer"]
-        S1; S2; S3; S4; S5; S6; S8; S9
-    end
-```
+Legacy 9-stage shell pipeline (`Stage 1–9`) removed. Stages 3 (Reviewer),
+4 (Architect), 5 (SDS Update), 8 (Presenter) absorbed/eliminated per FR-S15.
+Current architecture: see §2.2 Pipeline DAG.
 
 ### 2.2 Pipeline DAG (FR-26, FR-33)
 
@@ -71,9 +57,24 @@ graph LR
 ### 3.2 Stage Scripts (`.sdlc/scripts/`) — DEPRECATED
 
 - **Status:** Formally deprecated. Superseded by Deno/TypeScript pipeline engine
-  (`engine/`). Retained for backward compatibility only. Use `deno task run`.
+  (`engine/`). Use `deno task run`.
 - **Purpose:** Legacy orchestration for each pipeline stage: prepare input,
   invoke agent, validate, continue, commit.
+- **Legacy `test:*` deno.json tasks (DEPRECATED):** 9 tasks referencing
+  `.sdlc/scripts/` shell scripts, superseded by engine execution via
+  `deno task run`:
+  - `test:lib` — shared library tests
+  - `test:pm` — PM stage script
+  - `test:tech-lead` — Tech Lead stage script
+  - `test:reviewer` — Reviewer stage script (agent removed per FR-S15)
+  - `test:architect` — Architect stage script (renamed to design node per FR-S15)
+  - `test:sds-update` — SDS Update stage script (absorbed into Tech Lead per FR-S15)
+  - `test:developer` — Developer stage script
+  - `test:qa` — QA stage script
+  - `test:presenter` — Presenter stage script (agent removed per FR-S15)
+  - `test:meta-agent` — Meta-Agent stage script
+  Tasks retained in `deno.json` for backward compatibility only. Not part of
+  current pipeline execution.
 - **AGENT_PROMPT paths:** Updated to `.claude/skills/agent-<name>/SKILL.md`
   (canonical, post-FR-36 migration).
 - **Interfaces:**
