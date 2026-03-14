@@ -81,29 +81,42 @@ block direct invocations. Always use `deno task check`.
 - **Fix QA issues:** If a previous QA report is provided, read it and fix all
   issues marked as `FAIL` or `blocking` before proceeding.
 - **No documentation changes:** Do not update SRS or SDS. Only write code.
-- **No shell exploration:** Do NOT use Bash to explore directories (`ls`,
-  `find`), parse files (`grep`, `python3`, `tail`), or probe data formats.
-  Use the Read tool to read source files directly. If you need to understand a
-  data format, read the code that writes it, not sample outputs.
-  **This is enforced:** each `grep` via Bash wastes a turn. One Read call
-  replaces 3-4 grep commands.
+- **No shell exploration:** Do NOT use Bash for `ls`, `find`, `grep`, `rg`,
+  `python3`, `tail`, `cat`, or ANY search/read command. Use Read for files,
+  Grep tool for search. Bash is ONLY for: `deno task check`, `git add`,
+  `git commit`, `git push`. Nothing else.
+  **Evidence:** Run 20260314T020922 ran `grep -rn` via Bash — wasted turn.
+  Use the Grep tool instead.
 - **No TodoWrite:** Do NOT use TodoWrite to track progress — it wastes turns.
   Track your task list mentally from `04-decision.md`.
-- **ONE WRITE PER FILE (MANDATORY).** Count planned changes per file BEFORE
-  editing. If a file needs ≥2 changes, use the Write tool to rewrite the entire
-  file in one call. Do NOT use multiple Edit calls on the same file.
-  **Evidence:** In run 20260313T234144, requirements.md was edited 6 times and
-  stage-9-meta-agent.sh was edited 4 times. Each should have been 1 Write call.
-  Those 8 extra edits wasted 8 turns and ~$0.40.
+- **ONE WRITE PER FILE (MANDATORY — ZERO EXCEPTIONS).** Each target file gets
+  exactly ONE Write or ONE Edit call. If you touch a file twice, you wasted a
+  turn. Count before starting.
+  - **For rename/substitution tasks:** Use `Edit` with `replace_all: true` —
+    one call replaces all occurrences in the file. Do NOT Write the whole file
+    for simple string replacements.
+  - **For multi-section changes:** Use `Write` to rewrite the entire file once.
+  **Evidence:** Run 20260314T000902 wrote pipeline.yaml 3x, 5 test files 2x
+  each, 2 script files 2x each = 14 wasted writes across 81 turns ($7.02).
+  Target: 1 write per file → ≤35 turns, ~$3.00.
+- **HARD STOP — Read() calls MUST NOT have offset or limit parameters.**
+  NEVER pass `offset` or `limit` to ANY Read call — not on re-reads, not on
+  first reads, not on temp files, not on ANY file. Always call Read with
+  file_path ONLY. Violation = wasted turn.
+  **Evidence:** 6 consecutive runs had offset/limit violations. Run
+  20260314T022056: re-read requirements.md at offset=822 after full read.
+  Run 20260314T020922: chunk-read temp file 4x. STOP DOING THIS.
 - **ONE READ PER FILE (MANDATORY).** After reading a file once, retain its
-  content. Do NOT Read the same file again. In run 20260313T234144,
-  requirements.md was read 6 times — 5 wasted reads.
+  content in context. Do NOT Read the same file again. If an Edit fails, read
+  the error — do NOT re-read the whole file.
+  This applies to ALL files — source files, spec files, AND tool-result temp
+  files (paths like `/home/.../.claude/.../tool-results/*.txt`).
 - **Plan before editing (MANDATORY for >3 files):** Before your first Edit/Write,
-  list ALL changes needed per file. Then execute: one Write call per file that
-  needs multiple changes, one Edit call per file that needs exactly one change.
-- **Target: ≤25 turns.** Typical: 1 read decision → 1 parallel batch read →
-  N write/edit cycles (1 per file) → 1 deno task check → 1 commit+push.
-  If past 20 turns, stop exploring and finish.
+  output a checklist: `FILE → TOOL (Edit/Write/Edit+replace_all) → CHANGE`.
+  Then execute one call per file, in order. No re-reads, no re-writes.
+- **Target: ≤35 turns.** Typical: 1 read decision → 1-2 parallel batch reads →
+  N edit/write calls (1 per file) → 1-2 deno task check → 1 commit+push.
+  If past 30 turns, stop exploring and finish.
 
 ## Allowed File Modifications
 

@@ -12,7 +12,7 @@
     "test:reviewer": "deno test -A --no-check .sdlc/scripts/stage-3-reviewer_test.ts",
     "test:architect": "deno test -A --no-check .sdlc/scripts/stage-4-architect_test.ts",
     "test:sds-update": "deno test -A --no-check .sdlc/scripts/stage-5-sds-update_test.ts",
-    "test:executor": "deno test -A --no-check .sdlc/scripts/stage-6-executor_test.ts",
+    "test:developer": "deno test -A --no-check .sdlc/scripts/stage-6-developer_test.ts",
     "test:qa": "deno test -A --no-check .sdlc/scripts/stage-7-qa_test.ts",
     "test:presenter": "deno test -A --no-check .sdlc/scripts/stage-8-presenter_test.ts",
     "test:meta-agent": "deno test -A --no-check .sdlc/scripts/stage-9-meta-agent_test.ts",

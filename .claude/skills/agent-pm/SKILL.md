@@ -29,10 +29,15 @@ produce a specification artifact, updating the project's SRS.
    get full details. View ONLY the selected issue — never other issues.
 3. **Review existing docs:** In ONE response, issue Read calls for BOTH
    `documents/requirements.md` AND `documents/design.md` in parallel.
-   **Read each file ONCE.** Do NOT re-read, grep, or tail a file you already
-   read. Do NOT use Grep to search files you already read — you have the full
-   content. Do not probe irrelevant files (`ls`, `find`, filesystem exploration).
+   **Read each file EXACTLY ONCE — no offset, no limit, no re-reads.**
+   After the initial Read, the ENTIRE file is in your context (both files are
+   under 2000 lines). Do NOT re-read with offset/limit parameters — that is
+   the same file and wastes turns. Do NOT use Grep to search files you already
+   read. Do not probe irrelevant files (`ls`, `find`, filesystem exploration).
    Only read source files directly referenced in the issue body.
+   **Evidence:** Run 20260314T014914 wasted 4 turns re-reading requirements.md
+   with offset/limit (lines 1-100, 350-550, 550-750, 750-950) after already
+   reading the full 919-line file. Result: 14 turns/$0.70 instead of target 8t.
 4. **Update the SRS:** Add or modify requirements in `documents/requirements.md`
    to reflect the issue. Every new requirement gets a status marker `[ ]`
    (pending).
@@ -114,16 +119,33 @@ Define what is NOT included in this issue's scope:
   guessing.
 - **YAML frontmatter required:** `01-spec.md` MUST start with `---` on line 1
   and contain `issue: <N>` in the frontmatter.
-- **FORBIDDEN: Bash file inspection.** Do NOT use `head`, `cat`, `tail`,
-  `grep`, `find`, `ls`, or `python3` via Bash. Use Read or Grep tools only.
-- **FORBIDDEN: Grep after Read.** If you already Read a file, do NOT Grep it
-  and do NOT use `grep` via Bash on it. You already have the content in context.
+- **Bash WHITELIST (MANDATORY).** Bash is ONLY for these commands — nothing else:
+  `git branch --show-current`, `git pull origin main`,
+  `gh issue view`, `gh issue list`, `gh issue comment`, `mkdir -p`.
+  Do NOT use `head`, `cat`, `tail`, `grep`, `wc`, `find`, `ls`, or `python3`
+  via Bash. Use Read for files. If you already Read a file, its ENTIRE content
+  is in context — do NOT search it via Bash or Grep.
+  **Evidence:** Run 20260314T021602 used `wc -l && grep -n` via Bash on
+  requirements.md (already in context) — wasted 1 turn + triggered offset/limit
+  re-read.
+- **FORBIDDEN: offset/limit parameters on Read.** NEVER use offset or limit
+  parameters on ANY Read call. Always read files fully (no parameters). All
+  project files are under 2000 lines — one full Read gets everything. Chunked
+  reading wastes turns.
+  **Evidence:** Run 20260314T021602 re-read requirements.md with offset=820
+  limit=40 after full read — wasted 1 turn.
 - **FORBIDDEN: `gh issue list` on `sdlc/issue-*` branch.** The branch name
   already tells you the issue number. Running `gh issue list` wastes 2+ turns.
-- **ONE WRITE for SRS updates (MANDATORY).** When updating requirements.md,
-  collect ALL changes, then use ONE Write call to rewrite the file. Do NOT use
-  multiple Edit calls. In run 20260313T234144, PM used 3 Edits on
-  requirements.md — should have been 1 Write (saves 2 turns).
+- **ONE WRITE for SRS updates (MANDATORY — ZERO EXCEPTIONS).**
+  **STEP-BY-STEP ENFORCEMENT:**
+  1. Read requirements.md once (via parallel Read in step 3).
+  2. In your text response, draft ALL SRS changes as a complete updated file.
+  3. Use exactly ONE `Write` tool call to write the entire updated file.
+  **NEVER use Edit on requirements.md.** Edit calls on requirements.md are
+  BLOCKED — each one wastes a turn and inflates cost.
+  **Evidence:** Run 20260314T000902 used 13 Edit calls on requirements.md
+  (31 turns, $1.51). Run 20260313T234144 used 3 Edits (17 turns, $0.99).
+  Target with 1 Write: ≤8 turns, ~$0.50.
 - **Target: ≤8 turns.** Branch shortcut = 1 turn (git branch + skip to issue
   view). Issue view = 1 turn. Parallel read docs = 1 turn. SRS Write + spec
   Write = 2 turns. Comment = 1 turn. Total = 6 turns + 2 buffer.

@@ -1,24 +1,52 @@
 # Meta-Agent Memory
 
 ## Agent Baselines
-- pm (specification): 17t/$0.99/233s — improved from 22t; branch shortcut works
-- architect (design): 8t/$0.52/133s (stable, no fix needed)
-- tech-lead (decision): 17t/$0.59/113s — improved from 25t; whitelist works
-- developer (build): 53t/$3.01/593s — down from 67t but still 2x target
-- qa (verify): 27t/$0.89/146s — 1 iteration (PASS), down from 34t
-- Total run cost: ~$6.00 (stable vs $6.20 last run)
+- pm (specification): 14t/$0.71/88s — stable
+- architect (design): 8t/$0.40/85s — Agent subagent persists despite ban
+- tech-lead (decision): 13t/$0.47/62s — stable
+- developer (build): 4t/$0.20/8s — clean (no-op skip-implementation task)
+- qa (verify): 17t/$0.73/105s — offset/limit re-read persists (8th run)
+- Total run cost: $2.50
 - 1 iteration (QA passed first try)
 
 ## Active Patterns
-- pm-multi-edit-srs: NEW, first seen 20260313T234144. 3 Edits on requirements.md
-  instead of 1 Write. Fix: added "ONE WRITE for SRS" rule.
-- developer-multi-edit-waste: PERSISTS, first seen 20260313T230627,
-  last seen 20260313T234144. requirements.md edited 6x (should be 1 Write),
-  stage-9 edited 4x. "FORBIDDEN multiple edits" ignored. Fix: reworded to
-  "ONE WRITE PER FILE (MANDATORY)" with concrete evidence.
-- qa-reread-waste: NEW, first seen 20260313T234144. deno check output read 7x
-  (6 wasted). 5 Grep after Read on requirements.md. Fix: added explicit
-  "ONE READ PER FILE" rule + "FORBIDDEN Grep after Read" with evidence.
+- pm-multi-edit-srs: RESOLVED, first seen 20260313T234144,
+  last seen 20260314T000902. Fix (draft→Write, NEVER Edit) confirmed working:
+  16t/2 Writes in 20260314T010515. 1 clean run.
+- developer-multi-edit-waste: RESOLVED, first seen 20260313T230627,
+  last seen 20260314T000902. Fix (replace_all + checklist) confirmed working:
+  20t/$1.21 in 20260314T010515 (was 81t/$7.02). 1 clean run.
+- developer-reread-waste: RESOLVED, first seen 20260314T000902.
+  20t/11 Reads in 20260314T010515 (no wasted re-reads). 1 clean run.
+- qa-reread-waste: RESOLVED, first seen 20260313T234144,
+  last seen 20260314T013359. Fix v2 confirmed: 13t/1 temp read in 20260314T014728
+  (was 21t/7 reads). Explicit path pattern + evidence in prompt = effective.
+- developer-temp-reread: RESOLVED, first seen 20260314T014728,
+  last seen 20260314T014728. Fix confirmed: 0 temp re-reads in 20260314T014914.
+- pm-offset-reread: RESOLVED, first seen 20260314T014914,
+  last seen 20260314T014914. Fix confirmed: 0 offset/limit re-reads in
+  20260314T020000 (2 Reads total, no offset/limit). 2 clean runs.
+- developer-offset-reread: RESOLVED, first seen 20260314T020214,
+  last seen 20260314T020922. Fix v2 confirmed: 0 offset/limit reads in
+  20260314T021602. 1 clean run.
+- qa-offset-reread: RESOLVED, first seen 20260314T020214,
+  last seen 20260314T020214. Fix confirmed: 0 offset/limit reads in
+  20260314T020922. 3 Reads total, all clean.
+- developer-grep-via-bash: RESOLVED, first seen 20260314T020922,
+  last seen 20260314T020922. Fix confirmed: 0 grep-via-Bash in 20260314T021602.
+- developer-offset-persistent: RESOLVED, first seen 20260314T020214,
+  last seen 20260314T022056. Fix v3 confirmed: 0 offset/limit reads in
+  20260314T022619 (only 3 clean Reads). 1 clean run.
+- qa-offset-persistent: WATCHING, first seen 20260314T020214,
+  last seen 20260314T022619. Fix v3 (HARD STOP in Efficiency section) FAILED.
+  Read requirements.md at offset=826. Fix v4: moved HARD STOP to top of
+  prompt (before Responsibilities), replaced Efficiency section copy with
+  back-reference.
+- architect-subagent-waste: WATCHING, first seen 20260314T022056,
+  last seen 20260314T022619. FORBIDDEN rule at line 100 FAILED — still spawned
+  Agent/Explore. Fix v2: elevated to HARD STOP before Responsibilities.
+- pm-bash-blacklist-ignored: WATCHING, first seen 20260314T021602,
+  last seen 20260314T021602. Fix: converted to WHITELIST. Verify next run.
 - pm-branch-shortcut-regression: RESOLVED (3 consecutive runs with shortcut
   working: 22→17t, no gh issue list on branch).
 - tech-lead-bash-exploration: RESOLVED (all 8 Bash commands whitelisted,
@@ -36,11 +64,43 @@
 - 20260313T230627: tech-lead — Bash WHITELIST → RESOLVED (all 8 cmds valid)
 - 20260313T230627: developer — FORBIDDEN multi-edit + re-reads → FAILED (ignored)
 - 20260313T230627: qa — Bash WHITELIST → RESOLVED (6 cmds, all valid)
-- 20260313T234144: developer — ONE WRITE PER FILE mandatory, pre-edit planning,
-  evidence from this run (req.md 6x edit, stage-9 4x edit). Target ≤25 → WATCHING
-- 20260313T234144: qa — ONE READ PER FILE mandatory, FORBIDDEN Grep after Read
-  with evidence (check output 7x read, 5 Grep after Read). Target ≤10 → WATCHING
-- 20260313T234144: pm — ONE WRITE for SRS mandatory, target adjusted ≤8 → WATCHING
+- 20260313T234144: developer — ONE WRITE PER FILE mandatory → FAILED (81t, 22 writes)
+- 20260313T234144: qa — ONE READ PER FILE mandatory → IMPROVED (24t from 27t)
+- 20260313T234144: pm — ONE WRITE for SRS mandatory → FAILED (13 Edits, worse)
+- 20260314T000902: pm — step-by-step enforcement: draft→Write, NEVER Edit → RESOLVED
+  (16t/2 Writes in 20260314T010515)
+- 20260314T000902: developer — replace_all for renames, mandatory checklist → RESOLVED
+  (20t/$1.21 in 20260314T010515, down from 81t/$7.02)
+- 20260314T010515: no fixes needed — all agents within acceptable ranges
+- 20260314T013359: qa — strengthened temp-file re-read rule with explicit path
+  pattern and dual-run evidence. → RESOLVED (13t in 20260314T014728)
+- 20260314T014728: developer — added explicit temp-file re-read prevention
+  (mirroring QA fix). 3 re-reads of check output temp file. → RESOLVED (0 in 20260314T014914)
+- 20260314T014914: pm — added FORBIDDEN offset/limit re-read rule. PM read
+  requirements.md 5x (1 full + 4 offset/limit). → RESOLVED (0 in 20260314T020000)
+- 20260314T020000: no fixes needed — all agents within acceptable ranges
+- 20260314T020214: developer — added FORBIDDEN offset/limit re-read rule.
+  Re-read requirements.md at offset=822 after full read. → FAILED (chunk-read
+  temp file 4x in 20260314T020922; rule only covered "after full read")
+- 20260314T020214: qa — added FORBIDDEN offset/limit + no-partial-reads rule.
+  Read requirements.md with limit=100, then offset=820. → RESOLVED (0 in 20260314T020922)
+- 20260314T020922: developer — banned ALL offset/limit params on Read + rewrote
+  Bash rule as explicit whitelist. Chunk-read temp file 4x + grep via Bash. → RESOLVED
+- 20260314T021602: pm — converted Bash FORBIDDEN blacklist to WHITELIST. PM
+  used wc+grep via Bash + offset/limit re-read (12t, target 8t). → WATCHING
+- 20260314T022056: developer — elevated offset/limit ban from nested paragraph
+  to top-level "HARD STOP" standalone bullet. Re-read requirements.md at
+  offset=822 despite existing ban (was buried in paragraph). → WATCHING
+- 20260314T022056: qa — elevated offset/limit ban from nested paragraph to
+  top-level "HARD STOP" standalone bullet. Read temp file at offset=800 despite
+  existing ban (was buried in paragraph). → WATCHING
+- 20260314T022056: architect — added FORBIDDEN Agent tool rule. Used subagent
+  for grep sweep (wasteful). → FAILED (still used Agent in 20260314T022619)
+- 20260314T022619: architect — elevated Agent ban to HARD STOP at top of prompt
+  (before Responsibilities). FORBIDDEN at line 100 was ignored. → WATCHING
+- 20260314T022619: qa — moved offset/limit HARD STOP from Efficiency section to
+  top of prompt (before Responsibilities). 8th consecutive violation at
+  offset=826 on requirements.md. → WATCHING
 
 ## Lessons Learned
 - PM/SDS-update scope overlap resolved by explicit constraints in PM prompt.
@@ -59,3 +119,37 @@
 - **Re-read waste is a distinct pattern from multi-edit waste.** QA re-reads
   tool output files (not source files) — need explicit rule covering ALL file
   types including tool-result temp files.
+- **"ONE WRITE/READ" rules alone are insufficient.** Developer ignored them at
+  81 turns. Root cause: agent doesn't plan ahead — edits file, runs check,
+  re-reads to fix, re-writes. Fix: mandatory pre-edit checklist + replace_all
+  for rename tasks.
+- **PM ignores "ONE WRITE" when task has many SRS sections to update.**
+  Root cause: Edit feels easier per-section. Fix: make Edit on SRS explicitly
+  forbidden + enforce step-by-step (draft in text → one Write).
+- **QA temp-file re-read is a persistent pattern.** Generic "ONE READ PER FILE"
+  rule is insufficient — agent doesn't recognize tool-result temp files as
+  "files" covered by the rule. Must explicitly name the path pattern and
+  reference concrete past failures.
+- **Temp-file re-read pattern is cross-agent.** Any agent that runs
+  `deno task check` via Bash can exhibit it. When fixing in one agent, proactively
+  apply same fix to all agents that run Bash commands with large output.
+- **Offset/limit re-reads are a distinct waste pattern.** Agent reads full file
+  (under 2000 lines), then re-reads sections with offset/limit — believing
+  it needs "focused" reads. Must explicitly forbid offset/limit after full read.
+- **Offset/limit re-read is a cross-agent pattern.** PM fix (20260314T014914)
+  was not proactively applied to developer/QA. Same pattern recurred in both.
+  When fixing a waste pattern in one agent, ALWAYS apply to ALL agents.
+- **"After full read" condition is too narrow.** Developer never did a full
+  read — it chunk-read from the start with offset/limit. Rule must ban
+  offset/limit unconditionally, not just "after a full read".
+- **Rule placement matters as much as rule content.** Nested rules inside
+  paragraphs get ignored even with FORBIDDEN/NEVER keywords. Critical bans
+  must be standalone top-level bullets with "HARD STOP" prefix to survive
+  agent attention decay.
+- **Section placement matters too.** HARD STOP in an "Efficiency" section
+  (line 113) still gets ignored — agent treats efficiency as advisory. Moving
+  the rule BEFORE Responsibilities (top of prompt, right after role description)
+  is the strongest placement. Same for FORBIDDEN in a "Rules" list at line 100.
+- **FORBIDDEN keyword fails for Agent tool bans.** Agent/Explore is attractive
+  because it "feels thorough." Must frame as HARD STOP with explicit
+  alternative: "Use Grep with `-i: true` — 1% of the cost."
