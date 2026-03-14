@@ -7,7 +7,7 @@ import type {
 } from "./types.ts";
 import type { AgentResult } from "./agent.ts";
 import { loadConfig } from "./config.ts";
-import { buildLevels, topoSort } from "./dag.ts";
+import { buildLevels } from "./dag.ts";
 import {
   createRunState,
   generateRunId,
@@ -19,18 +19,22 @@ import {
   markNodeFailed,
   markNodeSkipped,
   markNodeStarted,
-  markRunAborted,
   markRunCompleted,
   markRunFailed,
   saveState,
   setPhaseRegistry,
 } from "./state.ts";
 import { acquireLock, defaultLockPath, releaseLock } from "./lock.ts";
-import { runHuman, terminalInput } from "./human.ts";
+import { terminalInput } from "./human.ts";
 import type { UserInput } from "./human.ts";
 import { OutputManager } from "./output.ts";
 import type { RunSummary } from "./output.ts";
-import { executeAgentNode, executeLoopNode } from "./node-dispatch.ts";
+import {
+  executeAgentNode,
+  executeHumanNode,
+  executeLoopNode,
+  executeMergeNode,
+} from "./node-dispatch.ts";
 import type { NodeExecutionContext } from "./node-dispatch.ts";
 
 /** Main pipeline engine. Orchestrates node execution across DAG levels. */
@@ -311,7 +315,7 @@ export class Engine {
           break;
         }
         case "merge":
-          success = await this.executeMergeNode(nodeId, node);
+          success = await executeMergeNode(this.makeExecCtx(), nodeId, node);
           break;
         case "loop":
           success = await executeLoopNode(
@@ -320,7 +324,7 @@ export class Engine {
           );
           break;
         case "human":
-          success = await this.executeHumanNode(nodeId, node);
+          success = await executeHumanNode(this.makeExecCtx(), nodeId, node);
           break;
         default:
           throw new Error(`Unknown node type: ${(node as NodeConfig).type}`);
@@ -357,48 +361,6 @@ export class Engine {
       this.output.nodeFailed(nodeId, (err as Error).message);
       return false;
     }
-  }
-
-  private async executeMergeNode(
-    nodeId: string,
-    node: NodeConfig,
-  ): Promise<boolean> {
-    const nodeDir = getNodeDir(this.state.run_id, nodeId);
-    await Deno.mkdir(nodeDir, { recursive: true });
-
-    // Copy input directories as subdirectories
-    for (const inputId of node.inputs ?? []) {
-      const inputDir = getNodeDir(this.state.run_id, inputId);
-      const targetDir = `${nodeDir}/${inputId}`;
-      try {
-        await copyDir(inputDir, targetDir);
-      } catch {
-        // Input may not have produced files
-      }
-    }
-
-    return true;
-  }
-
-  private async executeHumanNode(
-    nodeId: string,
-    node: NodeConfig,
-  ): Promise<boolean> {
-    const ctx = this.buildContext(nodeId);
-    const result = await runHuman(node, ctx, this.userInput);
-
-    if (result.aborted) {
-      markRunAborted(this.state);
-      markNodeFailed(
-        this.state,
-        nodeId,
-        `Aborted by user (response: ${result.response})`,
-        "aborted",
-      );
-      return false;
-    }
-
-    return result.success;
   }
 
   /** Build template context for a node (searches top-level and loop body nodes). */
@@ -443,6 +405,7 @@ export class Engine {
       buildContext: (nodeId, loopIteration) =>
         this.buildContext(nodeId, loopIteration),
       saveState: () => saveState(this.state),
+      userInput: this.userInput,
     };
   }
 
@@ -500,114 +463,11 @@ export class Engine {
   }
 }
 
-/** Re-export for consumers that import resolveInputArtifacts from this module. */
-export { resolveInputArtifacts } from "./node-dispatch.ts";
-
-/**
- * Collect node IDs with `run_on` set from pipeline config.
- * These nodes execute in a final post-pipeline step after all DAG levels complete.
- */
-export function collectPostPipelineNodes(
-  nodes: Record<string, NodeConfig>,
-): string[] {
-  return Object.entries(nodes)
-    .filter(([_, node]) => node.run_on !== undefined)
-    .map(([id]) => id);
-}
-
-/**
- * Sort post-pipeline nodes topologically using their `inputs` field.
- * Only considers dependencies within the post-pipeline subset.
- * Guarantees e.g. post-B (inputs: [post-A]) runs after post-A.
- */
-export function sortPostPipelineNodes(
-  postPipelineIds: string[],
-  nodes: Record<string, NodeConfig>,
-): string[] {
-  const subset = new Set(postPipelineIds);
-  const deps = new Map<string, Set<string>>();
-  for (const id of postPipelineIds) {
-    const node = nodes[id];
-    const internalInputs = (node.inputs ?? []).filter((inp) => subset.has(inp));
-    deps.set(id, new Set(internalInputs));
-  }
-  const levels = topoSort(deps);
-  return levels.flat();
-}
-
-/**
- * Find a NodeConfig by ID, searching both top-level nodes and loop body nodes.
- * Returns undefined if not found.
- */
-export function findNodeConfig(
-  config: PipelineConfig,
-  nodeId: string,
-): NodeConfig | undefined {
-  if (config.nodes[nodeId]) return config.nodes[nodeId];
-  for (const node of Object.values(config.nodes)) {
-    if (node.type === "loop" && node.nodes && node.nodes[nodeId]) {
-      return node.nodes[nodeId];
-    }
-  }
-  return undefined;
-}
-
-/**
- * Collect all node IDs including nested body nodes from loop `nodes` sub-objects.
- * Returns a flat list suitable for `createRunState()`.
- */
-export function collectAllNodeIds(config: PipelineConfig): string[] {
-  const ids: string[] = [];
-  for (const [id, node] of Object.entries(config.nodes)) {
-    ids.push(id);
-    if (node.type === "loop" && node.nodes) {
-      for (const bodyId of Object.keys(node.nodes)) {
-        ids.push(bodyId);
-      }
-    }
-  }
-  return ids;
-}
-
-/**
- * Execute the on_failure_script hook (domain-agnostic).
- * Swallows errors — failure hook must not crash the engine.
- */
-export async function runFailureHook(
-  script: string | undefined,
-  output: OutputManager,
-): Promise<void> {
-  if (!script) return;
-  try {
-    const cmd = new Deno.Command(script, {
-      stdout: "piped",
-      stderr: "piped",
-    });
-    const result = await cmd.output();
-    const stdout = new TextDecoder().decode(result.stdout).trim();
-    const stderr = new TextDecoder().decode(result.stderr).trim();
-    if (stdout) output.status("engine", `Hook stdout: ${stdout}`);
-    if (stderr) output.warn(`Hook stderr: ${stderr}`);
-    if (!result.success) {
-      output.warn(`Failure hook exited with code ${result.code}`);
-    } else {
-      output.status("engine", "Failure hook completed");
-    }
-  } catch (err) {
-    output.warn(`Failure hook error: ${(err as Error).message}`);
-  }
-}
-
-/** Recursively copy a directory. */
-async function copyDir(src: string, dest: string): Promise<void> {
-  await Deno.mkdir(dest, { recursive: true });
-  for await (const entry of Deno.readDir(src)) {
-    const srcPath = `${src}/${entry.name}`;
-    const destPath = `${dest}/${entry.name}`;
-    if (entry.isDirectory) {
-      await copyDir(srcPath, destPath);
-    } else {
-      await Deno.copyFile(srcPath, destPath);
-    }
-  }
-}
+export {
+  collectAllNodeIds,
+  collectPostPipelineNodes,
+  findNodeConfig,
+  resolveInputArtifacts,
+  runFailureHook,
+  sortPostPipelineNodes,
+} from "./node-dispatch.ts";
