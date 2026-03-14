@@ -386,3 +386,9 @@ FR-S1 evidence (issue #100):
 - **FR-S1 (Pipeline Trigger):** All 4 acceptance criteria marked `[x]` with
   evidence. `engine/cli.ts:36-76` (CLI entry point, flags),
   `.claude/skills/agent-pm/SKILL.md` (issue frontmatter mandate).
+
+Engine FR evidence (issue #99):
+
+- **FR-E2, FR-E10, FR-E11, FR-E13, FR-E19:** Documentation-only — mark
+  existing implementations with evidence in `documents/requirements-engine.md`.
+  No code or design changes. Variant A (batch single-pass) selected.
