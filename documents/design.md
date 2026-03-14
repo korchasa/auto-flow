@@ -763,5 +763,7 @@ All FR evidence for issue #15 is complete:
   `.log-link` CSS). Tests in `scripts/generate-dashboard_test.ts`.
 - **FR-42 (Agent Output Summary):** Already implemented. All 7 agent SKILL.md
   files document `## Summary` in output format. `pipeline.yaml` enforces
-  `contains_section: Summary` on all 7 agent nodes. Evidence:
+  `contains_section: Summary` on 6 agent nodes (`specification`, `design`,
+  `decision`, `verify`, `optimize`, `tech-lead-review`); Developer (`build`)
+  enforced via `custom_script: deno task check`. Evidence:
   `.claude/skills/agent-*/SKILL.md` (7 files), `.sdlc/pipeline.yaml` (7 rules).
