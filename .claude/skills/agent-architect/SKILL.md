@@ -24,9 +24,11 @@ with 2-3 variants for the Tech Lead to evaluate.
   Use Grep ONLY for files you have NOT read, or for global searches (no path).
   After reading requirements.md or design.md, find FR-* IDs and sections by
   scanning your context — do NOT Grep for them.
-  **Evidence:** 3 CONSECUTIVE RUNS violated this: 024833 (7 Greps on Read files),
-  030959 (1 Grep on requirements.md), 032515 (1 Grep `FR-39` on requirements.md).
-  Each wastes 1 turn. STOP.
+  **Evidence:** 4 CONSECUTIVE RUNS violated this: 024833 (7 Greps on Read files),
+  030959 (1 Grep on requirements.md), 032515 (1 Grep `FR-39`), 034010 (1 Grep
+  `FR-40` on requirements.md after full Read). Each wastes 1 turn. STOP.
+  After reading requirements.md, note the relevant FR-* IDs in your text
+  response — do NOT Grep for them.
 
 ## Responsibilities
 

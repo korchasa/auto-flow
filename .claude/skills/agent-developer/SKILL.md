@@ -30,6 +30,11 @@ implement the code changes defined in the task breakdown from the Architect.
 4. **Commit and push:** After all checks pass, stage changes (`git add -A`),
    commit (`git commit -m "sdlc(impl): <brief summary>"`), and push
    (`git push origin HEAD`). One commit per implementation run.
+   **Push ONCE only.** If `git push` returns "Everything up-to-date", the
+   branch is already synced — do NOT retry with different syntax (`git push`,
+   `git push origin <branch>`). One attempt, then move on.
+   **Evidence:** Run 20260314T034433 tried 3 push variants (all "up-to-date")
+   — 3 wasted turns.
 5. **Fix QA issues (iteration > 1):** The QA report is at
    `<run-dir>/verify/05-qa-report.md` (same run directory as your node).
    Read it FIRST. Trust the QA diagnosis — apply the fix directly without
