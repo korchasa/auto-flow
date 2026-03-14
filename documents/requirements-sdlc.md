@@ -252,7 +252,7 @@
 
 - **Description:** Defines how data flows between pipeline stages and when commits happen on the feature branch.
 - **Data flow:**
-  - Engine path: artifacts stored in `.sdlc/runs/<run-id>/<node-id>/`, linked via `{{input.<node-id>}}` templates in `pipeline.yaml`.
+  - Engine path: artifacts stored in `.sdlc/runs/<run-id>/[<phase>/]<node-id>/` (phase subdir present when node's `phase` field is set in `pipeline.yaml`; flat `<node-id>/` otherwise). Linked via `{{input.<node-id>}}` templates. Phase-aware directory creation depends on engine FR-E9 implementation. Evidence: `documents/design-sdlc.md` §2.2 (Artifact Store subsystem description).
   - Legacy path: artifacts in `.sdlc/pipeline/<issue-number>/`.
   - The file system is the single source of truth for inter-stage communication. No manifest or registry.
   - Claude CLI's built-in context auto-compression handles large input sets; no manual context management is required.
@@ -563,6 +563,26 @@
   - [ ] SDS section 3.2 (Stage Scripts) `deno.json` task references aligned with current state: 9 `test:*` legacy tasks accurately documented with DEPRECATED status.
   - [ ] `deno task check` passes.
 
+### 3.24 FR-S24: Pipeline Config Validation
+
+- **Description:** SDLC pipeline config (`.sdlc/pipeline.yaml`) must be validated for schema correctness as part of `deno task check`. Detects drift between pipeline config and engine schema requirements before runtime failures occur.
+- **Rationale:** Unvalidated config changes cause hard-to-diagnose runtime failures. Static validation catches invalid node types, missing required fields, and bad `inputs` references at development time. Maps to SDLC-scope aspect of engine FR-E7 (config drift detection).
+- **Acceptance criteria:**
+  - [x] `scripts/check.ts` validates `.sdlc/pipeline.yaml` schema: node types, required fields, `inputs` references, `run_on` values. Evidence: `scripts/check.ts:84-96` (`pipelineIntegrity()` calls `loadConfig()`), `engine/config.ts:43-103` (schema validation), `engine/config.ts:105-249` (node validation — types, inputs, `run_on`).
+  - [x] `deno task check` exits non-zero with descriptive error on invalid config. Evidence: `scripts/check.ts:84-96` (`pipelineIntegrity()` catches `loadConfig()` exceptions and reports descriptive error messages).
+  - [x] `deno task check` passes on valid config with no false positives. Evidence: `deno task check` passes on current `.sdlc/pipeline.yaml` with no errors.
+
+### 3.25 FR-S25: Phase-Organized SDLC Artifact Directories
+
+- **Description:** SDLC pipeline nodes with a `phase` config field must store output artifacts in phase-organized subdirectories (`.sdlc/runs/<run-id>/<phase>/<node-id>/`). Nodes without `phase` use flat layout (`.sdlc/runs/<run-id>/<node-id>/`). Depends on engine FR-E9 implementation.
+- **Rationale:** SDLC pipeline nodes are grouped into `plan`, `impl`, `report` phases in `pipeline.yaml`. Phase-organized storage improves navigability and aligns artifact structure with declared execution flow. Without engine FR-E9 (phase registry + phase-aware `getNodeDir()`), the `phase` field in `pipeline.yaml` has no effect on artifact paths.
+- **Acceptance criteria:**
+  - [ ] All SDLC pipeline nodes in `.sdlc/pipeline.yaml` have `phase:` field set to `plan`, `impl`, or `report` as appropriate.
+  - [ ] After engine FR-E9 implementation, artifact directories follow `.sdlc/runs/<run-id>/<phase>/<node-id>/` layout for all phased nodes.
+  - [ ] `{{input.<node-id>}}` and `{{node_dir}}` template variables resolve to phase-aware paths for phased nodes.
+  - [ ] SDLC pipeline runs end-to-end successfully with phase subdirectory layout.
+  - [ ] `deno task check` passes.
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -582,7 +602,7 @@
   - `-p "<prompt>"` — non-interactive mode, task description is passed as the prompt argument.
 - **Pipeline engine:** Deno/TypeScript engine (`engine/`) reads DAG config from `.sdlc/pipeline.yaml`, resolves node dependencies, executes nodes in topological order, manages state in `.sdlc/runs/<run-id>/state.json`.
 - **Legacy stage scripts:** `.sdlc/scripts/stage-<N>-<role>.sh` — handle invocation, validation, continuation, artifact commit. Superseded by engine but preserved.
-- **Inter-stage communication:** Engine: artifacts in `.sdlc/runs/<run-id>/<node-id>/`, linked via templates. Legacy: `.sdlc/pipeline/<issue-number>/`. Filesystem is source of truth.
+- **Inter-stage communication:** Engine: artifacts in `.sdlc/runs/<run-id>/[<phase>/]<node-id>/`, linked via templates. Legacy: `.sdlc/pipeline/<issue-number>/`. Filesystem is source of truth.
 - **Branching & commits:** Feature branch `sdlc/issue-<N>` created by Tech Lead (fallback `sdlc/{{run_id}}` for `--prompt` mode). Developer owns commits (`git add`, `git commit`, `git push` per task). Commit format: `sdlc(impl): <summary>`. Failed stages produce no commits.
 
 ## 6. Acceptance criteria
@@ -670,3 +690,5 @@ engine/                                # Deno/TypeScript pipeline engine
 | FR-42  | FR-S21 | Agent Output Summary Section |
 | FR-43  | FR-S22 | Agent First-Person Voice in GitHub Interactions |
 | —      | FR-S23 | SDLC Documentation Accuracy |
+| —      | FR-S24 | Pipeline Config Validation |
+| —      | FR-S25 | Phase-Organized SDLC Artifact Directories |
