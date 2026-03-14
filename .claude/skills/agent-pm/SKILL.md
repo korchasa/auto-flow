@@ -33,8 +33,9 @@ produce a specification artifact, updating the project's SRS.
   **MAX: 1 Read on requirements.md + 1 Read on tool-results = 2 total. EVER.**
 - **HARD STOP — NEVER use Edit on `requirements.md`.** Use ONE `Write` call
   with the complete updated file. Edit on requirements.md is BLOCKED — each one
-  wastes a turn. **Evidence:** Run 20260314T024833 used 3 Edit calls despite ban
-  at line 149. Run 20260314T000902 used 13 Edits. STOP — use Write.
+  wastes a turn. **Evidence:** Run 20260314T054156 used Edit despite this ban.
+  Run 20260314T024833: 3 Edits. Run 20260314T000902: 13 Edits. 3 CONSECUTIVE
+  RUNS violated this. STOP — use Write. ONE Write. ZERO Edits.
 - **HARD STOP — Branch shortcut (YOUR FIRST 2 BASH COMMANDS, NO EXCEPTIONS):**
   ```
   COMMAND 1: git branch --show-current
@@ -49,15 +50,32 @@ produce a specification artifact, updating the project's SRS.
   `sdlc/issue-49`, ran `git pull && gh issue list` + 2 more `gh issue list`
   = 3 wasted Bash calls. Run 20260314T034433: same on `sdlc/issue-51`.
   THE BRANCH NAME CONTAINS THE ISSUE NUMBER. USE IT. DO NOT LIST ISSUES.
-- **HARD STOP — ZERO Grep calls on ANY file you already Read.** After Read, the
-  FULL content is in your context window — all 900+ lines. You can find any
-  section, any FR-* ID, any insertion point by reading your own context.
-  Do NOT use Grep to search it. Every Grep on an already-Read file = 1 wasted
-  turn. Instead: after reading requirements.md, note in your text response the
-  LAST FR number and LAST section number — this eliminates the need to Grep.
-  **Evidence:** Run 20260314T034433: REGRESSION — 2 Grep calls on
-  requirements.md after reading it. Prior clean: 20260314T033033 (0 Grep).
-  Prior violations: 032515 (4 Grep), 030959 (3 Grep). Pattern is unstable.
+- **HARD STOP — ZERO Grep calls on ANY file you already Read.**
+  **ALGORITHM (follow EXACTLY after EVERY Read call):**
+  ```
+  1. Call Read(path).
+  2. IMMEDIATELY in your SAME text response, write down:
+     - LAST FR number (e.g., "Last FR: FR-41, section 3.40")
+     - LAST section number (e.g., "Last section: ## 4. Non-Functional at line 850")
+     - Any specific data you need (issue references, status markers, etc.)
+  3. PROCEED to next tool call. NEVER call Grep(path) afterward.
+  ```
+  After Read, the FULL content is in your context — all 900+ lines. Grep is
+  ALWAYS redundant. Every Grep on an already-Read file = 1 wasted turn.
+  **Evidence:** Run 20260314T054156: 7 Grep calls on requirements.md AFTER Read
+  (searching FR-* patterns, section boundaries, frontmatter delimiters). ALL
+  redundant. 22t/$0.77 vs target 8t/$0.50. 6 CONSECUTIVE RUNS violated this.
+  **COUNT: Your Grep call count MUST be ZERO. If you are about to call Grep
+  on a path you already Read, STOP. The answer is in your context.**
+- **HARD STOP — ZERO re-reads of requirements.md after Write.** You wrote the
+  file — you know its content. Do NOT Read it to verify, check FR numbers, or
+  confirm changes. Do NOT Read it to find insertion points before a second Write
+  (there should be no second Write). After Write(requirements.md): DONE. Move on.
+  **Evidence:** Run 20260314T054224: Read requirements.md 5 TIMES (1 initial +
+  4 re-reads). This alone wasted 4 turns and ~$0.25.
+- **FORBIDDEN: Skill tool.** Do NOT call the Skill tool for any purpose. You are
+  already running as the PM agent — calling Skill("agent-pm") is recursive and
+  wastes an entire turn.
 
 ## Responsibilities
 

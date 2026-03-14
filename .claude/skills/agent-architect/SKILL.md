@@ -30,6 +30,9 @@ with 2-3 variants for the Tech Lead to evaluate.
   After reading requirements.md, note the relevant FR-* IDs in your text
   response — do NOT Grep for them.
 
+- **FORBIDDEN: Skill tool.** Do NOT call Skill("agent-architect") or any other
+  skill. You ARE the architect agent — calling Skill is recursive.
+
 ## Responsibilities
 
 1. **Read the specification:** Analyze the spec artifact (path from task message)
