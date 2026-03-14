@@ -39,12 +39,13 @@ graph LR
 
 - **Subsystems:**
   - **Agent Runtime**: Claude Code CLI invocations with role-specific prompts
-    from `.claude/skills/agent-<name>/SKILL.md` (canonical, agentskills.io-
-    compliant; no symlinks)
-  - **Artifact Store**: Git-tracked files in `.sdlc/runs/<run-id>/[<phase>/]<node-id>/`
+    from `.auto-flow/agents/agent-<name>/SKILL.md` (canonical location;
+    symlinked from `.claude/skills/agent-<name>` for Claude Code interactive
+    discovery per FR-S26)
+  - **Artifact Store**: Git-tracked files in `.auto-flow/runs/<run-id>/[<phase>/]<node-id>/`
     (phase subdir present when node has `phase` field in config)
-  - **Legacy Shell Scripts** (`.sdlc/scripts/`): Preserved for backward
-    compatibility, superseded by engine
+  - **Legacy Shell Scripts** (`.auto-flow/scripts/`): Deprecated stage scripts
+    deleted per FR-S26. HITL and rollback scripts retained.
 
 ## 3. Components
 
@@ -54,35 +55,16 @@ graph LR
 - **Interfaces:** Contains `claude` CLI, `deno`, `git`, `gh`, `gitleaks`.
 - **Deps:** Node.js (for claude CLI install), Deno runtime.
 
-### 3.2 Stage Scripts (`.sdlc/scripts/`) — DEPRECATED
+### 3.2 Stage Scripts — DELETED (FR-S26)
 
-- **Status:** Formally deprecated. Superseded by Deno/TypeScript pipeline engine
-  (`engine/`). Use `deno task run`.
-- **Purpose:** Legacy orchestration for each pipeline stage: prepare input,
-  invoke agent, validate, continue, commit.
-- **Legacy `test:*` deno.json tasks (DEPRECATED):** 9 tasks referencing
-  `.sdlc/scripts/` shell scripts, superseded by engine execution via
-  `deno task run`:
-  - `test:lib` — shared library tests
-  - `test:pm` — PM stage script
-  - `test:tech-lead` — Tech Lead stage script
-  - `test:reviewer` — Reviewer stage script (agent removed per FR-S15)
-  - `test:architect` — Architect stage script (renamed to design node per FR-S15)
-  - `test:sds-update` — SDS Update stage script (absorbed into Tech Lead per FR-S15)
-  - `test:developer` — Developer stage script
-  - `test:qa` — QA stage script
-  - `test:presenter` — Presenter stage script (agent removed per FR-S15)
-  - `test:meta-agent` — Meta-Agent stage script
-  Tasks retained in `deno.json` for backward compatibility only. Not part of
-  current pipeline execution.
-- **AGENT_PROMPT paths:** Updated to `.claude/skills/agent-<name>/SKILL.md`
-  (canonical, post-FR-36 migration).
-- **Interfaces:**
-  - Input: `<issue-number>` as CLI argument.
-  - Output: Committed artifacts + logs on feature branch.
-- **Deps:** `lib.sh` (shared functions), `claude` CLI, `git`, `gh`.
+- **Status:** Deleted. Legacy stage orchestration scripts (`stage-*.sh`) and
+  associated tests removed per FR-S26. Superseded by Deno/TypeScript pipeline
+  engine (`engine/`). Use `deno task run`.
+- **Legacy `test:*` deno.json tasks:** Removed alongside scripts. No backward
+  compatibility retention needed — engine execution via `deno task run` is the
+  sole pipeline entry point.
 
-### 3.3 Shared Library (`.sdlc/scripts/lib.sh`)
+### 3.3 Shared Library (`.auto-flow/scripts/lib.sh`)
 
 - **Purpose:** Common functions for all stage scripts.
 - **Interfaces:** Functions: `log()`, `run_agent()`, `validate_artifact()`,
@@ -94,13 +76,15 @@ graph LR
     failures.
 - **Deps:** `claude` CLI, `git`, `gh`.
 
-### 3.4 Agent Skills (`.claude/skills/agent-*`) (FR-36)
+### 3.4 Agent Skills (`.auto-flow/agents/agent-*`) (FR-36, FR-S26)
 
 - **Purpose:** Versioned system prompts defining each agent's role and behavior.
-  Each agent lives in `.claude/skills/agent-<name>/SKILL.md` (canonical,
-  agentskills.io-compliant). Dual-use: pipeline-driven (via engine `prompt:`
-  config) and interactive (via Claude Code `/agent-<name>` slash commands).
-- **Directory structure:** `.claude/skills/agent-<name>/SKILL.md` — 7 agents:
+  Each agent lives in `.auto-flow/agents/agent-<name>/SKILL.md` (canonical
+  location per FR-S26). Symlinked from `.claude/skills/agent-<name>` →
+  `../../.auto-flow/agents/agent-<name>` for Claude Code interactive discovery.
+  Dual-use: pipeline-driven (via engine `prompt:` config) and interactive (via
+  Claude Code `/agent-<name>` slash commands through symlinks).
+- **Directory structure:** `.auto-flow/agents/agent-<name>/SKILL.md` — 7 agents:
   - `agent-pm` — triages open GitHub issues, selects highest-priority, produces
     spec.
   - `agent-architect` — design-solution role: produces implementation plan with
@@ -133,13 +117,14 @@ graph LR
     in their execution context.
 - **Interfaces:**
   - Pipeline: engine reads `prompt:` path from `pipeline.yaml` (now
-    `.claude/skills/agent-<name>/SKILL.md`), caches file content at config load
-    time (`prompt_content`), passes inline via
+    `.auto-flow/agents/agent-<name>/SKILL.md`), caches file content at config
+    load time (`prompt_content`), passes inline via
     `claude --append-system-prompt`. Fallback to `--append-system-prompt-file`
     for template paths.
-  - Interactive: Claude Code discovers skills directly from
-    `.claude/skills/agent-<name>/SKILL.md` → user invokes `/agent-<name>`.
-    No symlinks required (canonical location).
+  - Interactive: Claude Code discovers skills via symlinks at
+    `.claude/skills/agent-<name>` → `../../.auto-flow/agents/agent-<name>`.
+    User invokes `/agent-<name>`. Symlinks required (canonical location moved
+    from `.claude/skills/` per FR-S26).
 - **Agent Execution Summary (FR-40, FR-42):** All 7 agents must produce a `## Summary`
   section in their output artifacts. Content: 2-5 bullet points (actions taken,
   key decisions, artifacts produced, issues encountered). 6 agents (PM,
@@ -160,10 +145,12 @@ graph LR
   "Specification phase started"; QA: "I verified all criteria" not "All criteria
   were verified"). Hardcoded `gh issue comment --body` templates in SKILL.md
   files must also use first-person (FR-43).
-- **Migration (FR-36):** Complete. Formerly `agents/<name>/SKILL.md` with
-  symlinks from `.claude/skills/`. Migrated to canonical `.claude/skills/`
-  layout; `agents/` directory removed; symlink indirection eliminated. Legacy
-  stage scripts formally deprecated (co-location N/A for deprecated scripts).
+- **Migration (FR-36, FR-S26):** Two migrations completed:
+  1. FR-36: `agents/<name>/` → `.claude/skills/agent-<name>/` (symlinks
+     eliminated, `.claude/skills/` became canonical).
+  2. FR-S26: `.claude/skills/agent-<name>/` → `.auto-flow/agents/agent-<name>/`
+     (consolidated into pipeline directory; `.claude/skills/agent-<name>`
+     symlinks created for Claude Code discovery).
 - **Voice directive (FR-40):** Each SKILL.md contains `## Voice` section
   (before `## Rules`) mandating first-person ("I") narrative in all prose
   output. Shared 3-line core directive (first-person mandate, prohibited
@@ -173,7 +160,7 @@ graph LR
   code blocks, structured data, tables.
 - **Deps:** None (static content, versioned in git).
 
-### 3.5 HITL Pipeline Scripts (`.sdlc/scripts/hitl-*.sh`)
+### 3.5 HITL Pipeline Scripts (`.auto-flow/scripts/hitl-*.sh`)
 
 - **Purpose:** Deliver agent questions to humans and poll for replies. Pipeline-
   specific (GitHub), not engine code. Engine invokes via configurable paths.
@@ -273,8 +260,8 @@ graph LR
 
 ### 3.8 Pipeline Config Validation (FR-S24)
 
-- **Purpose:** Validate `.sdlc/pipeline.yaml` against engine schema as part of
-  `deno task check`. Prevents config drift causing runtime failures.
+- **Purpose:** Validate `.auto-flow/pipeline.yaml` against engine schema as part
+  of `deno task check`. Prevents config drift causing runtime failures.
 - **Implementation:** `pipelineIntegrity()` in `scripts/check.ts` delegates to
   engine's `loadConfig()` (`engine/config.ts`). The engine validation covers:
   - Node type validation (agent, merge, loop, human)
@@ -326,9 +313,10 @@ graph LR
   After all DAG levels complete (success or failure), engine collects
   post-pipeline nodes, sorts topologically, filters by condition, and executes
   in order. Meta-agent identifies failed nodes via `state.json`
-  (`nodes[*].status === "failed"`). Edits `.claude/skills/agent-*/SKILL.md` to fix diagnosed problems. Produces
-  minimal `07-changelog.md` listing applied fixes. Updates persistent memory
-  in `documents/meta.md`. Posts 2-3 line summary to GitHub issue.
+  (`nodes[*].status === "failed"`). Edits `.auto-flow/agents/agent-*/SKILL.md`
+  to fix diagnosed problems. Produces minimal `07-changelog.md` listing applied
+  fixes. Updates persistent memory in `documents/meta.md`. Posts 2-3 line
+  summary to GitHub issue.
 - **Tech-Lead-Review Node**: Post-pipeline agent (`run_on: always`). Performs
   final code review, checks CI gates, merges PR if all pass. Handles
   missing-PR case gracefully (no-op with clear message when pipeline failed
@@ -353,10 +341,10 @@ graph LR
   Pipeline config:
   ```yaml
   defaults:
-    on_failure_script: .sdlc/scripts/rollback-uncommitted.sh
+    on_failure_script: .auto-flow/scripts/rollback-uncommitted.sh
     hitl:
-      ask_script: .sdlc/scripts/hitl-ask.sh
-      check_script: .sdlc/scripts/hitl-check.sh
+      ask_script: .auto-flow/scripts/hitl-ask.sh
+      check_script: .auto-flow/scripts/hitl-check.sh
       artifact_source: plan/pm/01-spec.md
       poll_interval: 60
       timeout: 7200
@@ -365,7 +353,7 @@ graph LR
   - Artifacts overwritten on re-run (git history preserves previous).
   - QA iteration numbering restarts on re-run.
   - Meta-Agent runs on both success and failure.
-  - Meta-Agent auto-applies prompt improvements to `.claude/skills/agent-*/SKILL.md`.
+  - Meta-Agent auto-applies prompt improvements to `.auto-flow/agents/agent-*/SKILL.md`.
     Human review at PR merge via tech-lead-review.
 
 ## 6. Non-Functional
@@ -376,7 +364,7 @@ graph LR
 - **Sec:** Secret detection via `gitleaks detect --no-git` in `deno task check`
   (`scripts/check.ts`). Engine-level scope checks removed. Agents run with
   local user's permissions.
-- **Logs:** Full transcripts per stage in `.sdlc/runs/<run-id>/logs/`.
+- **Logs:** Full transcripts per stage in `.auto-flow/runs/<run-id>/logs/`.
 
 ## 7. Constraints
 
@@ -407,18 +395,18 @@ All FR evidence for issue #15 is complete:
   `contains_section: Summary` on 6 agent nodes (`specification`, `design`,
   `decision`, `verify`, `optimize`, `tech-lead-review`); Developer (`build`)
   enforced via `custom_script: deno task check`. Evidence:
-  `.claude/skills/agent-*/SKILL.md` (7 files), `.sdlc/pipeline.yaml` (7 rules).
+  `.auto-flow/agents/agent-*/SKILL.md` (7 files), `.auto-flow/pipeline.yaml` (7 rules).
 - **FR-43 (Agent First-Person Voice — GitHub Interactions):** Voice sections
   strengthened with explicit GitHub interaction scope + third example pair per
   agent. Hardcoded `gh issue comment --body` templates in PM, Architect, Tech
   Lead SKILL.md files updated to first-person. Evidence:
-  `.claude/skills/agent-*/SKILL.md` (7 files, `## Voice` sections).
+  `.auto-flow/agents/agent-*/SKILL.md` (7 files, `## Voice` sections).
 
 FR-S1 evidence (issue #100):
 
 - **FR-S1 (Pipeline Trigger):** All 4 acceptance criteria marked `[x]` with
   evidence. `engine/cli.ts:36-76` (CLI entry point, flags),
-  `.claude/skills/agent-pm/SKILL.md` (issue frontmatter mandate).
+  `.auto-flow/agents/agent-pm/SKILL.md` (issue frontmatter mandate).
 
 Engine FR evidence (issue #99):
 
@@ -436,12 +424,12 @@ FR-S24 evidence (issue #96):
   `engine/config.ts:105-249` (node validation — types, inputs, run_on).
   No new code required — Variant A (evidence-only) selected.
 - **FR-S11 (Inter-Stage Data Flow):** SRS text updated by PM to reflect
-  phase-aware artifact path `.sdlc/runs/<run-id>/[<phase>/]<node-id>/`.
+  phase-aware artifact path `.auto-flow/runs/<run-id>/[<phase>/]<node-id>/`.
   SDS §2.2 already documents phase-aware layout. Engine FR-E9 implementation
   deferred (separate issue).
 - **FR-S25 (Phase-Organized SDLC Artifact Directories):** FR-E9 phase registry
   implemented (`engine/state.ts:20-36`, `engine/engine.ts:129-130`). Artifact
-  paths resolve to `.sdlc/runs/<run-id>/<phase>/<node-id>/` for nodes with
+  paths resolve to `.auto-flow/runs/<run-id>/<phase>/<node-id>/` for nodes with
   `phase:` field. SDLC pipeline nodes have `phase:` fields in `pipeline.yaml`
   (`plan`, `impl`, `report`). ACs #1-3 marked with evidence. ACs #4-5 pending
   verification (end-to-end run + `deno task check`). Selected Variant A
