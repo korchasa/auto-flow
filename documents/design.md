@@ -11,7 +11,7 @@
 
 - **Diagrams:**
 
-### 2.1 Legacy: Shell Script Pipeline
+### 2.1 Legacy: Shell Script Pipeline (DEPRECATED — pre-FR-26)
 
 ```mermaid
 graph LR
@@ -40,9 +40,9 @@ graph TD
     Engine --> DAG["DAG Builder<br/>toposort → levels"]
     Engine --> State["State Manager<br/>state.json"]
 
-    DAG --> L1["Level 1<br/>(parallel nodes)"]
-    DAG --> L2["Level 2<br/>(parallel nodes)"]
-    DAG --> LN["Level N<br/>(parallel nodes)"]
+    DAG --> L1["Level 1<br/>(sequential nodes)"]
+    DAG --> L2["Level 2<br/>(sequential nodes)"]
+    DAG --> LN["Level N<br/>(sequential nodes)"]
 
     L1 --> Dispatch
     L2 --> Dispatch
@@ -84,7 +84,7 @@ graph LR
 
 - **Subsystems:**
   - **Pipeline Engine** (`engine/`): Deno/TypeScript DAG-based executor
-    with YAML config, template interpolation, parallel levels, loop nodes,
+    with YAML config, template interpolation, sequential levels, loop nodes,
     human nodes, resume support
   - **Agent Runtime**: Claude Code CLI invocations with role-specific prompts
     from `.claude/skills/agent-<name>/SKILL.md` (canonical, agentskills.io-
@@ -245,8 +245,8 @@ graph LR
   - `validate.ts` — artifact validation rules (file_exists, not_empty,
     contains_section, custom_script, frontmatter_field)
   - `state.ts` — RunState persistence to `state.json`, resume logic,
-    phase registry (`setPhaseRegistry()`, `clearPhaseRegistry()`,
-    `getPhaseForNode()`), cost aggregation (`updateRunCost()` sums
+    phase registry (planned, not yet implemented — see §3.7),
+    cost aggregation (`updateRunCost()` sums
     `nodes[*].cost_usd` → `total_cost_usd`; called from
     `markNodeCompleted()` when optional `costUsd` param provided, FR-32)
   - `agent.ts` — Claude CLI invocation, continuation loop, retry.
@@ -332,11 +332,10 @@ graph LR
     summary (FR-30). Guarded by `verbosity !== "quiet"`. Format:
     `[HH:MM:SS] <nodeId padded>  RESULT: <first line ≤120 chars> | cost=$X.XXXX | duration=Xs | turns=N`.
     Imports `ClaudeCliOutput` from `types.ts`
-  - `engine.ts` — main executor: level iteration, parallel dispatch, verbose
+  - `engine.ts` — main executor: level iteration, sequential dispatch, verbose
     input resolution, node result summary display (FR-30),
     loop-node log saving via `onNodeComplete` callback,
-    phase registry init (`setPhaseRegistry()` before `ensureRunDirs()` in both
-    fresh and resume paths), phase subdir creation in `ensureRunDirs()`,
+    phase registry init (planned, not yet implemented — see §3.7),
     pre-post-pipeline `on_failure_script` execution.
     Dry-run path (FR-28): applies `collectPostPipelineNodes()` +
     `sortPostPipelineNodes()` + level filtering before calling
@@ -420,13 +419,16 @@ graph LR
   - All existing callers pass no `output` arg — zero behavioral change.
 - **Deps:** `claude` CLI, `deno`, `git`, `jsr:@std/yaml`.
 
-### 3.7 Phase Registry (`state.ts`)
+### 3.7 Phase Registry (`state.ts`) — NOT IMPLEMENTED
 
+- **Status:** Designed but not implemented. `getNodeDir()` in `engine/state.ts`
+  returns flat path `${runDir}/${nodeId}` without phase awareness. Phases are
+  validated in `config.ts` but do not affect filesystem structure.
 - **Purpose:** Module-scoped mapping from nodeId → phase string, enabling
   `getNodeDir()` to resolve phase-aware artifact paths without signature change.
-- **Data:** `phaseRegistry: Map<string, string>` — populated from
+- **Planned data:** `phaseRegistry: Map<string, string>` — populated from
   `PipelineConfig` nodes' `phase` fields.
-- **Interfaces:**
+- **Planned interfaces:**
   - `setPhaseRegistry(config: PipelineConfig)` — iterates config nodes, builds
     map from `nodeId → node.phase` (skips nodes without `phase`). Called once at
     engine init (both fresh-run and `--resume` paths).
@@ -438,7 +440,7 @@ graph LR
 - **Deps:** `types.ts` (`PipelineConfig`, `NodeConfig`).
 - **Design rationale:** Module-scoped global state (not instance state) because
   `getNodeDir()` is a free function called from multiple contexts (engine,
-  templates, tests). Single-instance engine guarantee prevents concurrent
+  templates, tests). Single-instance engine guarantee prevents sequential
   mutation. `clearPhaseRegistry()` ensures test isolation.
 
 ### 3.8 HITL Pipeline Scripts (`.sdlc/scripts/hitl-*.sh`)
@@ -662,12 +664,10 @@ graph LR
       `verboseInputs()` reports `0 files` without error. No `Deno.stat()` calls.
     - **Missing file stat:** `Deno.stat()` failure on input artifact →
       graceful skip, verbose output includes error detail for affected path.
-  - **Phase Registry Init**: In `engine.ts` `run()`, `setPhaseRegistry(config)`
-    called before `ensureRunDirs()`. On `--resume`: config re-loaded from
-    `state.config_path`, then `setPhaseRegistry()` called (registry not persisted
-    in `state.json` — always rebuilt from config). `ensureRunDirs()` creates
-    phase subdirs (e.g., `plan/`, `impl/`, `report/`) when phases present.
-    Phase assignment (default pipeline, FR-26, FR-33):
+  - **Phase Registry Init (NOT IMPLEMENTED)**: Planned: `setPhaseRegistry(config)`
+    called before `ensureRunDirs()` in `engine.ts` `run()`. Currently `getNodeDir()`
+    returns flat `${runDir}/${nodeId}` path. See §3.7 for planned design.
+    Phase assignment (default pipeline config, FR-26, FR-33):
     - `plan`: specification, design, decision
     - `impl`: implementation (body nodes `build`, `verify` defined inline via
       `nodes` sub-object)

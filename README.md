@@ -2,7 +2,7 @@
 
 Fully autonomous software development pipeline: from GitHub Issue triage to merged PR — no human gates between stages.
 
-A locally-run system where `deno task run` triggers a DAG-based chain of specialized AI agents (Claude Code CLI). PM agent autonomously selects the highest-priority open issue; each agent performs a distinct SDLC role (PM, Tech Lead, Reviewer, Architect, SDS Update, Developer, QA, Presenter, Meta-Agent).
+A locally-run system where `deno task run` triggers a DAG-based chain of specialized AI agents (Claude Code CLI). PM agent autonomously selects the highest-priority open issue; each agent performs a distinct SDLC role (PM, Architect, Tech Lead, Developer, QA, Tech Lead Review, Meta-Agent).
 
 ## How It Works
 

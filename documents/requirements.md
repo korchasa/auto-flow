@@ -28,7 +28,7 @@
 
 ## 2. General description
 
-- **System context:** Operates as a local Deno engine process triggered by CLI command (`deno task run [--prompt "..."]`). The engine reads pipeline DAG config (`.sdlc/pipeline.yaml`), executes nodes sequentially/in parallel via `claude` CLI, validates outputs, and commits artifacts. PM agent autonomously triages open GitHub issues; `--prompt` passes optional additional context. Agents communicate through files in the repository.
+- **System context:** Operates as a local Deno engine process triggered by CLI command (`deno task run [--prompt "..."]`). The engine reads pipeline DAG config (`.sdlc/pipeline.yaml`), executes nodes sequentially via `claude` CLI, validates outputs, and commits artifacts. PM agent autonomously triages open GitHub issues; `--prompt` passes optional additional context. Agents communicate through files in the repository.
 - **Assumptions and constraints:**
   - A devcontainer provides the runtime environment with all required tools (see FR-12).
   - Each agent is stateless between runs — all context comes from input artifacts and its system prompt.
@@ -214,24 +214,16 @@
   - Continuation success rate: percentage of continuations that resolve the issue (target > 70%).
   - Average continuations per stage (target < 1.0 across all runs).
 
-### 3.9 FR-9: Stage 8 — Presenter (Change Summary)
+### 3.9 FR-9: Stage 8 — Presenter (Change Summary) — ABSORBED
 
-- **Description:** The Presenter agent creates a human-readable summary of all changes made during the pipeline, suitable for a PR description and issue comment.
-- **Input:** `01-spec.md`, `04-decision.md`, latest `05-qa-report-*.md`, `git diff main...HEAD`, updated `documents/requirements.md`, updated `documents/design.md`.
-- **Output:** `.sdlc/pipeline/<issue-number>/06-summary.md`, Pull Request targeting `main`.
-- **Acceptance criteria:**
-  - Agent produces `06-summary.md` containing:
-    - Executive summary: what was requested and what was done.
-    - Key changes: list of modified/added files with brief descriptions.
-    - SRS/SDS changes: what requirements and design sections were added or modified.
-    - Before/after comparisons where applicable (API changes, config changes, behavior changes).
-    - Testing summary: what was tested, coverage highlights.
-    - Known limitations or follow-up items.
-  - Agent creates a Pull Request targeting `main` with `06-summary.md` content as the PR body. PR requires manual review and merge — this is the only intentional human gate in the pipeline. Rationale: AI-generated code changes must be reviewed before merging to `main`.
-  - **Error handling:** If PR creation via `gh` fails, the stage fails immediately (fail fast). Meta-Agent is triggered for analysis.
-- **Quality metrics:**
-  - PR description mentions every file from `git diff --name-only main...HEAD`.
-  - Summary contains no hallucinated file names (all referenced files exist in the diff).
+- **Status:** Absorbed into Tech Lead (FR-5) and Tech Lead Review (FR-26).
+  Tech Lead creates draft PR with summary; Tech Lead Review performs final
+  review + merge. No separate Presenter agent.
+- **Previous description:** Presenter agent created human-readable change
+  summary for PR description. Functionality now covered by:
+  - Tech Lead: draft PR creation with implementation plan summary.
+  - Developer: PR comments with implementation progress (FR-7).
+  - Tech Lead Review: final review, CI gate, merge decision.
 
 ### 3.10 FR-10: Agent Log Storage
 
@@ -705,7 +697,25 @@
   - [ ] Engine unit tests cover dry-run output with `run_on` nodes present.
   - [ ] `deno task check` passes.
 
-### 3.30 FR-31: Prompt Path Validation at Config Load
+### 3.30 FR-30: Node Result Summary
+
+- **Description:** After each agent node completes, the engine displays a one-line
+  result summary in the terminal output. Summary includes the first line of the
+  agent result (truncated to 120 chars), cost, duration, and turn count. Provides
+  at-a-glance pipeline progress without requiring verbose mode.
+- **Acceptance criteria:**
+  - [x] `OutputManager.nodeResult(nodeId, output)` displays one-line summary.
+    Evidence: `engine/output.ts` (`nodeResult()` method).
+  - [x] Format: `[HH:MM:SS] <nodeId>  RESULT: <first line ≤120 chars> | cost=$X.XXXX | duration=Xs | turns=N`.
+    Evidence: `engine/output.ts` (`nodeResult()` formatting).
+  - [x] Shown in default and verbose modes; suppressed in quiet mode.
+    Evidence: `engine/output.ts` (`verbosity !== "quiet"` guard).
+  - [x] Called for top-level agent nodes in `executeNode()` and for loop body
+    nodes in `executeLoopNode()` `onNodeComplete` callback.
+    Evidence: `engine/engine.ts` (two call sites).
+  - [x] `deno task check` passes.
+
+### 3.31 FR-31: Prompt Path Validation at Config Load
 
 - **Description:** Pipeline engine validates that all `prompt` file paths declared
   in `pipeline.yaml` exist on the filesystem before any node executes. Validation
@@ -981,38 +991,6 @@
   - [x] `deno task check` passes after changes.
     Evidence: Run 20260314T073009 — 490 tests pass, pipeline integrity valid.
 
-### 3.38 FR-39: Repeated File Read Warning in Stream Log
-
-- **Description:** The pipeline engine must detect when an agent reads the same
-  file path more than 2 times within a single agent session and emit a warning
-  line to the stream log. The warning is informational only — it must not block
-  or interrupt execution.
-- **Rationale:** Agents repeatedly reading the same file waste tokens and incur
-  unnecessary cost. This pattern is invisible in current logging and undetectable
-  by Meta-Agent without manual parsing of raw JSONL transcripts. A warning
-  enables automated prompt optimization (Meta-Agent) to flag and fix
-  redundant-read patterns in agent prompts.
-- **Scope:** Stream log only (`.sdlc/runs/<run-id>/logs/<node-id>.jsonl`).
-  Terminal output via `onOutput` callback is unchanged. Engine-level detection
-  only (not agent-internal).
-- **Acceptance criteria:**
-  - [ ] Engine tracks per-session file read counts by monitoring Claude CLI
-    `tool_use` events with `tool_name == "Read"` in the stream-json output.
-  - [ ] When a file path's read count exceeds 2 within one agent invocation,
-    engine writes a warning line to the stream log:
-    `[WARN] repeated file read: <path> (<N> times)`.
-  - [ ] Warning line is timestamped via existing `tsPrefix()` / `stampLines()`
-    mechanism (consistent with FR-33 log format).
-  - [ ] Warning is written to stream log only — terminal `onOutput` callback
-    receives no additional output.
-  - [ ] Execution is not blocked or interrupted by the warning.
-  - [ ] Warning triggers on the 3rd read (count > 2), not the 2nd.
-  - [ ] Each agent invocation (including continuation resumes) tracks reads
-    independently (counter resets between invocations).
-  - [ ] Unit tests cover: first 2 reads → no warning; 3rd read → warning;
-    4th+ reads → warning each time; different paths counted independently.
-  - [ ] `deno task check` passes.
-
 ### 3.42 FR-43: Agent First-Person Voice in GitHub Interactions
 
 - **Description:** All 7 agent SKILL.md files MUST include a `## Voice` section
@@ -1060,13 +1038,13 @@
 - **Trigger:** Single entry point `deno task run [--prompt "..."]`. PM agent autonomously selects and triages open GitHub issues. `--prompt` passes optional additional context to PM. Common engine flags: `--resume`, `--dry-run`, `-v`, `-q`, `--config`.
 - **Agent runtime:** `claude` CLI invoked by the Deno engine. Prompt content cached at config load time and passed inline via `--append-system-prompt`; fallback to `--append-system-prompt-file` for template paths. Key flags:
   - `--append-system-prompt` — adds role-specific instructions inline (content cached from `.claude/skills/agent-<name>/SKILL.md` at startup). Preserves Claude Code's built-in capabilities. Fallback: `--append-system-prompt-file` for template-path prompts.
-  - `--output-format json` — returns structured JSON with `result`, `session_id`, `total_cost_usd`, `duration_ms`, `num_turns`, `is_error`.
+  - `--output-format stream-json` — streams JSON events line-by-line; `result` event contains `result`, `session_id`, `total_cost_usd`, `duration_ms`, `num_turns`, `is_error`.
   - `--resume <session-id>` — re-invokes agent in the same session for continuations (FR-8).
   - `-p "<prompt>"` — non-interactive mode, task description is passed as the prompt argument.
 - **Pipeline engine:** Deno/TypeScript engine (`engine/`) reads DAG config from `.sdlc/pipeline.yaml`, resolves node dependencies, executes nodes in topological order, manages state in `.sdlc/runs/<run-id>/state.json`.
 - **Legacy stage scripts:** `.sdlc/scripts/stage-<N>-<role>.sh` — handle invocation, validation, continuation, artifact commit. Superseded by engine but preserved.
 - **Inter-stage communication:** Engine: artifacts in `.sdlc/runs/<run-id>/<node-id>/`, linked via templates. Legacy: `.sdlc/pipeline/<issue-number>/`. Filesystem is source of truth.
-- **Branching & commits:** All work on branch `agent/<run-id>`. Commits at dedicated committer agent nodes (not per-stage). Commit format: `sdlc(<phase>): <summary>`. Failed stages produce no commits.
+- **Branching & commits:** Feature branch `sdlc/issue-<N>` created by Tech Lead (fallback `sdlc/{{run_id}}` for `--prompt` mode). Developer owns commits (`git add`, `git commit`, `git push` per task). Commit format: `sdlc(impl): <summary>`. Failed stages produce no commits.
 
 ## 6. Acceptance criteria
 
@@ -1076,7 +1054,7 @@ The system is considered accepted if:
 2. Each stage produces its expected artifact with all required sections.
 3. The Continuation mechanism catches and fixes `deno task check` failures without human intervention.
 4. The Developer+QA loop iterates until quality checks pass.
-5. The Presenter creates a comprehensive PR with a human-readable summary.
+5. Tech Lead creates draft PR; Tech Lead Review performs final review and merge.
 6. All agent logs are preserved and accessible.
 7. The Meta-Agent runs after every pipeline execution and produces actionable analysis.
 8. Re-running the pipeline on the same issue cleanly overwrites artifacts.
@@ -1125,6 +1103,3 @@ engine/                                # Deno/TypeScript pipeline engine
       state.json                     # Run state (node statuses, session IDs)
   pipeline.yaml                        # DAG-based pipeline configuration
 ```
-
-- возможность продолжить работу после остановки по какой-то причине. С указанием шага, с которого продолжаем
-- проверки незакомиченности должны проверять конкретные папки, а не все

@@ -41,8 +41,8 @@ Automate the full software development lifecycle for feature requests: from
 GitHub Issue triage to merged, tested code — fully autonomous, no human gates
 between stages. A locally-run system where `deno task run` triggers a chain of
 specialized AI agents (Claude Code CLI), PM autonomously selects highest-priority
-open issue, each agent performing a distinct role (PM, Tech Lead, Architect,
-Developer, QA, Presenter, Meta-Agent).
+open issue, each agent performing a distinct role (PM, Architect, Tech Lead,
+Developer, QA, Tech Lead Review, Meta-Agent).
 
 ## Project tooling Stack
 
@@ -55,22 +55,22 @@ Developer, QA, Presenter, Meta-Agent).
 
 ## Architecture
 
-- **Pattern:** Configurable DAG-based multi-agent pipeline with parallel levels,
-  loop nodes, and human interaction nodes
+- **Pattern:** Configurable DAG-based multi-agent pipeline with sequential level
+  execution, loop nodes, and human interaction nodes
 - **Pipeline Engine:** Deno/TypeScript engine (`engine/`) driven by YAML
   config (`.sdlc/pipeline.yaml`). Entry: `deno task run [--prompt "..."]`
 - **Node types:** `agent` (Claude CLI), `merge` (combine outputs), `loop`
   (iterative body with exit condition), `human` (terminal prompt)
 - **Inter-agent communication:** Structured artifacts in
   `.sdlc/runs/<run-id>/<node-id>/`, linked via `{{input.<node-id>}}` templates
-- **Parallel execution:** DAG topological sort into levels; nodes in same level
-  run concurrently (configurable `max_parallel`)
+- **Execution:** DAG topological sort into levels; nodes execute sequentially
+  (parallel execution deferred)
 - **Continuation mechanism:** `--resume` flag for re-invoking agents within same
   session on validation failure (max N per node)
 - **Resume:** Failed/interrupted runs resumable via `--resume <run-id>`;
   completed nodes skipped based on `state.json`
-- **Observability:** 3 verbosity levels (`-q`/default/`-v`); status lines with
-  timestamps; final summary
+- **Observability:** 4 verbosity levels (`-q`/default/`-s`/`-v`); status lines
+  with timestamps; final summary
 - **Legacy:** Shell scripts in `.sdlc/scripts/` preserved for backward
   compatibility, superseded by engine
 - **Docker image:** Single image with claude CLI, deno, git, gh — all stages use
@@ -84,7 +84,7 @@ Developer, QA, Presenter, Meta-Agent).
 - Meta-Agent suggests prompt improvements but does NOT auto-modify prompts
 - Diff-based safety checks in Developer stage (prevent scope creep, secret leaks)
 - Deno/TypeScript engine replaced shell script orchestration (configurable,
-  parallel, resumable)
+  sequential, resumable)
 - YAML pipeline config defines node graph; no hardcoded stage order
 - Artifacts stored in `.sdlc/runs/<run-id>/` (per-run isolation)
 - **Engine is domain-agnostic:** Engine is a generic DAG executor. It MUST NOT
