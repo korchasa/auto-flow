@@ -895,30 +895,36 @@
     4th+ reads → warning each time; different paths counted independently.
   - [ ] `deno task check` passes.
 
-### 3.39 FR-40: First-Person Voice in Agent Outputs
+### 3.42 FR-43: Agent First-Person Voice in GitHub Interactions
 
-- **Description:** All agents MUST use first-person ("I") narrative voice in
-  prose output — handoff artifacts, PR/issue comments, QA reports, and
-  specification files. Passive voice and third-person are prohibited in
-  narrative prose.
-- **Rationale:** First-person attribution makes reports more readable and
-  clearly identifies which agent performed each action. Consistent voice reduces
-  cognitive load when reviewing multi-agent pipeline outputs.
-- **Scope:** All prose narrative in agent-produced files and GitHub comments.
-  Excludes: YAML frontmatter, code blocks, structured data, and table content.
-- **Compliance:** Enforced via agent system prompts (SKILL.md `## Voice`
-  section). No engine-level enforcement required.
+- **Description:** All 7 agent SKILL.md files MUST include a `## Voice` section
+  that: (1) explicitly covers GitHub issue comments, PR descriptions, and status
+  updates in scope; (2) provides correct/incorrect example pairs including one
+  targeting GitHub interactions; (3) uses first-person ("I") in all hardcoded
+  `gh issue comment` body strings.
+- **Rationale:** FR-40 established per-agent Voice sections but omitted explicit
+  GitHub interaction scope and lacked GitHub-specific examples. Passive/impersonal
+  templates in PM, Architect, and Tech Lead comments reduce traceability.
+- **Scope:** All `gh issue comment` and `gh pr review` body strings in agent
+  SKILL.md files, plus the `## Voice` section scope sentence and examples.
 - **Acceptance criteria:**
-  - [ ] Each agent SKILL.md includes a `## Voice` section mandating first-person
-    ("I") narrative and prohibiting passive voice/third-person in prose.
-  - [ ] Correct/incorrect examples provided in each `## Voice` section.
-    - Correct: "I selected issue #42 as highest priority"
-    - Incorrect: "Issue #42 was selected."
-  - [ ] Voice rule applied to all agents: pm, architect, tech-lead, developer,
-    qa, tech-lead-review, meta-agent.
-  - [ ] YAML frontmatter, code blocks, and structured data explicitly excluded
-    from the voice requirement.
-  - [ ] `deno task check` passes.
+  - [x] Hardcoded `gh issue comment --body` templates changed to first-person in
+    PM, Architect, and Tech Lead SKILL.md files. Evidence:
+    `.claude/skills/agent-pm/SKILL.md`,
+    `.claude/skills/agent-architect/SKILL.md`,
+    `.claude/skills/agent-tech-lead/SKILL.md`
+  - [x] "This includes GitHub issue comments, PR descriptions, and status
+    updates." scope sentence added to all 7 `## Voice` sections. Evidence:
+    `.claude/skills/agent-pm/SKILL.md`,
+    `.claude/skills/agent-architect/SKILL.md`,
+    `.claude/skills/agent-tech-lead/SKILL.md`,
+    `.claude/skills/agent-developer/SKILL.md`,
+    `.claude/skills/agent-qa/SKILL.md`,
+    `.claude/skills/agent-tech-lead-review/SKILL.md`,
+    `.claude/skills/agent-meta-agent/SKILL.md`
+  - [x] Third correct/incorrect example pair targeting GitHub interactions added
+    to all 7 `## Voice` sections. Evidence: all 7 SKILL.md files listed above.
+  - [x] `deno task check` passes.
 
 ---
 

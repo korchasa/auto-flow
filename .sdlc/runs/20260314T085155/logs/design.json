@@ -1,0 +1,10 @@
+{
+  "result": "Plan written to `.sdlc/runs/20260314T085155/design/02-plan.md` with 3 variants:\n\n- **Variant A (S):** Fix only the hardcoded `gh issue comment` templates in 3 SKILL.md files. Minimal but leaves implicit coverage gap.\n- **Variant B (M):** Fix templates + add explicit GitHub interaction mention and a third example pair to all 7 Voice sections. Eliminates ambiguity, consistent with FR-40 per-agent approach.\n- **Variant C (M):** Centralize Voice rules in a shared file. Adds indirection, conflicts with FR-40's per-agent tailoring decision.\n\nRecommendation: **Variant B** — directly addresses the spec, unambiguous, consistent with prior decisions.",
+  "session_id": "821ee32a-0093-4734-9f75-fceaeba4b22a",
+  "total_cost_usd": 0.34294149999999995,
+  "duration_ms": 98270,
+  "duration_api_ms": 97660,
+  "num_turns": 14,
+  "is_error": false,
+  "permission_denials": []
+}

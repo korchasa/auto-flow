@@ -1,0 +1,54 @@
+{
+  "run_id": "20260314T085155",
+  "config_path": ".sdlc/pipeline.yaml",
+  "started_at": "2026-03-14T08:51:55.840Z",
+  "status": "running",
+  "args": {},
+  "env": {},
+  "nodes": {
+    "specification": {
+      "status": "completed",
+      "started_at": "2026-03-14T08:51:55.842Z",
+      "session_id": "581c3b2e-42c3-4550-971b-9b511ac01779",
+      "continuations": 0,
+      "completed_at": "2026-03-14T08:54:10.366Z",
+      "duration_ms": 134524,
+      "cost_usd": 0.5004375
+    },
+    "design": {
+      "status": "completed",
+      "started_at": "2026-03-14T08:54:10.367Z",
+      "session_id": "821ee32a-0093-4734-9f75-fceaeba4b22a",
+      "continuations": 0,
+      "completed_at": "2026-03-14T08:55:50.458Z",
+      "duration_ms": 100091,
+      "cost_usd": 0.34294149999999995
+    },
+    "decision": {
+      "status": "completed",
+      "started_at": "2026-03-14T08:55:50.459Z",
+      "session_id": "c253ffcb-6438-44c6-b16c-02794f67d1b7",
+      "continuations": 0,
+      "completed_at": "2026-03-14T08:58:10.332Z",
+      "duration_ms": 139873,
+      "cost_usd": 0.68092425
+    },
+    "implementation": {
+      "status": "running",
+      "started_at": "2026-03-14T08:58:10.333Z"
+    },
+    "build": {
+      "status": "pending"
+    },
+    "verify": {
+      "status": "pending"
+    },
+    "optimize": {
+      "status": "pending"
+    },
+    "tech-lead-review": {
+      "status": "pending"
+    }
+  },
+  "total_cost_usd": 1.52430325
+}
