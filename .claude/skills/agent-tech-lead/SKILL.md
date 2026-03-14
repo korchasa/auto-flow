@@ -19,7 +19,9 @@ update the SDS, and create a feature branch with draft PR.
 3. **Produce task breakdown:** Write `04-decision.md` (see Output below) with
    an ordered, dependency-aware list of atomic tasks.
 4. **Update SDS:** Reflect the selected variant's design in
-   `documents/design.md`. Keep changes minimal and targeted.
+   `documents/design.md`. **Use ONE Write call with the complete updated file.**
+   Do NOT Write design.md and then re-read + Edit it — that wastes 5+ turns.
+   Plan all SDS changes BEFORE writing. Keep changes minimal and targeted.
 5. **Create branch + draft PR:** Create `sdlc/issue-<N>` branch, commit
    decision + SDS changes, push, and open a draft PR.
 
@@ -77,9 +79,11 @@ Fields:
    - If already on `sdlc/issue-<N>`: stay on it, skip to step 2.
    - If on `main` or other branch: `git checkout -b sdlc/issue-<N> origin/main`
      (create from origin/main directly).
-   - **FORBIDDEN:** Do NOT run `git stash`, `git checkout main`, or `git pull`.
-     These waste 2-3 turns and are unnecessary — create branch from
-     `origin/main` directly in one command.
+   - **FORBIDDEN:** Do NOT run `git stash`, `git checkout main`, `git pull`,
+     or `git checkout --theirs`. These waste 2-3 turns. Create branch from
+     `origin/main` directly. If branch already exists, use `git checkout sdlc/issue-<N>`.
+     **Evidence:** Run 20260314T044647: used `git stash && git checkout -b` (failed),
+     then `git checkout --theirs ... && git stash && git checkout -b` — 2 wasted turns.
 2. Commit decision artifact + SDS changes (single commit).
    **IMPORTANT:** Run artifacts under `.sdlc/runs/` are gitignored. Always use
    `git add -f <path>` for files in that directory. Use `-f` on the first
@@ -113,8 +117,11 @@ diagnose before retrying. Do NOT retry the same command blindly.
   Read calls. In this run, TL used `ls` to check directories — wasted turn.
 - **FORBIDDEN: Grep tool after Read.** You Read 5 files in parallel. Do NOT
   then Grep any of those files. In this run, 2 Grep calls were wasted.
-- **Batch edits:** Update `design.md` in 1 Edit or Write call. Each Edit costs
-  a turn. If changes span many sections, use Write to rewrite the file.
+- **ONE WRITE for SDS updates (MANDATORY).** Read design.md once (in parallel
+  reads). Plan all changes in your text response. Write the complete updated
+  file with ONE Write call. Do NOT Write then re-read + Edit — that pattern
+  wastes 5+ turns. **Evidence:** Run 20260314T044647: wrote design.md, then
+  re-read it, then 4 Edit calls = 5 wasted turns. 23t/$1.32 vs target 10t.
 - Keep SDS updates focused. One issue comment at the end, not multiple.
 - **Target: ≤10 turns.** Typical: 1 parallel read (5 inputs) → 1 branch check
   (git branch + gh pr list parallel) → 1 write decision → 1 edit SDS →
