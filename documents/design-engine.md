@@ -91,6 +91,17 @@ graph TD
     cost aggregation (`updateRunCost()` sums
     `nodes[*].cost_usd` → `total_cost_usd`; called from
     `markNodeCompleted()` when optional `costUsd` param provided, FR-32)
+  - `agent-node.ts` — agent node execution dispatcher. Standalone
+    `executeAgentNode(params)` function extracted from `engine.ts` (FR-E24).
+    Receives typed params object: state, config, output manager, HITL config,
+    run directory, stream log path, user input function. Contains agent-specific
+    wiring: HITL detection, log saving, session tracking, verbose input
+    resolution. ~109 lines extracted from engine.ts.
+  - `merge.ts` — merge node execution. `executeMergeNode()` and `copyDir()`
+    as exported free functions (FR-E24). Pure filesystem operations: copies
+    input directories to merge node output directory. No Engine class
+    dependencies — receives source/dest paths and config as parameters.
+    ~32 lines extracted from engine.ts.
   - `agent.ts` — Claude CLI invocation, continuation loop, retry.
     `AgentRunOptions.model` and `InvokeOptions.model`: optional string for
     per-node model selection. `buildClaudeArgs()` emits `--model <value>` when
@@ -147,7 +158,8 @@ graph TD
     all blocks (backward-compatible). Log file writes call without verbosity
     (full output preserved). `onOutput` callback path passes verbosity from
     `AgentRunOptions` so terminal output is filtered at source
-  - `loop.ts` — loop node execution with condition extraction, per-iteration
+  - `loop.ts` — loop node execution with condition extraction, `executeLoopNode()`
+    (extracted from `engine.ts`, FR-E24), per-iteration
     `AgentResult` accumulation into `LoopResult.bodyResults`.
     `buildLoopBodyOrder()` reads from inline `nodes` sub-object (replaces
     `body` array), topo-sorts body nodes by their `inputs` declarations.
@@ -174,8 +186,10 @@ graph TD
     summary (FR-30). Guarded by `verbosity !== "quiet"`. Format:
     `[HH:MM:SS] <nodeId padded>  RESULT: <first line ≤120 chars> | cost=$X.XXXX | duration=Xs | turns=N`.
     Imports `ClaudeCliOutput` from `types.ts`
-  - `engine.ts` — main executor: level iteration, sequential dispatch, verbose
-    input resolution, node result summary display (FR-30),
+  - `engine.ts` — main executor: level iteration, sequential dispatch (FR-E24:
+    delegates to `agent-node.ts`, `merge.ts`, `loop.ts` for type-specific
+    node execution — ≤500 LOC after extraction), verbose input resolution,
+    node result summary display (FR-30),
     loop-node log saving via `onNodeComplete` callback,
     phase registry init (planned, not yet implemented — see §3.2),
     pre-post-pipeline `on_failure_script` execution.
