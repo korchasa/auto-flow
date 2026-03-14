@@ -270,7 +270,7 @@ graph LR
     loop-node log saving via `onNodeComplete` callback,
     phase registry init (`setPhaseRegistry()` before `ensureRunDirs()` in both
     fresh and resume paths), phase subdir creation in `ensureRunDirs()`,
-    pre-post-pipeline `on_failure_script` execution + failed-node-id extraction.
+    pre-post-pipeline `on_failure_script` execution.
     Dry-run path (FR-28): applies `collectPostPipelineNodes()` +
     `sortPostPipelineNodes()` + level filtering before calling
     `dryRunPlan()`, passing filtered levels and post-pipeline node IDs with
@@ -578,9 +578,8 @@ graph LR
     (if configured) via `runFailureHook()` before post-pipeline nodes. Script
     is pipeline-specific (e.g., `.sdlc/scripts/rollback-uncommitted.sh` performs
     `git checkout -- . && git reset HEAD`). Engine treats it as opaque
-    `Deno.Command` invocation — domain-agnostic. Extracts failed node ID via
-    `getNodesByStatus(state, "failed")[0]`, writes to `{{run_dir}}/failed-node.txt`
-    for meta-agent consumption.
+    `Deno.Command` invocation — domain-agnostic. Failed node IDs available via
+    `state.json` (`nodes[*].status === "failed"`) — no engine-written artifacts.
   - **Post-Pipeline Node Collection & Ordering**: `collectPostPipelineNodes()`
     collects nodes where `run_on !== undefined` (replaces `run_always`-based
     collection). `sortPostPipelineNodes()` sorts them topologically using
@@ -596,8 +595,8 @@ graph LR
   - **Meta-Agent Trigger**: Engine executes meta-agent via `run_on: "always"`.
     After all DAG levels complete (success or failure), engine collects
     post-pipeline nodes, sorts topologically, filters by condition (see above),
-    and executes in order. Meta-agent reads `failed-node.txt` for failure
-    context. Edits `.claude/skills/agent-*/SKILL.md` to fix diagnosed problems. Produces
+    and executes in order. Meta-agent identifies failed nodes via `state.json`
+    (`nodes[*].status === "failed"`). Edits `.claude/skills/agent-*/SKILL.md` to fix diagnosed problems. Produces
     minimal `07-changelog.md` listing applied fixes. Updates persistent memory
     in `documents/meta.md`. Posts 2-3 line summary to GitHub issue.
   - **Tech-Lead-Review Node**: Post-pipeline agent (`run_on: always`). Performs

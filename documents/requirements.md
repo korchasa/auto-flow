@@ -261,12 +261,11 @@
 - **Trigger conditions:**
   - **On pipeline success:** runs as the final stage after Presenter (Stage 9).
   - **On pipeline failure:** runs automatically when any stage fails after exhausting its continuation limit.
-- **Trigger mechanism:** Engine executes meta-agent node as a post-pipeline node. In `pipeline.yaml`, the meta-agent node is configured with `run_on: always` (FR-25) to run regardless of upstream success/failure. Failed node ID is available in `state.json`.
+- **Trigger mechanism:** Engine executes meta-agent node as a post-pipeline node. In `pipeline.yaml`, the meta-agent node is configured with `run_on: always` (FR-25) to run regardless of upstream success/failure. Failed node ID identified via `state.json` (nodes with `status: "failed"`). Engine does NOT write a separate `failed-node.txt` — that violates FR-29.
 - **Input:**
   - `documents/meta.md` — persistent memory (read first).
-  - Run logs from `<run-dir>/logs/` and `state.json`.
+  - Run logs from `<run-dir>/logs/` and `state.json` (failed node context from `nodes[*].status` field; no `failed-node.txt`).
   - Current agent prompts from `.claude/skills/agent-*/`.
-  - `<run-dir>/failed-node.txt` (on pipeline failure).
 - **Output:**
   - Primary: edited `.claude/skills/agent-*/SKILL.md` (prompt fixes).
   - Secondary: `<run-dir>/meta-agent/07-changelog.md` (minimal fix log).
@@ -276,6 +275,7 @@
   - `07-changelog.md` lists each fix with evidence (turns/cost/error data).
   - `documents/meta.md` updated with new patterns, fix outcomes, baselines.
   - Does NOT produce verbose reports — focus is on prompt optimization.
+  - [ ] `.claude/skills/agent-meta-agent/SKILL.md` Input section references `state.json` for failed-node context; no `failed-node.txt` reference (FR-29 compliance).
 - **Quality metrics:**
   - Every fix references specific log data as evidence.
   - Fixes are minimal, targeted, and testable in next run.
@@ -681,6 +681,7 @@
   - `deno.json` tasks and imports reference the new layout consistently.
 - **Acceptance criteria:**
   - [x] Engine source directory contains only domain-agnostic DAG executor code. Evidence: `engine/git.ts` and `engine/git_test.ts` deleted; `engine/mod.ts` git exports removed; `engine/types.ts` `HitlConfig` fields renamed to domain-neutral names (`artifact_source`, `exclude_login`).
+  - [ ] Engine source contains zero references to concrete artifact filenames (e.g., `failed-node.txt`) or concrete node names (e.g., `meta-agent`).
   - [ ] No `pipeline.yaml`, agent skill files, or run artifacts reside inside the engine directory.
   - [ ] `deno task run` and `deno task test:engine` reference the new engine path.
   - [ ] `deno task check` passes after restructure.

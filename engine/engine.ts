@@ -13,7 +13,6 @@ import {
   createRunState,
   generateRunId,
   getNodeDir,
-  getNodesByStatus,
   getRunDir,
   isNodeCompleted,
   loadState,
@@ -167,20 +166,12 @@ export class Engine {
 
     // Execute post-pipeline nodes (filtered by run_on condition)
     if (postPipelineNodeIds.length > 0) {
-      // Pre-step: on failure, run failure hook and write failed-node-id
+      // Pre-step: on failure, run failure hook
       if (!pipelineSuccess) {
         await runFailureHook(
           this.config.defaults?.on_failure_script,
           this.output,
         );
-
-        // Write failed node ID to failed-node.txt for meta-agent consumption
-        const failedNodes = getNodesByStatus(this.state, "failed");
-        if (failedNodes.length > 0) {
-          const runDir = getRunDir(this.state.run_id);
-          const failedNodePath = `${runDir}/failed-node.txt`;
-          await Deno.writeTextFile(failedNodePath, failedNodes[0]);
-        }
       }
 
       for (const nodeId of postPipelineNodeIds) {
@@ -757,7 +748,7 @@ export function collectPostPipelineNodes(
 /**
  * Sort post-pipeline nodes topologically using their `inputs` field.
  * Only considers dependencies within the post-pipeline subset.
- * Guarantees e.g. commit-meta (inputs: [meta-agent]) runs after meta-agent.
+ * Guarantees e.g. post-B (inputs: [post-A]) runs after post-A.
  */
 export function sortPostPipelineNodes(
   postPipelineIds: string[],

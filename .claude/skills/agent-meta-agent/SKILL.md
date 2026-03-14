@@ -33,9 +33,8 @@ Do NOT use hardcoded paths like `.sdlc/pipeline/...`.
 
 - `documents/meta.md` — persistent memory (read FIRST)
 - `<run-dir>/logs/` — stage logs (JSON + JSONL)
-- `<run-dir>/` — handoff artifacts and `state.json`
-- `<run-dir>/failed-node.txt` — failed node ID (only on pipeline failure);
-  read this FIRST if present
+- `<run-dir>/` — handoff artifacts and `state.json`; identify failed nodes via
+  `nodes[*].status === "failed"` in `state.json`
 - `.claude/skills/agent-*/` — current agent prompts
 
 ## Persistent Memory: `documents/meta.md`

@@ -20,6 +20,7 @@ import {
   createRunState,
   getNodesByStatus,
   markNodeCompleted,
+  markNodeFailed,
   markNodeStarted,
 } from "./state.ts";
 import { OutputManager } from "./output.ts";
@@ -270,7 +271,7 @@ Deno.test("NodeConfig — env field undefined when not set", () => {
   assertEquals(node.env, undefined);
 });
 
-// --- Pre-post-pipeline rollback + failed-node-id extraction tests ---
+// --- state.json failed node tracking tests ---
 
 Deno.test("getNodesByStatus — extracts failed node IDs from run state", () => {
   const state: RunState = {
@@ -292,34 +293,39 @@ Deno.test("getNodesByStatus — extracts failed node IDs from run state", () => 
   assertEquals(failed[0], "developer");
 });
 
-Deno.test("failed-node.txt — written with failed node ID on pipeline failure", async () => {
-  const tmpDir = await Deno.makeTempDir();
-  try {
-    // Simulate writing failed-node.txt (same logic as engine pre-step)
-    const failedNodeId = "developer";
-    const failedNodePath = `${tmpDir}/failed-node.txt`;
-    await Deno.writeTextFile(failedNodePath, failedNodeId);
+Deno.test("state.json — records status: failed for failed node (meta-agent reads state.json)", () => {
+  // Meta-agent identifies failed nodes via state.json nodes[*].status === "failed"
+  const state = createRunState(
+    "test-run",
+    "config.yaml",
+    ["pm", "developer", "qa"],
+    {},
+    {},
+  );
+  markNodeStarted(state, "pm");
+  markNodeCompleted(state, "pm");
+  markNodeStarted(state, "developer");
+  markNodeFailed(state, "developer", "Agent failed", "unknown");
 
-    const content = await Deno.readTextFile(failedNodePath);
-    assertEquals(content, "developer");
-  } finally {
-    await Deno.remove(tmpDir, { recursive: true });
-  }
+  const failed = getNodesByStatus(state, "failed");
+  assertEquals(failed, ["developer"]);
+  assertEquals(state.nodes.developer.status, "failed");
+  assertEquals(state.nodes.pm.status, "completed");
 });
 
-Deno.test("failed-node.txt — not written when no failed nodes", () => {
-  const state: RunState = {
-    run_id: "test-run",
-    config_path: "config.yaml",
-    started_at: new Date().toISOString(),
-    status: "completed",
-    args: {},
-    env: {},
-    nodes: {
-      pm: { status: "completed" },
-      developer: { status: "completed" },
-    },
-  };
+Deno.test("state.json — no failed nodes when all complete successfully", () => {
+  const state = createRunState(
+    "test-run",
+    "config.yaml",
+    ["pm", "developer"],
+    {},
+    {},
+  );
+  markNodeStarted(state, "pm");
+  markNodeCompleted(state, "pm");
+  markNodeStarted(state, "developer");
+  markNodeCompleted(state, "developer");
+
   const failed = getNodesByStatus(state, "failed");
   assertEquals(failed.length, 0);
 });
