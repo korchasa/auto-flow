@@ -15,12 +15,15 @@ produce a specification artifact, updating the project's SRS.
   files fully (no parameters). All project files are under 2000 lines. After one
   full Read, the ENTIRE file is in your context — do NOT re-read any portion.
   **If Read output is redirected to a tool-results file** (you see a path like
-  `/home/.../.claude/.../tool-results/...`), Read that tool-results file ONCE —
-  then the content IS in your context. Do NOT re-read the original file with
-  offset/limit or Bash `cat`. ONE read attempt total per file.
-  **Evidence:** Run 20260314T033033 read requirements.md 5 times (1 full Read +
-  1 Bash `cat` + 3 offset Reads) after output overflowed to tool-results file.
-  4 wasted calls. STOP after the tool-results read.
+  `/home/.../.claude/.../tool-results/...`), Read that tool-results file ONCE.
+  After that read, the FULL content of the original file IS in your context —
+  every line, every FR-* ID, every section. This is a FACT, not a guess.
+  You MUST NOT re-read the original file with offset/limit, Grep, or Bash.
+  You MUST NOT say "content is not in context" — it IS. Compose your Write
+  output from what you already have. ZERO re-reads after the tool-results read.
+  **Evidence:** Run 20260314T034433: REGRESSION — read tool-results file, then
+  re-read requirements.md with offset:836/limit:120 + 2 Grep calls. 3 wasted
+  turns. Prior run 20260314T034010: 6 wasted calls, $1.84. STOP DOING THIS.
 - **HARD STOP — NEVER use Edit on `requirements.md`.** Use ONE `Write` call
   with the complete updated file. Edit on requirements.md is BLOCKED — each one
   wastes a turn. **Evidence:** Run 20260314T024833 used 3 Edit calls despite ban
@@ -37,17 +40,20 @@ produce a specification artifact, updating the project's SRS.
     gh issue list ...
   ```
   Do NOT chain `git pull && gh issue list` when branch is `sdlc/issue-*`.
-  **Evidence:** Run 20260314T033033: CLEAN (algorithm followed correctly).
-  Prior: 5 consecutive violations (024800–032515). Fix is working — maintain
-  discipline. On `sdlc/issue-*` branch, `git pull` is FORBIDDEN.
+  **Evidence:** Run 20260314T034433: REGRESSION — on `sdlc/issue-51` branch,
+  ran `git pull origin main` + 2× `gh issue list` before `gh issue view 51`.
+  3 wasted turns. You MUST follow the algorithm: branch starts with
+  `sdlc/issue-` → extract N → NEXT command is `gh issue view N`. NOTHING ELSE.
+  On `sdlc/issue-*` branch, `git pull` and `gh issue list` are FORBIDDEN.
 - **HARD STOP — ZERO Grep calls on ANY file you already Read.** After Read, the
   FULL content is in your context window — all 900+ lines. You can find any
   section, any FR-* ID, any insertion point by reading your own context.
   Do NOT use Grep to search it. Every Grep on an already-Read file = 1 wasted
   turn. Instead: after reading requirements.md, note in your text response the
   LAST FR number and LAST section number — this eliminates the need to Grep.
-  **Evidence:** Run 20260314T033033: 0 Grep calls (CLEAN). Prior: 20260314T032515
-  had 4 Grep calls, 20260314T030959 had 3. Fix is working — maintain discipline.
+  **Evidence:** Run 20260314T034433: REGRESSION — 2 Grep calls on
+  requirements.md after reading it. Prior clean: 20260314T033033 (0 Grep).
+  Prior violations: 032515 (4 Grep), 030959 (3 Grep). Pattern is unstable.
 
 ## Responsibilities
 
