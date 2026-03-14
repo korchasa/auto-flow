@@ -577,11 +577,19 @@
 - **Description:** SDLC pipeline nodes with a `phase` config field must store output artifacts in phase-organized subdirectories (`.sdlc/runs/<run-id>/<phase>/<node-id>/`). Nodes without `phase` use flat layout (`.sdlc/runs/<run-id>/<node-id>/`). Depends on engine FR-E9 implementation.
 - **Rationale:** SDLC pipeline nodes are grouped into `plan`, `impl`, `report` phases in `pipeline.yaml`. Phase-organized storage improves navigability and aligns artifact structure with declared execution flow. Without engine FR-E9 (phase registry + phase-aware `getNodeDir()`), the `phase` field in `pipeline.yaml` has no effect on artifact paths.
 - **Acceptance criteria:**
-  - [ ] All SDLC pipeline nodes in `.sdlc/pipeline.yaml` have `phase:` field set to `plan`, `impl`, or `report` as appropriate.
-  - [ ] After engine FR-E9 implementation, artifact directories follow `.sdlc/runs/<run-id>/<phase>/<node-id>/` layout for all phased nodes.
-  - [ ] `{{input.<node-id>}}` and `{{node_dir}}` template variables resolve to phase-aware paths for phased nodes.
-  - [ ] SDLC pipeline runs end-to-end successfully with phase subdirectory layout.
-  - [ ] `deno task check` passes.
+  - [x] All SDLC pipeline nodes in `.sdlc/pipeline.yaml` have `phase:` field set to `plan`, `impl`, or `report` as appropriate. Evidence: `.sdlc/pipeline.yaml` (specification, design, decision → `plan`; implementation → `impl`; tech-lead-review, optimize → `report`).
+  - [x] After engine FR-E9 implementation, artifact directories follow `.sdlc/runs/<run-id>/<phase>/<node-id>/` layout for all phased nodes. Evidence: `engine/state.ts:20-36` (`setPhaseRegistry()`), `engine/state.ts:98-103` (`getNodeDir()` phase-aware path), `engine/engine.ts:129-130` (init at run start).
+  - [x] `{{input.<node-id>}}` and `{{node_dir}}` template variables resolve to phase-aware paths for phased nodes. Evidence: `engine/state.ts:44-46` (`getPhaseForNode()`); `getNodeDir()` underpins template variable resolution.
+  - [x] SDLC pipeline runs end-to-end successfully with phase subdirectory layout.
+    Evidence: `.sdlc/runs/20260314T154052/plan/specification/`,
+    `.sdlc/runs/20260314T154052/plan/design/`,
+    `.sdlc/runs/20260314T154052/plan/decision/`,
+    `.sdlc/runs/20260314T154052/impl/implementation/`,
+    `.sdlc/runs/20260314T154052/report/tech-lead-review/`,
+    `.sdlc/runs/20260314T154052/report/optimize/` — 6 phase-organized node
+    directories across all 3 phases (`plan`, `impl`, `report`).
+  - [x] `deno task check` passes. Evidence: `deno task check` exit 0, 498 tests
+    passed, 0 failed, run 20260314T154052.
 
 ## 4. Non-functional requirements
 
