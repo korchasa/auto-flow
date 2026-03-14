@@ -252,6 +252,17 @@ graph LR
     `status=<ok|error> duration=<X>s cost=$<Y> turns=<N>`. Both separators and
     footer are log-file-only (terminal `onOutput` callback unchanged).
     `formatFooter()` is a pure function — unit-testable without CLI.
+    **Repeated file read warning (FR-40):** `executeClaudeProcess()` maintains
+    `readCounts: Map<string, number>` tracking per-path `Read` tool-use events.
+    On each `assistant` event: iterates `message.content` blocks, detects
+    `tool_use` with `name === "Read"`, extracts `input.file_path`, increments
+    count. When count > 2: writes warning to `logFile` via `stampLines()`.
+    `checkRepeatedRead(readCounts, filePath): string | null` — helper: increments
+    map, returns formatted warning when count > 2, else null.
+    `formatRepeatedReadWarning(path, count): string` — pure function returning
+    `[WARN] repeated file read: <path> (<N> times)`. Exported for unit testing.
+    Warning is log-only (no `onOutput` callback). Counters reset per invocation
+    (map is local to `executeClaudeProcess()` call). Execution not blocked.
     **Semi-verbose filtering (FR-41):** `formatEventForOutput(event,
     verbosity?)` accepts optional `Verbosity` param. When
     `verbosity === "semi-verbose"`, skips `tool_use` content blocks in
