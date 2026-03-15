@@ -1,6 +1,6 @@
-# Pipeline configuration — 7-node SDLC flow (FR-26, FR-33).
+# Pipeline configuration — 6-node SDLC flow (FR-26, FR-33).
 # DAG: specification → design → decision → implementation(build, verify)
-#      ; optimize(run_on:always), tech-lead-review(run_on:always)
+#      ; tech-lead-review(run_on:always)
 # See: documents/requirements-sdlc.md for stage specifications.
 
 name: "auto-flow-sdlc"
@@ -28,7 +28,7 @@ defaults:
 phases:
   plan: [specification, design, decision]
   impl: [implementation]
-  report: [optimize, tech-lead-review]
+  report: [tech-lead-review]
 
 nodes:
   # Stage 1: Project Manager — specification
@@ -38,7 +38,7 @@ nodes:
     label: "Project Manager — Specification"
     prompt: ".auto-flow/agents/agent-pm/SKILL.md"
     task_template: |
-      Read your reflection memory at .auto-flow/memory/agent-pm.md before starting. Update it when done.
+      Read reflection memory at .auto-flow/memory/agent-pm.md and history at .auto-flow/memory/agent-pm-history.md before starting. Update both when done.
       Triage open GitHub issues: check health (no merged PRs, no needs-triage label), select best candidate by priority.
       Output:
         - {{node_dir}}/01-spec.md (YAML frontmatter with `issue: <N>` and `scope: <engine|sdlc|engine+sdlc>`,
@@ -74,7 +74,7 @@ nodes:
     inputs: [specification]
     prompt: ".auto-flow/agents/agent-architect/SKILL.md"
     task_template: |
-      Read your reflection memory at .auto-flow/memory/agent-architect.md before starting. Update it when done.
+      Read reflection memory at .auto-flow/memory/agent-architect.md and history at .auto-flow/memory/agent-architect-history.md before starting. Update both when done.
       Read the specification at {{input.specification}}/01-spec.md.
       Read ONLY scope-relevant SRS/SDS docs (derive scope from spec frontmatter `scope:` field).
       Produce an implementation plan with 2-3 variants.
@@ -97,7 +97,7 @@ nodes:
     inputs: [specification, design]
     prompt: ".auto-flow/agents/agent-tech-lead/SKILL.md"
     task_template: |
-      Read your reflection memory at .auto-flow/memory/agent-tech-lead.md before starting. Update it when done.
+      Read reflection memory at .auto-flow/memory/agent-tech-lead.md and history at .auto-flow/memory/agent-tech-lead-history.md before starting. Update both when done.
       Read the plan at {{input.design}}/02-plan.md.
       Read the spec at {{input.specification}}/01-spec.md.
       Read ONLY scope-relevant SRS/SDS docs (derive scope from spec frontmatter `scope:` field), and AGENTS.md.
@@ -131,7 +131,7 @@ nodes:
         inputs: [decision]
         prompt: ".auto-flow/agents/agent-developer/SKILL.md"
         task_template: |
-          Read your reflection memory at .auto-flow/memory/agent-developer.md before starting. Update it when done.
+          Read reflection memory at .auto-flow/memory/agent-developer.md and history at .auto-flow/memory/agent-developer-history.md before starting. Update both when done.
           Read the decision at {{input.decision}}/04-decision.md.
           Read ONLY scope-relevant SRS/SDS docs (derive scope from decision's spec reference or task context).
           Implement the changes following the task breakdown.
@@ -152,7 +152,7 @@ nodes:
         inputs: [specification, decision, build]
         prompt: ".auto-flow/agents/agent-qa/SKILL.md"
         task_template: |
-          Read your reflection memory at .auto-flow/memory/agent-qa.md before starting. Update it when done.
+          Read reflection memory at .auto-flow/memory/agent-qa.md and history at .auto-flow/memory/agent-qa-history.md before starting. Update both when done.
           Verify the implementation against the spec at {{input.specification}}/01-spec.md.
           Check the decision at {{input.decision}}/04-decision.md.
           Run deno task check and verify all acceptance criteria.
@@ -167,33 +167,7 @@ nodes:
             path: "{{node_dir}}/05-qa-report.md"
             value: "Summary"
 
-  # Post-pipeline 1: Meta-Agent — prompt optimization
-  optimize:
-    type: agent
-    phase: report
-    label: "Meta-Agent — Prompt Optimization"
-    model: claude-opus-4-6
-    prompt: ".auto-flow/agents/agent-meta-agent/SKILL.md"
-    task_template: |
-      Read your memory at .auto-flow/memory/agent-meta-agent.md first.
-      Analyze logs from run {{run_id}} at {{run_dir}}.
-      Diagnose problems in agent behavior and fix their prompts in .auto-flow/agents/agent-*/SKILL.md.
-      Update .auto-flow/memory/agent-meta-agent.md with findings and fix outcomes.
-      Write minimal changelog: {{node_dir}}/07-changelog.md
-    run_on: always
-    after: "deno task dashboard --run-dir {{run_dir}} || true"
-    settings:
-      on_error: continue
-    validate:
-      - type: file_exists
-        path: "{{node_dir}}/07-changelog.md"
-      - type: file_not_empty
-        path: "{{node_dir}}/07-changelog.md"
-      - type: contains_section
-        path: "{{node_dir}}/07-changelog.md"
-        value: "Summary"
-
-  # Post-pipeline 2: Tech Lead Review — final review + CI gate + merge
+  # Post-pipeline: Tech Lead Review — final review + CI gate + merge
   tech-lead-review:
     type: agent
     phase: report
@@ -201,13 +175,14 @@ nodes:
     inputs: [specification, decision]
     prompt: ".auto-flow/agents/agent-tech-lead-review/SKILL.md"
     task_template: |
-      Read your reflection memory at .auto-flow/memory/agent-tech-lead-review.md before starting. Update it when done.
+      Read reflection memory at .auto-flow/memory/agent-tech-lead-review.md and history at .auto-flow/memory/agent-tech-lead-review-history.md before starting. Update both when done.
       Perform final code review of the PR.
       Read the spec at {{input.specification}}/01-spec.md for acceptance criteria.
       Read the decision at {{input.decision}}/04-decision.md for scope.
       Check CI status. Merge PR if all checks pass, or leave open with review comments.
       Output: {{node_dir}}/08-review.md
     run_on: always
+    after: "deno task dashboard --run-dir {{run_dir}} || true"
     settings:
       on_error: continue
     validate:

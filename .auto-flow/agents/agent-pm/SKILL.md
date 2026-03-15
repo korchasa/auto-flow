@@ -279,13 +279,11 @@ Define what is NOT included in this issue's scope:
 
 ## Reflection Memory
 
-At session start, read `.auto-flow/memory/agent-pm.md` (persistent knowledge base across runs).
-At session end, rewrite it entirely (≤50 lines, full-snapshot — not append) with:
-- **Anti-patterns:** recurring mistakes encountered this run.
-- **Effective strategies:** approaches that worked well.
-- **Environment quirks:** tool behaviors, edge cases, gotchas.
-- **Baseline metrics:** turns, cost, time vs prior baseline.
-Keep compressed (no fluff). Rewrite = current-state snapshot.
+Follow `.auto-flow/agents/reflection-protocol.md`.
+
+- Memory path: `.auto-flow/memory/agent-pm.md`
+- History path: `.auto-flow/memory/agent-pm-history.md`
+- HISTORY entry: timestamp, issue#, turns, cost, outcome, key learnings.
 
 ## Allowed File Modifications
 

@@ -53,16 +53,16 @@ Deno.test("checkArgs — empty args returns null (ok)", () => {
 
 // --- validateAgentListContent ---
 
-Deno.test("validateAgentListContent — valid 7-agent content passes", () => {
+Deno.test("validateAgentListContent — valid 6-agent content passes", () => {
   const content =
-    "## Project Vision\nPM, Architect, Tech Lead, Developer, QA, Tech Lead Review, Meta-Agent\n\n## Next Section\n";
+    "## Project Vision\nPM, Architect, Tech Lead, Developer, QA, Tech Lead Review\n\n## Next Section\n";
   const errors = validateAgentListContent(content);
   assertEquals(errors, []);
 });
 
 Deno.test("validateAgentListContent — missing agent fails", () => {
   const content =
-    "## Project Vision\nPM, Architect, Tech Lead, Developer, QA, Meta-Agent\n\n## Next\n";
+    "## Project Vision\nPM, Architect, Tech Lead, Developer, QA\n\n## Next\n";
   const errors = validateAgentListContent(content);
   assertEquals(
     errors.some((e: string) => e.includes("Tech Lead Review")),
@@ -72,14 +72,14 @@ Deno.test("validateAgentListContent — missing agent fails", () => {
 
 Deno.test("validateAgentListContent — deprecated agent Presenter fails", () => {
   const content =
-    "## Project Vision\nPM, Architect, Tech Lead, Developer, QA, Tech Lead Review, Meta-Agent, Presenter\n\n## Next\n";
+    "## Project Vision\nPM, Architect, Tech Lead, Developer, QA, Tech Lead Review, Presenter\n\n## Next\n";
   const errors = validateAgentListContent(content);
   assertEquals(errors.some((e: string) => e.includes("Presenter")), true);
 });
 
 Deno.test("validateAgentListContent — deprecated agent Reviewer fails", () => {
   const content =
-    "## Project Vision\nPM, Architect, Tech Lead, Developer, QA, Tech Lead Review, Meta-Agent\n\nReviewer also exists\n## Next\n";
+    "## Project Vision\nPM, Architect, Tech Lead, Developer, QA, Tech Lead Review\n\nReviewer also exists\n## Next\n";
   const errors = validateAgentListContent(content);
   assertEquals(errors.some((e: string) => e.includes("Reviewer")), true);
 });

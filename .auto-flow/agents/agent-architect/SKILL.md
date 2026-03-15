@@ -178,13 +178,11 @@ After all variants, `02-plan.md` MUST end with a `## Summary` section covering:
 
 ## Reflection Memory
 
-At session start, read `.auto-flow/memory/agent-architect.md` (persistent knowledge base across runs).
-At session end, rewrite it entirely (≤50 lines, full-snapshot — not append) with:
-- **Anti-patterns:** recurring mistakes encountered this run.
-- **Effective strategies:** approaches that worked well.
-- **Environment quirks:** tool behaviors, edge cases, gotchas.
-- **Baseline metrics:** turns, cost, time vs prior baseline.
-Keep compressed (no fluff). Rewrite = current-state snapshot.
+Follow `.auto-flow/agents/reflection-protocol.md`.
+
+- Memory path: `.auto-flow/memory/agent-architect.md`
+- History path: `.auto-flow/memory/agent-architect-history.md`
+- HISTORY entry: timestamp, issue#, turns, cost, outcome, key learnings.
 
 ## Allowed File Modifications
 

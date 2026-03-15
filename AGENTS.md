@@ -44,9 +44,9 @@ engine; any workflow expressible as a DAG of agent/merge/loop/human nodes.
 
 The engine is developed using its own SDLC pipeline (dogfooding): a chain of
 specialized AI agents (PM, Architect, Tech Lead, Developer, QA, Tech Lead
-Review, Meta-Agent) that automates the full development lifecycle from GitHub
-Issue to merged PR. This pipeline serves as both the development method and a
-reference example of engine usage.
+Review) that automates the full development lifecycle from GitHub Issue to
+merged PR. This pipeline serves as both the development method and a reference
+example of engine usage.
 
 ## Project tooling Stack
 
@@ -73,7 +73,7 @@ reference example of engine usage.
   completed nodes skipped based on `state.json`
 - **Observability:** 3 verbosity levels (`-q`/default/`-v`); status lines with
   timestamps; final summary
-- **SDLC pipeline (example):** `.auto-flow/pipeline.yaml` — 7 agents automating
+- **SDLC pipeline (example):** `.auto-flow/pipeline.yaml` — 6 agents automating
   full development lifecycle. Agent prompts in `.auto-flow/agents/agent-*/SKILL.md`
 - **Docker image:** Single image with claude CLI, deno, git, gh
 
