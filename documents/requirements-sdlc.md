@@ -670,6 +670,20 @@
   - [x] No reference to "Presenter" as an active agent in `AGENTS.md`. Evidence: `scripts/check.ts:134-171` (`validateAgentListContent` rejects deprecated agents), `scripts/check_test.ts:73-78` (Presenter rejection test).
   - [x] `deno task check` passes. Evidence: `scripts/check.ts:173-184` (`agentListAccuracy` runs as part of check), `scripts/check_test.ts:54-100` (6 test cases).
 
+### 3.30 FR-S30: Stale Path Reference Cleanup in SDLC Artifacts
+
+- **Description:** SDLC documentation, task files, utility scripts, config, and agent prompts must contain zero deprecated `.sdlc/` or `.claude/skills/agent-*` path references. Additionally, FR-S23 ACs left `[ ]` by #97 (implementation done, bookkeeping skipped) must be marked `[x]` with evidence from `documents/design-sdlc.md`.
+- **Motivation:** ~60 stale `.sdlc/` refs across SDLC artifacts cause navigation failures after #111 migration. FR-S23 ACs unstamped despite implementation complete per #97. `.claude/skills/agent-*` refs in agent prompts couple them to Claude Code's internal path layout.
+- **Acceptance criteria:**
+  - [ ] Zero `.sdlc/` path references in `documents/requirements-sdlc.md`. Evidence: grep result = 0.
+  - [ ] Zero `.sdlc/` path references in `.auto-flow/tasks/fr-18-verbose-output.md`. Evidence: grep result = 0.
+  - [ ] Zero `.sdlc/` path references in `scripts/generate-dashboard.ts` and `scripts/generate-dashboard_test.ts`. Evidence: grep result = 0.
+  - [ ] Zero `.sdlc/` path references in `.gitignore` and `.gitleaks.toml`. Evidence: grep result = 0.
+  - [ ] Zero `.claude/skills/agent-*` path references in `documents/requirements-sdlc.md`. Evidence: grep result = 0.
+  - [ ] Zero `.claude/skills/agent-*` path references in `.auto-flow/agents/agent-tech-lead/SKILL.md`. Evidence: file content.
+  - [ ] FR-S23 ACs marked `[x]` with evidence from `documents/design-sdlc.md` §2.1 and §3.2. Evidence: `requirements-sdlc.md:561-563`.
+  - [ ] `deno task check` passes. Evidence: `deno task check` exit 0.
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -783,3 +797,4 @@ engine/                                # Deno/TypeScript pipeline engine
 | —      | FR-S27 | CLI Help for SDLC Utility Scripts |
 | —      | FR-S28 | Per-Agent Reflection Memory |
 | —      | FR-S29 | AGENTS.md Agent List Accuracy |
+| —      | FR-S30 | Stale Path Reference Cleanup in SDLC Artifacts |

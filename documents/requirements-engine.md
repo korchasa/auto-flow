@@ -637,6 +637,17 @@
   - [ ] Logged at normal verbosity level. Evidence: `engine/engine.ts`
   - [ ] Unit tests cover: execution on fresh run, skip on resume, failure abort, template interpolation. Evidence: `engine/engine_test.ts`
 
+### 3.31 FR-E31: Stale Path Reference Cleanup in Engine Artifacts
+
+- **Description:** Engine documentation and test fixtures must be free of deprecated `.sdlc/` path references and hardcoded `.claude/skills/agent-*` paths. Physical migration to `.auto-flow/` completed in #111; ~30 stale `.sdlc/` refs remain in `requirements-engine.md` evidence fields, ~12 in `design-engine.md`, and engine test fixtures reference `.claude/skills/agent-*` paths.
+- **Motivation:** Stale path references in evidence fields cause navigation failures (paths no longer exist), undermine documentation trustworthiness, and create onboarding confusion. Test fixtures with hardcoded `.claude/skills/agent-*` paths are brittle if symlinks change.
+- **Acceptance criteria:**
+  - [ ] Zero `.sdlc/` path references in `documents/requirements-engine.md`. Evidence: grep result = 0.
+  - [ ] Zero `.sdlc/` path references in `documents/design-engine.md`. Evidence: grep result = 0.
+  - [ ] Zero `.claude/skills/agent-*` hardcoded path references in `documents/requirements-engine.md`. Evidence: grep result = 0.
+  - [ ] Engine test fixtures (`engine/hitl_test.ts`, `engine/agent_test.ts`, `engine/config_test.ts`, `engine/pipeline_integrity_test.ts`) use `.auto-flow/agents/` paths only. Evidence: file contents.
+  - [ ] `deno task check` passes. Evidence: `deno task check` exit 0.
+
 ## 4. Non-Functional Requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -693,3 +704,4 @@
 | —      | FR-E28 | Shared Backoff Utility (`nextPause()`) |
 | —      | FR-E29 | Legacy Test Task Removal |
 | —      | FR-E30 | Pipeline Prepare Command (`prepare_command`) |
+| —      | FR-E31 | Stale Path Reference Cleanup in Engine Artifacts |
