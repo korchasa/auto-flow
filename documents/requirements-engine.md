@@ -572,6 +572,21 @@
   - [x] `pre_run` absent → no script executed, backward-compatible. Evidence: `engine/config_test.ts:262-263`
   - [x] Tests cover: field parsing, extraction, script success, script failure, nonexistent script. Evidence: `engine/config_test.ts:256-295`, `engine/engine_test.ts:900-949`
 
+### 3.25 FR-E25: Graceful Shutdown (Signal Handling)
+
+- **Description:** Engine kills spawned child processes and releases resources on SIGINT/SIGTERM. Global process registry tracks long-running `Deno.ChildProcess` instances. On signal: SIGTERM all registered processes, wait up to 5s, SIGKILL survivors, run shutdown callbacks (lock release, state save), exit with 130 (SIGINT) or 143 (SIGTERM).
+- **Motivation:** Without signal propagation, Ctrl+C leaves orphaned `claude` processes consuming resources and stale lock files blocking subsequent runs. Critical in Docker environments.
+- **Acceptance criteria:**
+  - [x] `process-registry.ts` singleton: `register()`, `unregister()`, `onShutdown()`, `killAll()`, `installSignalHandlers()`. Evidence: `engine/process-registry.ts:17-112`
+  - [x] `onShutdown()` returns disposer function to prevent callback leak in loops. Evidence: `engine/process-registry.ts:28-34`
+  - [x] `agent.ts:executeClaudeProcess()` registers/unregisters process in try/finally. Evidence: `engine/agent.ts:430-574`
+  - [x] `cli.ts` calls `installSignalHandlers()` at startup. Evidence: `engine/cli.ts:139`
+  - [x] `engine.ts` registers shutdown callbacks for lock release and state save after lock acquisition; disposes in finally. Evidence: `engine/engine.ts:139-153`
+  - [x] `self_runner.ts` calls `Engine.run()` directly (no subprocess), `installSignalHandlers()` at startup. Evidence: `scripts/self_runner.ts:5-7,57-64,135`
+  - [x] `loop_in_claude.ts` registers/unregisters claude child, `installSignalHandlers()` at startup. Evidence: `scripts/loop_in_claude.ts:7-11,80,100,106,152`
+  - [x] 9 unit tests cover registry operations, killAll, shutdown callbacks, error resilience. Evidence: `engine/process-registry_test.ts`
+  - [x] All 474 existing tests pass. Evidence: `deno task check` output
+
 ## 4. Non-Functional Requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -621,3 +636,5 @@
 | FR-41  | FR-E21 | Semi-Verbose Output Mode (`-s`) |
 | —      | FR-E22 | Pipeline Final Summary with Node Results |
 | —      | FR-E23 | CLI Help for `deno task check` |
+| —      | FR-E24 | Pre-Run Script (`pre_run`) |
+| —      | FR-E25 | Graceful Shutdown (Signal Handling) |

@@ -4,6 +4,11 @@
 // Exponential backoff (30s → 4h) when no actionable tickets found.
 
 import { processStream } from "./claude_stream_formatter.ts";
+import {
+  installSignalHandlers,
+  register,
+  unregister,
+} from "../engine/process-registry.ts";
 
 const MIN_PAUSE_SEC = 30;
 const MAX_PAUSE_SEC = 4 * 60 * 60; // 4 hours
@@ -72,15 +77,20 @@ async function runPipelineViaClaude(): Promise<boolean> {
     env: { CLAUDECODE: "" },
   });
   const child = cmd.spawn();
+  register(child);
   const streamResult = await processStream(child.stdout);
 
   // Workaround: claude CLI may hang after emitting result event (issue #25629).
   // If stream completed, give process a grace period then kill.
   if (streamResult.completed) {
+    let graceTimeout: ReturnType<typeof setTimeout> | undefined;
     const raced = await Promise.race([
       child.status,
-      new Promise<null>((r) => setTimeout(() => r(null), KILL_GRACE_MS)),
+      new Promise<null>((r) => {
+        graceTimeout = setTimeout(() => r(null), KILL_GRACE_MS);
+      }),
     ]);
+    clearTimeout(graceTimeout);
     if (raced === null) {
       console.error(
         `claude process did not exit within ${
@@ -91,11 +101,13 @@ async function runPipelineViaClaude(): Promise<boolean> {
         child.kill("SIGKILL");
       } catch { /* already exited */ }
     }
+    unregister(child);
     return streamResult.success;
   }
 
   // Stream ended without result event — rely on exit code
   const { success } = await child.status;
+  unregister(child);
   return success;
 }
 
@@ -139,6 +151,8 @@ export function checkArgs(
 
 // --- Main loop ---
 if (import.meta.main) {
+  installSignalHandlers();
+
   const argCheck = checkArgs(Deno.args);
   if (argCheck !== null) {
     if (argCheck.code === 0) console.log(argCheck.text);

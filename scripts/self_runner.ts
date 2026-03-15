@@ -2,6 +2,10 @@
 // Autonomous loop: check GitHub issues → run pipeline → repeat.
 // Exponential backoff (30s → 4h) when no actionable tickets found.
 
+import { Engine } from "../engine/engine.ts";
+import { parseArgs } from "../engine/cli.ts";
+import { installSignalHandlers } from "../engine/process-registry.ts";
+
 const MIN_PAUSE_SEC = 30;
 const MAX_PAUSE_SEC = 4 * 60 * 60; // 4 hours
 const BACKOFF_FACTOR = 2;
@@ -46,17 +50,42 @@ async function fetchActionableIssues(): Promise<
   );
 }
 
-/** Run the pipeline via deno task run. Returns true on success. */
+/** Load .env file into options (same logic as cli.ts). */
+function loadEnvFile(envOverrides: Record<string, string>): void {
+  try {
+    const envFile = Deno.readTextFileSync(".env");
+    for (const line of envFile.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eqIdx = trimmed.indexOf("=");
+      if (eqIdx === -1) continue;
+      const key = trimmed.substring(0, eqIdx).trim();
+      const value = trimmed.substring(eqIdx + 1).trim().replace(
+        /^['"]|['"]$/g,
+        "",
+      );
+      if (!(key in envOverrides)) {
+        envOverrides[key] = value;
+      }
+    }
+  } catch {
+    // .env file is optional
+  }
+}
+
+/** Run the pipeline via direct Engine import. Returns true on success. */
 async function runPipeline(): Promise<boolean> {
-  console.log("> deno task run");
-  const cmd = new Deno.Command("deno", {
-    args: ["task", "run"],
-    stdin: "null",
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  const { success } = await cmd.output();
-  return success;
+  console.log("> Engine.run()");
+  try {
+    const options = parseArgs(["--config", ".auto-flow/pipeline.yaml"]);
+    loadEnvFile(options.env_overrides);
+    const engine = new Engine(options);
+    const state = await engine.run();
+    return state.status === "completed";
+  } catch (err) {
+    console.error(`Engine error: ${(err as Error).message}`);
+    return false;
+  }
 }
 
 function formatDuration(sec: number): string {
@@ -75,17 +104,13 @@ export function printUsage(): string {
   return `Pipeline loop runner — check GitHub issues and run pipeline repeatedly
 
 Usage:
-  deno task loop [interval] [-- claude-args...]
+  deno task loop
 
 Options:
-  [interval]     Initial backoff in seconds (default: 30)
-  [-- args...]   Arguments passed through to the pipeline (optional)
   --help, -h     Show this help
 
 Examples:
-  deno task loop
-  deno task loop 60
-  deno task loop -- --prompt "Focus on the login bug"`;
+  deno task loop`;
 }
 
 export function checkArgs(
@@ -108,6 +133,8 @@ export function checkArgs(
 
 // --- Main loop ---
 if (import.meta.main) {
+  installSignalHandlers();
+
   const argCheck = checkArgs(Deno.args);
   if (argCheck !== null) {
     if (argCheck.code === 0) console.log(argCheck.text);

@@ -20,6 +20,7 @@ import { detectHitlRequest } from "./hitl.ts";
 import { runHuman, terminalInput } from "./human.ts";
 import type { UserInput } from "./human.ts";
 import { acquireLock, defaultLockPath, releaseLock } from "./lock.ts";
+import { onShutdown } from "./process-registry.ts";
 import { saveAgentLog } from "./log.ts";
 import { runLoop } from "./loop.ts";
 import { extractResultExcerpt, OutputManager } from "./output.ts";
@@ -135,9 +136,22 @@ export class Engine {
     const lockPath = this.options.lock_path ?? defaultLockPath();
     await acquireLock(lockPath, this.state.run_id);
 
+    // Register shutdown callbacks for signal-initiated cleanup;
+    // disposers remove them after normal completion to prevent leak in loops
+    const disposers = [
+      onShutdown(() => releaseLock(lockPath)),
+      onShutdown(async () => {
+        if (this.state.status === "running") {
+          markRunFailed(this.state);
+          await saveState(this.state);
+        }
+      }),
+    ];
+
     try {
       return await this.runWithLock(levels, lockPath);
     } finally {
+      for (const dispose of disposers) dispose();
       await releaseLock(lockPath);
     }
   }

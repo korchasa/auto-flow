@@ -31,10 +31,9 @@ Deno.test("printUsage — contains Usage and deno task loop", () => {
   assertEquals(text.includes("deno task loop"), true);
 });
 
-Deno.test("printUsage — mentions interval and passthrough args", () => {
+Deno.test("printUsage — mentions help flag", () => {
   const text = printUsage();
-  assertEquals(text.includes("interval"), true);
-  assertEquals(text.includes("--"), true);
+  assertEquals(text.includes("--help"), true);
 });
 
 // --- checkArgs ---

@@ -15,6 +15,7 @@ import {
   type ValidationResult,
 } from "./validate.ts";
 import type { OutputManager, VerboseInput } from "./output.ts";
+import { register, unregister } from "./process-registry.ts";
 
 /**
  * Resolve input artifact file paths and sizes from input directories.
@@ -426,51 +427,108 @@ async function executeClaudeProcess(
   });
 
   const process = cmd.spawn();
+  register(process);
 
-  // Set up timeout
-  const timeoutId = setTimeout(() => {
-    try {
-      process.kill("SIGTERM");
-    } catch {
-      // Process may have already exited
+  try {
+    // Set up timeout
+    const timeoutId = setTimeout(() => {
+      try {
+        process.kill("SIGTERM");
+      } catch {
+        // Process may have already exited
+      }
+    }, timeoutSeconds * 1000);
+
+    // Open stream log file for real-time writing (append mode)
+    let logFile: Deno.FsFile | undefined;
+    if (streamLogPath) {
+      const dir = streamLogPath.replace(/\/[^/]+$/, "");
+      await Deno.mkdir(dir, { recursive: true });
+      logFile = await Deno.open(streamLogPath, {
+        write: true,
+        create: true,
+        append: true,
+      });
     }
-  }, timeoutSeconds * 1000);
 
-  // Open stream log file for real-time writing (append mode)
-  let logFile: Deno.FsFile | undefined;
-  if (streamLogPath) {
-    const dir = streamLogPath.replace(/\/[^/]+$/, "");
-    await Deno.mkdir(dir, { recursive: true });
-    logFile = await Deno.open(streamLogPath, {
-      write: true,
-      create: true,
-      append: true,
-    });
-  }
+    // Process stdout as stream-json NDJSON
+    let resultEvent: ClaudeCliOutput | undefined;
+    const stdoutDecoder = new TextDecoder();
+    const encoder = new TextEncoder();
+    let buffer = "";
+    let turnCount = 0;
+    const tracker = new FileReadTracker();
 
-  // Process stdout as stream-json NDJSON
-  let resultEvent: ClaudeCliOutput | undefined;
-  const stdoutDecoder = new TextDecoder();
-  const encoder = new TextEncoder();
-  let buffer = "";
-  let turnCount = 0;
-  const tracker = new FileReadTracker();
-
-  const stdoutReader = process.stdout.getReader();
-  const stdoutDone = (async () => {
-    try {
-      while (true) {
-        const { done, value } = await stdoutReader.read();
-        if (done) break;
-        buffer += stdoutDecoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop()!;
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          // Parse and extract result event
+    const stdoutReader = process.stdout.getReader();
+    const stdoutDone = (async () => {
+      try {
+        while (true) {
+          const { done, value } = await stdoutReader.read();
+          if (done) break;
+          buffer += stdoutDecoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop()!;
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            // Parse and extract result event
+            try {
+              // deno-lint-ignore no-explicit-any
+              const event = JSON.parse(line) as Record<string, any>;
+              if (event.type === "assistant" && logFile) {
+                turnCount++;
+                await logFile.write(
+                  encoder.encode(
+                    stampLines(`--- turn ${turnCount} ---`) + "\n",
+                  ),
+                );
+                // Track repeated file reads
+                const contents = event.message?.content;
+                if (Array.isArray(contents)) {
+                  for (const block of contents) {
+                    if (block.type === "tool_use" && block.name === "Read") {
+                      const warn = tracker.track(block.input?.file_path);
+                      if (warn) {
+                        await logFile.write(
+                          encoder.encode(stampLines(warn) + "\n"),
+                        );
+                      }
+                    }
+                  }
+                }
+              }
+              if (event.type === "result") {
+                resultEvent = extractClaudeOutput(event);
+              }
+              // Write full unfiltered summary to log file
+              const logSummary = formatEventForOutput(event);
+              if (logFile && logSummary) {
+                await logFile.write(
+                  encoder.encode(stampLines(logSummary) + "\n"),
+                );
+              }
+              if (event.type === "result" && resultEvent && logFile) {
+                await logFile.write(
+                  encoder.encode(stampLines("--- end ---") + "\n"),
+                );
+                await logFile.write(
+                  encoder.encode(stampLines(formatFooter(resultEvent)) + "\n"),
+                );
+              }
+              // Forward verbosity-filtered summary to terminal
+              if (onOutput) {
+                const termSummary = formatEventForOutput(event, verbosity);
+                if (termSummary) onOutput(termSummary);
+              }
+            } catch {
+              // Skip malformed JSON lines
+            }
+          }
+        }
+        // Process remaining buffer
+        if (buffer.trim()) {
           try {
             // deno-lint-ignore no-explicit-any
-            const event = JSON.parse(line) as Record<string, any>;
+            const event = JSON.parse(buffer) as Record<string, any>;
             if (event.type === "assistant" && logFile) {
               turnCount++;
               await logFile.write(
@@ -494,7 +552,6 @@ async function executeClaudeProcess(
             if (event.type === "result") {
               resultEvent = extractClaudeOutput(event);
             }
-            // Write full unfiltered summary to log file
             const logSummary = formatEventForOutput(event);
             if (logFile && logSummary) {
               await logFile.write(
@@ -509,114 +566,67 @@ async function executeClaudeProcess(
                 encoder.encode(stampLines(formatFooter(resultEvent)) + "\n"),
               );
             }
-            // Forward verbosity-filtered summary to terminal
             if (onOutput) {
               const termSummary = formatEventForOutput(event, verbosity);
               if (termSummary) onOutput(termSummary);
             }
-          } catch {
-            // Skip malformed JSON lines
-          }
+          } catch { /* skip */ }
         }
-      }
-      // Process remaining buffer
-      if (buffer.trim()) {
-        try {
-          // deno-lint-ignore no-explicit-any
-          const event = JSON.parse(buffer) as Record<string, any>;
-          if (event.type === "assistant" && logFile) {
-            turnCount++;
-            await logFile.write(
-              encoder.encode(stampLines(`--- turn ${turnCount} ---`) + "\n"),
-            );
-            // Track repeated file reads
-            const contents = event.message?.content;
-            if (Array.isArray(contents)) {
-              for (const block of contents) {
-                if (block.type === "tool_use" && block.name === "Read") {
-                  const warn = tracker.track(block.input?.file_path);
-                  if (warn) {
-                    await logFile.write(
-                      encoder.encode(stampLines(warn) + "\n"),
-                    );
-                  }
-                }
-              }
-            }
-          }
-          if (event.type === "result") {
-            resultEvent = extractClaudeOutput(event);
-          }
-          const logSummary = formatEventForOutput(event);
-          if (logFile && logSummary) {
-            await logFile.write(encoder.encode(stampLines(logSummary) + "\n"));
-          }
-          if (event.type === "result" && resultEvent && logFile) {
-            await logFile.write(
-              encoder.encode(stampLines("--- end ---") + "\n"),
-            );
-            await logFile.write(
-              encoder.encode(stampLines(formatFooter(resultEvent)) + "\n"),
-            );
-          }
-          if (onOutput) {
-            const termSummary = formatEventForOutput(event, verbosity);
-            if (termSummary) onOutput(termSummary);
-          }
-        } catch { /* skip */ }
-      }
-    } catch { /* stream closed */ }
-  })();
+      } catch { /* stream closed */ }
+    })();
 
-  // Collect stderr for error reporting
-  const stderrChunks: Uint8Array[] = [];
-  const stderrReader = process.stderr.getReader();
-  const stderrDone = (async () => {
-    try {
-      while (true) {
-        const { done, value } = await stderrReader.read();
-        if (done) break;
-        stderrChunks.push(value);
-      }
-    } catch { /* stream closed */ }
-  })();
+    // Collect stderr for error reporting
+    const stderrChunks: Uint8Array[] = [];
+    const stderrReader = process.stderr.getReader();
+    const stderrDone = (async () => {
+      try {
+        while (true) {
+          const { done, value } = await stderrReader.read();
+          if (done) break;
+          stderrChunks.push(value);
+        }
+      } catch { /* stream closed */ }
+    })();
 
-  await Promise.all([stdoutDone, stderrDone]);
-  const status = await process.status;
-  clearTimeout(timeoutId);
+    await Promise.all([stdoutDone, stderrDone]);
+    const status = await process.status;
+    clearTimeout(timeoutId);
 
-  // Close log file
-  if (logFile) {
-    logFile.close();
-  }
-
-  const concat = (chunks: Uint8Array[]) => {
-    const total = chunks.reduce((n, c) => n + c.length, 0);
-    const buf = new Uint8Array(total);
-    let offset = 0;
-    for (const c of chunks) {
-      buf.set(c, offset);
-      offset += c.length;
+    // Close log file
+    if (logFile) {
+      logFile.close();
     }
-    return buf;
-  };
-  const stderr = new TextDecoder().decode(concat(stderrChunks)).trim();
 
-  if (resultEvent) {
-    return resultEvent;
-  }
+    const concat = (chunks: Uint8Array[]) => {
+      const total = chunks.reduce((n, c) => n + c.length, 0);
+      const buf = new Uint8Array(total);
+      let offset = 0;
+      for (const c of chunks) {
+        buf.set(c, offset);
+        offset += c.length;
+      }
+      return buf;
+    };
+    const stderr = new TextDecoder().decode(concat(stderrChunks)).trim();
 
-  if (!status.success) {
+    if (resultEvent) {
+      return resultEvent;
+    }
+
+    if (!status.success) {
+      throw new Error(
+        `Claude CLI exited with code ${status.code}${
+          stderr ? `: ${stderr}` : ""
+        }`,
+      );
+    }
+
     throw new Error(
-      `Claude CLI exited with code ${status.code}${
-        stderr ? `: ${stderr}` : ""
-      }`,
+      "Claude CLI stream-json output contained no result event",
     );
+  } finally {
+    unregister(process);
   }
-
-  throw new Error(
-    "Claude CLI stream-json output contained no result event",
-  );
 }
 
 /** Extract ClaudeCliOutput fields from a stream-json result event. */

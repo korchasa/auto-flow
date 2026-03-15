@@ -18,6 +18,7 @@
 
 import type { EngineOptions, Verbosity } from "./types.ts";
 import { Engine } from "./engine.ts";
+import { installSignalHandlers } from "./process-registry.ts";
 
 export function parseArgs(args: string[]): EngineOptions {
   let configPath = ".auto-flow/pipeline.yaml";
@@ -136,6 +137,8 @@ Examples:
 // --- Main ---
 
 if (import.meta.main) {
+  installSignalHandlers();
+
   try {
     const options = parseArgs(Deno.args);
 

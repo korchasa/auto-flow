@@ -310,6 +310,29 @@ graph TD
   templates, tests). Single-instance engine guarantee prevents sequential
   mutation. `clearPhaseRegistry()` ensures test isolation.
 
+### 3.3 Process Registry (`process-registry.ts`) — IMPLEMENTED
+
+- **Status:** Implemented. FR-E25.
+- **Purpose:** Global singleton tracking spawned `Deno.ChildProcess` instances
+  and shutdown callbacks. Enables graceful cleanup on SIGINT/SIGTERM.
+- **Data:** `processes: Set<Deno.ChildProcess>`, `shutdownCallbacks: Array<() => Promise<void> | void>`.
+- **Interfaces:**
+  - `register(p)` / `unregister(p)` — add/remove process from tracked set.
+  - `onShutdown(cb): () => void` — register cleanup callback, returns disposer.
+  - `killAll()` — SIGTERM all, wait 5s, SIGKILL survivors, run callbacks.
+  - `installSignalHandlers()` — idempotent; adds SIGINT+SIGTERM listeners
+    that call `killAll()` then `Deno.exit(130|143)`.
+- **Integration points:**
+  - `agent.ts:executeClaudeProcess()` — register/unregister in try/finally.
+  - `engine.ts:Engine.run()` — onShutdown for lock release + state save;
+    disposers called in finally to prevent leak in loops.
+  - `cli.ts`, `self_runner.ts`, `loop_in_claude.ts` — installSignalHandlers()
+    at entry point.
+- **Design rationale:** Module-scoped global state (same pattern as Phase
+  Registry) because signal handlers are process-wide. `_reset()` for test
+  isolation. `onShutdown` disposer pattern prevents callback accumulation
+  when `Engine.run()` called in a loop (`self_runner.ts`).
+
 ## 4. Data
 
 - **Entities:**
