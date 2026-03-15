@@ -560,6 +560,18 @@
   - [ ] `deno task check` (no args) continues to run all checks unchanged (backward-compatible).
   - [ ] `deno task check` passes (self-check).
 
+### 3.24 FR-E24: Pre-Run Script (`pre_run`)
+
+- **Description:** Pipeline config supports an optional `pre_run` field (top-level string). When present, the engine executes it as a shell script **before** fully loading the config. Two-phase loading: (1) read raw YAML, extract `pre_run`; (2) execute script; (3) re-read and fully parse config. Enables self-healing (e.g. reset to stable branch before pipeline starts).
+- **Motivation:** Pipeline may be invoked from a broken branch where config/prompts are corrupted. `pre_run` can reset to a known-good state before the engine loads any node definitions.
+- **Acceptance criteria:**
+  - [x] `PipelineConfig.pre_run` is an optional string field. Evidence: `engine/types.ts:14-16`
+  - [x] `extractPreRun(yaml)` extracts only `pre_run` without full schema validation. Evidence: `engine/config.ts:33-42`
+  - [x] `Engine.run()` reads raw YAML, calls `extractPreRun`, executes script if present, then re-reads config via `loadConfig`. Evidence: `engine/engine.ts:72-82`
+  - [x] `runPreRunScript()` throws on script failure (non-zero exit). Evidence: `engine/engine.ts:662-690`
+  - [x] `pre_run` absent → no script executed, backward-compatible. Evidence: `engine/config_test.ts:262-263`
+  - [x] Tests cover: field parsing, extraction, script success, script failure, nonexistent script. Evidence: `engine/config_test.ts:256-295`, `engine/engine_test.ts:900-949`
+
 ## 4. Non-Functional Requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.

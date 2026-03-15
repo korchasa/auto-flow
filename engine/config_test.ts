@@ -1,5 +1,5 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { DEFAULT_SETTINGS, parseConfig } from "./config.ts";
+import { DEFAULT_SETTINGS, extractPreRun, parseConfig } from "./config.ts";
 
 const MINIMAL_AGENT = `
 name: test-pipeline
@@ -250,6 +250,46 @@ nodes:
   const config = parseConfig(yaml);
   assertEquals(config.nodes.a.before, "git pull");
   assertEquals(config.nodes.a.after, "deno task check");
+});
+
+// --- pre_run tests ---
+
+Deno.test("parseConfig — pre_run field is preserved", () => {
+  const yaml = `
+name: test
+version: "1"
+pre_run: "./scripts/reset.sh"
+nodes:
+  a:
+    type: agent
+    label: A
+    task_template: "do something"
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.pre_run, "./scripts/reset.sh");
+});
+
+Deno.test("parseConfig — pre_run absent is undefined", () => {
+  const config = parseConfig(MINIMAL_AGENT);
+  assertEquals(config.pre_run, undefined);
+});
+
+Deno.test("extractPreRun — extracts pre_run from YAML without full parsing", () => {
+  const yaml = `
+name: test
+version: "1"
+pre_run: "./scripts/reset.sh"
+nodes:
+  a:
+    type: agent
+    label: A
+    task_template: "do something"
+`;
+  assertEquals(extractPreRun(yaml), "./scripts/reset.sh");
+});
+
+Deno.test("extractPreRun — returns undefined when no pre_run", () => {
+  assertEquals(extractPreRun(MINIMAL_AGENT), undefined);
 });
 
 // --- Error cases ---

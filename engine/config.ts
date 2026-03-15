@@ -30,6 +30,18 @@ export const DEFAULT_PIPELINE_DEFAULTS: Required<PipelineDefaults> = {
   on_failure_script: "",
 };
 
+/**
+ * Extract only the `pre_run` field from YAML without full config parsing.
+ * Used for two-phase loading: read pre_run → execute → re-read full config.
+ */
+export function extractPreRun(yaml: string): string | undefined {
+  const raw = parseYaml(yaml);
+  if (!raw || typeof raw !== "object") return undefined;
+  const config = raw as Record<string, unknown>;
+  const preRun = config.pre_run;
+  return typeof preRun === "string" ? preRun : undefined;
+}
+
 /** Parse YAML string into PipelineConfig, validate schema, merge defaults. */
 export function parseConfig(yaml: string): PipelineConfig {
   const raw = parseYaml(yaml);

@@ -11,6 +11,10 @@ export interface PipelineConfig {
   name: string;
   /** Config schema version; only "1" is currently supported. */
   version: "1";
+  /** Shell script executed before config is fully loaded and pipeline starts.
+   * Enables self-healing (e.g. reset to stable branch). The engine reads only
+   * this field first, runs the script, then re-reads the full config. */
+  pre_run?: string;
   /** Global defaults applied to all nodes unless overridden at node level. */
   defaults?: PipelineDefaults;
   /** Global environment variables accessible via `{{env.<key>}}` in templates. */

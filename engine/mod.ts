@@ -19,7 +19,12 @@ export type {
 } from "./types.ts";
 
 export { interpolate } from "./template.ts";
-export { DEFAULT_SETTINGS, loadConfig, parseConfig } from "./config.ts";
+export {
+  DEFAULT_SETTINGS,
+  extractPreRun,
+  loadConfig,
+  parseConfig,
+} from "./config.ts";
 export { buildLevels, buildLoopBodyOrder } from "./dag.ts";
 export type { ExecutionLevels } from "./dag.ts";
 export { allPassed, formatFailures, runValidations } from "./validate.ts";
@@ -57,4 +62,4 @@ export type {
   VerboseInput,
   VerboseValidationResult,
 } from "./output.ts";
-export { Engine } from "./engine.ts";
+export { Engine, runPreRunScript } from "./engine.ts";

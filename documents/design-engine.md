@@ -70,7 +70,8 @@ graph TD
     `Verbosity` union: `"quiet"|"normal"|"semi-verbose"|"verbose"` (FR-41))
   - `template.ts` — `{{var}}` interpolation for prompts/paths
   - `config.ts` — YAML parsing, schema validation, defaults merge,
-    `run_on` normalization. `validateNode()`: if `run_on` present, must be
+    `run_on` normalization. `extractPreRun()`: lightweight pre-parse
+    extracting only `pre_run` field for two-phase loading (FR-E24). `validateNode()`: if `run_on` present, must be
     one of `"always"|"success"|"failure"`; error:
     `Node '<id>' has invalid run_on value '<val>'. Must be one of: always, success, failure`.
     `normalizeRunOn()` pass (in `mergeDefaults()`):
@@ -191,6 +192,9 @@ graph TD
     loop-node log saving via `onNodeComplete` callback,
     phase registry init via `setPhaseRegistry(config)` at engine startup,
     pre-post-pipeline `on_failure_script` execution.
+    Two-phase config loading (FR-E24): `run()` reads raw YAML →
+    `extractPreRun()` → `runPreRunScript()` if present → `loadConfig()`
+    re-reads (potentially updated) config.
     `executeNode()`: passes `extractResultExcerpt(result.output.result)` to
     `markNodeCompleted()` as `result` param (FR-E22).
     `executeLoopNode()`: passes result excerpt in `onNodeComplete` callback.

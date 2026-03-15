@@ -8,7 +8,12 @@ import type {
 } from "./types.ts";
 import type { AgentResult } from "./agent.ts";
 import { resolveInputArtifacts, runAgent } from "./agent.ts";
-import { collectAllNodeIds, findNodeConfig, loadConfig } from "./config.ts";
+import {
+  collectAllNodeIds,
+  extractPreRun,
+  findNodeConfig,
+  loadConfig,
+} from "./config.ts";
 import { buildLevels } from "./dag.ts";
 import { handleAgentHitl } from "./hitl-handler.ts";
 import { detectHitlRequest } from "./hitl.ts";
@@ -62,7 +67,17 @@ export class Engine {
   async run(): Promise<RunState> {
     this.startTime = Date.now();
 
-    // Load config
+    // Two-phase config loading:
+    // 1. Read raw YAML, extract pre_run script path
+    // 2. If pre_run exists, execute it (e.g. reset to stable branch)
+    // 3. Re-read and fully parse config (now from potentially updated files)
+    const rawYaml = await Deno.readTextFile(this.options.config_path);
+    const preRun = extractPreRun(rawYaml);
+    if (preRun) {
+      await runPreRunScript(preRun, this.output);
+    }
+
+    // Load config (re-reads file after pre_run may have changed it)
     this.config = await loadConfig(this.options.config_path);
 
     // Merge env overrides
@@ -641,6 +656,34 @@ export class Engine {
         : undefined,
     };
     this.output.summary(summary);
+  }
+}
+
+/**
+ * Execute the pre_run shell script before full config loading.
+ * Enables self-healing workflows (e.g. reset to stable branch).
+ * Throws on script failure — pipeline cannot start from unstable state.
+ */
+export async function runPreRunScript(
+  scriptPath: string,
+  output: OutputManager,
+): Promise<void> {
+  output.status("engine", `PRE_RUN: ${scriptPath}`);
+  const cmd = new Deno.Command("sh", {
+    args: ["-c", scriptPath],
+    stdout: "piped",
+    stderr: "piped",
+  });
+  const result = await cmd.output();
+  const stdout = new TextDecoder().decode(result.stdout).trim();
+  const stderr = new TextDecoder().decode(result.stderr).trim();
+  if (stdout) output.status("engine", stdout);
+  if (!result.success) {
+    const msg = `pre_run script failed: ${scriptPath}${
+      stderr ? `\n${stderr}` : ""
+    }`;
+    output.error(msg);
+    throw new Error(msg);
   }
 }
 
