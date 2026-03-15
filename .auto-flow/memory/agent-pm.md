@@ -15,7 +15,7 @@ type: feedback
 ## Effective strategies
 
 - Grep `^### 3\.\d+ FR-E\d+` / `^### 3\.\d+ FR-S\d+` on SRS to find all FR numbers + line ranges in one call.
-- Grep `^## ` to find section headings and line numbers.
+- Grep `^##` to find section headings and line numbers.
 - Read targeted line ranges (offset + limit) to get specific sections (last FR, appendix boundary).
 - On `main` branch with no in-progress issues: check health of oldest (lowest-number) candidates first.
 - Draft all SRS changes in text response BEFORE writing — catches issues before the write.
