@@ -615,6 +615,15 @@
   - [ ] `scripts/loop_in_claude.ts` imports `nextPause` from `scripts/backoff.ts`; no local `nextPause` definition remains. Evidence: `scripts/loop_in_claude.ts`.
   - [ ] All tests pass. Evidence: `deno task check` PASS.
 
+### 3.29 FR-E29: Legacy Test Task Removal
+
+- **Description:** `deno.json` contains legacy test tasks (`test:pm`, `test:tech-lead`, etc.) referencing obsolete `.sdlc/scripts/stage-*_test.ts` files superseded by the engine test suite. These tasks must be removed to keep the task list accurate.
+- **Motivation:** Stale tasks reference non-existent or inactive test files, pollute `deno task` output, and create false confidence that stage-level tests are running.
+- **Acceptance criteria:**
+  - [x] All `test:*` tasks in `deno.json` referencing `.sdlc/scripts/stage-*_test.ts` paths are identified. Evidence: `deno.json` — no such tasks exist; active test tasks are `test`, `test:lib`, `test:engine` only.
+  - [x] All identified obsolete tasks are removed from `deno.json`. Evidence: `deno.json:6-18` — no `.sdlc/scripts/stage-*_test.ts` references present.
+  - [x] All remaining active tests pass. Evidence: `deno task check` PASS (run 20260315T155429).
+
 ## 4. Non-Functional Requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -669,3 +678,4 @@
 | —      | FR-E26 | Engine Codebase Housekeeping |
 | —      | FR-E27 | Test Suite Integrity |
 | —      | FR-E28 | Shared Backoff Utility (`nextPause()`) |
+| —      | FR-E29 | Legacy Test Task Removal |
