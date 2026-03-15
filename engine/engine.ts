@@ -1,13 +1,11 @@
 import type {
   EngineOptions,
   NodeConfig,
-  NodeSettings,
   PipelineConfig,
   RunState,
   TemplateContext,
 } from "./types.ts";
 import type { AgentResult } from "./agent.ts";
-import { resolveInputArtifacts, runAgent } from "./agent.ts";
 import {
   collectAllNodeIds,
   extractPreRun,
@@ -15,14 +13,10 @@ import {
   loadConfig,
 } from "./config.ts";
 import { buildLevels } from "./dag.ts";
-import { handleAgentHitl } from "./hitl-handler.ts";
-import { detectHitlRequest } from "./hitl.ts";
-import { runHuman, terminalInput } from "./human.ts";
+import { terminalInput } from "./human.ts";
 import type { UserInput } from "./human.ts";
 import { acquireLock, defaultLockPath, releaseLock } from "./lock.ts";
 import { onShutdown } from "./process-registry.ts";
-import { saveAgentLog } from "./log.ts";
-import { runLoop } from "./loop.ts";
 import { extractResultExcerpt, OutputManager } from "./output.ts";
 import type { RunSummary } from "./output.ts";
 import {
@@ -41,12 +35,18 @@ import {
   markNodeFailed,
   markNodeSkipped,
   markNodeStarted,
-  markRunAborted,
   markRunCompleted,
   markRunFailed,
   saveState,
   setPhaseRegistry,
 } from "./state.ts";
+import type { EngineContext } from "./node-dispatch.ts";
+import {
+  executeAgentNode,
+  executeHumanNode,
+  executeLoopNode,
+  executeMergeNode,
+} from "./node-dispatch.ts";
 
 /** Main pipeline engine. Orchestrates node execution across DAG levels. */
 export class Engine {
@@ -305,9 +305,21 @@ export class Engine {
       let success: boolean;
       let lastAgentResult: AgentResult | null = null;
 
+      const eng: EngineContext = {
+        config: this.config,
+        state: this.state,
+        output: this.output,
+        options: this.options,
+        userInput: this.userInput,
+        buildContext: (nId, loopIteration?) =>
+          this.buildContext(nId, loopIteration),
+        saveState: () => saveState(this.state),
+      };
+
       switch (node.type) {
         case "agent": {
-          lastAgentResult = await this.executeAgentNode(
+          lastAgentResult = await executeAgentNode(
+            eng,
             nodeId,
             node,
             wasWaiting,
@@ -316,13 +328,13 @@ export class Engine {
           break;
         }
         case "merge":
-          success = await this.executeMergeNode(nodeId, node);
+          success = await executeMergeNode(eng, nodeId, node);
           break;
         case "loop":
-          success = await this.executeLoopNode(nodeId, node);
+          success = await executeLoopNode(eng, nodeId, node);
           break;
         case "human":
-          success = await this.executeHumanNode(nodeId, node);
+          success = await executeHumanNode(eng, nodeId, node);
           break;
         default:
           throw new Error(`Unknown node type: ${(node as NodeConfig).type}`);
@@ -362,220 +374,6 @@ export class Engine {
       this.output.nodeFailed(nodeId, (err as Error).message);
       return false;
     }
-  }
-
-  /** Run an agent node: invoke Claude CLI, handle HITL if triggered, save logs. */
-  private async executeAgentNode(
-    nodeId: string,
-    node: NodeConfig,
-    wasWaiting = false,
-  ): Promise<AgentResult | null> {
-    const ctx = this.buildContext(nodeId);
-    const settings = node.settings as Required<NodeSettings>;
-    const hitlConfig = this.config.defaults?.hitl;
-    const effectiveModel = node.model ?? this.config.defaults?.model;
-
-    // Resume path: node was waiting for human reply
-    if (wasWaiting) {
-      if (!hitlConfig) {
-        markNodeFailed(
-          this.state,
-          nodeId,
-          "HITL detected but defaults.hitl not configured in pipeline.yaml",
-          "unknown",
-        );
-        return null;
-      }
-      return await handleAgentHitl({
-        mode: "resume",
-        nodeId,
-        hitlConfig,
-        state: this.state,
-        saveState: () => saveState(this.state),
-        node,
-        ctx,
-        settings,
-        claudeArgs: this.config.defaults?.claude_args,
-        model: effectiveModel,
-        output: this.output,
-      });
-    }
-
-    // Normal path: run agent
-    // Verbose: resolve and show input artifacts
-    const inputArtifacts = await resolveInputArtifacts(ctx.input);
-    this.output.verboseInputs(nodeId, inputArtifacts);
-
-    const streamLogPath = `${ctx.node_dir}/stream.log`;
-
-    const result = await runAgent({
-      node,
-      ctx,
-      settings,
-      claudeArgs: this.config.defaults?.claude_args,
-      model: effectiveModel,
-      output: this.output,
-      nodeId,
-      streamLogPath,
-      verbosity: this.options.verbosity,
-    });
-
-    if (!result.success) {
-      markNodeFailed(
-        this.state,
-        nodeId,
-        result.error ?? "Agent failed",
-        result.error_category ?? "unknown",
-      );
-      return result;
-    }
-
-    // Check for HITL request in permission_denials
-    if (result.output) {
-      const hitlQuestion = detectHitlRequest(result.output);
-      if (hitlQuestion) {
-        if (!hitlConfig) {
-          markNodeFailed(
-            this.state,
-            nodeId,
-            "Agent requested HITL (AskUserQuestion) but defaults.hitl not configured in pipeline.yaml",
-            "unknown",
-          );
-          return null;
-        }
-        return await handleAgentHitl({
-          mode: "detect",
-          nodeId,
-          hitlQuestion,
-          agentSessionId: result.output.session_id,
-          hitlConfig,
-          state: this.state,
-          saveState: () => saveState(this.state),
-          node,
-          ctx,
-          settings,
-          claudeArgs: this.config.defaults?.claude_args,
-          model: effectiveModel,
-          output: this.output,
-        });
-      }
-    }
-
-    if (result.session_id) {
-      this.state.nodes[nodeId].session_id = result.session_id;
-    }
-    this.state.nodes[nodeId].continuations = result.continuations;
-
-    // Save agent log (JSON output + JSONL transcript)
-    if (result.output) {
-      const runDir = getRunDir(this.state.run_id);
-      await saveAgentLog(runDir, nodeId, result.output);
-    }
-
-    return result;
-  }
-
-  /** Merge inputs by copying each input directory into the merge node's output dir. */
-  private async executeMergeNode(
-    nodeId: string,
-    node: NodeConfig,
-  ): Promise<boolean> {
-    const nodeDir = getNodeDir(this.state.run_id, nodeId);
-    await Deno.mkdir(nodeDir, { recursive: true });
-
-    // Copy input directories as subdirectories
-    for (const inputId of node.inputs ?? []) {
-      const inputDir = getNodeDir(this.state.run_id, inputId);
-      const targetDir = `${nodeDir}/${inputId}`;
-      try {
-        await copyDir(inputDir, targetDir);
-      } catch {
-        // Input may not have produced files
-      }
-    }
-
-    return true;
-  }
-
-  /** Delegate to runLoop(), then record iteration count and failure state. */
-  private async executeLoopNode(
-    nodeId: string,
-    _node: NodeConfig,
-  ): Promise<boolean> {
-    const result = await runLoop({
-      loopNodeId: nodeId,
-      config: this.config,
-      state: this.state,
-      buildCtx: (bodyNodeId, iteration) =>
-        this.buildContext(bodyNodeId, iteration),
-      onNodeStart: (id, iteration) =>
-        this.output.status(id, `STARTED (iteration ${iteration})`),
-      onNodeComplete: (id, iteration, result) => {
-        if (result.success) {
-          this.output.status(id, "COMPLETED");
-          if (result.output) {
-            this.output.nodeResult(id, result.output);
-            if (id in this.state.nodes) {
-              this.state.nodes[id].result = extractResultExcerpt(
-                result.output.result,
-              );
-            }
-          }
-        } else {
-          this.output.nodeFailed(id, result.error ?? "Failed");
-        }
-
-        // Save agent log for successful loop body nodes (iteration-qualified)
-        if (result.success && result.output) {
-          const runDir = getRunDir(this.state.run_id);
-          const iterNodeId = `${id}-iter-${iteration}`;
-          saveAgentLog(runDir, iterNodeId, result.output).catch((err) => {
-            this.output.warn(
-              `Failed to save log for ${iterNodeId}: ${(err as Error).message}`,
-            );
-          });
-        }
-      },
-      onIteration: (iteration, maxIterations) =>
-        this.output.loopIteration(nodeId, iteration, maxIterations),
-      output: this.output,
-      verbosity: this.options.verbosity,
-      saveState: () => saveState(this.state),
-    });
-
-    if (!result.success) {
-      markNodeFailed(
-        this.state,
-        nodeId,
-        result.error ?? "Loop failed",
-        result.error_category ?? "unknown",
-      );
-    }
-    this.state.nodes[nodeId].iteration = result.iterations;
-
-    return result.success;
-  }
-
-  /** Prompt the user for input and abort the run if response matches abort_on. */
-  private async executeHumanNode(
-    nodeId: string,
-    node: NodeConfig,
-  ): Promise<boolean> {
-    const ctx = this.buildContext(nodeId);
-    const result = await runHuman(node, ctx, this.userInput);
-
-    if (result.aborted) {
-      markRunAborted(this.state);
-      markNodeFailed(
-        this.state,
-        nodeId,
-        `Aborted by user (response: ${result.response})`,
-        "aborted",
-      );
-      return false;
-    }
-
-    return result.success;
   }
 
   /** Build template context for a node (searches top-level and loop body nodes). */
@@ -698,19 +496,5 @@ export async function runPreRunScript(
     }`;
     output.error(msg);
     throw new Error(msg);
-  }
-}
-
-/** Recursively copy a directory. */
-async function copyDir(src: string, dest: string): Promise<void> {
-  await Deno.mkdir(dest, { recursive: true });
-  for await (const entry of Deno.readDir(src)) {
-    const srcPath = `${src}/${entry.name}`;
-    const destPath = `${dest}/${entry.name}`;
-    if (entry.isDirectory) {
-      await copyDir(srcPath, destPath);
-    } else {
-      await Deno.copyFile(srcPath, destPath);
-    }
   }
 }
