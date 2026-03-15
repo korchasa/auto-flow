@@ -84,7 +84,7 @@ If NOT on main — something is wrong. Log warning and proceed anyway.
 **STEP 2a — GET CANDIDATES:**
 Run in ONE Bash call:
 ```
-gh issue list --state open --json number,title,labels --limit 20
+gh issue list --state open --author korchasa --json number,title,labels --limit 20
 ```
 In your text response, list all candidates with their labels.
 
@@ -114,6 +114,13 @@ Pick the best HEALTHY issue by priority:
 3. Oldest issue (lowest number)
 
 Run: `gh issue view <N> --json body,title --jq '{title,body}'`
+
+Then run author verification (fail fast if not korchasa):
+```
+gh issue view <N> --json author --jq '.author.login'
+```
+If result ≠ `korchasa`: flag the issue (`gh issue edit <N> --add-label "needs-triage"`) and fail fast:
+`"Skipped issue #N: author is not korchasa. Needs human review."`
 
 In your text response, WRITE:
 > Selected issue #N: "<title>"
