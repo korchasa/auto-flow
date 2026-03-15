@@ -102,7 +102,12 @@ graph LR
     `git push` after each task. Commit messages follow `sdlc(impl): <summary>`
     format.
   - `agent-qa` — verifies developer output. Posts verdict as PR review
-    (`gh pr review`: approve/request-changes).
+    (`gh pr review`: approve/request-changes). **Check suite extension
+    (FR-S31):** May autonomously add new verification functions to
+    `scripts/check.ts` when recurring quality issues are detected. Constrained
+    to evidence-based additions only, standalone function pattern, label to
+    stdout, `Deno.exit(1)` on failure, zero false positives confirmed by
+    running extended suite post-addition.
   - `agent-tech-lead-review` — post-pipeline: final code review + CI gate
     check + merge. `run_on: always`. Handles missing-PR case gracefully.
 - **Removed agents (FR-26):** `tech-lead-reviewer`, `tech-lead-sds`,
