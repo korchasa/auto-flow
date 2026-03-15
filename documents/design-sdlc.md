@@ -341,6 +341,27 @@ graph LR
   `Deno.exit(0)` on help, `Deno.exit(1)` on unknown flag with message
   referencing `--help`.
 
+### 3.10 AGENTS.md Agent List Validation (FR-S29)
+
+- **Purpose:** Validate `AGENTS.md` lists exactly 7 active agents with no
+  deprecated entries. Runs as part of `deno task check` alongside
+  `pipelineIntegrity()` (§3.8).
+- **Implementation:** `agentListAccuracy()` in `scripts/check.ts`:
+  1. Reads `AGENTS.md` content.
+  2. Extracts agent list from Project Vision section (parenthetical list after
+     "specialized AI agents").
+  3. Verifies all 7 expected agents present: PM, Architect, Tech Lead,
+     Developer, QA, Tech Lead Review, Meta-Agent.
+  4. Verifies no deprecated agent names appear as active: Presenter, Reviewer,
+     SDS Update.
+  5. Reports pass/fail with descriptive messages per check.
+- **Validation flow:** `agentListAccuracy()` → `Deno.readTextFile("AGENTS.md")`
+  → string matching against expected/deprecated lists → error collection →
+  report. Pattern follows `pipelineIntegrity()`: catch + report, non-throwing.
+- **Interfaces:** Called as part of `deno task check` pipeline in
+  `scripts/check.ts` main sequence. No separate CLI entry point.
+- **Deps:** None (reads `AGENTS.md` directly, no engine dependency).
+
 ## 4. Data
 
 ### 4.1 Commit Strategy
