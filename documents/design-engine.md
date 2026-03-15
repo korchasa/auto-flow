@@ -200,9 +200,17 @@ graph TD
     per-node result excerpts. `summary()` renders per-node result lines after
     "Nodes:" when `nodeResults` present: `  <nodeId padded>  <excerpt>`.
     Imports `ClaudeCliOutput` from `types.ts`
-  - `engine.ts` — main executor: level iteration, sequential dispatch, verbose
-    input resolution, node result summary display (FR-E15/E22),
-    loop-node log saving via `onNodeComplete` callback,
+  - `node-dispatch.ts` — node-type executor dispatch module (FR-E30).
+    Exports `EngineContext` interface (parameter bag: `config`, `state`,
+    `output`, `options`, `userInput`, `buildContext()`, `saveState()`) and
+    4 free functions: `executeAgentNode()` (agent invocation, HITL check,
+    log save), `executeMergeNode()` (directory copy), `executeLoopNode()`
+    (loop delegation + callbacks), `executeHumanNode()` (terminal prompt),
+    plus `copyDir()` utility. Enables `engine.ts` to act as pure orchestrator
+    by delegating all node-type-specific logic to this module.
+  - `engine.ts` — main orchestrator: config loading, state management,
+    level iteration, delegation to `node-dispatch.ts` executors (FR-E30),
+    node result summary display (FR-E15/E22),
     phase registry init via `setPhaseRegistry(config)` at engine startup,
     pre-post-pipeline `on_failure_script` execution.
     Two-phase config loading (FR-E24): `run()` reads raw YAML →
