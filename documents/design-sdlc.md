@@ -341,7 +341,18 @@ graph LR
   `Deno.exit(0)` on help, `Deno.exit(1)` on unknown flag with message
   referencing `--help`.
 
-### 3.10 AGENTS.md Agent List Validation (FR-S29)
+### 3.10 SDLC Script Module JSDoc (FR-S30)
+
+- **Purpose:** Module-level `/** @module */` JSDoc coverage for all 4 SDLC
+  utility scripts. Each module gets a docstring declaring purpose,
+  responsibility, and dependencies.
+- **Files:** `scripts/check.ts`, `scripts/claude_stream_formatter.ts`,
+  `scripts/generate-dashboard.ts`, `scripts/self_runner.ts`.
+- **Scope:** Module-level JSDoc only. Function-level JSDoc and why-comments
+  excluded (covered by FR-E30 for engine modules only).
+- **Deps:** None (documentation-only change).
+
+### 3.11 AGENTS.md Agent List Validation (FR-S29)
 
 - **Purpose:** Validate `AGENTS.md` lists exactly 7 active agents with no
   deprecated entries. Runs as part of `deno task check` alongside

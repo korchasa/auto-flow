@@ -1,6 +1,10 @@
-// scripts/self_runner.ts
-// Autonomous loop: check GitHub issues → run pipeline → repeat.
-// Exponential backoff (30s → 4h) when no actionable tickets found.
+/**
+ * @module
+ * Autonomous pipeline loop runner.
+ * Polls GitHub for open issues (excluding "in-progress"), runs the engine
+ * pipeline when actionable issues exist, and applies exponential backoff
+ * (30 s → 4 h) when the queue is empty. Run via: deno task loop
+ */
 
 import { Engine } from "../engine/engine.ts";
 import { parseArgs } from "../engine/cli.ts";

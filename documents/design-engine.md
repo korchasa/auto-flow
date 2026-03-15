@@ -236,6 +236,15 @@ graph TD
   - `mod.ts` — barrel re-export serving as `deno doc --lint` entry point
     (not a runtime public API; sole non-redundant consumer is
     `scripts/check.ts` JSDoc validation)
+- **Module JSDoc and Why-Comments (FR-E30):** All 6 engine modules require
+  module-level `/** @module */` JSDoc (purpose, responsibility, deps) and
+  function-level JSDoc on exported functions. 4 complex functions require
+  inline `// Why:` comments explaining non-obvious design decisions:
+  (1) `runAgent()` in `agent.ts` — continuation/resume semantics with shared
+  session_id; (2) `validateNode()` in `config.ts` — recursive validation with
+  dual input-ID namespace; (3) `mergeDefaults()` in `config.ts` — 3-tier
+  cascade order and legacy normalization; (4) `checkFrontmatterField()` in
+  `validate.ts` — regex-over-YAML-parser for partial-document handling.
 - **Legacy Test Task Removal (FR-E29):** Verified complete. No `test:*` tasks
   referencing `.sdlc/scripts/stage-*_test.ts` remain in `deno.json`. No "Stage
   Scripts" section in SDS (§3.2 is Phase Registry). No `.sdlc/scripts/stage-*`

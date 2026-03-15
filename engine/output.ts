@@ -1,3 +1,11 @@
+/**
+ * @module
+ * Terminal output management for pipeline execution.
+ * {@link OutputManager} centralises all stderr writes and enforces verbosity
+ * levels (quiet / normal / semi-verbose / verbose) so callers never need to
+ * check verbosity themselves.
+ */
+
 import type { ClaudeCliOutput, Verbosity } from "./types.ts";
 
 /** Input artifact descriptor for verbose output. */

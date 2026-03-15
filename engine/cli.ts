@@ -1,6 +1,8 @@
 #!/usr/bin/env -S deno run -A
 /**
+ * @module
  * CLI entry point for the pipeline engine.
+ * Parses arguments and delegates to {@link Engine}.
  * Usage: deno task run [options]
  *
  * Options:
@@ -20,6 +22,11 @@ import type { EngineOptions, Verbosity } from "./types.ts";
 import { Engine } from "./engine.ts";
 import { installSignalHandlers } from "./process-registry.ts";
 
+/**
+ * Parse CLI arguments into EngineOptions.
+ * Known flags (--config, --resume, --dry-run, verbosity, --env, --skip, --only)
+ * set dedicated fields. Generic `--key value` pairs populate `args`.
+ */
 export function parseArgs(args: string[]): EngineOptions {
   let configPath = ".auto-flow/pipeline.yaml";
   let runId: string | undefined;

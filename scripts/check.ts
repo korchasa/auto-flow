@@ -1,5 +1,10 @@
-// scripts/check.ts
-// Full project verification: fmt, lint, test, comment-scan
+/**
+ * @module
+ * Full project verification: fmt --check, lint, type-check, CLI smoke test,
+ * secret scan, tests, doc lint, pipeline integrity, AGENTS.md accuracy, and
+ * comment-marker scan (TODO/FIXME/HACK/XXX).
+ * Run via: deno task check
+ */
 
 async function run(
   cmd: string,

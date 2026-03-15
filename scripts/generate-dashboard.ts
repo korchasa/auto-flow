@@ -1,6 +1,11 @@
-// scripts/generate-dashboard.ts
-// Generates a self-contained HTML dashboard for a pipeline run.
-// Reads state.json + per-node logs/<nodeId>.json from a run directory.
+/**
+ * @module
+ * HTML dashboard generator for a pipeline run.
+ * Reads state.json + per-node logs/<nodeId>.json from a run directory and
+ * produces a self-contained index.html with node cards, Gantt timeline, and
+ * cost chart. Entry point: {@link renderHtml}.
+ * CLI: deno task dashboard --run-dir <path>
+ */
 import type { ClaudeCliOutput, NodeState, RunState } from "../engine/types.ts";
 import { parse as parseYaml } from "@std/yaml";
 

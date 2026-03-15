@@ -1,5 +1,9 @@
-// scripts/claude_stream_formatter.ts
-// Transforms claude CLI stream-json events into readable terminal output.
+/**
+ * @module
+ * Transforms claude CLI stream-json events into readable, ANSI-coloured terminal
+ * output. Entry points: {@link formatStreamEvent} (single event → string) and
+ * {@link processStream} (full stream → StreamResult).
+ */
 
 // deno-lint-ignore no-explicit-any
 type StreamEvent = Record<string, any>;
