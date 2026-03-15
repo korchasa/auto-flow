@@ -18,6 +18,7 @@
 - Check `git diff <file>` when git status shows M (modified) — prior agent may have already made partial changes
 - No-op tasks: run check, fix any pre-existing fmt issues, write summary, commit run artifact only
 - No-op detection: read decision + git log in parallel on first turn; if tasks=[] and sdlc(impl) commit exists, skip all source reads
+- When deno task check shows trailing space in an out-of-scope memory file: fix it (single Edit), stage it alongside memory file
 
 ## Environment Quirks
 
@@ -29,6 +30,7 @@
 - `git diff HEAD` shows both staged and unstaged changes vs HEAD; `git diff --cached` shows only staged
 - PM agent may add FR sections with unchecked ACs — developer's job is to mark them with evidence
 - No-op tasks (tasks[].files empty): still need to fix pre-existing fmt issues before check passes
+- Trailing space in memory/*.md is a recurring pattern — check git status M files before running check
 
 ## Baseline Metrics
 
@@ -39,4 +41,5 @@
 - Run 20260315T013850: ~4 turns, scope sdlc, issue #121 (FR-S29), no-op pass-through (tasks=[])
 - Run 20260315T014815: ~4 turns, scope sdlc, issue #121 (FR-S29), no-op pass-through (tasks=[])
 - Run 20260315T020701: ~4 turns, scope sdlc, issue #121 (FR-S29), no-op pass-through (tasks=[])
+- Run 20260315T021555: ~6 turns, scope sdlc, issue #121 (FR-S29), no-op + fmt fix in agent-architect.md
 - Target: ≤35 turns. All runs achieved well under target.
