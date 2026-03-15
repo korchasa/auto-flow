@@ -80,7 +80,6 @@ export class Engine {
 
     // Load config (re-reads file after pre_run may have changed it)
     this.config = await loadConfig(this.options.config_path);
-
     // Merge env overrides
     const env = { ...this.config.env, ...this.options.env_overrides };
 
