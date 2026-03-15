@@ -664,11 +664,11 @@
 ### 3.29 FR-S29: AGENTS.md Agent List Accuracy
 
 - **Description:** `AGENTS.md` must list exactly the 7 active pipeline agents: PM, Architect, Tech Lead, Developer, QA, Tech Lead Review, Meta-Agent. Deprecated/absorbed agents (e.g., Presenter, absorbed into Tech Lead + Tech Lead Review per FR-S15) must not appear as active agents.
-- **Rationale:** Stale agent references in `AGENTS.md` mislead contributors about pipeline structure. Presenter agent was absorbed into Tech Lead + Tech Lead Review per FR-S15 but persists in `AGENTS.md:44-45`, creating confusion.
+- **Rationale:** Stale agent references in `AGENTS.md` mislead contributors about pipeline structure. Presenter agent was absorbed into Tech Lead + Tech Lead Review per FR-S15. `AGENTS.md` now lists exactly 7 correct agents; Presenter reference removed.
 - **Acceptance criteria:**
-  - [ ] `AGENTS.md` agent list contains exactly: PM, Architect, Tech Lead, Developer, QA, Tech Lead Review, Meta-Agent (7 agents total).
-  - [ ] No reference to "Presenter" as an active agent in `AGENTS.md`.
-  - [ ] `deno task check` passes.
+  - [x] `AGENTS.md` agent list contains exactly: PM, Architect, Tech Lead, Developer, QA, Tech Lead Review, Meta-Agent (7 agents total). Evidence: `AGENTS.md` (7 agents listed, no Presenter), `scripts/check.ts:134-171` (`validateAgentListContent`), `scripts/check_test.ts:96-100` (real AGENTS.md integration test).
+  - [x] No reference to "Presenter" as an active agent in `AGENTS.md`. Evidence: `scripts/check.ts:134-171` (`validateAgentListContent` rejects deprecated agents), `scripts/check_test.ts:73-78` (Presenter rejection test).
+  - [x] `deno task check` passes. Evidence: `scripts/check.ts:173-184` (`agentListAccuracy` runs as part of check), `scripts/check_test.ts:54-100` (6 test cases).
 
 ## 4. Non-functional requirements
 
