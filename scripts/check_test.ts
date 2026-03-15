@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { checkArgs, printUsage } from "./check.ts";
+import { checkArgs, printUsage, validateAgentListContent } from "./check.ts";
 
 // --- printUsage ---
 
@@ -15,6 +15,7 @@ Deno.test("printUsage — mentions checks performed", () => {
   assertEquals(text.includes("Linting"), true);
   assertEquals(text.includes("Tests"), true);
   assertEquals(text.includes("Pipeline integrity"), true);
+  assertEquals(text.includes("AGENTS.md agent list accuracy"), true);
   assertEquals(text.includes("Comment marker scan"), true);
 });
 
@@ -48,4 +49,52 @@ Deno.test("checkArgs — unknown positional arg returns error with code 1", () =
 Deno.test("checkArgs — empty args returns null (ok)", () => {
   const result = checkArgs([]);
   assertEquals(result, null);
+});
+
+// --- validateAgentListContent ---
+
+Deno.test("validateAgentListContent — valid 7-agent content passes", () => {
+  const content =
+    "## Project Vision\nPM, Architect, Tech Lead, Developer, QA, Tech Lead Review, Meta-Agent\n\n## Next Section\n";
+  const errors = validateAgentListContent(content);
+  assertEquals(errors, []);
+});
+
+Deno.test("validateAgentListContent — missing agent fails", () => {
+  const content =
+    "## Project Vision\nPM, Architect, Tech Lead, Developer, QA, Meta-Agent\n\n## Next\n";
+  const errors = validateAgentListContent(content);
+  assertEquals(
+    errors.some((e: string) => e.includes("Tech Lead Review")),
+    true,
+  );
+});
+
+Deno.test("validateAgentListContent — deprecated agent Presenter fails", () => {
+  const content =
+    "## Project Vision\nPM, Architect, Tech Lead, Developer, QA, Tech Lead Review, Meta-Agent, Presenter\n\n## Next\n";
+  const errors = validateAgentListContent(content);
+  assertEquals(errors.some((e: string) => e.includes("Presenter")), true);
+});
+
+Deno.test("validateAgentListContent — deprecated agent Reviewer fails", () => {
+  const content =
+    "## Project Vision\nPM, Architect, Tech Lead, Developer, QA, Tech Lead Review, Meta-Agent\n\nReviewer also exists\n## Next\n";
+  const errors = validateAgentListContent(content);
+  assertEquals(errors.some((e: string) => e.includes("Reviewer")), true);
+});
+
+Deno.test("validateAgentListContent — missing Project Vision section fails", () => {
+  const content = "## Some Section\ncontent\n";
+  const errors = validateAgentListContent(content);
+  assertEquals(
+    errors.some((e: string) => e.includes("Project Vision")),
+    true,
+  );
+});
+
+Deno.test("validateAgentListContent — real AGENTS.md passes", async () => {
+  const content = await Deno.readTextFile("AGENTS.md");
+  const errors = validateAgentListContent(content);
+  assertEquals(errors, []);
 });

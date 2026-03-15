@@ -124,6 +124,66 @@ async function pipelineIntegrity(): Promise<void> {
   console.log("  Agent symlinks valid.");
 }
 
+/**
+ * Validates AGENTS.md content for agent list accuracy.
+ *
+ * Checks that the Project Vision section lists all 7 active pipeline agents
+ * and that no deprecated agent names appear anywhere in the document.
+ * Returns an array of error messages; empty array means validation passed.
+ */
+export function validateAgentListContent(content: string): string[] {
+  const expectedAgents = [
+    "PM",
+    "Architect",
+    "Tech Lead",
+    "Developer",
+    "QA",
+    "Tech Lead Review",
+    "Meta-Agent",
+  ];
+  const deprecatedAgents = ["Presenter", "Reviewer", "SDS Update"];
+  const errors: string[] = [];
+
+  const visionMatch = content.match(
+    /## Project Vision\n([\s\S]*?)(?=\n## |\n# |$)/,
+  );
+  if (!visionMatch) {
+    return ["AGENTS.md: ## Project Vision section not found"];
+  }
+  // Normalize line breaks to spaces so word-wrapped agent names match correctly
+  const visionSection = visionMatch[1].replace(/\n/g, " ");
+
+  for (const agent of expectedAgents) {
+    if (!visionSection.includes(agent)) {
+      errors.push(
+        `AGENTS.md: Expected agent "${agent}" not found in Project Vision`,
+      );
+    }
+  }
+
+  for (const agent of deprecatedAgents) {
+    if (content.includes(agent)) {
+      errors.push(`AGENTS.md: Deprecated agent "${agent}" found in AGENTS.md`);
+    }
+  }
+
+  return errors;
+}
+
+async function agentListAccuracy(): Promise<void> {
+  console.log("\n--- AGENTS.md Agent List Accuracy ---");
+  const content = await Deno.readTextFile("AGENTS.md");
+  const errors = validateAgentListContent(content);
+  if (errors.length > 0) {
+    for (const err of errors) {
+      console.error(`  ${err}`);
+    }
+    console.error("FAILED: AGENTS.md agent list is inaccurate");
+    Deno.exit(1);
+  }
+  console.log("  AGENTS.md agent list valid (7 active agents, no deprecated).");
+}
+
 export function printUsage(): string {
   return `Full project verification: fmt, lint, test, comment-scan
 
@@ -139,6 +199,7 @@ Checks performed:
   - Tests (deno test)
   - Doc lint: JSDoc, private-type-ref, circular deps (deno doc --lint)
   - Pipeline integrity check
+  - AGENTS.md agent list accuracy
   - Comment marker scan (TODO/FIXME/HACK/XXX)
 
 No options accepted.
@@ -219,6 +280,7 @@ if (import.meta.main) {
   );
 
   await pipelineIntegrity();
+  await agentListAccuracy();
   await commentScan();
 
   console.log("\n=== All checks passed! ===");
