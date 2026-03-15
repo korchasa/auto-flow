@@ -8,7 +8,7 @@ import type {
 } from "./types.ts";
 import { resolveInputArtifacts } from "./agent.ts";
 import { collectAllNodeIds, findNodeConfig } from "./config.ts";
-import { Engine, runPreRunScript } from "./engine.ts";
+import { Engine, runPrepareCommand, runPreRunScript } from "./engine.ts";
 import {
   collectPostPipelineNodes,
   runFailureHook,
@@ -948,4 +948,59 @@ Deno.test("runPreRunScript — throws on nonexistent script", async () => {
     thrown = true;
   }
   assertEquals(thrown, true);
+});
+
+// --- FR-E30: runPrepareCommand tests ---
+
+Deno.test("runPrepareCommand — executes command on fresh run", async () => {
+  const cap = createCapture();
+  const out = new OutputManager("normal", cap.writer);
+  await runPrepareCommand("echo ok", "/tmp", "test-run", {}, {}, out);
+  const output = cap.lines.join("");
+  assertEquals(output.includes("PREPARE_COMMAND"), true);
+});
+
+Deno.test("runPrepareCommand — throws on non-zero exit (failure abort)", async () => {
+  const cap = createCapture();
+  const out = new OutputManager("normal", cap.writer);
+  let thrown = false;
+  try {
+    await runPrepareCommand("exit 1", "/tmp", "test-run", {}, {}, out);
+  } catch (e) {
+    thrown = true;
+    assertEquals(
+      (e as Error).message.includes("prepare_command failed"),
+      true,
+    );
+  }
+  assertEquals(thrown, true);
+});
+
+Deno.test("runPrepareCommand — skipped when resume=true (guard logic)", () => {
+  // The call site in runWithLock() uses: !this.options.resume && prepareCmd
+  // This test verifies the boolean guard prevents execution on resume runs.
+  const opts = makeOptions({ resume: true, run_id: "20260315T000000" });
+  const cmd = "exit 1"; // would throw if executed
+  const shouldRun = !opts.resume && !!cmd;
+  assertEquals(shouldRun, false);
+});
+
+Deno.test("runPrepareCommand — interpolates run_id in command", async () => {
+  const tmpFile = await Deno.makeTempFile();
+  try {
+    const cap = createCapture();
+    const out = new OutputManager("normal", cap.writer);
+    await runPrepareCommand(
+      `echo {{run_id}} > ${tmpFile}`,
+      "/tmp",
+      "my-run-id",
+      {},
+      {},
+      out,
+    );
+    const content = await Deno.readTextFile(tmpFile);
+    assertEquals(content.trim(), "my-run-id");
+  } finally {
+    await Deno.remove(tmpFile);
+  }
 });

@@ -40,6 +40,7 @@ import {
   saveState,
   setPhaseRegistry,
 } from "./state.ts";
+import { interpolate } from "./template.ts";
 import type { EngineContext } from "./node-dispatch.ts";
 import {
   executeAgentNode,
@@ -166,6 +167,19 @@ export class Engine {
     // Create run directory structure
     await this.ensureRunDirs(levels);
     await saveState(this.state);
+
+    // Run prepare_command before level loop (skip on resume)
+    const prepareCmd = this.config.defaults?.prepare_command ?? "";
+    if (!this.options.resume && prepareCmd) {
+      await runPrepareCommand(
+        prepareCmd,
+        getRunDir(this.state.run_id),
+        this.state.run_id,
+        this.state.env,
+        this.state.args,
+        this.output,
+      );
+    }
 
     // Identify post-pipeline nodes (run_on set) — execute after all DAG levels
     // Sort topologically so dependencies within post-pipeline subset are respected
@@ -491,6 +505,49 @@ export async function runPreRunScript(
   if (stdout) output.status("engine", stdout);
   if (!result.success) {
     const msg = `pre_run script failed: ${scriptPath}${
+      stderr ? `\n${stderr}` : ""
+    }`;
+    output.error(msg);
+    throw new Error(msg);
+  }
+}
+
+/**
+ * Execute prepare_command once before the node level loop on fresh runs.
+ * Supports template interpolation for run_dir, run_id, env.*, args.*.
+ * node_dir and input.* resolve to empty string (not meaningful at pipeline scope).
+ * Throws on non-zero exit — caller saves state and pipeline aborts (FR-E30).
+ * Call site guards with !options.resume so this is skipped on resumed runs.
+ */
+export async function runPrepareCommand(
+  cmd: string,
+  runDir: string,
+  runId: string,
+  env: Record<string, string>,
+  args: Record<string, string>,
+  output: OutputManager,
+): Promise<void> {
+  const ctx: TemplateContext = {
+    node_dir: "",
+    run_dir: runDir,
+    run_id: runId,
+    args,
+    env,
+    input: {},
+  };
+  const interpolated = interpolate(cmd, ctx);
+  output.status("engine", `PREPARE_COMMAND: ${interpolated}`);
+  const proc = new Deno.Command("sh", {
+    args: ["-c", interpolated],
+    stdout: "piped",
+    stderr: "piped",
+  });
+  const result = await proc.output();
+  const stdout = new TextDecoder().decode(result.stdout).trim();
+  const stderr = new TextDecoder().decode(result.stderr).trim();
+  if (stdout) output.status("engine", stdout);
+  if (!result.success) {
+    const msg = `prepare_command failed: ${interpolated}${
       stderr ? `\n${stderr}` : ""
     }`;
     output.error(msg);

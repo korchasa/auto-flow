@@ -15,7 +15,7 @@ type: feedback
 ## Effective strategies
 
 - Grep `^### 3\.\d+ FR-E\d+` on SRS → all FR numbers + line ranges in 1 call.
-- Grep `^## ` → section headings + line numbers in 1 call.
+- Grep `^##` → section headings + line numbers in 1 call.
 - Offset read of last ~80 lines (offset = last-FR-line) → captures end of last FR + section 4 + section 5 + appendix.
 - Parallel Grep (FR list + section headings) in one response = 1 turn for full SRS structure.
 - For large SRS (>50KB): 2 targeted Edits (section insert before `## 4.` + appendix row insert) is sufficient and practical.
@@ -33,7 +33,7 @@ type: feedback
 - Appendix in requirements-engine.md (single table: Old ID / New ID / Title) — update alongside section 3.xx.
 - Newer FRs with no legacy alias use `—` in Old ID column of appendix.
 - Section 4 ("Non-Functional Requirements") immediately follows last FR-E section. Insert new FR section just before it.
-- Tool-results persisted output is line-prefixed (`     1→...`), which adds ~8 chars per line → inflates file size to >50KB even for 682-line files.
+- Tool-results persisted output is line-prefixed (`1→...`), which adds ~8 chars per line → inflates file size to >50KB even for 682-line files.
 
 ## Baseline metrics
 

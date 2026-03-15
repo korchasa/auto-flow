@@ -38,6 +38,10 @@ export interface PipelineDefaults extends NodeSettings {
   hitl?: HitlConfig;
   /** Path to script executed when the pipeline fails (FR-34). */
   on_failure_script?: string;
+  /** Shell command executed once before the node level loop on fresh runs.
+   * Supports template interpolation (run_dir, run_id, env.*, args.*).
+   * Skipped on resume. Non-zero exit aborts the pipeline (FR-E30). */
+  prepare_command?: string;
 }
 
 /** Configuration for a single pipeline node. */

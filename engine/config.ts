@@ -36,6 +36,7 @@ export const DEFAULT_PIPELINE_DEFAULTS: Required<PipelineDefaults> = {
     timeout: 7200,
   },
   on_failure_script: "",
+  prepare_command: "",
 };
 
 /**
