@@ -1,3 +1,12 @@
+/**
+ * @module
+ * Agent node execution: invoke Claude CLI, validate output artifacts, and
+ * continue on validation failure (continuation loop).
+ * Entry point: {@link runAgent}.
+ * Depends on {@link invokeClaudeCli} for the actual subprocess management and
+ * {@link runValidations} for post-run artifact checks.
+ */
+
 import type {
   ClaudeCliOutput,
   ErrorCategory,
@@ -93,6 +102,18 @@ export interface AgentRunOptions {
  * 3. Validate output artifacts
  * 4. If validation fails and continuations remain, resume with `--resume`
  * 5. Run `after` hook if configured
+ *
+ * Why reuse the same session_id across continuations: `claude --resume <id>`
+ * re-enters the existing conversation so the agent retains full context of
+ * what it already produced. A fresh invocation would lose that context, forcing
+ * the agent to start over rather than surgically fix the specific validation
+ * failure. Context preservation is critical when artefacts are large (e.g. a
+ * half-written implementation) and only a small section needs correction.
+ *
+ * Why a loop rather than one-shot: the number of continuations needed is
+ * unknown upfront — each pass may fix some failures while exposing others.
+ * The loop terminates on either allPassed() or exhausting max_continuations,
+ * satisfying the fail-fast contract without hard-coding a fixed retry count.
  */
 export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
   const {

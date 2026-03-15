@@ -1,3 +1,11 @@
+/**
+ * @module
+ * Pipeline config loading, schema validation, and default merging.
+ * Entry points: {@link loadConfig} (file → PipelineConfig) and
+ * {@link parseConfig} (YAML string → PipelineConfig).
+ * Defaults are applied in a 3-tier cascade: hardcoded → pipeline-level → node-level.
+ */
+
 import { parse as parseYaml } from "@std/yaml";
 import type {
   NodeConfig,
@@ -122,6 +130,15 @@ function validateSchema(config: Record<string, unknown>): void {
   }
 }
 
+/**
+ * Validate a single node's required fields and type-specific constraints.
+ *
+ * Why recursive with widened ID set: loop body nodes may reference each other
+ * (for intra-body ordering) in addition to top-level nodes. When we recurse
+ * into loop body nodes we pass `[...allNodeIds, ...bodyNodeIds]` so that
+ * inputs can resolve against both namespaces. Passing only `allNodeIds` would
+ * falsely reject valid body-node cross-references.
+ */
 function validateNode(
   id: string,
   node: Record<string, unknown>,
@@ -321,7 +338,19 @@ function validateValidationRule(
   }
 }
 
-/** Merge pipeline defaults into each node's settings. */
+/**
+ * Merge pipeline defaults into each node's settings.
+ *
+ * Why 3-tier cascade: `DEFAULT_SETTINGS` (hardcoded engine fallbacks) →
+ * `config.defaults` (pipeline-level overrides) → `node.settings` (per-node
+ * overrides). Each tier wins over the one before it, so operators can set
+ * pipeline-wide timeouts without touching every node, and nodes can still
+ * override individually.
+ *
+ * Why `run_always` normalisation: `run_always: true` is a legacy shorthand
+ * that predates the `run_on` enum. We canonicalise it to `run_on: "always"`
+ * here so all downstream code only needs to handle `run_on`.
+ */
 function mergeDefaults(config: PipelineConfig): PipelineConfig {
   const pipelineDefaults: PipelineDefaults = {
     ...DEFAULT_PIPELINE_DEFAULTS,

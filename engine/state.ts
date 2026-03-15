@@ -1,3 +1,10 @@
+/**
+ * @module
+ * Run-state management: create, persist, load, and update RunState across a
+ * pipeline execution. Also owns the phase registry (nodeId → phase name) used
+ * for computing node output directory paths.
+ */
+
 import type {
   ErrorCategory,
   NodeState,

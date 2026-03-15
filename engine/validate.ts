@@ -1,3 +1,11 @@
+/**
+ * @module
+ * Output artifact validation for pipeline nodes.
+ * Supports five rule types: file_exists, file_not_empty, contains_section,
+ * custom_script, and frontmatter_field.
+ * Entry point: {@link runValidations}.
+ */
+
 import type { TemplateContext, ValidationRule } from "./types.ts";
 import { interpolate } from "./template.ts";
 
@@ -164,6 +172,16 @@ async function checkCustomScript(
   }
 }
 
+/**
+ * Validate that a YAML frontmatter field in an artifact file has an expected value.
+ *
+ * Why regex over a full YAML parser: agent output artifacts contain valid YAML
+ * frontmatter (between `---` delimiters) but potentially invalid YAML in the
+ * document body (e.g. unquoted colons in markdown text). Parsing the whole
+ * document would throw on a valid artifact. We extract only the frontmatter
+ * block via regex and apply a second simple key:value regex — robust enough
+ * for single-level scalar fields without risking spurious parse failures.
+ */
 async function checkFrontmatterField(
   rule: ValidationRule,
   path: string,
