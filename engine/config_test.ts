@@ -782,6 +782,88 @@ nodes:
   assertEquals(caught!.message.includes("missing/b/SKILL.md"), true);
 });
 
+// --- validateFileReferences tests (FR-E32) ---
+
+Deno.test("parseConfig — task_template with valid file() reference passes", () => {
+  const tmpDir = Deno.makeTempDirSync();
+  const filePath = `${tmpDir}/context.md`;
+  Deno.writeTextFileSync(filePath, "# Context");
+  const yaml = `
+name: test
+version: "1"
+nodes:
+  a:
+    type: agent
+    label: A
+    task_template: '{{file("${filePath}")}}'
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.nodes.a.task_template, `{{file("${filePath}")}}`);
+});
+
+Deno.test("parseConfig — task_template with missing file() path throws", () => {
+  const yaml = `
+name: test
+version: "1"
+nodes:
+  a:
+    type: agent
+    label: A
+    task_template: '{{file("/nonexistent/missing.md")}}'
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "file not found",
+  );
+});
+
+Deno.test("parseConfig — file() path containing {{ is skipped (no validation error)", () => {
+  const yaml = `
+name: test
+version: "1"
+nodes:
+  a:
+    type: agent
+    label: A
+    task_template: '{{file("{{input.x}}/context.md")}}'
+`;
+  const config = parseConfig(yaml);
+  assertEquals(
+    config.nodes.a.task_template,
+    '{{file("{{input.x}}/context.md")}}',
+  );
+});
+
+Deno.test("parseConfig — loop body node task_template with missing file() throws", () => {
+  const yaml = `
+name: test
+version: "1"
+nodes:
+  impl-loop:
+    type: loop
+    label: Impl loop
+    condition_node: qa
+    condition_field: verdict
+    exit_value: PASS
+    nodes:
+      developer:
+        type: agent
+        label: Developer
+        task_template: '{{file("/nonexistent/prompt.md")}}'
+      qa:
+        type: agent
+        label: QA
+        task_template: verify
+        inputs: [developer]
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "file not found",
+  );
+});
+
 Deno.test("parseConfig — loop body node with missing prompt throws", () => {
   const yaml = `
 name: test

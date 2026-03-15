@@ -1,5 +1,5 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { interpolate } from "./template.ts";
+import { FILE_INCLUSION_SIZE_WARN_BYTES, interpolate } from "./template.ts";
 import type { TemplateContext } from "./types.ts";
 
 function makeCtx(overrides?: Partial<TemplateContext>): TemplateContext {
@@ -139,4 +139,69 @@ Deno.test("interpolate — empty key after prefix throws", () => {
     Error,
     "Empty key after prefix",
   );
+});
+
+// --- file() function tests (FR-E32) ---
+
+Deno.test("interpolate — file() resolves to file content", () => {
+  const tmpDir = Deno.makeTempDirSync();
+  const filePath = `${tmpDir}/context.md`;
+  Deno.writeTextFileSync(filePath, "# Context\nHello world");
+  const ctx = makeCtx();
+  assertEquals(
+    interpolate(`{{file("${filePath}")}}`, ctx),
+    "# Context\nHello world",
+  );
+});
+
+Deno.test("interpolate — file() missing file throws descriptive error", () => {
+  const ctx = makeCtx();
+  const path = "/nonexistent/path/missing.md";
+  assertThrows(
+    () => interpolate(`{{file("${path}")}}`, ctx),
+    Error,
+    "file not found",
+  );
+});
+
+Deno.test("interpolate — file() content with {{var}} is NOT re-interpolated", () => {
+  const tmpDir = Deno.makeTempDirSync();
+  const filePath = `${tmpDir}/template.md`;
+  Deno.writeTextFileSync(filePath, "content with {{node_dir}} literal");
+  const ctx = makeCtx();
+  assertEquals(
+    interpolate(`{{file("${filePath}")}}`, ctx),
+    "content with {{node_dir}} literal",
+  );
+});
+
+Deno.test("interpolate — file() mixed with other template vars", () => {
+  const tmpDir = Deno.makeTempDirSync();
+  const filePath = `${tmpDir}/context.md`;
+  Deno.writeTextFileSync(filePath, "file content");
+  const ctx = makeCtx();
+  assertEquals(
+    interpolate(`{{input.pm}} and {{file("${filePath}")}}`, ctx),
+    "/runs/20260308/pm and file content",
+  );
+});
+
+Deno.test("interpolate — file() emits console.warn for large file", () => {
+  const tmpDir = Deno.makeTempDirSync();
+  const filePath = `${tmpDir}/large.md`;
+  Deno.writeTextFileSync(
+    filePath,
+    "x".repeat(FILE_INCLUSION_SIZE_WARN_BYTES + 1),
+  );
+  const ctx = makeCtx();
+  const warns: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => warns.push(args.map(String).join(" "));
+  try {
+    interpolate(`{{file("${filePath}")}}`, ctx);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assertEquals(warns.length, 1);
+  assertEquals(warns[0].includes("large file"), true);
 });

@@ -405,6 +405,7 @@ function mergeDefaults(config: PipelineConfig): PipelineConfig {
     nodes: mergedNodes,
   };
   validatePromptPaths(result);
+  validateFileReferences(result);
   return result;
 }
 
@@ -440,6 +441,47 @@ function readPromptContent(node: NodeConfig, missing: string[]): void {
   } catch (e) {
     if (e instanceof Deno.errors.NotFound) {
       missing.push(node.prompt);
+    }
+  }
+}
+
+/**
+ * Validate all `{{file("path")}}` references in task_template and prompt fields.
+ *
+ * Scans top-level and loop body nodes. Paths containing `{{` are skipped
+ * (unresolvable template variables at load time). Throws immediately on the
+ * first missing file, including the node ID for context.
+ */
+export function validateFileReferences(config: PipelineConfig): void {
+  const FILE_REF_RE = /\{\{file\("([^"]+)"\)\}\}/g;
+
+  function scanNode(nodeId: string, node: NodeConfig): void {
+    const fields = [node.task_template, node.prompt].filter(
+      (f): f is string => typeof f === "string",
+    );
+    for (const field of fields) {
+      FILE_REF_RE.lastIndex = 0;
+      let match;
+      while ((match = FILE_REF_RE.exec(field)) !== null) {
+        const path = match[1];
+        if (path.includes("{{")) continue;
+        try {
+          Deno.statSync(path);
+        } catch {
+          throw new Error(
+            `Node '${nodeId}': {{file("${path}")}} — file not found: ${path}`,
+          );
+        }
+      }
+    }
+  }
+
+  for (const [id, node] of Object.entries(config.nodes)) {
+    scanNode(id, node);
+    if (node.type === "loop" && node.nodes) {
+      for (const [bodyId, bodyNode] of Object.entries(node.nodes)) {
+        scanNode(bodyId, bodyNode);
+      }
     }
   }
 }
