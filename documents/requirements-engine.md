@@ -587,6 +587,16 @@
   - [x] 9 unit tests cover registry operations, killAll, shutdown callbacks, error resilience. Evidence: `engine/process-registry_test.ts`
   - [x] All 474 existing tests pass. Evidence: `deno task check` output
 
+### 3.26 FR-E26: Engine Codebase Housekeeping
+
+- **Description:** Engine source tree must remain free of dead code and stale documentation. Barrel export files with no runtime or test consumers must be removed. Pre-implementation research docs in `documents/rnd/` superseded by implemented FRs must be deleted or archived. Empty run artifact directories must not be tracked in version control.
+- **Motivation:** `engine/mod.ts` is a barrel re-export not imported by runtime code or tests (only referenced as a type-check target in `deno task check`). Retaining it without a clear owner creates confusion about the engine's public API surface. `documents/rnd/human-in-the-loop.md` (18KB, Russian, 2026-03-11) predates the HITL implementation (FR-E8) and may be superseded by it. Empty `.auto-flow/runs/*/implementation` directories accumulate from loop iterations; `.gitignore` covers `.auto-flow/runs/` but stale tracked entries must be purged.
+- **Acceptance criteria:**
+  - [x] `engine/mod.ts` purpose documented via module-level JSDoc: barrel re-export for `deno doc --lint`. Evidence: `engine/mod.ts:1`
+  - [x] `documents/rnd/human-in-the-loop.md` deleted — superseded by `engine/hitl.ts` + SDS §5 HITL documentation. Evidence: file removed from repo.
+  - [x] Empty `.auto-flow/runs/*/implementation` directories are not git-tracked; `.gitignore` covers `runs/` directory.
+  - [x] All existing engine tests pass after changes. Evidence: `deno task check` PASS
+
 ## 4. Non-Functional Requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -638,3 +648,4 @@
 | —      | FR-E23 | CLI Help for `deno task check` |
 | —      | FR-E24 | Pre-Run Script (`pre_run`) |
 | —      | FR-E25 | Graceful Shutdown (Signal Handling) |
+| —      | FR-E26 | Engine Codebase Housekeeping |

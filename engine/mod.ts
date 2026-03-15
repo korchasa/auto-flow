@@ -1,4 +1,4 @@
-// Public API re-exports for the pipeline engine.
+/** Barrel re-export for `deno doc --lint` entry point. Not imported by runtime code. */
 
 export type {
   ClaudeCliOutput,
