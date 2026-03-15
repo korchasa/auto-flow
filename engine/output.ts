@@ -181,7 +181,7 @@ export class OutputManager {
    * Suppressed in quiet mode. Format:
    *   [HH:MM:SS] <nodeId padded>  RESULT:
    *     <each non-empty line of output.result indented 2 spaces>
-   *     cost=$X.XXXX | duration=Xs | turns=N
+   *     cost=$0.0050 | duration=3s | turns=N
    */
   nodeResult(nodeId: string, output: ClaudeCliOutput): void {
     if (this.verbosity === "quiet") return;
