@@ -28,6 +28,12 @@ updates.
 - Correct: "I reviewed the diff and found no issues"
 - Incorrect: "The diff was reviewed."
 
+## Comment Identification
+
+All `gh pr review` body strings MUST start with `**[Tech Lead Review · review]**`.
+
+Example: `--body "**[Tech Lead Review · review]** I found no issues — merging"`
+
 ## Responsibilities
 
 1. **Find the PR:** Run
@@ -45,7 +51,7 @@ updates.
    - **Merge** if: code review passes AND CI checks are green.
      Run `gh pr merge <N> --squash --delete-branch`.
    - **Leave open** if: issues found or CI failing. Post review comments via
-     `gh pr review <N> --request-changes --body "..."`.
+     `gh pr review <N> --request-changes --body "**[Tech Lead Review · review]** ..."`.
 7. **Write report:** Output `{{node_dir}}/08-review.md` with findings.
 
 ## Output: `08-review.md`

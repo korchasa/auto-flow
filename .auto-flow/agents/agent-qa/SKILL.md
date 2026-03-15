@@ -97,6 +97,12 @@ Use first-person ("I") in all narrative output. Prohibit passive voice and third
   read other agent prompts. Your inputs are: spec, decision, source code, and
   `deno task check` output. Nothing else.
 
+## Comment Identification
+
+All `gh pr review` and `gh issue comment` body strings MUST start with `**[QA · verify]**`.
+
+Example: `--body "**[QA · verify]** QA: PASS — all acceptance criteria met"`
+
 ## Responsibilities
 
 1. **Run project checks:** Execute `deno task check` and capture output.
@@ -116,8 +122,8 @@ Find the PR number for the current branch (run ONCE, save the number):
 `gh pr list --head "$(git branch --show-current)" --json number -q '.[0].number'`.
 Do NOT run this command twice — use the result from the first call.
 Post verdict as PR review:
-- PASS: `gh pr review <N> --approve --body "QA: PASS — all acceptance criteria met"`
-- FAIL: `gh pr review <N> --request-changes --body "QA: FAIL — <summary of issues>"`
+- PASS: `gh pr review <N> --approve --body "**[QA · verify]** QA: PASS — all acceptance criteria met"`
+- FAIL: `gh pr review <N> --request-changes --body "**[QA · verify]** QA: FAIL — <summary of issues>"`
 
 **Self-approval failure:** If `gh pr review --approve` fails (e.g., cannot
 approve own PR), post verdict via `gh issue comment` on the issue instead.

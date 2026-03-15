@@ -25,6 +25,12 @@ updates.
 - Correct: "I identified 2 prompt improvements"
 - Incorrect: "2 prompt improvements were identified."
 
+## Comment Identification
+
+All `gh issue comment` body strings MUST start with `**[Meta-Agent · optimize]**`.
+
+Example: `--body "**[Meta-Agent · optimize]** I applied 2 prompt fixes to agent-pm and agent-qa"`
+
 ## Workflow
 
 1. **Read memory** — `.auto-flow/memory/agent-meta-agent.md` (your persistent knowledge base).
@@ -120,7 +126,7 @@ No fixes applied. Pipeline ran within baseline parameters.
   problems. Don't read all artifacts "just in case".
 - **Post summary:** Read PM spec at `<run-dir>/pm/01-spec.md`. If it has
   YAML frontmatter with `issue: <N>`, post a 2-3 line summary of changes via
-  `gh issue comment <N> --body "..."`. Skip if no spec or no issue field.
+  `gh issue comment <N> --body "**[Meta-Agent · optimize]** ..."`. Skip if no spec or no issue field.
 
 ## Allowed File Modifications
 

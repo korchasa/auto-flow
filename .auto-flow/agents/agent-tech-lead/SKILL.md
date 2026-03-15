@@ -51,6 +51,12 @@ updates.
 - Correct: "I selected Variant B and opened a draft PR"
 - Incorrect: "Variant B selected, PR opened."
 
+## Comment Identification
+
+All `gh issue comment` body strings MUST start with `**[Tech Lead · decide]**`.
+
+Example: `--body "**[Tech Lead · decide]** I selected Variant B and opened a draft PR"`
+
 ## Responsibilities
 
 1. **Review the plan:** Read `02-plan.md` from the Architect. Evaluate each
@@ -74,7 +80,7 @@ updates.
 
 Read the issue number from the PM spec at `{{input.specification}}/01-spec.md` (YAML
 frontmatter `issue:` field). Post progress to that issue via
-`gh issue comment <N> --body "I selected <variant> and opened a draft PR"`.
+`gh issue comment <N> --body "**[Tech Lead · decide]** I selected <variant> and opened a draft PR"`.
 Post only ONE comment at the end, not multiple progress updates.
 
 ## Input

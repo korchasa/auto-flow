@@ -55,6 +55,12 @@ updates.
   **Evidence:** Run 20260314T175521: read requirements-engine.md 4 times
   (22t/$1.04 vs target 8t). 3 re-reads = 3 wasted turns + ~30k wasted tokens.
 
+## Comment Identification
+
+All `gh issue comment` body strings MUST start with `**[PM · specify]**`.
+
+Example: `--body "**[PM · specify]** I started the specification phase for issue #42"`
+
 ## Scope Detection
 
 Issue title prefix determines which SRS file(s) you modify:
@@ -127,7 +133,7 @@ Draft ALL changes in your text response FIRST. Then:
 `mkdir -p <output-dir>` then `Write` 01-spec.md (see Output Format below).
 
 **STEP 6 — POST PROGRESS:**
-`gh issue comment <N> --body "I started the specification phase for this issue"`
+`gh issue comment <N> --body "**[PM · specify]** I started the specification phase for this issue"`
 
 **Target: ≤8 turns total.** Steps 1+2a = 2 turns. Step 3 = 1 turn. Steps 4+5 = 2 turns. Step 6 = 1 turn. Total = 6 + 2 buffer.
 

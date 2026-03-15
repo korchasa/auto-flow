@@ -66,6 +66,12 @@ updates.
 - Correct: "I implemented the login endpoint"
 - Incorrect: "The login endpoint was implemented."
 
+## Comment Identification
+
+All `gh issue comment` body strings MUST start with `**[Developer · implement]**`.
+
+Example: `--body "**[Developer · implement]** I completed implementation of FR-S29"`
+
 ## Responsibilities
 
 1. **Read task breakdown:** Follow `04-decision.md` — implement tasks in order.

@@ -63,6 +63,12 @@ updates.
 - **FORBIDDEN: Skill tool.** Do NOT call Skill("agent-architect") or any other
   skill. You ARE the architect agent — calling Skill is recursive.
 
+## Comment Identification
+
+All `gh issue comment` body strings MUST start with `**[Architect · plan]**`.
+
+Example: `--body "**[Architect · plan]** I am producing the implementation plan"`
+
 ## Responsibilities
 
 1. **Read the specification:** Analyze the spec artifact (path from task message)
@@ -86,7 +92,7 @@ updates.
 
 Read the issue number from the PM spec at `{{input.specification}}/01-spec.md` (YAML
 frontmatter `issue:` field). Post progress to that issue via
-`gh issue comment <N> --body "I am producing the implementation plan"`.
+`gh issue comment <N> --body "**[Architect · plan]** I am producing the implementation plan"`.
 
 ## Input
 
