@@ -103,7 +103,7 @@ nodes:
       Read ONLY scope-relevant SRS/SDS docs (derive scope from spec frontmatter `scope:` field), and AGENTS.md.
       Critique the plan, select a variant, produce task breakdown (04-decision.md).
       Update the scope-relevant SDS with selected variant's design details.
-      Create feature branch and draft PR.
+      Create feature branch (or rebase existing onto origin/main) and draft PR.
       Output: {{node_dir}}/04-decision.md
     validate:
       - type: file_exists

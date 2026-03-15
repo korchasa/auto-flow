@@ -92,9 +92,10 @@ graph LR
   - `agent-architect` — design-solution role: produces implementation plan with
     2-3 variants, affected files, effort estimates, risk analysis.
   - `agent-tech-lead` — critique + decision + SDS update + branch creation
-    (`git checkout -b sdlc/issue-<N>`) + draft PR (`gh pr create --draft`) +
-    task breakdown from selected variant. Uses `{{run_id}}` for `--prompt` mode
-    fallback branch `sdlc/{{run_id}}`.
+    (`git checkout -b sdlc/issue-<N>`) or rebase existing branch onto
+    `origin/main` (`git rebase origin/main`, with conflict resolution) +
+    draft PR (`gh pr create --draft`) + task breakdown from selected variant.
+    Uses `{{run_id}}` for `--prompt` mode fallback branch `sdlc/{{run_id}}`.
   - `agent-developer` — implements tasks. Owns `git add`, `git commit`,
     `git push` after each task. Commit messages follow `sdlc(impl): <summary>`
     format.
@@ -345,7 +346,10 @@ graph LR
 ### 4.1 Commit Strategy
 
 - **Branch:** Feature branch created by tech-lead agent (`git checkout -b
-  sdlc/issue-<N>`). Fallback for `--prompt` mode: `sdlc/{{run_id}}`.
+  sdlc/issue-<N>`). If branch already exists, tech-lead rebases onto
+  `origin/main` (`git rebase origin/main`) with manual conflict resolution
+  (up to 2 attempts; abort on failure). Fallback for `--prompt` mode:
+  `sdlc/{{run_id}}`.
 - **Commit cadence (FR-26):** Developer-owned commits. No dedicated committer
   agent nodes. Developer runs `git add`, `git commit`, `git push` after each
   task. Commit messages follow `sdlc(impl): <summary>` format.

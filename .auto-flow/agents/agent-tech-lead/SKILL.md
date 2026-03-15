@@ -134,20 +134,31 @@ Fields:
 
 ## Git Workflow
 
-1. Run `git branch --show-current` and `gh pr list --head sdlc/issue-<N> --json number`
-   (parallel, same response).
-   - If already on `sdlc/issue-<N>`: stay on it, skip to step 2.
+1. Run `git fetch origin main`, `git branch --show-current`, and
+   `gh pr list --head sdlc/issue-<N> --json number` (parallel, same response).
+   - If already on `sdlc/issue-<N>`: rebase onto latest main (step 1b).
    - If on `main` or other branch:
      **ALGORITHM (follow EXACTLY):**
      ```
      1. Run: git checkout -b sdlc/issue-<N> origin/main
      2. IF it fails with "already exists":
         Run: git checkout sdlc/issue-<N>
-        DONE. Do NOT run any other git commands.
-     3. DONE. Do NOT run git stash, git checkout --theirs, or git pull.
+        Then rebase (step 1b).
+     3. DONE.
      ```
+   **1b. Rebase onto latest main (MANDATORY when branch already exists):**
+   ```
+   1. Run: git rebase origin/main
+   2. If rebase succeeds: DONE. Continue to step 2.
+   3. If rebase conflicts:
+      a. Read conflicting files (git diff --name-only --diff-filter=U).
+      b. Resolve each conflict manually (Read file, Edit to fix markers).
+      c. git add <resolved-files> && git rebase --continue
+      d. If resolution fails after 2 attempts: git rebase --abort. STOP.
+         Report unresolvable conflicts to user.
+   ```
    - **FORBIDDEN:** `git stash`, `git checkout main`, `git pull`,
-     `git checkout --theirs`. These waste 2-3 turns.
+     `git checkout --theirs`, `git merge`. These waste 2-3 turns.
      **Evidence:** Run 20260314T054224: `git checkout -b` failed (branch exists),
      then used `git checkout --theirs` (FORBIDDEN) + retried `git checkout -b`
      = 3 wasted Bash calls. Run 20260314T044647: same pattern.
@@ -175,7 +186,7 @@ Fields:
 
 **Git error recovery:** If a git operation fails, read the error message and
 diagnose before retrying. Do NOT retry the same command blindly.
-**FORBIDDEN git commands:** `git pull`, `git stash`, `git rebase`, `git fetch`,
+**FORBIDDEN git commands:** `git pull`, `git stash`, `git merge`,
 `git checkout --theirs`. These are NEVER needed in the push flow.
 
 ## Efficiency
@@ -186,9 +197,15 @@ diagnose before retrying. Do NOT retry the same command blindly.
   NEVER read these one-per-turn — that wastes 4 turns.
 - **Read each file ONCE.** Do not re-read files you already have in context.
 - **Bash WHITELIST — ONLY these commands are allowed:**
+  - `git fetch origin main`
   - `git branch --show-current`
   - `gh pr list --head ... --json number`
   - `git checkout -b sdlc/issue-<N> origin/main`
+  - `git checkout sdlc/issue-<N>`
+  - `git rebase origin/main`
+  - `git rebase --continue`
+  - `git rebase --abort`
+  - `git diff --name-only --diff-filter=U`
   - `git add -f <paths>` / `git add <paths>`
   - `git commit -m "..."`
   - `git push -f -u origin sdlc/issue-<N>`
