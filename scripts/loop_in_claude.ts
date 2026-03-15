@@ -9,15 +9,7 @@ import {
   register,
   unregister,
 } from "../engine/process-registry.ts";
-
-const MIN_PAUSE_SEC = 30;
-const MAX_PAUSE_SEC = 4 * 60 * 60; // 4 hours
-const BACKOFF_FACTOR = 2;
-
-/** Compute next pause with exponential backoff capped at MAX. */
-export function nextPause(current: number): number {
-  return Math.min(current * BACKOFF_FACTOR, MAX_PAUSE_SEC);
-}
+import { MIN_PAUSE_SEC, nextPause } from "./backoff.ts";
 
 /** Query open issues excluding "in-progress" label via gh CLI. */
 async function fetchActionableIssues(): Promise<

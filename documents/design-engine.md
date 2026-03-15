@@ -340,6 +340,24 @@ graph TD
   isolation. `onShutdown` disposer pattern prevents callback accumulation
   when `Engine.run()` called in a loop (`self_runner.ts`).
 
+### 3.4 Shared Backoff Utility (`scripts/backoff.ts`) — FR-E28
+
+- **Status:** Pending.
+- **Purpose:** Single authoritative source for exponential backoff logic used by
+  both `scripts/self_runner.ts` and `scripts/loop_in_claude.ts`. Eliminates
+  duplicated `nextPause()` function and associated constants.
+- **Exports:**
+  - `MIN_PAUSE_SEC` (60) — minimum pause / reset value on success.
+  - `MAX_PAUSE_SEC` (14400) — 4h cap.
+  - `BACKOFF_FACTOR` (2) — multiplier per iteration.
+  - `nextPause(current: number): number` — returns
+    `Math.min(current * BACKOFF_FACTOR, MAX_PAUSE_SEC)`.
+- **Consumers:** `self_runner.ts`, `loop_in_claude.ts` — both import
+  `nextPause` and `MIN_PAUSE_SEC` (used for pause reset on success).
+- **Tests:** `scripts/backoff_test.ts` — 3 tests (doubling, max cap, min floor)
+  moved from `self_runner_test.ts`.
+- **Deps:** None (pure function, no imports).
+
 ## 4. Data
 
 - **Entities:**
