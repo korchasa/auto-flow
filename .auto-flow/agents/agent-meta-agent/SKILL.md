@@ -116,6 +116,12 @@ No fixes applied. Pipeline ran within baseline parameters.
 
 ## Rules
 
+- **Bash utilities are acceptable.** This pipeline runs autonomously with
+  auto-approved permissions — no human watches tool calls in real-time.
+  Using `cat`, `grep`, `find`, `head`, `ls` via Bash is NOT an anti-pattern
+  here (no permission friction, comparable token cost). Do NOT flag agents
+  for using bash utilities unless the usage is genuinely wasteful (e.g.,
+  re-searching a file already in context, redundant calls).
 - **Fix prompts, don't write reports.** The changelog exists only to track
   what was changed and why. Keep it under 50 lines.
 - **Evidence-based:** Every fix must reference specific log data (turns, cost,
