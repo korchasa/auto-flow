@@ -16,7 +16,7 @@ type: feedback
 ## Effective strategies
 
 - Grep `^### 3\.\d+ FR-E\d+` on SRS → all FR numbers + line ranges in 1 call.
-- Grep `^## ` → section headings + line numbers in 1 call.
+- Grep `^##` → section headings + line numbers in 1 call.
 - Offset read of last ~80 lines (offset = last-FR-line) → captures end of last FR + section 4 + section 5 + appendix.
 - Parallel Grep (FR list + section headings) in one response = 1 turn for full SRS structure.
 - For large SRS (>50KB): 2 targeted Edits (insert before `## 4.` + appendix row insert) is sufficient and practical.

@@ -106,7 +106,7 @@
 - **Motivation:** Current `.auto-flow/` prefix conflates engine source code, configuration, runtime data, and legacy scripts. This hinders navigation, IDE support, and standard tooling (test runners, linters).
 - **Acceptance criteria:**
   - [x] Engine source code lives under a standard `src/` or dedicated top-level directory (not `.auto-flow/engine/`). Evidence: `engine/` (top-level directory, 30 files moved via `git mv .auto-flow/engine/ engine/`)
-  - ~~`[ ] Agent prompts in a top-level agents/ directory`~~ — superseded by FR-36/FR-19: canonical location is `.claude/skills/agent-<name>/`.
+  - ~~`[ ] Agent prompts in a top-level agents/ directory`~~ — superseded by FR-36/FR-19: canonical location is `.auto-flow/agents/agent-<name>/`.
   - [x] Pipeline config path configurable via `--config <path>` flag (default: `.auto-flow/pipeline.yaml`). Engine is config-path-agnostic — no hardcoded root assumption. Evidence: `engine/cli.ts:7,37` (`--config` flag definition and handling), `engine/config.ts:37` (`loadConfig(path)` accepts any path)
   - [x] Run artifacts in gitignored `.auto-flow/runs/` directory; `.gitignore` updated. Evidence: `.gitignore:3` (`.auto-flow/runs/` entry)
   - ~~`[ ] Legacy shell scripts in a scripts/ directory (not .auto-flow/scripts/)`~~ — SDLC pipeline convention, not engine constraint. Legacy scripts remain at `.auto-flow/scripts/` (SDLC scope, outside engine boundary).
@@ -223,12 +223,12 @@
     nodes:
       developer:
         type: agent
-        prompt: ".claude/skills/agent-developer/SKILL.md"
+        prompt: ".auto-flow/agents/agent-developer/SKILL.md"
         inputs: [architect, sds-update]
         ...
       qa:
         type: agent
-        prompt: ".claude/skills/agent-qa/SKILL.md"
+        prompt: ".auto-flow/agents/agent-qa/SKILL.md"
         inputs: [pm, architect, developer]
         ...
   ```
@@ -617,11 +617,11 @@
 
 ### 3.29 FR-E29: Legacy Test Task Removal
 
-- **Description:** `deno.json` contains legacy test tasks (`test:pm`, `test:tech-lead`, etc.) referencing obsolete `.sdlc/scripts/stage-*_test.ts` files superseded by the engine test suite. These tasks must be removed to keep the task list accurate.
+- **Description:** `deno.json` contains legacy test tasks (`test:pm`, `test:tech-lead`, etc.) referencing obsolete `.auto-flow/scripts/stage-*_test.ts` files superseded by the engine test suite. These tasks must be removed to keep the task list accurate.
 - **Motivation:** Stale tasks reference non-existent or inactive test files, pollute `deno task` output, and create false confidence that stage-level tests are running.
 - **Acceptance criteria:**
-  - [x] All `test:*` tasks in `deno.json` referencing `.sdlc/scripts/stage-*_test.ts` paths are identified. Evidence: `deno.json` — no such tasks exist; active test tasks are `test`, `test:lib`, `test:engine` only.
-  - [x] All identified obsolete tasks are removed from `deno.json`. Evidence: `deno.json:6-18` — no `.sdlc/scripts/stage-*_test.ts` references present.
+  - [x] All `test:*` tasks in `deno.json` referencing `.auto-flow/scripts/stage-*_test.ts` paths are identified. Evidence: `deno.json` — no such tasks exist; active test tasks are `test`, `test:lib`, `test:engine` only.
+  - [x] All identified obsolete tasks are removed from `deno.json`. Evidence: `deno.json:6-18` — no `.auto-flow/scripts/stage-*_test.ts` references present.
   - [x] All remaining active tests pass. Evidence: `deno task check` PASS (run 20260315T155429).
 
 ### 3.30 FR-E30: Pipeline Prepare Command (`prepare_command`)
@@ -639,12 +639,12 @@
 
 ### 3.31 FR-E31: Stale Path Reference Cleanup in Engine Artifacts
 
-- **Description:** Engine documentation and test fixtures must be free of deprecated `.sdlc/` path references and hardcoded `.claude/skills/agent-*` paths. Physical migration to `.auto-flow/` completed in #111; ~30 stale `.sdlc/` refs remain in `requirements-engine.md` evidence fields, ~12 in `design-engine.md`, and engine test fixtures reference `.claude/skills/agent-*` paths.
-- **Motivation:** Stale path references in evidence fields cause navigation failures (paths no longer exist), undermine documentation trustworthiness, and create onboarding confusion. Test fixtures with hardcoded `.claude/skills/agent-*` paths are brittle if symlinks change.
+- **Description:** Engine documentation and test fixtures must be free of deprecated `.auto-flow/` path references and hardcoded `.auto-flow/agents/agent-*` paths. Physical migration to `.auto-flow/` completed in #111; ~30 stale `.auto-flow/` refs remain in `requirements-engine.md` evidence fields, ~12 in `design-engine.md`, and engine test fixtures reference `.auto-flow/agents/agent-*` paths.
+- **Motivation:** Stale path references in evidence fields cause navigation failures (paths no longer exist), undermine documentation trustworthiness, and create onboarding confusion. Test fixtures with hardcoded `.auto-flow/agents/agent-*` paths are brittle if symlinks change.
 - **Acceptance criteria:**
-  - [ ] Zero `.sdlc/` path references in `documents/requirements-engine.md`. Evidence: grep result = 0.
-  - [ ] Zero `.sdlc/` path references in `documents/design-engine.md`. Evidence: grep result = 0.
-  - [ ] Zero `.claude/skills/agent-*` hardcoded path references in `documents/requirements-engine.md`. Evidence: grep result = 0.
+  - [ ] Zero `.auto-flow/` path references in `documents/requirements-engine.md`. Evidence: grep result = 0.
+  - [ ] Zero `.auto-flow/` path references in `documents/design-engine.md`. Evidence: grep result = 0.
+  - [ ] Zero `.auto-flow/agents/agent-*` hardcoded path references in `documents/requirements-engine.md`. Evidence: grep result = 0.
   - [ ] Engine test fixtures (`engine/hitl_test.ts`, `engine/agent_test.ts`, `engine/config_test.ts`, `engine/pipeline_integrity_test.ts`) use `.auto-flow/agents/` paths only. Evidence: file contents.
   - [ ] `deno task check` passes. Evidence: `deno task check` exit 0.
 

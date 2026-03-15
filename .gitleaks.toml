@@ -7,7 +7,7 @@ title = "auto-flow gitleaks config"
     '''documents/design\.md''',
     '''\.auto-flow/agents/agent-.*/SKILL\.md''',
     '''\.auto-flow/tasks/.*\.md''',
-    '''\.sdlc/runs/.*''',
+    '''\.auto-flow/runs/.*''',
     '''CLAUDE\.md''',
     '''AGENTS\.md''',
   ]
