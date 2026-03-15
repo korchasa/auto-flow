@@ -37,13 +37,13 @@
   - **Stage script responsibilities (engine path — `engine/`):**
     1. [x] Invoke `claude` CLI with the stage prompt and input artifacts. Evidence: `engine/agent.ts:208-230` (`buildClaudeArgs`), `engine/agent.ts:75-117` (invocation loop)
     2. After the agent exits, run stage-specific validation checks:
-       - [x] **For Developer stage:** run `deno task check` via `custom_script` validation rule. If it fails, continuation is triggered. Evidence: `engine/validate.ts:49-50,127-162` (`checkCustomScript()`), `.sdlc/pipeline.yaml` (developer node `custom_script` config)
+       - [x] **For Developer stage:** run `deno task check` via `custom_script` validation rule. If it fails, continuation is triggered. Evidence: `engine/validate.ts:49-50,127-162` (`checkCustomScript()`), `.auto-flow/pipeline.yaml` (developer node `custom_script` config)
        - [x] **For QA stage:** (1) verify `05-qa-report-N.md` exists and is non-empty, (2) extract verdict via frontmatter parsing, (3) if verdict is not exactly `PASS` or `FAIL` — treat as validation failure, trigger continuation on QA agent. Evidence: `engine/validate.ts:51-52,164-228` (`checkFrontmatterField()`), `engine/validate_test.ts:225-351` (6 tests)
-       - [x] **For all stages:** verify the expected output artifact exists and is non-empty. Evidence: `engine/validate.ts:60-88` (`file_exists`, `file_not_empty` rules), `.sdlc/pipeline.yaml` (per-node `validate` config)
+       - [x] **For all stages:** verify the expected output artifact exists and is non-empty. Evidence: `engine/validate.ts:60-88` (`file_exists`, `file_not_empty` rules), `.auto-flow/pipeline.yaml` (per-node `validate` config)
     3. [x] If validation fails: re-invoke `claude --resume <session-id>` with the validation error output appended as context. Evidence: `engine/agent.ts:94-116` (resume prompt construction + `invokeClaudeCli` with `resumeSessionId`)
     4. [x] Repeat until validation passes or the continuation limit is reached. Evidence: `engine/agent.ts:75-91` (loop with `continuations < settings.max_continuations`)
   - **Continuation limits:**
-    - [x] Maximum continuations per stage: configurable (default 3). Evidence: `.sdlc/pipeline.yaml:9` (`max_continuations: 3`), `engine/agent.ts:82-91`
+    - [x] Maximum continuations per stage: configurable (default 3). Evidence: `.auto-flow/pipeline.yaml:9` (`max_continuations: 3`), `engine/agent.ts:82-91`
     - [x] If limit reached: stage is marked as failed, pipeline stops, Meta-Agent is triggered (FR-11, FR-E11). Evidence: `engine/engine.ts:96-109,613-619` (`collectRunOnNodes()`), `engine/types.ts:56-57` (`run_on` field), `engine/agent.ts:110-120` (continuation limit check)
   - **Session persistence:**
     - [x] The `--resume` flag ensures the agent retains full conversation context from the initial invocation. Evidence: `engine/agent.ts:208-230` (`--resume` flag in `buildClaudeArgs`)
@@ -52,8 +52,8 @@
     - [x] `gitleaks detect --no-git` runs as part of `scripts/check.ts` (after lint, before tests). `allowFailure=true` — skips if gitleaks binary not found. Evidence: `scripts/check.ts:87`
     - Scope check (`allowed_paths`) and engine-level `safetyCheckDiff()` removed. Rationale: engine no longer commits per-node; scope enforcement via agent prompts and QA validation.
     - [ ] Future: simplified safety checks via `git diff` + file hash comparison
-  - **Stage script responsibilities (legacy path — `.sdlc/scripts/`):**
-    - [x] Legacy shell implementation in `lib.sh`: `continuation_loop()`, `safety_check_diff()`, `run_agent()`, `retry_with_backoff()`. Evidence: `.sdlc/scripts/lib.sh:59-233`
+  - **Stage script responsibilities (legacy path — `.auto-flow/scripts/`):**
+    - [x] Legacy shell implementation in `lib.sh`: `continuation_loop()`, `safety_check_diff()`, `run_agent()`, `retry_with_backoff()`. Evidence: `.auto-flow/scripts/lib.sh:59-233`
 - **Quality metrics:**
   - Continuation success rate: percentage of continuations that resolve the issue (target > 70%).
   - Average continuations per stage (target < 1.0 across all runs).
@@ -66,12 +66,12 @@
   - **JSONL transcript:** Claude CLI automatically stores full session transcripts as JSONL files in `~/.claude/projects/`. Each line is a JSON event (messages, tool calls, responses).
 - **Acceptance criteria (legacy shell script path):**
   - Each stage script saves two log files:
-    - `.sdlc/pipeline/<issue-number>/logs/stage-<N>-<role>.json` — the JSON output from `claude` CLI (metadata: cost, duration, session ID, result).
-    - `.sdlc/pipeline/<issue-number>/logs/stage-<N>-<role>.jsonl` — copy of the JSONL transcript from `~/.claude/projects/` for the session.
+    - `.auto-flow/pipeline/<issue-number>/logs/stage-<N>-<role>.json` — the JSON output from `claude` CLI (metadata: cost, duration, session ID, result).
+    - `.auto-flow/pipeline/<issue-number>/logs/stage-<N>-<role>.jsonl` — copy of the JSONL transcript from `~/.claude/projects/` for the session.
   - Logs are committed to the feature branch after each stage.
   - Stage script locates the JSONL transcript by session ID extracted from the JSON output.
 - **Acceptance criteria (Deno engine path):**
-  - [x] After each non-loop agent node completes successfully, the engine saves two files to `.sdlc/runs/<run-id>/logs/`:
+  - [x] After each non-loop agent node completes successfully, the engine saves two files to `.auto-flow/runs/<run-id>/logs/`:
     - `<node-id>.json` — full `ClaudeCliOutput` JSON object (`result`, `session_id`, `total_cost_usd`, `duration_ms`, `duration_api_ms`, `num_turns`, `is_error`).
     - `<node-id>.jsonl` — copy of the JSONL session transcript from `~/.claude/projects/<project-hash>/`, located by matching `session_id` in filenames.
     - Evidence: `engine/engine.ts:266-270`, `engine/log.ts:18-47`
@@ -84,7 +84,7 @@
 
 - **Description:** Defines how pipeline artifacts are managed on repeated runs for the same issue.
 - **Acceptance criteria:**
-  - On re-run, artifacts in `.sdlc/pipeline/<issue-number>/` are overwritten.
+  - On re-run, artifacts in `.auto-flow/pipeline/<issue-number>/` are overwritten.
   - Previous versions are preserved in git history of the feature branch.
   - QA reports use iteration suffix (`05-qa-report-1.md`, `05-qa-report-2.md`) within a single run; on re-run, iteration numbering restarts from 1.
   - Log files are overwritten on re-run (previous logs preserved in git history).
@@ -102,14 +102,14 @@
 
 ### 3.5 FR-E5 (ex FR-17): Project Directory Structure
 
-- **Description:** Project directory layout must reflect application structure, not be buried under a single `.sdlc/` prefix. Engine code, agent prompts, pipeline config, and run artifacts should be organized at the top level as distinct concerns.
-- **Motivation:** Current `.sdlc/` prefix conflates engine source code, configuration, runtime data, and legacy scripts. This hinders navigation, IDE support, and standard tooling (test runners, linters).
+- **Description:** Project directory layout must reflect application structure, not be buried under a single `.auto-flow/` prefix. Engine code, agent prompts, pipeline config, and run artifacts should be organized at the top level as distinct concerns.
+- **Motivation:** Current `.auto-flow/` prefix conflates engine source code, configuration, runtime data, and legacy scripts. This hinders navigation, IDE support, and standard tooling (test runners, linters).
 - **Acceptance criteria:**
-  - [x] Engine source code lives under a standard `src/` or dedicated top-level directory (not `.sdlc/engine/`). Evidence: `engine/` (top-level directory, 30 files moved via `git mv .sdlc/engine/ engine/`)
+  - [x] Engine source code lives under a standard `src/` or dedicated top-level directory (not `.auto-flow/engine/`). Evidence: `engine/` (top-level directory, 30 files moved via `git mv .auto-flow/engine/ engine/`)
   - ~~`[ ] Agent prompts in a top-level agents/ directory`~~ — superseded by FR-36/FR-19: canonical location is `.claude/skills/agent-<name>/`.
-  - [x] Pipeline config path configurable via `--config <path>` flag (default: `.sdlc/pipeline.yaml`). Engine is config-path-agnostic — no hardcoded root assumption. Evidence: `engine/cli.ts:7,37` (`--config` flag definition and handling), `engine/config.ts:37` (`loadConfig(path)` accepts any path)
-  - [x] Run artifacts in gitignored `.sdlc/runs/` directory; `.gitignore` updated. Evidence: `.gitignore:3` (`.sdlc/runs/` entry)
-  - ~~`[ ] Legacy shell scripts in a scripts/ directory (not .sdlc/scripts/)`~~ — SDLC pipeline convention, not engine constraint. Legacy scripts remain at `.sdlc/scripts/` (SDLC scope, outside engine boundary).
+  - [x] Pipeline config path configurable via `--config <path>` flag (default: `.auto-flow/pipeline.yaml`). Engine is config-path-agnostic — no hardcoded root assumption. Evidence: `engine/cli.ts:7,37` (`--config` flag definition and handling), `engine/config.ts:37` (`loadConfig(path)` accepts any path)
+  - [x] Run artifacts in gitignored `.auto-flow/runs/` directory; `.gitignore` updated. Evidence: `.gitignore:3` (`.auto-flow/runs/` entry)
+  - ~~`[ ] Legacy shell scripts in a scripts/ directory (not .auto-flow/scripts/)`~~ — SDLC pipeline convention, not engine constraint. Legacy scripts remain at `.auto-flow/scripts/` (SDLC scope, outside engine boundary).
   - [x] `deno.json` tasks (`run`, `check`, `test`) updated to reference `engine/cli.ts` and `scripts/`. Evidence: `deno.json:7,19` (`check`, `run` tasks referencing `engine/cli.ts`)
   - [x] All existing engine tests pass after restructuring. Evidence: `deno task check` passes.
   - [x] SDS (`documents/design-engine.md`) updated to reflect implemented layout. Evidence: `documents/design-engine.md` §3.1 (engine modules), §3.2 (Phase Registry — IMPLEMENTED with evidence)
@@ -148,23 +148,23 @@
   3. Engine invokes configurable `ask_script` (pipeline script, not engine code) to deliver question (e.g., `gh issue comment`).
   4. Engine enters poll loop: `sleep poll_interval` → invoke `check_script` → if exit 0 (reply found), read reply from stdout.
   5. Engine resumes agent: `claude --resume <session_id> -p "<reply>"`. Agent continues with full session context.
-- **Key constraint:** Engine contains zero GitHub/Slack/email-specific code. All delivery/polling logic lives in pipeline scripts (`.sdlc/scripts/`).
+- **Key constraint:** Engine contains zero GitHub/Slack/email-specific code. All delivery/polling logic lives in pipeline scripts (`.auto-flow/scripts/`).
 - **Acceptance criteria:**
   - [x] Engine detects `AskUserQuestion` in `permission_denials` of Claude CLI JSON output after agent node completes. Evidence: `engine/hitl.ts:61-93` (`detectHitlRequest()`), `engine/engine.ts:316-319` (call in `executeAgentNode`)
   - [x] Engine saves `session_id`, question JSON, and node status `waiting` to `state.json`. Evidence: `engine/state.ts:93-103` (`markNodeWaiting()`), `engine/engine.ts:324-325` (call + saveState), `engine/types.ts:104` (`question_json` field)
   - [x] Engine invokes `ask_script` (path from `pipeline.yaml` `defaults.hitl`) with args: `--run-dir`, `--artifact-source`, `--run-id`, `--node-id`, `--question-json`. Evidence: `engine/hitl.ts:111-125` (`buildScriptArgs("ask")`), `engine/hitl.ts:127-134` (ask invocation)
   - [x] Engine enters poll loop calling `check_script` with args: `--run-dir`, `--artifact-source`, `--run-id`, `--node-id`, `--exclude-login`. Exit 0 = reply in stdout; exit 1 = no reply yet. Evidence: `engine/hitl.ts:137-175` (poll loop), `engine/hitl_test.ts:184-214` (poll test)
   - [x] On reply: engine resumes agent via `claude --resume <session_id> -p "<reply>"`. Evidence: `engine/hitl.ts:158-172` (claudeRun with resumeSessionId)
-  - [x] Configurable `poll_interval` (default 60s) and `timeout` (default 7200s) per pipeline. Evidence: `engine/types.ts:170-175` (`HitlConfig`), `.sdlc/pipeline.yaml:16-20` (defaults.hitl)
+  - [x] Configurable `poll_interval` (default 60s) and `timeout` (default 7200s) per pipeline. Evidence: `engine/types.ts:170-175` (`HitlConfig`), `.auto-flow/pipeline.yaml:16-20` (defaults.hitl)
   - [x] On timeout: node fails, Meta-Agent triggered. Evidence: `engine/hitl.ts:183-188` (timeout return), `engine/engine.ts:342-347` (markNodeFailed on HITL failure), `engine/hitl_test.ts:216-230` (timeout test)
   - [x] `deno task run` on a pipeline with `waiting` nodes auto-resumes polling (no manual `--resume` needed). Evidence: `engine/engine.ts:278-310` (wasWaiting resume path in executeAgentNode)
-  - [x] Pipeline scripts `hitl-ask.sh` and `hitl-check.sh` exist in `.sdlc/scripts/`. Evidence: `.sdlc/scripts/hitl-ask.sh`, `.sdlc/scripts/hitl-check.sh`
-  - [x] `hitl-ask.sh` renders question JSON → markdown with HTML marker `<!-- hitl:<run-id>:<node-id> -->`, posts via `gh issue comment`. Evidence: `.sdlc/scripts/hitl-ask.sh:52-76` (markdown render + marker + gh post)
-  - [x] `hitl-check.sh` finds first non-bot comment after marker, outputs body to stdout (exit 0) or exits 1 if no reply. Evidence: `.sdlc/scripts/hitl-check.sh:39-54` (jq filter + exit codes)
+  - [x] Pipeline scripts `hitl-ask.sh` and `hitl-check.sh` exist in `.auto-flow/scripts/`. Evidence: `.auto-flow/scripts/hitl-ask.sh`, `.auto-flow/scripts/hitl-check.sh`
+  - [x] `hitl-ask.sh` renders question JSON → markdown with HTML marker `<!-- hitl:<run-id>:<node-id> -->`, posts via `gh issue comment`. Evidence: `.auto-flow/scripts/hitl-ask.sh:52-76` (markdown render + marker + gh post)
+  - [x] `hitl-check.sh` finds first non-bot comment after marker, outputs body to stdout (exit 0) or exits 1 if no reply. Evidence: `.auto-flow/scripts/hitl-check.sh:39-54` (jq filter + exit codes)
 
 ### 3.9 FR-E9 (ex FR-23): Run Artifacts Folder Structure
 
-- **Description:** Run artifacts under `.sdlc/runs/<run-id>/` must follow a
+- **Description:** Run artifacts under `.auto-flow/runs/<run-id>/` must follow a
   hierarchical layout that groups node output directories by pipeline phase,
   separating agent output artifacts from runtime metadata (logs, state).
 - **Motivation:** Current flat layout intermixes planning nodes, implementation
@@ -176,14 +176,14 @@
   at the run root level (not inside phase groups).
 - **Acceptance criteria:**
   - [x] Node output directories are grouped by pipeline phase under
-    `.sdlc/runs/<run-id>/` (e.g., `plan/`, `impl/`, `report/`). Phase derived
+    `.auto-flow/runs/<run-id>/` (e.g., `plan/`, `impl/`, `report/`). Phase derived
     from top-level `phases:` config declaration (authoritative) or per-node
     `phase:` field (fallback). Evidence: `engine/state.ts:20-36`
     (`setPhaseRegistry()` — builds nodeId→phase map from config),
     `engine/state.ts:98-104` (`getNodeDir()` — phase-aware path resolution),
     `engine/engine.ts:135` (`setPhaseRegistry(config)` at engine init)
   - [x] `state.json` and `logs/` remain at the run root level
-    (`.sdlc/runs/<run-id>/state.json`, `.sdlc/runs/<run-id>/logs/`). Phase
+    (`.auto-flow/runs/<run-id>/state.json`, `.auto-flow/runs/<run-id>/logs/`). Phase
     registry applies only to node artifact dirs; `getRunDir()` is
     phase-independent. Evidence: `engine/state.ts:44-46` (`getPhaseForNode()`
     — used only in `getNodeDir()`, not in state/log path resolution)
@@ -234,11 +234,11 @@
   ```
 - **Acceptance criteria:**
   - [x] Loop nodes define body nodes inline via `nodes` sub-object in
-    `pipeline.yaml`. Evidence: `.sdlc/pipeline.yaml:120-158` (`implementation` loop node with inline `nodes:` containing `build` and `verify`)
+    `pipeline.yaml`. Evidence: `.auto-flow/pipeline.yaml:120-158` (`implementation` loop node with inline `nodes:` containing `build` and `verify`)
   - [x] Body node IDs in `nodes` are not registered as top-level DAG nodes. Evidence: `engine/dag.ts:17-19` (`collectLoopBodyNodes()`), `engine/dag.ts:36-45` (body nodes filtered from main DAG in `buildLevels()`)
-  - [x] Body nodes can reference external (top-level) nodes in their `inputs`. Evidence: `engine/config.ts:204` (`validInputIds = [...allNodeIds, ...bodyNodeIds]`), `.sdlc/pipeline.yaml:124` (`build` inputs `[decision]` — top-level node)
+  - [x] Body nodes can reference external (top-level) nodes in their `inputs`. Evidence: `engine/config.ts:204` (`validInputIds = [...allNodeIds, ...bodyNodeIds]`), `.auto-flow/pipeline.yaml:124` (`build` inputs `[decision]` — top-level node)
   - [x] Body nodes can reference sibling body nodes (within the same loop) in
-    their `inputs`. Evidence: `engine/config.ts:190-195` (validates internal inputs for ordering), `.sdlc/pipeline.yaml:144` (`verify` inputs `[specification, decision, build]` — `build` is a sibling body node)
+    their `inputs`. Evidence: `engine/config.ts:190-195` (validates internal inputs for ordering), `.auto-flow/pipeline.yaml:144` (`verify` inputs `[specification, decision, build]` — `build` is a sibling body node)
   - [x] `{{loop.iteration}}` template variable resolves only inside loop body
     node contexts. Evidence: `engine/engine.ts:651-653` (`loop` context only when `loopIteration !== undefined`), `engine/engine.ts:559-560` (loop body nodes receive iteration via `buildCtx`)
   - [x] Engine config loader (`config.ts`) parses nested node definitions from
@@ -250,7 +250,7 @@
   - [x] Template resolver handles `{{input.<node-id>}}` for both body-to-body
     and body-to-external references. Evidence: `engine/engine.ts:637-639` (resolves all `inputs` via `findNodeConfig` which searches top-level and loop body nodes)
   - [x] `pipeline.yaml` and any other pipeline configs updated to use nested
-    body node definitions. Evidence: `.sdlc/pipeline.yaml:120-158` (`implementation` loop with inline `nodes:` sub-object)
+    body node definitions. Evidence: `.auto-flow/pipeline.yaml:120-158` (`implementation` loop with inline `nodes:` sub-object)
   - [x] All existing engine tests pass after restructuring. Evidence: `deno task check` — 490 passed, 0 failed
   - [x] `deno task check` passes. Evidence: 490 passed, 0 failed
 
@@ -278,8 +278,8 @@
   - [x] `NodeConfig` in `types.ts` has `run_on?: "always" | "success" | "failure"` field. `run_always` deprecated. Evidence: `engine/types.ts:66-69` (`run_on?` field, `run_always?: boolean` with `@deprecated` tag)
   - [x] `config.ts` normalizes `run_always: true` → `run_on: "always"` for backward compat. Evidence: `engine/config.ts:341-347` (normalizes `run_always: true` → `run_on: "always"`, deletes `run_always`)
   - [x] Engine filters post-pipeline nodes: skips `run_on: success` nodes when pipeline failed, skips `run_on: failure` nodes when pipeline succeeded. Evidence: `engine/engine.ts:182-199` (skip logic with `markNodeSkipped`)
-  - [x] Meta-agent runs on every outcome (`run_on: always`). Evidence: `.sdlc/pipeline.yaml:174` (`optimize` node `run_on: always`), `engine/engine.ts:182-199` (`run_on: always` bypasses skip filter)
-  - [x] `pipeline.yaml` migrated from `run_always: true` to appropriate `run_on` values. Evidence: `.sdlc/pipeline.yaml:174` (`optimize: run_on: always`), `.sdlc/pipeline.yaml:200` (`tech-lead-review: run_on: always`)
+  - [x] Meta-agent runs on every outcome (`run_on: always`). Evidence: `.auto-flow/pipeline.yaml:174` (`optimize` node `run_on: always`), `engine/engine.ts:182-199` (`run_on: always` bypasses skip filter)
+  - [x] `pipeline.yaml` migrated from `run_always: true` to appropriate `run_on` values. Evidence: `.auto-flow/pipeline.yaml:174` (`optimize: run_on: always`), `.auto-flow/pipeline.yaml:200` (`tech-lead-review: run_on: always`)
   - [x] Engine remains domain-agnostic — no git/PR/GitHub logic in engine code. Evidence: `engine/git.ts` deleted; `engine/engine.ts` uses generic `on_failure_script` hook; `engine/mod.ts` git re-exports removed.
   - [x] All existing engine tests pass; new tests cover `run_on` filtering logic. Evidence: `engine/engine_test.ts:211-506` (collectPostPipelineNodes and run_on tests), `engine/config_test.ts:446-564` (run_on validation + run_always normalization tests); 490 passed, 0 failed
   - [x] `deno task check` passes. Evidence: 490 passed, 0 failed
@@ -317,7 +317,7 @@
   - [x] `agent.ts` `buildClaudeArgs()` emits `--model <value>` when model is set. Evidence: `engine/agent.ts:309-311`
   - [x] `agent.ts` does NOT emit `--model` on `--resume` invocations. Evidence: `engine/agent.ts:309` (`&& !opts.resumeSessionId` guard)
   - [x] Loop body nodes resolve model from: own config > loop node config > defaults. Evidence: `engine/loop.ts:76`
-  - [x] `pipeline.yaml` updated: default model + per-node overrides for complex stages. Evidence: `.sdlc/pipeline.yaml:15` (default), `.sdlc/pipeline.yaml:65,84,147` (overrides)
+  - [x] `pipeline.yaml` updated: default model + per-node overrides for complex stages. Evidence: `.auto-flow/pipeline.yaml:15` (default), `.auto-flow/pipeline.yaml:65,84,147` (overrides)
   - [x] All existing engine tests pass; new tests cover model flag emission and resolution. Evidence: `engine/agent_test.ts:207-233` (3 model tests); 434 tests pass.
   - [x] `deno task check` passes. Evidence: validated — 434 passed, 0 failed.
 
@@ -343,7 +343,7 @@
 ### 3.14 FR-E14 (ex FR-29): Engine-Pipeline Separation Invariant
 
 - **Description:** The pipeline engine (`engine/`) is a domain-agnostic DAG executor. It MUST be physically separated from pipeline-specific concerns (config, agents, run artifacts) by directory structure, not only by convention. This constraint is structural and must be enforced by the project layout.
-- **Rationale:** Issue #12 — collocating engine source with pipeline data under `.sdlc/` obscures boundaries, hinders tooling, and blocks future engine reuse.
+- **Rationale:** Issue #12 — collocating engine source with pipeline data under `.auto-flow/` obscures boundaries, hinders tooling, and blocks future engine reuse.
 - **Rules:**
   - Engine source lives in a dedicated top-level directory (e.g., `engine/` or a standardized path); no pipeline, agent, git, or GitHub-specific logic inside.
   - Pipeline config (`pipeline.yaml`), agent prompts (`.claude/skills/`), and run artifacts (`runs/`) are domain-specific — must not be nested under the engine directory.
@@ -438,7 +438,7 @@
 ### 3.18 FR-E18 (ex FR-33): Stream Log Timestamps
 
 - **Description:** Each non-empty line written to the stream log file
-  (`.sdlc/runs/<run-id>/logs/<node-id>.jsonl`) is prefixed with a wall-clock
+  (`.auto-flow/runs/<run-id>/logs/<node-id>.jsonl`) is prefixed with a wall-clock
   timestamp in `[HH:MM:SS]` format (24-hour, zero-padded). Empty lines pass
   through without prefix. Terminal output via `onOutput` callback is NOT
   prefixed — timestamps appear in persisted logs only.
@@ -470,7 +470,7 @@
   - [x] `PipelineDefaults` in `engine/types.ts` includes `on_failure_script?: string`. Evidence: `engine/types.ts:23` (`on_failure_script?: string`)
   - [x] Engine executes `on_failure_script` via `Deno.Command` on pipeline failure (if configured). Evidence: `engine/engine.ts:171-175` (`runFailureHook` called when `!pipelineSuccess`), `engine/engine.ts:808-831` (`runFailureHook` using `new Deno.Command(script, ...)`)
   - [x] Engine does NOT import or call any git functions on failure. Evidence: `engine/engine.ts` — no git imports; failure path uses generic `runFailureHook` only
-  - [x] `.sdlc/pipeline.yaml` sets `on_failure_script: .sdlc/scripts/rollback-uncommitted.sh`. Evidence: `.sdlc/pipeline.yaml:18` (`on_failure_script: .sdlc/scripts/rollback-uncommitted.sh`)
+  - [x] `.auto-flow/pipeline.yaml` sets `on_failure_script: .auto-flow/scripts/rollback-uncommitted.sh`. Evidence: `.auto-flow/pipeline.yaml:18` (`on_failure_script: .auto-flow/scripts/rollback-uncommitted.sh`)
   - [x] If script path not found: engine logs warning and continues (no hard failure). Evidence: `engine/engine.ts:828-829` (catch block logs warning, does not throw)
   - [x] Unit test covers `on_failure_script` execution path. Evidence: `engine/engine_test.ts:776-822` (4 `runFailureHook` tests: no-op, success, script failure, nonexistent script)
   - [x] `deno task check` passes. Evidence: 490 passed, 0 failed
@@ -521,7 +521,7 @@
   a 30+ minute run.
 - **Motivation:** Current `summary()` output (`engine/output.ts:98-111`) renders
   only aggregate metadata. Per-node result text is available in
-  `.sdlc/runs/<run-id>/logs/<node-id>.json` but not in `state.json`, forcing
+  `.auto-flow/runs/<run-id>/logs/<node-id>.json` but not in `state.json`, forcing
   operators to read N log files after the run. Issue #109: "After a 30+ minute
   run, the operator has to scroll back through interleaved logs to find what
   each agent produced."

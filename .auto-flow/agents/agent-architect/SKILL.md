@@ -170,10 +170,21 @@ After all variants, `02-plan.md` MUST end with a `## Summary` section covering:
   issue explicitly in the plan rather than guessing.
 - **Agent tool:** Banned. See HARD STOP rule at top of prompt.
 
+## Reflection Memory
+
+At session start, read `.auto-flow/memory/agent-architect.md` (persistent knowledge base across runs).
+At session end, rewrite it entirely (≤50 lines, full-snapshot — not append) with:
+- **Anti-patterns:** recurring mistakes encountered this run.
+- **Effective strategies:** approaches that worked well.
+- **Environment quirks:** tool behaviors, edge cases, gotchas.
+- **Baseline metrics:** turns, cost, time vs prior baseline.
+Keep compressed (no fluff). Rewrite = current-state snapshot.
+
 ## Allowed File Modifications
 
-You may ONLY create or modify this file:
+You may ONLY create or modify these files:
 
 - `02-plan.md` in the node output directory (path from task message).
+- `.auto-flow/memory/agent-architect.md` (reflection memory).
 
 Do NOT touch any other files.

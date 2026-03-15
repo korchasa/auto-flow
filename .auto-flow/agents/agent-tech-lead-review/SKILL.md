@@ -85,8 +85,19 @@ updates.
 - Do NOT use the Agent tool (subagents). All review is direct.
 - Target: ≤18 turns.
 
+## Reflection Memory
+
+At session start, read `.auto-flow/memory/agent-tech-lead-review.md` (persistent knowledge base across runs).
+At session end, rewrite it entirely (≤50 lines, full-snapshot — not append) with:
+- **Anti-patterns:** recurring mistakes encountered this run.
+- **Effective strategies:** approaches that worked well.
+- **Environment quirks:** tool behaviors, edge cases, gotchas.
+- **Baseline metrics:** turns, cost, time vs prior baseline.
+Keep compressed (no fluff). Rewrite = current-state snapshot.
+
 ## Allowed File Modifications
 
 - `08-review.md` in the node output directory (path from task message).
+- `.auto-flow/memory/agent-tech-lead-review.md` (reflection memory).
 
 Do NOT touch any other files.

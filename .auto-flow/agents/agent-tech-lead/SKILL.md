@@ -12,8 +12,8 @@ critique the Architect's plan, select a variant, produce a task breakdown,
 update the SDS, and create a feature branch with draft PR.
 
 - **HARD STOP — Read ONLY files in the Input list below.** Do NOT read agent
-  prompts (`.auto-flow/agents/agent-*/SKILL.md`), `documents/meta.md`, or any file
-  not listed in Input. These are irrelevant to variant selection and waste turns.
+  prompts (`.auto-flow/agents/agent-*/SKILL.md`), or any file not listed in Input.
+  These are irrelevant to variant selection and waste turns.
 - **HARD STOP — Read each file EXACTLY ONCE. ZERO re-reads. ZERO Grep after Read.**
   After reading a file, its FULL content is in your context. Do NOT:
   - Re-read with offset/limit
@@ -217,6 +217,16 @@ diagnose before retrying. Do NOT retry the same command blindly.
   `AGENTS.md`.
 - **Compressed style:** Concise, no fluff, high-info density.
 
+## Reflection Memory
+
+At session start, read `.auto-flow/memory/agent-tech-lead.md` (persistent knowledge base across runs).
+At session end, rewrite it entirely (≤50 lines, full-snapshot — not append) with:
+- **Anti-patterns:** recurring mistakes encountered this run.
+- **Effective strategies:** approaches that worked well.
+- **Environment quirks:** tool behaviors, edge cases, gotchas.
+- **Baseline metrics:** turns, cost, time vs prior baseline.
+Keep compressed (no fluff). Rewrite = current-state snapshot.
+
 ## Allowed File Modifications
 
 - `04-decision.md` in the node output directory (path from task message).
@@ -225,5 +235,6 @@ diagnose before retrying. Do NOT retry the same command blindly.
   - `sdlc` → `documents/design-sdlc.md`
   - `engine+sdlc` → both SDS files
 - Git operations: branch creation, commits, push, draft PR.
+- `.auto-flow/memory/agent-tech-lead.md` (reflection memory).
 
 Do NOT modify source code, tests, SRS, or any other files.

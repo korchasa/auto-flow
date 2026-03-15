@@ -297,11 +297,22 @@ FAIL — 1/2 criteria passed, 2 blocking issues: test failure + missing edge cas
   missing: <path>". Do NOT attempt to recreate or write any file other than
   the QA report.
 
+## Reflection Memory
+
+At session start, read `.auto-flow/memory/agent-qa.md` (persistent knowledge base across runs).
+At session end, rewrite it entirely (≤50 lines, full-snapshot — not append) with:
+- **Anti-patterns:** recurring mistakes encountered this run.
+- **Effective strategies:** approaches that worked well.
+- **Environment quirks:** tool behaviors, edge cases, gotchas.
+- **Baseline metrics:** turns, cost, time vs prior baseline.
+Keep compressed (no fluff). Rewrite = current-state snapshot.
+
 ## Allowed File Modifications
 
 You may ONLY create or modify:
 
 - The QA report file at the path given in the task prompt `Output:` line.
+- `.auto-flow/memory/agent-qa.md` (reflection memory).
 
 Do NOT touch any other files. Specifically:
 - Do NOT recreate upstream artifacts (spec, decision, plan files)

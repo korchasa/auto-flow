@@ -2,7 +2,7 @@
 
 ## 0. Resolved Design Decisions
 
-- **Target project:** This repo (auto-sdlc). Project-agnostic reuse deferred.
+- **Target project:** This repo (auto-flow). Project-agnostic reuse deferred.
 - **Concurrent pipelines:** One pipeline per branch. Single local execution assumed. No concurrent locking.
 - **Cost limits:** Not tracked. No budget constraints.
 - **Agent prompts:** Written incrementally alongside implementation.
@@ -32,7 +32,7 @@
 - **Assumptions and constraints:**
   - A devcontainer provides the runtime environment with all required tools (see FR-S10).
   - Each agent is stateless between runs — all context comes from input artifacts and its system prompt.
-  - The target project is this repository (auto-sdlc). Pipeline design should be project-agnostic for future reuse in other repos.
+  - The target project is this repository (auto-flow). Pipeline design should be project-agnostic for future reuse in other repos.
 - **Goal:** Automate the full development cycle for feature requests: from issue triage to a ready-to-merge PR — fully autonomous, no human gates between stages. PR merge is the only human checkpoint (post-pipeline, not between stages).
 
 ## 3. Functional Requirements
@@ -593,7 +593,7 @@
 
 ### 3.26 FR-S26: Pipeline Asset Directory Consolidation
 
-- **Desc:** All pipeline assets (config, agent prompts, scripts, tasks, runs) MUST be consolidated under `.auto-flow/` directory. Eliminates `.sdlc/` (domain-specific naming, violates engine's domain-agnostic principle) and decouples agent prompts from `.claude/skills/` (Claude Code's skill-system coupling).
+- **Desc:** All pipeline assets (config, agent prompts, scripts, tasks, runs) MUST be consolidated under `.auto-flow/` directory. Eliminates `.auto-flow/` (domain-specific naming, violates engine's domain-agnostic principle) and decouples agent prompts from `.claude/skills/` (Claude Code's skill-system coupling).
 - **Directory layout:**
   ```
   .auto-flow/
@@ -619,7 +619,7 @@
   - [ ] Active scripts at `.auto-flow/scripts/` (rollback-uncommitted.sh, hitl-ask.sh, hitl-check.sh, lib.sh)
   - [ ] Tasks at `.auto-flow/tasks/`; runs at `.auto-flow/runs/`
   - [ ] Deprecated stage scripts (`stage-*.sh`) and their `*_test.ts` files deleted
-  - [ ] Zero `.sdlc/` path references remain in codebase (except git history)
+  - [ ] Zero `.auto-flow/` path references remain in codebase (except git history)
   - [ ] Zero `.claude/skills/agent-*` path references remain in codebase
   - [ ] `deno task run` works with `.auto-flow/pipeline.yaml` as default config path
   - [ ] `deno task check` passes clean

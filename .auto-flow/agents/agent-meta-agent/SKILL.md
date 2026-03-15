@@ -27,17 +27,17 @@ updates.
 
 ## Workflow
 
-1. **Read memory** — `documents/meta.md` (your persistent knowledge base).
+1. **Read memory** — `.auto-flow/memory/agent-meta-agent.md` (your persistent knowledge base).
 2. **Read `state.json`** — identify failed/slow/expensive nodes.
 3. **Read logs** — `<run-dir>/logs/*.json` for cost, turns, errors.
 4. **Diagnose** — for each problem, find root cause in the agent's prompt.
-   Cross-reference with `documents/meta.md` patterns to avoid duplicate fixes
+   Cross-reference with `.auto-flow/memory/agent-meta-agent.md` patterns to avoid duplicate fixes
    and verify whether past fixes worked.
 5. **Fix prompts** — edit `.auto-flow/agents/agent-*/SKILL.md` directly. Each edit must be:
    - Evidence-based (reference specific log data: turns, cost, error message)
    - Minimal (change only what's needed)
    - Testable (next run should show measurable improvement)
-6. **Update memory** — append findings to `documents/meta.md` (see format).
+6. **Update memory** — rewrite `.auto-flow/memory/agent-meta-agent.md` (see format).
 7. **Write changelog** — `{{node_dir}}/07-changelog.md` (see format below).
 
 ## Input
@@ -45,13 +45,13 @@ updates.
 Use ONLY paths from the task message (run directory, run ID).
 Do NOT use hardcoded paths like `.auto-flow/pipeline/...`.
 
-- `documents/meta.md` — persistent memory (read FIRST)
+- `.auto-flow/memory/agent-meta-agent.md` — persistent memory (read FIRST)
 - `<run-dir>/logs/` — stage logs (JSON + JSONL)
 - `<run-dir>/` — handoff artifacts and `state.json`; identify failed nodes via
   `nodes[*].status === "failed"` in `state.json`
 - `.auto-flow/agents/agent-*/` — current agent prompts
 
-## Persistent Memory: `documents/meta.md`
+## Persistent Memory: `.auto-flow/memory/agent-meta-agent.md`
 
 This file is your knowledge base across runs. Structure:
 
@@ -73,12 +73,11 @@ This file is your knowledge base across runs. Structure:
 - <insight that should persist across runs>
 ```
 
-Rules for `documents/meta.md`:
-- **Append, don't rewrite.** Add new entries; update status of existing ones.
-- **Prune resolved patterns** after 3 consecutive clean runs.
+Rules for `.auto-flow/memory/agent-meta-agent.md`:
+- **Rewrite entirely** each run (full current-state snapshot). Do NOT append.
+- **≤50 lines total.** Compress aggressively. Omit resolved patterns after 3 clean runs.
 - **Track fix outcomes:** After applying a fix, mark it as WATCHING. On next
   run, verify if it helped and update status (RESOLVED or escalate).
-- Keep total file under 200 lines. Compress old entries if needed.
 
 ## Output: `07-changelog.md`
 
@@ -127,4 +126,4 @@ No fixes applied. Pipeline ran within baseline parameters.
 
 - `07-changelog.md` in the node output directory (path from task message)
 - `.auto-flow/agents/agent-*/SKILL.md` (prompt improvements)
-- `documents/meta.md` (persistent memory)
+- `.auto-flow/memory/agent-meta-agent.md` (persistent memory)

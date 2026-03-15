@@ -171,7 +171,6 @@ block direct invocations. Always use `deno task check`.
   - `.github/`
   - `.auto-flow/scripts/`
   - `.auto-flow/agents/` (agent prompts — meta-agent's job, NOT yours)
-  - `documents/meta.md` (meta-agent's memory — NOT yours)
   - `CLAUDE.md`
   **Evidence:** Run 20260314T052906: committed 4 SKILL.md files + meta.md —
   NONE in task breakdown. This is scope creep. You implement the TASK, nothing else.
@@ -245,15 +244,25 @@ block direct invocations. Always use `deno task check`.
   N edit/write calls (1 per file) → 1-2 deno task check → 1 commit+push.
   If past 30 turns, stop exploring and finish.
 
+## Reflection Memory
+
+At session start, read `.auto-flow/memory/agent-developer.md` (persistent knowledge base across runs).
+At session end, rewrite it entirely (≤50 lines, full-snapshot — not append) with:
+- **Anti-patterns:** recurring mistakes encountered this run.
+- **Effective strategies:** approaches that worked well.
+- **Environment quirks:** tool behaviors, edge cases, gotchas.
+- **Baseline metrics:** turns, cost, time vs prior baseline.
+Keep compressed (no fluff). Rewrite = current-state snapshot.
+
 ## Allowed File Modifications
 
 - Files listed in `04-decision.md` YAML frontmatter `tasks[].files`.
 - Node output directory (path from task message) for any temporary artifacts.
+- `.auto-flow/memory/agent-developer.md` (reflection memory).
 
 Explicitly forbidden (unless listed in `04-decision.md` `tasks[].files`):
 
 - `.github/`
 - `.auto-flow/scripts/`
 - `.auto-flow/agents/` (agent prompts)
-- `documents/meta.md` (meta-agent memory)
 - `CLAUDE.md`

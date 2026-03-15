@@ -241,6 +241,16 @@ Define what is NOT included in this issue's scope:
   view). Issue view = 1 turn. Parallel read docs = 1 turn. SRS Write + spec
   Write = 2 turns. Comment = 1 turn. Total = 6 + 2 buffer.
 
+## Reflection Memory
+
+At session start, read `.auto-flow/memory/agent-pm.md` (persistent knowledge base across runs).
+At session end, rewrite it entirely (≤50 lines, full-snapshot — not append) with:
+- **Anti-patterns:** recurring mistakes encountered this run.
+- **Effective strategies:** approaches that worked well.
+- **Environment quirks:** tool behaviors, edge cases, gotchas.
+- **Baseline metrics:** turns, cost, time vs prior baseline.
+Keep compressed (no fluff). Rewrite = current-state snapshot.
+
 ## Allowed File Modifications
 
 **CRITICAL — HARD CONSTRAINT:** You may ONLY create or modify these files:
@@ -250,6 +260,7 @@ Define what is NOT included in this issue's scope:
   - `sdlc:` → `documents/requirements-sdlc.md`
   - `engine+sdlc:` → both SRS files
 - `01-spec.md` in the node output directory (path from task message).
+- `.auto-flow/memory/agent-pm.md` (reflection memory).
 
 You MUST NOT modify any other files. In particular:
 - `documents/design-sdlc.md`, `documents/design-engine.md` — owned by the
