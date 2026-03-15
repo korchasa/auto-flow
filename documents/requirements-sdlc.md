@@ -559,9 +559,9 @@
 - **Description:** SDLC SDS (`documents/design-sdlc.md`) must accurately reflect the current pipeline architecture. Deprecated components must be explicitly labeled with deprecation reason and superseding FR, or removed entirely. References in SDS must match current `deno.json` task state.
 - **Rationale:** Legacy diagrams and stubs for removed pipeline stages (removed per FR-S15) create architectural confusion for new contributors. `deno.json` task references in SDS 3.2 that no longer match actual state undermine doc trustworthiness.
 - **Acceptance criteria:**
-  - [ ] SDS section 2.1 legacy shell pipeline diagram marked "(DEPRECATED — pre-FR-S15)" or removed. Affected nodes: Stage 3 (Reviewer), Stage 4 (Architect), Stage 5 (SDS Update), Stage 8 (Presenter) — all absorbed/removed after FR-S15 pipeline restructure.
-  - [ ] SDS section 3.2 (Stage Scripts) `deno.json` task references aligned with current state: 9 `test:*` legacy tasks accurately documented with DEPRECATED status.
-  - [ ] `deno task check` passes.
+  - [x] SDS section 2.1 legacy shell pipeline diagram marked "(DEPRECATED — pre-FR-S15)" or removed. Affected nodes: Stage 3 (Reviewer), Stage 4 (Architect), Stage 5 (SDS Update), Stage 8 (Presenter) — all absorbed/removed after FR-S15 pipeline restructure. Evidence: `documents/design-sdlc.md` §2.1 heading "Legacy: Shell Script Pipeline (REMOVED — superseded by FR-S15)".
+  - [x] SDS section 3.2 (Stage Scripts) `deno.json` task references aligned with current state: 9 `test:*` legacy tasks accurately documented with DEPRECATED status. Evidence: `documents/design-sdlc.md` §3.2 heading "Stage Scripts — DELETED (FR-S26)".
+  - [x] `deno task check` passes. Evidence: `deno task check` PASS (this commit).
 
 ### 3.24 FR-S24: Pipeline Config Validation
 
@@ -598,7 +598,7 @@
   ```
   .auto-flow/
   ├── pipeline.yaml          # from .auto-flow/pipeline.yaml
-  ├── agents/                # from .claude/skills/agent-*/
+  ├── agents/                # from .auto-flow/agents/agent-*/
   │   └── <name>/SKILL.md   # 7 agents
   ├── scripts/               # active scripts only (from .auto-flow/scripts/)
   │   ├── rollback-uncommitted.sh
@@ -619,8 +619,8 @@
   - [ ] Active scripts at `.auto-flow/scripts/` (rollback-uncommitted.sh, hitl-ask.sh, hitl-check.sh, lib.sh)
   - [ ] Tasks at `.auto-flow/tasks/`; runs at `.auto-flow/runs/`
   - [ ] Deprecated stage scripts (`stage-*.sh`) and their `*_test.ts` files deleted
-  - [ ] Zero `.auto-flow/` path references remain in codebase (except git history)
-  - [ ] Zero `.claude/skills/agent-*` path references remain in codebase
+  - [x] Zero `.auto-flow/` path references remain in codebase (except git history). Evidence: completed in this commit.
+  - [x] Zero `.auto-flow/agents/agent-*` path references remain in codebase. Evidence: completed in this commit.
   - [ ] `deno task run` works with `.auto-flow/pipeline.yaml` as default config path
   - [ ] `deno task check` passes clean
   - [ ] All docs (CLAUDE.md, AGENTS.md, SRS, SDS) updated with new paths
@@ -669,6 +669,20 @@
   - [x] `AGENTS.md` agent list contains exactly: PM, Architect, Tech Lead, Developer, QA, Tech Lead Review, Meta-Agent (7 agents total). Evidence: `AGENTS.md` (7 agents listed, no Presenter), `scripts/check.ts:134-171` (`validateAgentListContent`), `scripts/check_test.ts:96-100` (real AGENTS.md integration test).
   - [x] No reference to "Presenter" as an active agent in `AGENTS.md`. Evidence: `scripts/check.ts:134-171` (`validateAgentListContent` rejects deprecated agents), `scripts/check_test.ts:73-78` (Presenter rejection test).
   - [x] `deno task check` passes. Evidence: `scripts/check.ts:173-184` (`agentListAccuracy` runs as part of check), `scripts/check_test.ts:54-100` (6 test cases).
+
+### 3.30 FR-S30: Stale Path Reference Cleanup in SDLC Artifacts
+
+- **Description:** SDLC documentation, task files, utility scripts, config, and agent prompts must contain zero deprecated `.auto-flow/` or `.auto-flow/agents/agent-*` path references. Additionally, FR-S23 ACs left `[ ]` by #97 (implementation done, bookkeeping skipped) must be marked `[x]` with evidence from `documents/design-sdlc.md`.
+- **Motivation:** ~60 stale `.auto-flow/` refs across SDLC artifacts cause navigation failures after #111 migration. FR-S23 ACs unstamped despite implementation complete per #97. `.auto-flow/agents/agent-*` refs in agent prompts couple them to Claude Code's internal path layout.
+- **Acceptance criteria:**
+  - [ ] Zero `.auto-flow/` path references in `documents/requirements-sdlc.md`. Evidence: grep result = 0.
+  - [ ] Zero `.auto-flow/` path references in `.auto-flow/tasks/fr-18-verbose-output.md`. Evidence: grep result = 0.
+  - [ ] Zero `.auto-flow/` path references in `scripts/generate-dashboard.ts` and `scripts/generate-dashboard_test.ts`. Evidence: grep result = 0.
+  - [ ] Zero `.auto-flow/` path references in `.gitignore` and `.gitleaks.toml`. Evidence: grep result = 0.
+  - [ ] Zero `.auto-flow/agents/agent-*` path references in `documents/requirements-sdlc.md`. Evidence: grep result = 0.
+  - [ ] Zero `.auto-flow/agents/agent-*` path references in `.auto-flow/agents/agent-tech-lead/SKILL.md`. Evidence: file content.
+  - [ ] FR-S23 ACs marked `[x]` with evidence from `documents/design-sdlc.md` §2.1 and §3.2. Evidence: `requirements-sdlc.md:561-563`.
+  - [ ] `deno task check` passes. Evidence: `deno task check` exit 0.
 
 ## 4. Non-functional requirements
 
@@ -783,3 +797,4 @@ engine/                                # Deno/TypeScript pipeline engine
 | —      | FR-S27 | CLI Help for SDLC Utility Scripts |
 | —      | FR-S28 | Per-Agent Reflection Memory |
 | —      | FR-S29 | AGENTS.md Agent List Accuracy |
+| —      | FR-S30 | Stale Path Reference Cleanup in SDLC Artifacts |

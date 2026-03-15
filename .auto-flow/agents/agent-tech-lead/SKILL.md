@@ -107,7 +107,7 @@ tasks:
   - desc: "Add phases config key"
     files: [".auto-flow/pipeline.yaml"]
   - desc: "Rename node IDs"
-    files: [".auto-flow/pipeline.yaml", ".claude/skills/agent-*/SKILL.md"]
+    files: [".auto-flow/pipeline.yaml", ".auto-flow/agents/agent-*/SKILL.md"]
 ---
 ```
 

@@ -15,7 +15,7 @@
 ```mermaid
 graph TD
     CLI["CLI<br/>deno task run"] --> Engine
-    Engine --> Config["Config Loader<br/>.sdlc/pipeline.yaml"]
+    Engine --> Config["Config Loader<br/>.auto-flow/pipeline.yaml"]
     Engine --> DAG["DAG Builder<br/>toposort → levels"]
     Engine --> State["State Manager<br/>state.json"]
 
@@ -42,7 +42,7 @@ graph TD
   - **Pipeline Engine** (`engine/`): Deno/TypeScript DAG-based executor
     with YAML config, template interpolation, sequential levels, loop nodes,
     human nodes, resume support
-  - **Artifact Store**: Git-tracked files in `.sdlc/runs/<run-id>/[<phase>/]<node-id>/`
+  - **Artifact Store**: Git-tracked files in `.auto-flow/runs/<run-id>/[<phase>/]<node-id>/`
     (phase subdir present when node has `phase` field in config)
   - **Validation Engine**: Rule-based checks (file_exists, file_not_empty,
     contains_section, custom_script, frontmatter_field)
@@ -177,7 +177,7 @@ graph TD
     (`runHitlLoop`); injectable `scriptRunner`/`claudeRunner` for testing
   - `human.ts` — terminal user input, abort logic
   - ~~`git.ts`~~ — **deleted** (FR-29: domain-specific git code removed from
-    engine). Functions relocated to `.sdlc/scripts/rollback-uncommitted.sh`.
+    engine). Functions relocated to `.auto-flow/scripts/rollback-uncommitted.sh`.
     Failure handling replaced by configurable `on_failure_script` hook
   - `output.ts` — terminal output manager (quiet/normal/semi-verbose/verbose),
     verbose methods for detailed agent-node diagnostics.
@@ -256,8 +256,8 @@ graph TD
   cascade order and legacy normalization; (4) `checkFrontmatterField()` in
   `validate.ts` — regex-over-YAML-parser for partial-document handling.
 - **Legacy Test Task Removal (FR-E29):** Verified complete. No `test:*` tasks
-  referencing `.sdlc/scripts/stage-*_test.ts` remain in `deno.json`. No "Stage
-  Scripts" section in SDS (§3.2 is Phase Registry). No `.sdlc/scripts/stage-*`
+  referencing `.auto-flow/scripts/stage-*_test.ts` remain in `deno.json`. No "Stage
+  Scripts" section in SDS (§3.2 is Phase Registry). No `.auto-flow/scripts/stage-*`
   references in this document. Current valid test tasks: `test`, `test:lib`,
   `test:engine`.
 - **Test Suite Integrity (FR-E27):** Every `engine/` test function must
@@ -274,8 +274,8 @@ graph TD
 - **Interfaces:**
   - CLI: `deno task run [--prompt <text>] [--config <path>] [--resume <run-id>]
     [--dry-run] [-v|-s|-q] [--env KEY=VAL] [--skip nodes] [--only nodes]`
-  - Config: `.sdlc/pipeline.yaml` (YAML, version "1")
-  - State: `.sdlc/runs/<run-id>/state.json` (JSON)
+  - Config: `.auto-flow/pipeline.yaml` (YAML, version "1")
+  - State: `.auto-flow/runs/<run-id>/state.json` (JSON)
 - **Node types:** `agent`, `merge`, `loop` (with inline `nodes` sub-object
     for body node definitions), `human`
 - **Node flags:**
@@ -406,8 +406,8 @@ graph TD
 ## 4. Data
 
 - **Entities:**
-  - Run State: JSON (`.sdlc/runs/<run-id>/state.json`)
-  - Pipeline Config: YAML (`.sdlc/pipeline.yaml`). Top-level keys: `name`,
+  - Run State: JSON (`.auto-flow/runs/<run-id>/state.json`)
+  - Pipeline Config: YAML (`.auto-flow/pipeline.yaml`). Top-level keys: `name`,
     `version`, `defaults`, `phases`, `nodes`. `phases` key declares
     named phase groups with member stage IDs. Engine treats `phases` as opaque
     config data. `defaults.prepare_command` (FR-E30): optional string, shell
@@ -441,7 +441,7 @@ graph TD
 
 - **Mechanism:** Filesystem-based. Each node reads input via `{{input.<node-id>}}`
   template variable pointing to predecessor's output directory. No manifest.
-- **Directory structure:** `.sdlc/runs/<run-id>/[<phase>/]<node-id>/` per node
+- **Directory structure:** `.auto-flow/runs/<run-id>/[<phase>/]<node-id>/` per node
   output. Phase subdir present when node's `phase` field is set in config.
 - **Validation:** Engine validates output via configurable rules (file_exists,
   file_not_empty, contains_section, custom_script, frontmatter_field) after
@@ -536,10 +536,10 @@ graph TD
     Pipeline config example:
     ```yaml
     defaults:
-      on_failure_script: .sdlc/scripts/rollback-uncommitted.sh
+      on_failure_script: .auto-flow/scripts/rollback-uncommitted.sh
       hitl:
-        ask_script: .sdlc/scripts/hitl-ask.sh
-        check_script: .sdlc/scripts/hitl-check.sh
+        ask_script: .auto-flow/scripts/hitl-ask.sh
+        check_script: .auto-flow/scripts/hitl-check.sh
         artifact_source: plan/pm/01-spec.md
         poll_interval: 60
         timeout: 7200
@@ -581,7 +581,7 @@ graph TD
 - **Fault:** Node failure stops pipeline (unless `on_error: continue`). Failure
   reported via state.json. Configurable `on_failure_script` hook runs before
   post-pipeline nodes.
-- **Logs:** Full transcripts per node in `.sdlc/runs/<run-id>/logs/`.
+- **Logs:** Full transcripts per node in `.auto-flow/runs/<run-id>/logs/`.
 
 ## 7. Constraints
 

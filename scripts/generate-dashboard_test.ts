@@ -756,7 +756,7 @@ Deno.test("checkArgs — unknown flag returns error string with code 1", () => {
 });
 
 Deno.test("checkArgs — valid --run-dir arg returns null (ok)", () => {
-  const result = checkArgs(["--run-dir", ".sdlc/runs/20260101T120000"]);
+  const result = checkArgs(["--run-dir", ".auto-flow/runs/20260101T120000"]);
   assertEquals(result, null);
 });
 

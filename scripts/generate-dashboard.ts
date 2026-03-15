@@ -398,7 +398,7 @@ Options:
   --help, -h         Show this help
 
 Example:
-  deno task dashboard --run-dir .sdlc/runs/20260101T120000`;
+  deno task dashboard --run-dir .auto-flow/runs/20260101T120000`;
 }
 
 export function checkArgs(
