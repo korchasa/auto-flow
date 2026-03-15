@@ -6,36 +6,38 @@ type: feedback
 
 ## Anti-patterns
 
-- `requirements-engine.md` is ~62KB — redirects on Read. Same issue as sdlc file.
-- `requirements-sdlc.md` is ~69KB (775+ lines) — too large to Read in one call; hits tool-results redirect chain. Cannot reconstruct full content for a Write call. Use targeted Grep + offset/limit reads to gather specific sections, then Edit for surgical insertions.
-- The "NEVER use Edit on SRS files" rule is impractical when the SRS is >50KB and cannot be fully loaded. A single targeted Edit (one insertion) is the pragmatic equivalent of a Write on large files.
-- Tool-results redirect chains: reading a persisted-output file that also exceeds limits creates a second redirect. Do NOT follow more than 1 redirect — use Grep/offset reads on the original file directly instead.
-- Do NOT run health checks only on the 5 most recent issues — check oldest first (lowest number) when no in-progress/high-priority labels exist. Selection rule: oldest healthy = lowest number.
+- `requirements-engine.md` is ~62KB — redirects on Read. Use Grep + offset/limit reads instead.
+- `requirements-sdlc.md` is ~69KB (775+ lines) — too large to Read in one call. Use targeted Grep + offset reads + Edit.
+- The "NEVER use Edit on SRS files" rule is impractical when SRS is >50KB and cannot be fully loaded. One targeted Edit per insertion is pragmatic.
+- Tool-results redirect chains: reading a persisted-output file that also exceeds limits creates a second redirect. Do NOT follow more than 1 redirect.
+- Do NOT run health checks only on the 5 most recent issues — check oldest first (lowest number) when no in-progress/high-priority labels exist.
 
 ## Effective strategies
 
-- Grep for `^### 3\.\d+ FR-E\d+` (engine) or `^### 3\.\d+ FR-S\d+` (sdlc) pattern on SRS to find all FR numbers and their line ranges in one call — fast and reliable.
-- Also grep `^## Appendix` with -n to find line number for appendix section.
-- Read targeted line ranges (offset + limit) to get specific sections (e.g., last FR, section 4 boundary, appendix).
-- On `main` branch with no in-progress issues: check health of oldest (lowest-number) candidates first, not newest.
+- Grep `^### 3\.\d+ FR-E\d+` / `^### 3\.\d+ FR-S\d+` on SRS to find all FR numbers + line ranges in one call.
+- Grep `^## ` to find section headings and line numbers.
+- Read targeted line ranges (offset + limit) to get specific sections (last FR, appendix boundary).
+- On `main` branch with no in-progress issues: check health of oldest (lowest-number) candidates first.
 - Draft all SRS changes in text response BEFORE writing — catches issues before the write.
 - For large SRS (>50KB): 2 targeted Edits (section insert + appendix row) is sufficient and practical.
-- Batch health checks for oldest 5 candidates in parallel via a single chained Bash call to save turns.
-- Run health checks and `gh issue view` for selected candidate in parallel after selection.
+- Batch health checks for oldest 5 candidates in a single chained Bash call.
 - Read reflection memory and issue list in parallel in STEP 1+2a.
+- Read issue body and SRS structure (grep for FRs + sections) in parallel.
+- For new FRs with no old ID: use `| —      | FR-ENN | Title |` in appendix.
 
 ## Environment quirks
 
 - `requirements-sdlc.md` was 775+ lines (~69KB) as of run 20260315T144221. Grows with each FR addition.
-- `requirements-engine.md` is ~62KB (~660+ lines). Also too large to Read in one pass — redirects.
+- `requirements-engine.md` is ~62KB (~670+ lines after FR-E28). Also too large to Read in one pass.
 - `gh issue view` without `comments` flag is fast (~1KB). Always omit `comments`.
-- `gh issue list --label "in-progress"` returns `[]` most of the time — always have fallback to `--limit 20` all open.
 - Appendix C in requirements-sdlc.md must be updated alongside section 3.xx when adding a new FR.
-- Appendix in requirements-engine.md (single table) must also be updated with each new FR-E.
+- Appendix in requirements-engine.md (single table, Old ID / New ID / Title) must also be updated with each new FR-E.
+- Newer FRs with no legacy alias use `—` in Old ID column of appendix.
 
 ## Baseline metrics
 
-- Run 20260315T003418: 8 turns, main branch, no in-progress issues, issue #121 (sdlc scope), FR-S29 added.
-- Run 20260315T144221: ~9 turns, main branch, no in-progress issues, issue #86 (sdlc scope), FR-S29 added. 2 targeted Edits on large SRS file.
-- Run 20260315T152252: ~9 turns, main branch, no in-progress issues, issue #88 (engine scope), FR-E27 added. 2 targeted Edits on large SRS file.
+- Run 20260315T003418: 8 turns, main branch, issue #121 (sdlc scope), FR-S29 added.
+- Run 20260315T144221: ~9 turns, main branch, issue #86 (sdlc scope), FR-S29 added. 2 targeted Edits.
+- Run 20260315T152252: ~9 turns, main branch, issue #88 (engine scope), FR-E27 added. 2 targeted Edits.
+- Run 20260315T153825: ~8 turns, main branch, issue #89 (engine scope), FR-E28 added. Grep structure + offset reads + 2 Edits. Efficient.
 - Large SRS file (>50KB): use Grep + offset reads + targeted Edits. Both SRS files are now this large.

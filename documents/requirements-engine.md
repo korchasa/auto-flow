@@ -605,6 +605,16 @@
   - [ ] Test "releaseLock - no error if lock file already removed" in `engine/lock_test.ts` includes `assertEquals(await releaseLock(lockPath), undefined)`. Evidence: `engine/lock_test.ts:143`
   - [ ] All engine tests pass after change. Evidence: `deno task check` PASS
 
+### 3.28 FR-E28: Shared Backoff Utility (`nextPause()`)
+
+- **Description:** `nextPause()` function is duplicated in `scripts/self_runner.ts` and `scripts/loop_in_claude.ts`. Extract into a shared `scripts/backoff.ts` module to eliminate duplication.
+- **Motivation:** DRY violation — backoff logic changes must be applied in multiple places; shared module ensures consistency.
+- **Acceptance criteria:**
+  - [ ] `scripts/backoff.ts` exists and exports `nextPause()`. Evidence: `scripts/backoff.ts`.
+  - [ ] `scripts/self_runner.ts` imports `nextPause` from `scripts/backoff.ts`; no local `nextPause` definition remains. Evidence: `scripts/self_runner.ts`.
+  - [ ] `scripts/loop_in_claude.ts` imports `nextPause` from `scripts/backoff.ts`; no local `nextPause` definition remains. Evidence: `scripts/loop_in_claude.ts`.
+  - [ ] All tests pass. Evidence: `deno task check` PASS.
+
 ## 4. Non-Functional Requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -658,3 +668,4 @@
 | —      | FR-E25 | Graceful Shutdown (Signal Handling) |
 | —      | FR-E26 | Engine Codebase Housekeeping |
 | —      | FR-E27 | Test Suite Integrity |
+| —      | FR-E28 | Shared Backoff Utility (`nextPause()`) |
