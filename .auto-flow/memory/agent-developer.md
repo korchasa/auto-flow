@@ -18,19 +18,20 @@
 - Check `git diff <file>` when git status shows M (modified) — prior agent may have already made partial changes
 - No-op tasks: run check, fix any pre-existing fmt issues, write summary, commit run artifact only
 - No-op detection: read decision + git log in parallel on first turn; if tasks=[] and sdlc(impl) commit exists, skip all source reads
-- When deno task check shows trailing space in an out-of-scope memory file: fix it (single Edit), stage it alongside memory file
+- When deno task check shows formatting issue in an out-of-scope memory file: fix it (single Write), stage it alongside memory file
+- When multiple headings in a memory file lack blank lines: rewrite whole file once (single Write call)
 
 ## Environment Quirks
 
 - `deno fmt` checks ALL `.md` files in the repo, not just TypeScript
 - Memory files require blank lines between `##` headings and first list item (deno fmt rule)
 - SKILL.md-only tasks: no tests to write, deno task check passes if formatting is clean
-- `.auto-flow/memory/*.md` files can accumulate trailing whitespace from prior agent writes
+- `.auto-flow/memory/*.md` files can accumulate missing blank lines from prior agent writes
 - deno task check output >50KB gets persisted to temp file — check `<error>` wrapper vs `<persisted-output>` to determine pass/fail (no error tag = PASS)
 - `git diff HEAD` shows both staged and unstaged changes vs HEAD; `git diff --cached` shows only staged
 - PM agent may add FR sections with unchecked ACs — developer's job is to mark them with evidence
 - No-op tasks (tasks[].files empty): still need to fix pre-existing fmt issues before check passes
-- Trailing space in memory/*.md is a recurring pattern — check git status M files before running check
+- Trailing space AND missing blank lines in memory/*.md are recurring patterns — check git status M files before running check
 
 ## Baseline Metrics
 
@@ -43,4 +44,5 @@
 - Run 20260315T020701: ~4 turns, scope sdlc, issue #121 (FR-S29), no-op pass-through (tasks=[])
 - Run 20260315T021555: ~6 turns, scope sdlc, issue #121 (FR-S29), no-op + fmt fix in agent-architect.md
 - Run 20260315T025139: ~4 turns, scope sdlc, issue #121 (FR-S29), no-op pass-through (tasks=[])
+- Run 20260315T030805: ~6 turns, scope sdlc, issue #121 (FR-S29), no-op + fmt fix in agent-meta-agent.md
 - Target: ≤35 turns. All runs achieved well under target.
