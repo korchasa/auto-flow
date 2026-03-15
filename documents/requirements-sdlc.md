@@ -661,6 +661,24 @@
   - [ ] At least one end-to-end pipeline run completes with agents reading/writing their own memory files.
   - [ ] `deno task check` passes after changes.
 
+### 3.29 FR-S29: Agent Comment Identification
+
+- **Description:** Each pipeline agent SKILL.md includes a `## Comment Identification` section defining the comment prefix rule. All `gh issue comment` and `gh pr review` body strings produced by agents MUST start with `**[<Agent> · <phase>]**` identifying the agent and pipeline phase.
+- **Motivation:** All agent comments appear under the same GitHub bot account, making it impossible to distinguish which pipeline agent posted a given comment without reading full context. Per-agent prefixes enable instant attribution in issue timelines.
+- **Prefix map:**
+  - PM → `**[PM · specify]**`
+  - Architect → `**[Architect · plan]**`
+  - Tech Lead → `**[Tech Lead · decide]**`
+  - Developer → `**[Developer · implement]**`
+  - QA → `**[QA · verify]**`
+  - Tech Lead Review → `**[Tech Lead Review · review]**`
+  - Meta-Agent → `**[Meta-Agent · optimize]**`
+- **Scope:** All 7 agent SKILL.md files. Covers hardcoded templates and dynamically generated comment bodies. Separate from FR-S22 Voice (tone) — this governs attribution.
+- **Acceptance criteria:**
+  - [x] Each of 7 agent SKILL.md files contains a `## Comment Identification` section specifying prefix format `**[<Agent> · <phase>]**`. Evidence: `.auto-flow/agents/agent-pm/SKILL.md:58`, `.auto-flow/agents/agent-architect/SKILL.md:66`, `.auto-flow/agents/agent-tech-lead/SKILL.md:54`, `.auto-flow/agents/agent-developer/SKILL.md:69`, `.auto-flow/agents/agent-qa/SKILL.md:100`, `.auto-flow/agents/agent-tech-lead-review/SKILL.md:31`, `.auto-flow/agents/agent-meta-agent/SKILL.md:28`.
+  - [x] All `gh issue comment` and `gh pr review` examples/templates in SKILL.md files use the correct agent prefix. Evidence: `.auto-flow/agents/agent-pm/SKILL.md:60,62,136`, `.auto-flow/agents/agent-architect/SKILL.md:68,70,95`, `.auto-flow/agents/agent-tech-lead/SKILL.md:56,58,83`, `.auto-flow/agents/agent-developer/SKILL.md:71,73`, `.auto-flow/agents/agent-qa/SKILL.md:102,104,125,126`, `.auto-flow/agents/agent-tech-lead-review/SKILL.md:33,35,54`, `.auto-flow/agents/agent-meta-agent/SKILL.md:30,32,129`.
+  - [x] `deno task check` passes after changes. Evidence: verified 2026-03-15, PASS (`452 passed | 0 failed`).
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -773,3 +791,4 @@ engine/                                # Deno/TypeScript pipeline engine
 | —      | FR-S26 | Pipeline Asset Directory Consolidation |
 | —      | FR-S27 | CLI Help for SDLC Utility Scripts |
 | —      | FR-S28 | Per-Agent Reflection Memory |
+| —      | FR-S29 | Agent Comment Identification |
