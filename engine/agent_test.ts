@@ -1,6 +1,9 @@
 import { assertEquals } from "@std/assert";
+import type { AgentRunOptions } from "./agent.ts";
+import { buildClaudeArgs } from "./claude-process.ts";
+import type { InvokeOptions } from "./claude-process.ts";
+import { OutputManager } from "./output.ts";
 import {
-  buildClaudeArgs,
   extractClaudeOutput,
   FileReadTracker,
   formatEventForOutput,
@@ -8,13 +11,8 @@ import {
   processStreamEvent,
   stampLines,
   tsPrefix,
-} from "./agent.ts";
-import type {
-  AgentRunOptions,
-  InvokeOptions,
-  StreamProcessorState,
-} from "./agent.ts";
-import { OutputManager } from "./output.ts";
+} from "./stream.ts";
+import type { StreamProcessorState } from "./stream.ts";
 import type { NodeConfig, NodeSettings, TemplateContext } from "./types.ts";
 
 // Note: Full integration tests for runAgent require a real claude CLI.

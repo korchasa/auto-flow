@@ -42,7 +42,8 @@ export {
   setPhaseRegistry,
 } from "./state.ts";
 export { runAgent } from "./agent.ts";
-export type { AgentResult, AgentRunOptions, InvokeOptions } from "./agent.ts";
+export type { AgentResult, AgentRunOptions } from "./agent.ts";
+export type { InvokeOptions } from "./claude-process.ts";
 export { detectHitlRequest, runHitlLoop } from "./hitl.ts";
 export type {
   ClaudeRunner,

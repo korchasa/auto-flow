@@ -5,7 +5,8 @@ import type {
   NodeSettings,
   TemplateContext,
 } from "./types.ts";
-import type { AgentResult, InvokeOptions } from "./agent.ts";
+import type { AgentResult } from "./agent.ts";
+import type { InvokeOptions } from "./claude-process.ts";
 import type { OutputManager } from "./output.ts";
 
 /** Structured question extracted from AskUserQuestion permission denial. */
@@ -137,7 +138,7 @@ export async function runHitlLoop(
 
   const runner = opts.scriptRunner ?? defaultScriptRunner;
   const claudeRun = opts.claudeRunner ??
-    (await import("./agent.ts")).invokeClaudeCli;
+    (await import("./claude-process.ts")).invokeClaudeCli;
 
   // Step 1: Deliver question (unless resuming)
   if (!skipAsk) {
