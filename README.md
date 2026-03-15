@@ -24,7 +24,7 @@ Inter-agent communication uses structured Markdown artifacts in `<runs-dir>/<run
 - **HITL support** — human interaction nodes for manual decisions or approvals
 - **Validation** — rule-based checks per node (file_exists, file_not_empty, contains_section, custom_script, frontmatter_field)
 - **Resume** — failed/interrupted runs resumable via `--resume <run-id>`; completed nodes skipped
-- **Observability** — 3 verbosity levels (`-q` / default / `-v`); status lines with timestamps; final summary
+- **Observability** — 4 verbosity levels (`-q` / default / `-s` / `-v`); status lines with timestamps; final summary
 
 ## Quick Start
 
@@ -55,8 +55,9 @@ Options:
   --skip <nodes>      Comma-separated node IDs to skip
   --only <nodes>      Run only specified nodes
   --env KEY=VAL       Set environment variable for the run
-  -v                  Verbose output (detailed agent diagnostics)
   -q                  Quiet output (minimal status)
+  -s                  Show text output only (suppress tool calls)
+  -v                  Verbose output (detailed agent diagnostics)
 ```
 
 ## Configuration
