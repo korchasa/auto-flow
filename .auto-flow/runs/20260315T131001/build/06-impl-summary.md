@@ -29,4 +29,4 @@ status: PASS
 
 ### deno task check result
 
-PASS — 459 tests passed, 0 failed. All checks including new AGENTS.md Agent List Accuracy check passed.
+PASS — 465 tests passed, 0 failed. New AGENTS.md Agent List Accuracy check passed with "7 active agents, no deprecated."
