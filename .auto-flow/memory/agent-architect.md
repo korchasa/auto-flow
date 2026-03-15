@@ -27,6 +27,7 @@
 
 ## Baseline metrics
 
+- Run 20260315T213641: 10 tool calls, engine scope, template file() function, 3 variants
 - Run 20260315T193605: 10 tool calls, engine+sdlc scope, path cleanup task, 3 variants
 - Run 20260315T183811: 9 tool calls, engine scope, new hook feature, 3 variants
 - Run 20260315T153825: 8 tool calls, engine scope, DRY extraction task, 3 variants

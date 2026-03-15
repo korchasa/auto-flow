@@ -1,5 +1,8 @@
 import type { TemplateContext } from "./types.ts";
 
+/** File inclusion size threshold. Files larger than this emit a console warning. */
+export const FILE_INCLUSION_SIZE_WARN_BYTES = 102400;
+
 /**
  * Interpolates `{{var}}` placeholders in a template string using the provided context.
  *
@@ -9,6 +12,7 @@ import type { TemplateContext } from "./types.ts";
  * - `{{args.<key>}}` — CLI arguments
  * - `{{env.<key>}}` — environment variables
  * - `{{loop.iteration}}` — current loop iteration
+ * - `{{file("path")}}` — inline file content (single-pass, no re-interpolation)
  *
  * Unresolved placeholders throw an error (fail fast).
  */
@@ -24,6 +28,25 @@ function resolve(key: string, ctx: TemplateContext): string {
   if (key === "node_dir") return ctx.node_dir;
   if (key === "run_dir") return ctx.run_dir;
   if (key === "run_id") return ctx.run_id;
+
+  // file() function: {{file("path")}}
+  const fileMatch = key.match(/^file\("(.+)"\)$/);
+  if (fileMatch) {
+    const path = fileMatch[1];
+    const resolved = path.startsWith("/") ? path : `${Deno.cwd()}/${path}`;
+    let content: string;
+    try {
+      content = Deno.readTextFileSync(resolved);
+    } catch {
+      throw new Error(`{{file("${path}")}} — file not found: ${resolved}`);
+    }
+    if (content.length > FILE_INCLUSION_SIZE_WARN_BYTES) {
+      console.warn(
+        `{{file("${path}")}}: large file included (${content.length} bytes, threshold ${FILE_INCLUSION_SIZE_WARN_BYTES}): ${resolved}`,
+      );
+    }
+    return content;
+  }
 
   // Dotted paths
   const dotIdx = key.indexOf(".");

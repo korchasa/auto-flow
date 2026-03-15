@@ -648,6 +648,20 @@
   - [ ] Engine test fixtures (`engine/hitl_test.ts`, `engine/agent_test.ts`, `engine/config_test.ts`, `engine/pipeline_integrity_test.ts`) use `.auto-flow/agents/` paths only. Evidence: file contents.
   - [ ] `deno task check` passes. Evidence: `deno task check` exit 0.
 
+### 3.32 FR-E32: `{{file()}}` Template Function
+
+- **Description:** Template engine (`engine/template.ts`) supports `{{file("path/to/file.md")}}` function syntax. Reads named file content and inserts it inline at the call site. Paths resolved relative to repo root. Inserted content NOT re-interpolated (prevents recursion, ensures predictable behavior). Fail-fast: throws descriptive error if file not found.
+- **Motivation:** Two separate mechanisms for file content injection (`prompt` field via `--append-system-prompt-file`; `task_template` via `{{variable}}` substitution) prevent composition of shared instructions across nodes without duplication. `{{file()}}` unifies inline file injection into the existing template system.
+- **Acceptance criteria:**
+  - [ ] `{{file("path")}}` resolves path relative to repo root and inserts file content inline. Evidence: `engine/template.ts`
+  - [ ] Inserted content is NOT re-interpolated (no nested `{{...}}` processing of included text). Evidence: `engine/template.ts`
+  - [ ] Missing file throws a fail-fast error with the missing path in the message. Evidence: `engine/template.ts`
+  - [ ] `deno task check` validates `{{file()}}` references at load time by executing real file reads (not stub substitution). Evidence: `engine/config.ts`
+  - [ ] Validation error identifies the missing file path for quick diagnosis. Evidence: `engine/config.ts`
+  - [ ] Size warning emitted when included file content exceeds a threshold. Evidence: `engine/template.ts`
+  - [ ] Unit tests: successful inclusion, missing file error, no re-interpolation of included content. Evidence: `engine/template_test.ts`
+  - [ ] Config check tests: `deno task check` catches missing `{{file()}}` path in `task_template`. Evidence: `engine/config_test.ts`
+
 ## 4. Non-Functional Requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -668,7 +682,7 @@
   - `--model <model>` — per-node model override (FR-E12).
 - **Config format:** YAML pipeline config with `defaults` (global settings) and `nodes` (DAG definition). Node types: `agent`, `loop`, `merge`, `human`. Fields per type: `prompt`, `inputs`, `validate`, `model`, `run_on`, `after`/`before` hooks.
 - **State:** `<run-dir>/state.json` — node statuses (`pending`/`running`/`completed`/`failed`/`waiting`/`skipped`), session IDs, cost data, timing, HITL question JSON.
-- **Template variables:** `{{input.<node-id>}}` (node output dir), `{{node_dir}}` (current node output dir), `{{run_dir}}` (run root), `{{run_id}}`, `{{loop.iteration}}` (loop body only), `{{env.<KEY>}}`.
+- **Template variables:** `{{input.<node-id>}}` (node output dir), `{{node_dir}}` (current node output dir), `{{run_dir}}` (run root), `{{run_id}}`, `{{loop.iteration}}` (loop body only), `{{env.<KEY>}}`, `{{file("path")}}` (inline file content, path relative to repo root; FR-E32).
 
 ## Appendix: FR Cross-Reference
 
@@ -705,3 +719,4 @@
 | —      | FR-E29 | Legacy Test Task Removal |
 | —      | FR-E30 | Pipeline Prepare Command (`prepare_command`) |
 | —      | FR-E31 | Stale Path Reference Cleanup in Engine Artifacts |
+| —      | FR-E32 | `{{file()}}` Template Function |

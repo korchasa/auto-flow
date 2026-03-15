@@ -69,12 +69,23 @@ graph TD
     `HitlConfig.artifact_source` (renamed from `issue_source`),
     `HitlConfig.exclude_login` (renamed from `bot_login`),
     `Verbosity` union: `"quiet"|"normal"|"semi-verbose"|"verbose"` (FR-41))
-  - `template.ts` — `{{var}}` interpolation for prompts/paths
+  - `template.ts` — `{{var}}` interpolation for prompts/paths.
+    `resolve()` handles `file("path")` pattern within `{{...}}` matches
+    (FR-E32): detects `/^file\("(.+)"\)$/`, reads file via
+    `Deno.readTextFileSync()` relative to `Deno.cwd()`, returns content
+    as-is (no re-interpolation — single-pass). Missing file → throw with
+    diagnostic. Size > `FILE_INCLUSION_SIZE_WARN_BYTES` (100KB) →
+    `console.warn()` (non-fatal)
   - `config.ts` — YAML parsing, schema validation, defaults merge,
     `run_on` normalization. `extractPreRun()`: lightweight pre-parse
     extracting only `pre_run` field for two-phase loading (FR-E24). `validateNode()`: if `run_on` present, must be
     one of `"always"|"success"|"failure"`; error:
     `Node '<id>' has invalid run_on value '<val>'. Must be one of: always, success, failure`.
+    `validateFileReferences(config)` (FR-E32): scans all `task_template`
+    and `prompt` fields (incl. loop body nodes) for `{{file("...")}}` regex,
+    checks file existence via `Deno.statSync()`. Skips paths containing `{{`
+    (unresolvable at load time). Called from `mergeDefaults()` alongside
+    `validatePromptPaths()`.
     `normalizeRunOn()` pass (in `mergeDefaults()`):
     if `node.run_always === true && !node.run_on` → sets `run_on = "always"`;
     if both present, `run_on` wins; deletes `run_always` from config
@@ -455,7 +466,9 @@ graph TD
     continuation-on-failure for check errors.
 - **Context management:** Claude CLI auto-compression handles large input sets.
 - **Template variables:** `{{node_dir}}`, `{{input.*}}`, `{{run_dir}}`,
-  `{{run_id}}`, `{{args.*}}`, `{{env.*}}`, `{{loop.iteration}}`.
+  `{{run_id}}`, `{{args.*}}`, `{{env.*}}`, `{{loop.iteration}}`,
+  `{{file("path")}}` (FR-E32: inline file inclusion, path relative to CWD,
+  single-pass — no re-interpolation of file contents).
 - **After-hook conventions:** Commands run from repo root (no `cd {{run_dir}}`
   prefix needed). Use `|| true` suffix to prevent hook failure from killing
   the node.
@@ -502,6 +515,17 @@ graph TD
       `verboseInputs()` reports `0 files` without error. No `Deno.stat()` calls.
     - **Missing file stat:** `Deno.stat()` failure on input artifact →
       graceful skip, verbose output includes error detail for affected path.
+  - **File Inclusion Resolution (FR-E32):** In `resolve()`, when key matches
+    `/^file\("(.+)"\)$/`: extract path → resolve relative to `Deno.cwd()` →
+    `Deno.readTextFileSync(resolved)`. Missing → throw
+    `Error('{{file("${path}")}} — file not found: ${resolved}')`. Content
+    returned as-is (no re-interpolation). Size > 100KB → `console.warn()`.
+    Nested template variables inside `file()` path not supported (regex
+    limitation: `{{file("{{var}}")}}` matches inner `}}` first). Acceptable
+    per FR-E32 spec (no recursive includes).
+    Load-time validation: `validateFileReferences(config)` in `config.ts`
+    scans `task_template`/`prompt` fields for `{{file("...")}}` regex, checks
+    existence. Skips paths with `{{` (template vars unresolvable at load time).
   - **Post-Pipeline Node Collection & Ordering**: `collectPostPipelineNodes()`
     collects nodes where `run_on !== undefined` (replaces `run_always`-based
     collection). `sortPostPipelineNodes()` sorts them topologically using

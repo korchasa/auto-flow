@@ -7,6 +7,7 @@
 - `git push -f -u` avoids --force-with-lease stale-ref failures.
 - Write SDS in ONE Edit call — plan changes before writing, no re-read needed.
 - Single issue comment at end, not multiple progress updates.
+- Use Edit (not Write) for SDS updates — multiple targeted edits are fine as long as no re-reads happen. More precise than full file Write for large SDS files.
 
 ## Anti-Patterns
 
@@ -24,4 +25,5 @@
 ## Baseline Metrics
 
 - Run 20260315T003418: ~8 turns, scope sdlc, issue #121 (FR-S29).
-- Target: ≤10 turns. Achieved.
+- Run 20260315T213641: ~7 turns, scope engine, issue #128 (FR-E32).
+- Target: ≤10 turns. Achieved both runs.
