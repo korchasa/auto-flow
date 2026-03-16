@@ -1,5 +1,5 @@
 ---
-name: flow-skill-create-requirement-ticket
+name: create-requirement-ticket
 description: >-
   Create GitHub issue as a requirement ticket: problem + requirements only,
   no implementation details. Use when user asks to create a ticket, issue,

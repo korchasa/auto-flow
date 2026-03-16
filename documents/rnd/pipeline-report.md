@@ -1,10 +1,5 @@
 # Pipeline Structure Review
 
-## 1. Validation duplication
-
-Pattern `file_exists` + `file_not_empty` + `contains_section: Summary` repeated in 5/6 nodes.
-Only filename differs. Needs `validate_defaults` or `validate_preset` in engine.
-
 ## 2. Artifact numbering inconsistency
 
 - 01-spec -> 02-plan -> **04**-decision -> **06**-impl-summary -> **05**-qa-report -> **08**-review
