@@ -400,6 +400,25 @@ graph LR
   entry point (deferred).
 - **Deps:** `engine/config.ts` (`loadConfig` function).
 
+### 3.8.1 HITL Artifact Source Validation (FR-S35)
+
+- **Purpose:** Validate `defaults.hitl.artifact_source` uses `{{input.<node-id>}}`
+  template syntax instead of a hardcoded path. Prevents silent breakage when
+  specification node is renamed or artifact layout changes.
+- **Implementation:** `hitlArtifactSource()` in `scripts/check.ts`:
+  1. Loads pipeline config via `loadConfig()`.
+  2. Reads `config.defaults?.hitl?.artifact_source`.
+  3. If field present and does not contain `{{input.`: reports error
+     "hitl.artifact_source must use template syntax".
+  4. If field absent: skips (no error).
+- **Validation flow:** `hitlArtifactSource()` → `loadConfig()` → string match
+  for `{{input.` → error collection → report. Pattern follows
+  `pipelineIntegrity()` (§3.8): catch + report, non-throwing.
+- **Interfaces:** Called as part of `deno task check` pipeline in
+  `scripts/check.ts` main sequence, alongside `pipelineIntegrity()` and
+  `agentListAccuracy()`.
+- **Deps:** `engine/config.ts` (`loadConfig` function).
+
 ### 3.9 SDLC Utility Scripts CLI Help (FR-S26)
 
 - **Purpose:** `--help`/`-h` support for `scripts/self_runner.ts` and
@@ -510,7 +529,7 @@ graph LR
     hitl:
       ask_script: .auto-flow/scripts/hitl-ask.sh
       check_script: .auto-flow/scripts/hitl-check.sh
-      artifact_source: plan/pm/01-spec.md
+      artifact_source: "{{input.specification}}/01-spec.md"
       poll_interval: 60
       timeout: 7200
   ```

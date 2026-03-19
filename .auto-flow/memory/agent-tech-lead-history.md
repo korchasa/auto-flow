@@ -11,3 +11,4 @@
 | 20260319T192055 | #148 (FR-S33) | ~7    | ✅ Variant A selected, SDS updated, PR draft      | 4 targeted Edit calls for SDS symlink removal refs — precise and efficient. Symlink cleanup = pure deletion task.   |
 | 20260319T194808 | #149 (FR-S34) | ~7    | ✅ Variant C selected, SDS updated, PR #163 draft | 3 targeted Edit calls for SDS (add function, update renderHtml, add flow). Dashboard scope = pure SDLC, no engine. |
 | 20260319T201620 | #150 (FR-E33) | ~7    | ✅ Variant B selected, SDS updated, PR draft       | 3 targeted Edit calls for SDS (config validation, registry simplification, logic init). Engine-scope, straightforward. |
+| 20260319T204544 | #151 (FR-S35) | ~7    | ✅ Variant C selected, SDS updated, PR draft       | 2 targeted Edit calls for SDS (add §3.8.1 validation + update YAML snippet). SDLC-scope, check.ts pattern. |
