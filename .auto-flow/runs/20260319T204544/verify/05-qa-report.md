@@ -1,18 +1,18 @@
 ---
-verdict: FAIL
+verdict: PASS
 ---
 
 ## Check Results
 
-- Format: PASS
-- Lint: PASS
-- Type Check: PASS
+- Format: PASS (76 files checked, auto-fixed)
+- Lint: PASS (53 files checked)
+- Type Check: PASS (all engine/ + scripts/ .ts files)
 - CLI Smoke Test: PASS
 - Secret Scan: PASS
 - Tests: PASS (519 passed, 0 failed)
 - Doc Lint: PASS
 - Pipeline Integrity: PASS
-- HITL Artifact Source Validation: PASS
+- HITL Artifact Source Validation: PASS ("HITL artifact_source uses template syntax.")
 - AGENTS.md Agent List Accuracy: PASS
 - Comment Scan: PASS
 
@@ -20,45 +20,40 @@ verdict: FAIL
 
 ## Spec vs Issue Alignment
 
-Issue #151 title: `sdlc: Hardcoded artifact path in hitl.artifact_source defaults`
+Issue #151 — "sdlc: Hardcoded artifact path in hitl.artifact_source defaults"
 
-Issue requirements:
-1. HITL artifact source MUST reference target node via template system (e.g., `{{input.<node>}}/…`) rather than hardcoded path → addressed by FR-S35 AC#1
-2. Engine MUST validate at parse time if hardcoded path used → addressed by FR-S35 AC#2
+- **Requirement 1:** `defaults.hitl.artifact_source` MUST reference its target node via the template system (e.g., `{{input.<node>}}`).
+  - Coverage: `pipeline.yaml` line 23: `artifact_source: "{{input.specification}}/01-spec.md"` ✅
+- **Requirement 2:** If a hardcoded path is used, engine MUST validate at parse time.
+  - Coverage: `hitlArtifactSource()` in `scripts/check.ts` (lines 120–146) emits error + `Deno.exit(1)` when no `{{` found ✅
+- **Out-of-scope exclusions honored:** HITL polling logic unchanged; no `hitl-ask.sh` or `hitl-check.sh` modifications in diff ✅
 
-Spec FR-S35 matches both issue requirements exactly. No spec drift detected.
-
-Spec's "SRS Changes" section states:
-- `documents/requirements-sdlc.md` updated with FR-S35 section 3.35
-- Appendix C updated with FR-S35 cross-reference row
-
-`documents/requirements-sdlc.md` is **not in `git diff main...HEAD --name-only`** and has **0 grep matches for "FR-S35"**. PM-stage SRS persistence failure (same pattern as issues #147, #148, #149, #150).
+No spec drift from issue detected.
 
 ## Acceptance Criteria
 
 Criteria derived from FR-S35 definition in spec + spec SRS Changes section + decision task breakdown:
 
-- [x] AC#1: `pipeline.yaml` `defaults.hitl.artifact_source` uses `{{input.specification}}/01-spec.md` template syntax (line 23)
+- [x] AC#1: `pipeline.yaml` `defaults.hitl.artifact_source` uses `{{input.specification}}/01-spec.md` template syntax (line 23) — not hardcoded
 - [x] AC#2: `hitlArtifactSource()` validation function in `scripts/check.ts` emits parse-time error for hardcoded path (lines 120–146)
 - [x] AC#3: `validateHitlArtifactSource()` exported pure function checks for `{{` presence; returns error messages for hardcoded path, passes for template or absent field (lines 110–118)
 - [x] AC#4: `interpolate()` applied in `engine/hitl.ts:buildScriptArgs()` for `artifact_source` before passing to scripts (line 264)
-- [x] AC#5: `HitlRunOptions.ctx: TemplateContext` threaded through to `buildScriptArgs()` (signature at line 257)
-- [x] AC#6: Test `runHitlLoop — artifact_source template resolved via ctx` in `engine/hitl_test.ts` (lines 232–277) verifies `{{input.specification}}/01-spec.md` resolves to `/runs/abc/specification/01-spec.md`
-- [x] AC#7: Tests for `validateHitlArtifactSource()` in `scripts/check_test.ts` cover valid template path (pass), hardcoded path (fail), absent field (skip/pass), empty string (skip/pass) (lines 109–130)
-- [ ] AC#8: FR-S35 section 3.35 added to `documents/requirements-sdlc.md` — **MISSING** (0 grep matches, file not in diff)
-- [ ] AC#9: Appendix C row for FR-S35 added to `documents/requirements-sdlc.md` — **CANNOT CONFIRM** (file not in diff, 0 FR-S35 matches)
+- [x] AC#5: `HitlRunOptions.ctx: TemplateContext` threaded through to `buildScriptArgs()` (function accepts `ctx: TemplateContext` at line 257)
+- [x] AC#6: Test for `artifact_source` template resolution in `engine/hitl_test.ts` — 519 tests (+5 from 514); SRS AC marker confirmed
+- [x] AC#7: Tests for `validateHitlArtifactSource()` in `scripts/check_test.ts` — valid template, hardcoded path, absent field, empty string cases covered
+- [x] AC#8: FR-S35 section 3.35 present in `documents/requirements-sdlc.md` — confirmed at line 788; file in `git diff main...HEAD`
+- [x] AC#9: Appendix C row for FR-S35 in `documents/requirements-sdlc.md` — confirmed at line 938
+
+9/9 criteria passed.
 
 ## Issues Found
 
-1. **FR-S35 absent from `documents/requirements-sdlc.md`**
-   - File: `documents/requirements-sdlc.md`
-   - Severity: **blocking**
-   - Spec "SRS Changes" section explicitly states "New requirement added: FR-S35 (section 3.35)" and "Appendix C updated: FR-S35 row added." The file is not in the diff and has zero matches for "FR-S35". This is a PM-stage SRS persistence failure — the same recurring pattern seen in issues #147, #148, #149, #150. Without this section, FR-S35 has no formal requirement backing the implementation.
+None.
 
 ## Verdict Details
 
-FAIL: 1 blocking issue. All 5 implementation tasks are correct and fully tested (519 tests, 0 failures). `pipeline.yaml` uses `{{input.specification}}/01-spec.md` ✓. `hitlArtifactSource()` validation fires correctly ✓. `interpolate()` called in `buildScriptArgs()` ✓. New test for template resolution in `hitl_test.ts` ✓. Four `validateHitlArtifactSource()` tests in `check_test.ts` ✓. However, `documents/requirements-sdlc.md` was never updated by the PM agent — FR-S35 section 3.35 and the Appendix C row are absent. The spec-promised SRS changes must be present for the PR to be mergeable.
+PASS. All 9 acceptance criteria met. The blocking issue from iteration 1 (FR-S35 missing from `requirements-sdlc.md`) is resolved: section 3.35 is at line 788 and the Appendix C row is at line 938. All 5 decision tasks are correctly implemented: `pipeline.yaml` uses `{{input.specification}}/01-spec.md` (line 23), `interpolate()` called in `engine/hitl.ts:buildScriptArgs()` (line 264), template resolution test in `engine/hitl_test.ts`, `validateHitlArtifactSource()` + `hitlArtifactSource()` in `scripts/check.ts` (lines 110–146), validation tests in `scripts/check_test.ts`. HITL polling behavior is unchanged. `deno task check` passes end-to-end with 519 tests.
 
 ## Summary
 
-FAIL — 7/9 criteria passed, 1 blocking issue: FR-S35 section 3.35 and Appendix C row missing from `documents/requirements-sdlc.md` (PM-stage persistence failure; same pattern as issues #147–150). All implementation code and tests are correct; 519 tests pass. Fix: add FR-S35 section + Appendix C entry to `requirements-sdlc.md`.
+PASS — 9/9 criteria passed, 0 blocking issues. 519 tests, 0 failures. FR-S35 (HITL Artifact Source Node Reference) fully implemented and documented: template syntax in `pipeline.yaml`, interpolation in `engine/hitl.ts`, SDLC-level validation in `scripts/check.ts`, complete test coverage, FR-S35 section + Appendix C in `requirements-sdlc.md`.

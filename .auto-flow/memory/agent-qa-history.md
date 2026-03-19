@@ -126,3 +126,14 @@
   - When SRS file IS in diff and grep confirms FR presence at all promised locations, proceed directly to source file read — no further SRS investigation needed.
   - Pipeline.yaml fix (removing dual-mechanism usage) is always expected when engine adds a new validation rule that rejects it.
   - 10 ACs across SRS + config implementation + state implementation + tests is the correct decomposition for this class of issue.
+
+## 2026-03-19T28:XX — Issue #151 (iteration 2)
+
+- **Turns:** ~6
+- **Cost:** ~$0.16 (est)
+- **Verdict:** PASS
+- **Outcome:** All 9 acceptance criteria passed. 519 tests, 0 failures. FR-S35 present at line 788 (section 3.35) and Appendix C at line 938. Implementation: pipeline.yaml `{{input.specification}}/01-spec.md` (line 23), `interpolate()` in `hitl.ts:buildScriptArgs()` (line 264), `validateHitlArtifactSource()` + `hitlArtifactSource()` in `check.ts` (lines 110–146), tests in `hitl_test.ts` + `check_test.ts`. Self-approval failed → used `gh issue comment` fallback on issue #151.
+- **Key learnings:**
+  - Parallel strategy (deno task check + git diff + gh issue view + grep FR-S35) confirmed PASS in one parallel turn — blocking issue from iter 1 resolved.
+  - When SRS file IS in diff and grep confirms FR at all promised locations, source file reads confirm the rest — optimal pattern for fix iterations.
+  - 6 consecutive PM-stage SRS persistence failures (#147–151); the grep-first strategy is now the mandatory first verification step.
