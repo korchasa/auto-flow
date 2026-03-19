@@ -17,6 +17,7 @@ type: feedback
 - Read all changed source files in one parallel response after getting the diff.
 - For SKILL.md verifications: read the file directly (it is a changed file) rather than using Grep — need full context to verify constraint completeness.
 - `tail -80 <temp-file>` gets the final summary/pass-fail lines without recursive nesting.
+- Fetch issue, run check, and get git diff all in parallel in a single turn.
 
 ## Environment Quirks
 
@@ -27,3 +28,4 @@ type: feedback
 
 - Target: ≤15 turns
 - First session (issue #129): ~10 turns, PASS verdict
+- Second session (issue #146): ~8 turns, PASS verdict
