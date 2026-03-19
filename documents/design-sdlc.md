@@ -56,7 +56,9 @@ graph LR
       All pipeline YAML, agent prompts, SRS, and SDS references MUST use these
       canonical filenames. Alphabetical sorting = execution order.
   - **Legacy Shell Scripts** (`.auto-flow/scripts/`): Deprecated stage scripts
-    deleted per FR-S26. HITL and rollback scripts retained.
+    deleted per FR-S26. HITL, rollback, and dashboard wrapper scripts retained.
+    `run-dashboard.sh` wraps `deno task dashboard` with warning logging on
+    failure (FR-S36).
 
 ## 3. Components
 
@@ -376,7 +378,8 @@ graph LR
   Exported `printUsage()`/`checkArgs()` for unit testing
 - **Interfaces:**
   - CLI: `deno task dashboard --run-dir <path>`
-  - Hook: `after:` on `tech-lead-review` node (`|| true` suffix for non-fatal)
+  - Hook: `after:` on `tech-lead-review` node via `run-dashboard.sh` wrapper
+    (FR-S36 — replaces `|| true` with explicit warning logging)
 - **Deps:** `engine/types.ts` (imports `RunState`, `ClaudeCliOutput` types
   for parsing). No runtime engine dependency — reads JSON files directly.
 
@@ -504,7 +507,13 @@ graph LR
 - **Tech-Lead-Review Node**: Post-pipeline agent (`run_on: always`). Performs
   final code review, checks CI gates, merges PR if all pass. Handles
   missing-PR case gracefully (no-op with clear message when pipeline failed
-  before tech-lead created PR).
+  before tech-lead created PR). **After-hook observability (FR-S36):**
+  `after:` field invokes `.auto-flow/scripts/run-dashboard.sh {{run_dir}}`
+  (replaces `deno task dashboard ... || true`). Wrapper runs dashboard
+  command, emits `[WARN] dashboard generation failed (exit $code)` to stderr
+  on non-zero exit, always exits 0. Warning captured in `stream.log`, visible
+  via inline log viewer (FR-S34). Node status remains "completed" — no false
+  failure signal.
 - **HITL via AskUserQuestion Interception** (FR-21):
   Engine detects agent HITL requests by inspecting `permission_denials` in
   Claude CLI JSON output. Flow:
