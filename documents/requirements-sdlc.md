@@ -86,15 +86,15 @@
 - **Description:** Plan critique and revision functionality is now absorbed into the Tech Lead agent (FR-S5). The Tech Lead critiques the Architect's plan, selects a variant, and produces the task breakdown — all in one stage. Separate reviewer agent eliminated (FR-S15).
 - **Previous input/output:** `02-plan.md` → `03-revised-plan.md` (no longer produced as separate artifact).
 - **Acceptance criteria:**
-  - Critique is embedded in Tech Lead's `04-decision.md` body (at least one issue per variant).
+  - Critique is embedded in Tech Lead's `03-decision.md` body (at least one issue per variant).
   - No separate reviewer node in `pipeline.yaml`.
 
 ### 3.5 FR-S5 (ex FR-5): Stage 3 — Tech Lead (Decision + Branch + PR)
 
 - **Description:** The Tech Lead agent (FR-S15: renamed from Architect) critiques the Architect's plan, selects the final implementation variant, updates the SDS, creates a feature branch and draft PR, and produces a task breakdown for the Developer. Absorbs former reviewer (FR-S4) and SDS-update (FR-S6) responsibilities.
 - **Input:** `02-plan.md`, `01-spec.md`, `documents/requirements-sdlc.md`, `documents/design-sdlc.md`, `AGENTS.md`, relevant source code.
-- **Output:** `04-decision.md` in node output directory, updated `documents/design-sdlc.md`, feature branch, draft PR.
-- **Decision document format:** Every `04-decision.md` MUST begin with YAML frontmatter:
+- **Output:** `03-decision.md` in node output directory, updated `documents/design-sdlc.md`, feature branch, draft PR.
+- **Decision document format:** Every `03-decision.md` MUST begin with YAML frontmatter:
   ```
   ---
   variant: "Variant B"
@@ -110,7 +110,7 @@
     - `desc`: string — atomic task description.
     - `files`: array of strings — relative file paths the task will create or modify.
   - Tasks MUST be ordered by dependency (blocking tasks first).
-  - Parsing file allowlist: `yq --front-matter=extract '.tasks[].files[]' 04-decision.md`.
+  - Parsing file allowlist: `yq --front-matter=extract '.tasks[].files[]' 03-decision.md`.
 - **Branch naming:** `sdlc/issue-<N>` for issue-driven runs, `sdlc/{{run_id}}` for `--prompt` mode.
 - **Acceptance criteria:**
   - Agent reads all input artifacts listed above.
@@ -119,7 +119,7 @@
     - Technical fit (from the plan).
     - Alignment with product vision and project conventions.
     - Complexity/maintainability trade-off.
-  - Agent produces `04-decision.md` starting with YAML frontmatter containing `variant` and `tasks` fields (see format above), followed by critique, justification, and detailed task descriptions.
+  - Agent produces `03-decision.md` starting with YAML frontmatter containing `variant` and `tasks` fields (see format above), followed by critique, justification, and detailed task descriptions.
   - Agent updates `documents/design-sdlc.md` with selected variant's design details.
   - Agent creates feature branch and opens draft PR.
 - **Quality metrics:**
@@ -131,7 +131,7 @@
 ### 3.6 FR-S6 (ex FR-6): SDS Update (absorbed into Tech Lead, FR-S15)
 
 - **Description:** SDS update functionality is now absorbed into the Tech Lead agent (FR-S5). The Tech Lead updates `documents/design-sdlc.md` as part of its decision-making stage. Separate sds-update agent eliminated (FR-S15).
-- **Previous input/output:** `04-decision.md` → updated `documents/design-sdlc.md` (now done by Tech Lead).
+- **Previous input/output:** `03-decision.md` → updated `documents/design-sdlc.md` (now done by Tech Lead).
 - **Acceptance criteria:**
   - Tech Lead updates `documents/design-sdlc.md` with selected variant's design details.
   - No separate sds-update node in `pipeline.yaml`.
@@ -140,9 +140,9 @@
 
 - **Description:** The Developer and QA agents work as an iterative pair. Developer implements, QA verifies. If QA finds issues, Developer fixes them. The loop continues until QA passes or the iteration limit is reached.
 - **Orchestration:** The loop is managed by the engine's `loop` node type (`engine/loop.ts`). It invokes the Developer agent, then QA agent. Based on the QA verdict, it either exits the loop (on `PASS`) or re-invokes the Developer with the QA report (on `FAIL`). Legacy: `stage-6-developer.sh` calls `stage-7-qa.sh` as sub-step.
-- **Developer Input:** `04-decision.md`, `documents/requirements-sdlc.md`, `documents/design-sdlc.md`, source code. On subsequent iterations: previous QA report (`05-qa-report-N.md`).
+- **Developer Input:** `03-decision.md`, `documents/requirements-sdlc.md`, `documents/design-sdlc.md`, source code. On subsequent iterations: previous QA report (`05-qa-report-N.md`).
 - **Developer Output:** Code changes, tests, commits and pushes on feature branch. PR comment with implementation summary.
-- **QA Input:** `01-spec.md`, `04-decision.md`, all changed files, test results.
+- **QA Input:** `01-spec.md`, `03-decision.md`, all changed files, test results.
 - **QA Output:** `05-qa-report.md` in node output directory. PR review verdict (`gh pr review`: approve/request-changes).
 - **QA report format:** Every `05-qa-report-<iteration>.md` MUST begin with YAML frontmatter:
   ```
@@ -743,7 +743,7 @@ The system is considered accepted if:
 | ----- | ---------------- | --------------------------------------- | -------------------------------------------- |
 | 1     | Project Manager  | `01-spec.md` + updated SRS              | Has all 4 sections, no SDS details           |
 | 2     | Architect        | `02-plan.md`                            | 2-3 variants with concrete file refs         |
-| 3     | Tech Lead        | `04-decision.md` + SDS + branch + PR    | Variant selected, SDS updated, PR opened     |
+| 3     | Tech Lead        | `03-decision.md` + SDS + branch + PR    | Variant selected, SDS updated, PR opened     |
 | 4-5   | Developer + QA   | Code + commits + `05-qa-report-N.md`    | `deno task check` passes, PR reviews posted  |
 | 6*    | Tech Lead Review | PR review + merge                       | CI green, code review passed                 |
 | 7*    | Meta-Agent       | `07-changelog.md` + prompt fixes        | Evidence-based suggestions with prompt diffs |

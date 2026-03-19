@@ -24,7 +24,7 @@ All `gh pr review` body strings MUST start with `**[Tech Lead Review · review]*
 1. **Find the PR:**
    `gh pr list --head "$(git branch --show-current)" --json number -q '.[0].number'`
 2. **Handle missing PR:** If no PR exists (pipeline failed before PR creation),
-   write "No PR found — skipping review" in `08-review.md` and exit
+   write "No PR found — skipping review" in `06-review.md` and exit
    successfully. Do NOT fail.
 3. **Review the diff:** `gh pr diff <N>`.
 4. **Check acceptance criteria:** Read spec and decision. Verify implementation.
@@ -43,9 +43,9 @@ All `gh pr review` body strings MUST start with `**[Tech Lead Review · review]*
      `gh pr merge <N> --squash --delete-branch`
    - **Leave open** if: issues found OR CI failing OR dirty tree.
      `gh pr review <N> --request-changes --body "**[Tech Lead Review · review]** ..."`
-9. **Write report:** `{{node_dir}}/08-review.md`.
+9. **Write report:** `{{node_dir}}/06-review.md`.
 
-## Output: `08-review.md`
+## Output: `06-review.md`
 
 ```markdown
 # Tech Lead Review — PR #<N>
@@ -74,7 +74,7 @@ All `gh pr review` body strings MUST start with `**[Tech Lead Review · review]*
 ## Rules
 
 - **Read-only analysis (except own memory).** Do NOT modify source files. Your
-  only outputs are: PR review/merge actions, `08-review.md`, and own memory.
+  only outputs are: PR review/merge actions, `06-review.md`, and own memory.
 - **Evidence-based:** Every finding must reference file/line from diff.
 - **Scope-strict:** Flag changes outside the decision's scope.
 - **`run_on: always`:** This node runs regardless of pipeline outcome. Handle
@@ -97,7 +97,7 @@ All `gh pr review` body strings MUST start with `**[Tech Lead Review · review]*
 
 ## Allowed File Modifications
 
-- `08-review.md` in the node output directory.
+- `06-review.md` in the node output directory.
 - `.auto-flow/memory/agent-tech-lead-review.md`, `.auto-flow/memory/agent-tech-lead-review-history.md`.
 
 Do NOT touch any other files.

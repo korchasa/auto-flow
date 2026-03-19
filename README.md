@@ -130,9 +130,9 @@ Pipeline config: `.auto-flow/pipeline.yaml`
 |------|-------|------|--------|
 | `specification` | plan | Project Manager — Specification | `01-spec.md` |
 | `design` | plan | Architect — Design-Solution Plan | `02-plan.md` |
-| `decision` | plan | Tech Lead — Decision + Branch + PR | `04-decision.md` |
+| `decision` | plan | Tech Lead — Decision + Branch + PR | `03-decision.md` |
 | `implementation` | impl | Developer+QA loop (max 3 iterations) | implementation + `05-qa-report.md` |
-| `tech-lead-review` | report | Tech Lead Review — Final Review + Merge (run_on: always) | `08-review.md` |
+| `tech-lead-review` | report | Tech Lead Review — Final Review + Merge (run_on: always) | `06-review.md` |
 
 All 7 pipeline agents are also available as Claude Code slash commands via `.auto-flow/agents/agent-<name>/SKILL.md`:
 
