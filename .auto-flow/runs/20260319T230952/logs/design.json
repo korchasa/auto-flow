@@ -1,0 +1,10 @@
+{
+  "result": "I produced `02-plan.md` with 3 variants:\n\n- **Variant A (recommended, effort S):** Remove only the `# BEFORE YOU DO ANYTHING` heading + shared-rules read instruction (lines 7-11). Keep \"first tool call MUST be\" instructions as standalone paragraphs. Smallest blast radius, preserves useful agent-specific guidance.\n- **Variant B (effort S):** Remove the entire block including first-tool-call instructions. Cleanest result but drops directive guidance that isn't fully covered by task_template.\n- **Variant C (effort M):** Remove heading + shared-rules, relocate first-tool-call into `## Responsibilities`. More thorough but approaches the \"further consolidation\" explicitly deferred by spec scope boundaries.",
+  "session_id": "7d8e294f-1f63-4582-a101-091355d77b50",
+  "total_cost_usd": 0.47622849999999994,
+  "duration_ms": 119654,
+  "duration_api_ms": 117775,
+  "num_turns": 14,
+  "is_error": false,
+  "permission_denials": []
+}

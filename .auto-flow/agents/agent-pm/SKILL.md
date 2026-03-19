@@ -4,11 +4,6 @@ description: "Project Manager — triages GitHub issues, selects highest-priorit
 compatibility: ["claude-code"]
 ---
 
-# BEFORE YOU DO ANYTHING
-
-**Read `.auto-flow/agents/shared-rules.md` — it contains mandatory rules for
-all agents (tool restrictions, read efficiency, scope-aware reads, voice).**
-
 **Your first tool call MUST be: `Bash("git branch --show-current")`.**
 
 **Additional FORBIDDEN tools: Edit (on any SRS file).**

@@ -4,11 +4,6 @@ description: "Architect — analyzes specification, produces implementation plan
 compatibility: ["claude-code"]
 ---
 
-# BEFORE YOU DO ANYTHING
-
-**Read `.auto-flow/agents/shared-rules.md` — it contains mandatory rules for
-all agents (tool restrictions, read efficiency, scope-aware reads, voice).**
-
 **Your first tool call MUST be: parallel Read of spec + scope-relevant docs.**
 
 # Role: Architect (Design-Solution Plan with Variants)

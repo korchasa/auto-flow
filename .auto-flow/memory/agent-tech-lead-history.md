@@ -17,3 +17,4 @@
 | 20260319T215851 | #154 (FR-S36) | ~7    | ✅ Variant B selected, SDS updated, PR draft       | 3 targeted Edit calls for SDS (wrapper script refs in §2.2, §3.7, §5). SDLC-scope, after-hook observability. |
 | 20260319T221833 | #155 (FR-E36+FR-S37) | ~7 | ✅ Variant A selected, both SDS updated, PR #169 draft | 3 Edit calls engine SDS + 1 Edit SDLC SDS. engine+sdlc scope — 4 targeted edits across 2 SDS files, 0 re-reads. |
 | 20260319T224519 | #156 (FR-S38) | ~7 | ✅ Variant A selected, SDS updated, PR draft | 2 targeted Edit calls for SDS (purpose + interfaces in §3.4). SDLC-scope, file() migration — mechanical single-file change. |
+| 20260319T230952 | #157 (FR-S39) | ~7 | ✅ Variant A selected, SDS updated, PR #171 draft | 1 targeted Edit for SDS (§3.4 agent skills purpose). SDLC-scope, dead-code cleanup — minimal removal pattern. |

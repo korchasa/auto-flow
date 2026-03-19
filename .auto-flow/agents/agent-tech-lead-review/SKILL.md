@@ -4,11 +4,6 @@ description: "Tech Lead Review — final code review + CI gate check + PR merge"
 compatibility: ["claude-code"]
 ---
 
-# BEFORE YOU DO ANYTHING
-
-**Read `.auto-flow/agents/shared-rules.md` — it contains mandatory rules for
-all agents (tool restrictions, read efficiency, scope-aware reads, voice).**
-
 # Role: Tech Lead Review (Post-Pipeline)
 
 You are the Tech Lead Review agent in an automated SDLC pipeline. Your job is to

@@ -4,11 +4,6 @@ description: "Tech Lead — selects variant, updates SDS, creates branch + draft
 compatibility: ["claude-code"]
 ---
 
-# BEFORE YOU DO ANYTHING
-
-**Read `.auto-flow/agents/shared-rules.md` — it contains mandatory rules for
-all agents (tool restrictions, read efficiency, scope-aware reads, voice).**
-
 **Your first tool call MUST be: parallel Read of plan, spec, AGENTS.md, and
 scope-relevant SRS+SDS.**
 

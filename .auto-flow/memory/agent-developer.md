@@ -52,6 +52,11 @@ type: feedback
 - **Edit tool session tracking**: Re-read files with offset/limit (small range) to satisfy "File has not
   been read yet" errors — happens when file was Read in a previous parallel batch
 
+## Self-Referential SKILL.md Deletions
+
+- When the task is pure markdown deletion from SKILL.md files (no TS logic), no tests are needed per "DO NOT test constants/templates".
+- All 6 edits can be issued in parallel in one turn for maximum efficiency.
+
 ## Baseline Metrics
 
 - Run 20260315T003418: ~14 turns, scope sdlc, issue #121 (FR-S29), 7 SKILL.md + 2 memory files — PASS
@@ -81,6 +86,7 @@ type: feedback
 - Run 20260319T221833 iter2: ~5 turns, scope engine+sdlc, issue #155 QA fix — PASS (SRS: added §3.36 FR-E36 to requirements-engine.md + §3.37 FR-S37 to requirements-sdlc.md + both Appendix rows; ninth consecutive PM persistence failure #147–#155)
 - Run 20260319T224519: ~5 turns, scope sdlc, issue #156 (FR-S38), 2 files changed — PASS (pipeline.yaml prompt→file() migration; integrity test inverted: presence→absence assertion for FR-S38 AC#3).
 - Run 20260319T224519 iter2: ~4 turns, scope sdlc, issue #156 QA fix — PASS (SRS: added §3.38 + Appendix C row; tenth consecutive PM persistence failure #147–#156).
+- Run 20260319T230952 iter2: ~5 turns, scope sdlc, issue #157 (FR-S39) QA fix — PASS (SRS: added §3.39 + Appendix C row; eleventh consecutive PM persistence failure #147–#157).
 - Target: ≤35 turns. Key lesson: commit before deno task check; stash pattern for pre-existing fmt issues.
 
 ## Pipeline.yaml Coexistence Pattern

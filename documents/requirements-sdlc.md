@@ -878,6 +878,32 @@
     (FR-S38 AC#3)" passes; run `20260319T224519` (533 tests, 0 failures).
   - [x] `deno task check` passes. Evidence: PASS (533 tests, run `20260319T224519`).
 
+### 3.39 FR-S39: Remove Redundant shared-rules.md Read Instruction from SKILL.md Files
+
+- **Description:** After FR-S38, `shared-rules.md` is injected into all agent
+  prompts via `{{file(...)}}` in `task_template`. The explicit "BEFORE YOU DO
+  ANYTHING" block instructing agents to read `shared-rules.md` in each SKILL.md
+  is therefore redundant (dead code). FR-S39 removes this block from all 6
+  SKILL.md files, eliminating one wasted turn and unnecessary token cost per
+  pipeline run.
+- **Dep:** FR-S38 (file() injection must be implemented first).
+- **Acceptance criteria:**
+  - [x] "BEFORE YOU DO ANYTHING" heading + shared-rules read instruction removed
+    from all 6 SKILL.md files (`agent-pm`, `agent-architect`, `agent-tech-lead`,
+    `agent-developer`, `agent-qa`, `agent-tech-lead-review`). Evidence:
+    `.auto-flow/agents/agent-pm/SKILL.md`,
+    `.auto-flow/agents/agent-architect/SKILL.md`,
+    `.auto-flow/agents/agent-tech-lead/SKILL.md`,
+    `.auto-flow/agents/agent-developer/SKILL.md`,
+    `.auto-flow/agents/agent-qa/SKILL.md`,
+    `.auto-flow/agents/agent-tech-lead-review/SKILL.md`.
+  - [x] Cross-references like "per shared-rules.md § Scope-Aware Doc Reads"
+    preserved in all files. Evidence: verified in each SKILL.md.
+  - [x] YAML frontmatter unchanged in each SKILL.md. Evidence: verified in each
+    SKILL.md.
+  - [x] `deno task check` passes. Evidence: PASS (533 tests, run
+    `20260319T230952`).
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -999,3 +1025,4 @@ engine/                                # Deno/TypeScript pipeline engine
 | —      | FR-S36 | After-Script Failure Observability |
 | —      | FR-S37 | Verify Node Verdict Frontmatter Validation |
 | —      | FR-S38 | Pipeline Agent Context via file() Injection in task_template |
+| —      | FR-S39 | Remove Redundant shared-rules.md Read Instruction from SKILL.md Files |
