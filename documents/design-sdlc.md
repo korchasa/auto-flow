@@ -93,10 +93,11 @@ graph LR
 
 - **Purpose:** Versioned system prompts defining each agent's role and behavior.
   Each agent lives in `.auto-flow/agents/agent-<name>/SKILL.md` (canonical
-  location per FR-S26). Pipeline-driven only: engine reads prompts via
-  `prompt:` config in `pipeline.yaml`. Legacy `.claude/skills/` symlinks
-  removed per FR-S33 — interactive `/agent-<name>` slash commands no longer
-  supported (pipeline-only agents should not be exposed as interactive skills).
+  location per FR-S26). Pipeline-driven only: prompts injected via
+  `{{file(...)}}` in `task_template` (FR-S38); legacy `prompt:` field removed.
+  Legacy `.claude/skills/` symlinks removed per FR-S33 — interactive
+  `/agent-<name>` slash commands no longer supported (pipeline-only agents
+  should not be exposed as interactive skills).
 - **Directory structure:** `.auto-flow/agents/agent-<name>/SKILL.md` — 6 agents:
   - `agent-pm` — triages open GitHub issues, selects highest-priority, produces
     spec. **Issue Author Filter (FR-S31):** PM filters candidates by author at
@@ -145,11 +146,20 @@ graph LR
   - `allowed-tools: []` — no automatic tool grants; agents use tools available
     in their execution context.
 - **Interfaces:**
-  - Pipeline: engine reads `prompt:` path from `pipeline.yaml` (now
-    `.auto-flow/agents/agent-<name>/SKILL.md`), caches file content at config
-    load time (`prompt_content`), passes inline via
-    `claude --append-system-prompt`. Fallback to `--append-system-prompt-file`
-    for template paths.
+  - Pipeline (FR-S38): `prompt:` field removed from all 6 agent nodes.
+    SKILL.md and shared-rules.md injected via `{{file(...)}}` in
+    `task_template`. Template structure per node:
+    ```yaml
+    task_template: |
+      {{file(".auto-flow/agents/shared-rules.md")}}
+      ---
+      {{file(".auto-flow/agents/agent-<name>/SKILL.md")}}
+      ---
+      <task-specific content>
+    ```
+    Content delivered as user message (`-p`) — no `--system-prompt` flag.
+    Engine `file()` template function resolves paths at runtime, inlines
+    file content into task prompt before CLI invocation.
   - Interactive: Removed (FR-S33). Legacy `.claude/skills/agent-<name>`
     symlinks deleted. Pipeline-only agents are no longer discoverable as
     interactive Claude Code skills.
