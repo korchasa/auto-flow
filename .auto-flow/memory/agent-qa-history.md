@@ -163,6 +163,17 @@
   - 528 tests unchanged from iteration 1 — no new tests needed for this sdlc-only change.
   - SDLC pipeline pattern (wrapper script replacing `|| true`) is correct approach for observable non-blocking after-script failures.
 
+## 2026-03-19T35:XX — Issue #155 (iteration 2)
+
+- **Turns:** ~5
+- **Cost:** ~$0.12 (est)
+- **Verdict:** PASS
+- **Outcome:** All 10 acceptance criteria passed. 533 tests, 0 failures. FR-E36 present at line 756 (§3.36) and Appendix at line 854 in requirements-engine.md. FR-S37 present at line 850 (§3.37) and Appendix at line 983 in requirements-sdlc.md. Both SRS files confirmed in diff — PM-stage persistence failure from iteration 1 resolved. Implementation: `config.ts` lines 291-312 (parse-time validation), `loop.ts` lines 224-226 (runtime throw with descriptive message), `pipeline.yaml` lines 162-165 (frontmatter_field: verdict + allowed: [PASS, FAIL]), 5 new tests (2 parse-time + 3 runtime). Self-approval failed → used `gh issue comment` fallback on issue #155.
+- **Key learnings:**
+  - First engine+sdlc scope issue to PASS on iteration 2 — both SRS files were in diff and both FRs found at all promised locations.
+  - 533 tests unchanged from iteration 1 — tests were already added in iter 1, no new ones needed.
+  - Parallel strategy (deno task check + git diff + gh issue view + grep FR-E36|FR-S37) confirmed PASS in one parallel turn — optimal pattern for fix iterations.
+
 ## 2026-03-19T34:XX — Issue #155 (iteration 1)
 
 - **Turns:** ~5
