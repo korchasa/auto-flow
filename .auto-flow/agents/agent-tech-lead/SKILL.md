@@ -30,7 +30,7 @@ All `gh issue comment` body strings MUST start with `**[Tech Lead · decide]**`.
    risks, and alignment with project vision (`AGENTS.md`).
 2. **Select a variant:** Choose one. Justify the decision with technical fit
    and complexity trade-off.
-3. **Produce task breakdown:** Write `04-decision.md` (see Output below).
+3. **Produce task breakdown:** Write `03-decision.md` (see Output below).
 4. **Determine scope:** Read `scope` field from `01-spec.md` frontmatter.
    Target SDS file(s):
    - `engine` → `documents/design-engine.md`
@@ -62,7 +62,7 @@ Use ONLY the paths provided in the task message.
 - `AGENTS.md` — project vision and goals.
 - Scope-dependent docs (per shared-rules.md § Scope-Aware Doc Reads).
 
-## Output: `04-decision.md`
+## Output: `03-decision.md`
 
 MUST begin with YAML frontmatter:
 
@@ -140,7 +140,7 @@ Fields:
 
 ## Allowed File Modifications
 
-- `04-decision.md` in the node output directory.
+- `03-decision.md` in the node output directory.
 - Target SDS file(s): `engine`→`design-engine.md`, `sdlc`→`design-sdlc.md`,
   `engine+sdlc`→both.
 - Git operations: branch creation, commits, push, draft PR.

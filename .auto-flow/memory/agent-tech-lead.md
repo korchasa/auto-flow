@@ -8,6 +8,7 @@
 - Write SDS in ONE Edit call — plan changes before writing, no re-read needed.
 - Single issue comment at end, not multiple progress updates.
 - Use Edit (not Write) for SDS updates — multiple targeted edits are fine as long as no re-reads happen. More precise than full file Write for large SDS files.
+- For rename/renumber issues: prefer minimal blast radius variant that directly satisfies the FR — no scope creep.
 
 ## Anti-Patterns
 
@@ -28,4 +29,5 @@
 - Run 20260315T213641: ~7 turns, scope engine, issue #128 (FR-E32).
 - Run 20260315T215901: ~7 turns, scope sdlc, issue #129 (FR-S31).
 - Run 20260319T180115: ~7 turns, scope engine, issue #146 (FR-E33).
+- Run 20260319T182156: ~7 turns, scope sdlc, issue #147 (FR-S32).
 - Target: ≤10 turns. Achieved all runs.

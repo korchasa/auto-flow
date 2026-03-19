@@ -101,17 +101,17 @@ nodes:
       Read the plan at {{input.design}}/02-plan.md.
       Read the spec at {{input.specification}}/01-spec.md.
       Read ONLY scope-relevant SRS/SDS docs (derive scope from spec frontmatter `scope:` field), and AGENTS.md.
-      Critique the plan, select a variant, produce task breakdown (04-decision.md).
+      Critique the plan, select a variant, produce task breakdown (03-decision.md).
       Update the scope-relevant SDS with selected variant's design details.
       Create feature branch (or rebase existing onto origin/main) and draft PR.
-      Output: {{node_dir}}/04-decision.md
+      Output: {{node_dir}}/03-decision.md
     validate:
       - type: file_exists
-        path: "{{node_dir}}/04-decision.md"
+        path: "{{node_dir}}/03-decision.md"
       - type: file_not_empty
-        path: "{{node_dir}}/04-decision.md"
+        path: "{{node_dir}}/03-decision.md"
       - type: contains_section
-        path: "{{node_dir}}/04-decision.md"
+        path: "{{node_dir}}/03-decision.md"
         value: "Summary"
 
   # Stages 4-5: Developer + QA loop (body nodes defined inline)
@@ -132,19 +132,19 @@ nodes:
         prompt: ".auto-flow/agents/agent-developer/SKILL.md"
         task_template: |
           Read reflection memory at .auto-flow/memory/agent-developer.md and history at .auto-flow/memory/agent-developer-history.md before starting. Update both when done.
-          Read the decision at {{input.decision}}/04-decision.md.
+          Read the decision at {{input.decision}}/03-decision.md.
           Read ONLY scope-relevant SRS/SDS docs (derive scope from decision's spec reference or task context).
           Implement the changes following the task breakdown.
           This is iteration {{loop.iteration}}.
-          After deno task check passes, write {{node_dir}}/06-impl-summary.md
+          After deno task check passes, write {{node_dir}}/04-impl-summary.md
           with a ## Summary section listing files changed, tests added/modified, and check status.
         validate:
           - type: custom_script
             path: "deno task check"
           - type: file_exists
-            path: "{{node_dir}}/06-impl-summary.md"
+            path: "{{node_dir}}/04-impl-summary.md"
           - type: contains_section
-            path: "{{node_dir}}/06-impl-summary.md"
+            path: "{{node_dir}}/04-impl-summary.md"
             value: "Summary"
       verify:
         type: agent
@@ -154,7 +154,7 @@ nodes:
         task_template: |
           Read reflection memory at .auto-flow/memory/agent-qa.md and history at .auto-flow/memory/agent-qa-history.md before starting. Update both when done.
           Verify the implementation against the spec at {{input.specification}}/01-spec.md.
-          Check the decision at {{input.decision}}/04-decision.md.
+          Check the decision at {{input.decision}}/03-decision.md.
           Run deno task check and verify all acceptance criteria.
           Post verdict as PR review (approve or request-changes).
           Output: {{node_dir}}/05-qa-report.md with YAML frontmatter containing verdict: PASS or FAIL
@@ -178,18 +178,18 @@ nodes:
       Read reflection memory at .auto-flow/memory/agent-tech-lead-review.md and history at .auto-flow/memory/agent-tech-lead-review-history.md before starting. Update both when done.
       Perform final code review of the PR.
       Read the spec at {{input.specification}}/01-spec.md for acceptance criteria.
-      Read the decision at {{input.decision}}/04-decision.md for scope.
+      Read the decision at {{input.decision}}/03-decision.md for scope.
       Check CI status. Merge PR if all checks pass, or leave open with review comments.
-      Output: {{node_dir}}/08-review.md
+      Output: {{node_dir}}/06-review.md
     run_on: always
     after: "deno task dashboard --run-dir {{run_dir}} || true"
     settings:
       on_error: continue
     validate:
       - type: file_exists
-        path: "{{node_dir}}/08-review.md"
+        path: "{{node_dir}}/06-review.md"
       - type: file_not_empty
-        path: "{{node_dir}}/08-review.md"
+        path: "{{node_dir}}/06-review.md"
       - type: contains_section
-        path: "{{node_dir}}/08-review.md"
+        path: "{{node_dir}}/06-review.md"
         value: "Summary"
