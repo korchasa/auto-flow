@@ -1,107 +1,69 @@
 ---
-verdict: FAIL
+verdict: PASS
 ---
 
 ## Check Results
 
-- Format: PASS
-- Lint: PASS
-- Type Check: PASS
+- Format (deno fmt): PASS
+- Lint (deno lint): PASS
+- Type Check (deno check): PASS
 - CLI Smoke Test: PASS
-- Doc Lint: PASS
-- Pipeline Integrity: PASS (`.auto-flow/pipeline.yaml` valid)
-- AGENTS.md Agent List: PASS (6 active agents)
-- Comment Scan: PASS
-- Tests: PASS — **514 passed, 0 failed**
+- Doc Lint (deno doc --lint): PASS
+- Pipeline Integrity (.auto-flow/pipeline.yaml): PASS — valid
+- AGENTS.md agent list: PASS — 6 active agents, none deprecated
+- Comment scan: PASS — no markers found
+- Tests: PASS — **514 passed, 0 failed** (up from 509; 5 new tests confirmed)
 
 ## Spec vs Issue Alignment
 
 Issue #150 (`engine: Eliminate redundant phase definition in pipeline config`) requires:
-1. Exactly one mechanism to assign a node to a phase — **addressed**
-2. Engine must reject config at parse time with clear error if both mechanisms exist — **addressed**
-3. Engine documentation must specify which mechanism is canonical — **NOT addressed** (see Issues Found)
+- Config MUST have exactly one mechanism for phase assignment → FR-E33 enforces this ✅
+- If both exist, engine MUST reject at parse time with clear error naming the conflict → `parseConfig` throws diagnostic error listing affected node IDs ✅
+- Documentation MUST specify canonical mechanism → `phases:` block designated canonical ✅
 
-Spec aligns with issue requirements for engine behavior (FRs E33 + E9 update). No spec drift detected in the functional logic. However, the spec itself states SRS changes to `documents/requirements-engine.md` — those were described in the spec but never persisted to the file (PM-stage failure, same root cause as issues #147, #148, #149).
+Spec addresses all three issue requirements. No spec drift detected.
 
 ## Acceptance Criteria
 
-| # | Criterion | Status |
-|---|-----------|--------|
-| AC1 | Both `phases:` block + per-node `phase:` field present → rejected at parse time | ✅ PASS |
-| AC2 | `phases:` block only → accepted | ✅ PASS |
-| AC3 | Per-node `phase:` field only → accepted | ✅ PASS |
-| AC4 | Neither mechanism → accepted | ✅ PASS |
-| AC5 | Diagnostic error names both mechanisms + at least one affected node ID | ✅ PASS |
-| AC6 | Unit-test coverage for all 4 scenarios in `config_test.ts` | ✅ PASS |
-| AC7 | `setPhaseRegistry()` simplified to exclusive if/else (no dual-merge) | ✅ PASS |
-| AC8 | FR-E33 section 3.33 added to `documents/requirements-engine.md` | ❌ FAIL |
-| AC9 | FR-E9 criterion updated in `requirements-engine.md` to reference FR-E33 | ❌ FAIL |
-| AC10 | FR-E33 row appended to Appendix cross-reference table in `requirements-engine.md` | ❌ FAIL |
+All criteria derived from `01-spec.md` SRS Changes section and `03-decision.md` task list:
 
-**7/10 criteria passed.**
+### SRS Requirements (requirements-engine.md)
+
+- [x] **FR-E33 section 3.33 present** — confirmed at line 665 (`### 3.33 FR-E33: Phase Assignment Single-Mechanism Enforcement`)
+- [x] **FR-E9 updated to reference FR-E33** — confirmed at line 180: references FR-E33 as governing rule, names `phases:` block as canonical
+- [x] **Appendix cross-reference row added** — confirmed at line 751: `| — | FR-E33 | Phase Assignment Single-Mechanism Enforcement |`
+
+### Implementation: config.ts (Task 1)
+
+- [x] **Mutual-exclusivity validation added** — lines 133–149 in `engine/config.ts`: detects coexistence of `phases:` block and per-node `phase:` fields
+- [x] **Diagnostic error names affected node IDs** — error: `"Phase assignment conflict: top-level 'phases:' block and per-node 'phase:' field cannot coexist. Affected node(s): <ids>. Use one mechanism only."`
+- [x] **Both present → diagnostic error** — `config_test.ts` line 671: `assertThrows(… "cannot coexist")` ✓
+- [x] **`phases:` block only → accepted** — `config_test.ts` line 694: parses successfully, `config.phases!.plan === ["a"]` ✓
+- [x] **Per-node `phase:` only → accepted** — `config_test.ts` line 710: parses successfully, `config.nodes.a.phase === "plan"` ✓
+- [x] **Neither mechanism → accepted** — `config_test.ts` line 728: parses, both `phases` and `nodes.spec.phase` are `undefined` ✓
+
+### Implementation: state.ts (Task 2)
+
+- [x] **`setPhaseRegistry()` simplified to exclusive if/else** — lines 28–45 in `engine/state.ts`: no dual-mechanism merge logic; `if (config.phases)` populates from phases block, `else` iterates per-node `phase:` fields
+- [x] **JSDoc updated** — documents that `parseConfig` guarantees mutual exclusivity before `setPhaseRegistry()` is called
+- [x] **Phases-block-only test added** — `state_test.ts` line 416: `"setPhaseRegistry — phases block only: builds registry from phases block"` ✓
+- [x] **Phase-field-only test added** — `state_test.ts` line 426: `"setPhaseRegistry — phase-field-only: builds registry from per-node phase fields"` ✓
+
+### pipeline.yaml
+
+- [x] **`.auto-flow/pipeline.yaml` fixed** — both mechanisms removed; engine now rejects dual-mechanism configs; change is necessary and correct
 
 ## Issues Found
 
-1. **FR-E33 section absent from `documents/requirements-engine.md`**
-   - File: `documents/requirements-engine.md`
-   - Severity: **blocking**
-   - `documents/requirements-engine.md` is NOT in `git diff main...HEAD --name-only`. Grep for "FR-E33" returns 0 matches. The spec explicitly states "Section 3.33 added to `requirements-engine.md` with description, motivation, and 6 acceptance criteria". The PM agent described these changes in the spec but never persisted them to the SRS file — same root cause as issues #147, #148, #149.
-
-2. **FR-E9 criterion not updated in `documents/requirements-engine.md`**
-   - File: `documents/requirements-engine.md`
-   - Severity: **blocking** (subsumed by issue #1)
-   - Spec states FR-E9 acceptance criterion should be updated to remove "authoritative or fallback" dual-mechanism language and reference FR-E33. Since the file was never modified, this update is absent.
-
-3. **Appendix cross-reference table not updated**
-   - File: `documents/requirements-engine.md`
-   - Severity: **blocking** (subsumed by issue #1)
-   - Spec states FR-E33 row should be appended to the FR Cross-Reference table. File unchanged.
-
-## Evidence: Implementation Correctness (ACs 1–7)
-
-**AC1/AC5 — `engine/config.ts` lines 133–149:**
-```
-if (config.phases) {
-  const nodesWithPhaseField: string[] = [];
-  for (const [nid, rawNode] of Object.entries(nodes)) {
-    if ((rawNode as Record<string, unknown>).phase !== undefined) {
-      nodesWithPhaseField.push(nid);
-    }
-  }
-  if (nodesWithPhaseField.length > 0) {
-    throw new Error(
-      `Phase assignment conflict: top-level 'phases:' block and per-node 'phase:' field cannot coexist. ` +
-      `Affected node(s): ${nodesWithPhaseField.join(", ")}. Use one mechanism only.`,
-    );
-  }
-}
-```
-Error names both mechanisms and lists affected node IDs. ✓
-
-**AC6 — `engine/config_test.ts` lines 669–732:**
-- Line 671: both present → `assertThrows(… "cannot coexist")` ✓
-- Line 694: phases-only → accepted, `phases.plan === ["a"]` ✓
-- Line 710: phase-field-only → accepted, `nodes.a.phase === "plan"` ✓
-- Line 728: neither → accepted, `phases === undefined` ✓
-
-**AC7 — `engine/state.ts` lines 28–45:**
-```
-if (config.phases) {
-  // Top-level phases block is the sole mechanism
-  for (const [phase, nodeIds] of Object.entries(config.phases)) { … }
-} else {
-  // Per-node phase fields are the sole mechanism when no phases block is present
-  for (const [nodeId, node] of Object.entries(config.nodes)) { … }
-}
-```
-Dual-merge logic removed; clean if/else. ✓
-
-**`.auto-flow/pipeline.yaml` modification:** Expected and necessary — the existing pipeline used both mechanisms simultaneously. With FR-E33 enforcement active, failing to fix it would cause `deno task check` (Pipeline Integrity) to fail, violating CLAUDE.md "keep the project in working condition". This change is correct even though the spec deferred it as a "separate SDLC task". Non-blocking.
+1. **Stale test name "falls back to per-node phase field" (state_test.ts line 408)**
+   - File: `engine/state_test.ts:408`
+   - Severity: non-blocking
+   - The name implies fallback from a `phases:` block (old dual-mechanism semantics). The test body correctly tests per-node `phase:` field with no `phases:` block — valid single-mechanism behavior. Misleading name only; correctness unaffected.
 
 ## Verdict Details
 
-FAIL: 3 blocking issues — all stem from `documents/requirements-engine.md` being unchanged. The PM agent described FR-E33 section, FR-E9 update, and Appendix cross-reference addition in the spec but never persisted any of them to the file. The engine implementation itself (config.ts, state.ts, their tests) is correct and complete. All 514 tests pass. Blocking issue requires the PM-stage SRS additions to be applied to `requirements-engine.md`.
+PASS: All 10 acceptance criteria met. `deno task check` passes with 514 tests, 0 failures. The blocking issue from iteration 1 (FR-E33 absent from `requirements-engine.md`) is resolved — section 3.33 confirmed at line 665, FR-E9 updated at line 180, Appendix row at line 751. Implementation correct: mutual-exclusivity validation in `config.ts` (lines 133–149) rejects at parse time with diagnostic naming affected nodes; `setPhaseRegistry()` in `state.ts` (lines 28–45) simplified to exclusive if/else. All 4 config tests and 2 new state tests confirmed. One non-blocking: stale "falls back" label in `state_test.ts:408` does not affect behavior.
 
 ## Summary
 
-FAIL — 7/10 acceptance criteria passed, 3 blocking issues. All blocking issues reduce to one root cause: `documents/requirements-engine.md` not updated (FR-E33 section missing, FR-E9 criterion not updated, Appendix cross-reference absent). Engine implementation is correct; tests pass (514/0). Fix: add FR-E33 section 3.33 + update FR-E9 criterion + add Appendix row to `requirements-engine.md`.
+PASS — 10/10 acceptance criteria met. 514 tests, 0 failures. Blocking issue from iteration 1 (FR-E33 missing from SRS) resolved. No blocking issues. One non-blocking: stale test name at `state_test.ts:408`.
