@@ -38,9 +38,8 @@ graph LR
 
 - **Subsystems:**
   - **Agent Runtime**: Claude Code CLI invocations with role-specific prompts
-    from `.auto-flow/agents/agent-<name>/SKILL.md` (canonical location;
-    symlinked from `.claude/skills/agent-<name>` for Claude Code interactive
-    discovery per FR-S26)
+    from `.auto-flow/agents/agent-<name>/SKILL.md` (canonical location per
+    FR-S26; legacy `.claude/skills/` symlinks removed per FR-S33)
   - **Artifact Store**: Git-tracked files in `.auto-flow/runs/<run-id>/[<phase>/]<node-id>/`
     (phase subdir present when node has `phase` field in config). Note: runs
     directory remains at `.auto-flow/runs/` — engine-controlled hardcoded path;
@@ -92,10 +91,10 @@ graph LR
 
 - **Purpose:** Versioned system prompts defining each agent's role and behavior.
   Each agent lives in `.auto-flow/agents/agent-<name>/SKILL.md` (canonical
-  location per FR-S26). Symlinked from `.claude/skills/agent-<name>` →
-  `../../.auto-flow/agents/agent-<name>` for Claude Code interactive discovery.
-  Dual-use: pipeline-driven (via engine `prompt:` config) and interactive (via
-  Claude Code `/agent-<name>` slash commands through symlinks).
+  location per FR-S26). Pipeline-driven only: engine reads prompts via
+  `prompt:` config in `pipeline.yaml`. Legacy `.claude/skills/` symlinks
+  removed per FR-S33 — interactive `/agent-<name>` slash commands no longer
+  supported (pipeline-only agents should not be exposed as interactive skills).
 - **Directory structure:** `.auto-flow/agents/agent-<name>/SKILL.md` — 6 agents:
   - `agent-pm` — triages open GitHub issues, selects highest-priority, produces
     spec. **Issue Author Filter (FR-S31):** PM filters candidates by author at
@@ -149,10 +148,9 @@ graph LR
     load time (`prompt_content`), passes inline via
     `claude --append-system-prompt`. Fallback to `--append-system-prompt-file`
     for template paths.
-  - Interactive: Claude Code discovers skills via symlinks at
-    `.claude/skills/agent-<name>` → `../../.auto-flow/agents/agent-<name>`.
-    User invokes `/agent-<name>`. Symlinks required (canonical location moved
-    from `.claude/skills/` per FR-S26).
+  - Interactive: Removed (FR-S33). Legacy `.claude/skills/agent-<name>`
+    symlinks deleted. Pipeline-only agents are no longer discoverable as
+    interactive Claude Code skills.
 - **Agent Execution Summary (FR-40, FR-42):** All 6 agents must produce a
   `## Summary` section in their output artifacts. Content: 2-5 bullet points
   (actions taken, key decisions, artifacts produced, issues encountered).
@@ -173,12 +171,16 @@ graph LR
   "Specification phase started"; QA: "I verified all criteria" not "All criteria
   were verified"). Hardcoded `gh issue comment --body` templates in SKILL.md
   files must also use first-person (FR-43).
-- **Migration (FR-36, FR-S26):** Two migrations completed:
+- **Migration (FR-36, FR-S26, FR-S33):** Three migrations completed:
   1. FR-36: `agents/<name>/` → `.auto-flow/agents/agent-<name>/` (symlinks
      eliminated, `.claude/skills/` became canonical).
   2. FR-S26: `.auto-flow/agents/agent-<name>/` → `.auto-flow/agents/agent-<name>/`
      (consolidated into pipeline directory; `.claude/skills/agent-<name>`
      symlinks created for Claude Code discovery).
+  3. FR-S33: `.claude/skills/agent-<name>` symlinks removed. Canonical path
+     `.auto-flow/agents/agent-<name>/SKILL.md` is sole discovery mechanism.
+     `scripts/check.ts` symlink validation block removed (engine `loadConfig()`
+     covers prompt file existence).
 - **Voice directive (FR-40):** Each SKILL.md contains `## Voice` section
   (before `## Rules`) mandating first-person ("I") narrative in all prose
   output. Shared 3-line core directive (first-person mandate, prohibited
