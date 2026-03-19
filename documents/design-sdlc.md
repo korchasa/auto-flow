@@ -95,6 +95,10 @@ graph LR
   Each agent lives in `.auto-flow/agents/agent-<name>/SKILL.md` (canonical
   location per FR-S26). Pipeline-driven only: prompts injected via
   `{{file(...)}}` in `task_template` (FR-S38); legacy `prompt:` field removed.
+  Redundant `# BEFORE YOU DO ANYTHING` / "Read shared-rules.md" block removed
+  from all 6 SKILL.md files (FR-S39) — content already injected at prompt
+  construction time. Agent-specific "first tool call MUST be" instruction
+  (5 of 6 agents) preserved as standalone paragraph before `# Role:`.
   Legacy `.claude/skills/` symlinks removed per FR-S33 — interactive
   `/agent-<name>` slash commands no longer supported (pipeline-only agents
   should not be exposed as interactive skills).
