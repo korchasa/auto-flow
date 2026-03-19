@@ -72,6 +72,7 @@ type: feedback
 - Run 20260319T204544 iter2: ~5 turns, scope sdlc, issue #151 (FR-S35) QA fix — PASS (SRS: added §3.35, Appendix C row; fifth consecutive PM persistence failure #147/#148/#149/#150/#151)
 - Run 20260319T211036: ~10 turns, scope engine, issue #152 (FR-E34), 3 files changed — PASS (info log + 5 interaction tests; SDS pre-populated by Tech Lead; `async` lambdas without await → `require-await` lint error → use `Promise.resolve(true)`)
 - Run 20260319T213344: ~7 turns, scope engine, issue #153 (FR-E35), 4 files changed — PASS (forwarding validation in config.ts; SDS already pre-populated by Tech Lead; pipeline.yaml gap caught by new check → fix loop inputs; same coexistence pattern as #150)
+- Run 20260319T213344 iter2: ~5 turns, scope engine, issue #153 (FR-E35) QA fix — PASS (SRS: added §3.35 + Appendix row; sixth consecutive PM persistence failure #147–#153)
 - Target: ≤35 turns. Key lesson: commit before deno task check; stash pattern for pre-existing fmt issues.
 
 ## Pipeline.yaml Coexistence Pattern
