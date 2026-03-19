@@ -12,7 +12,7 @@ type: feedback
 - When developer uses a Write (full rewrite) for a large SRS file, PM-stage additions (like FR-S32, FR-S33) can be silently dropped. Check for new sections promised in spec's "SRS Changes" section even if `deno task check` passes.
 - When `requirements-engine.md` or `requirements-sdlc.md` is NOT in `git diff main...HEAD --name-only`, it means the PM agent never added the promised FR section. Grep for the FR number to confirm before writing verdict.
 - Stale ACs in existing FRs can become contradictory after a new FR removes a feature (e.g., FR-S13 AC claiming standalone invocability after FR-S33 removes interactive skill discovery). Check for contradictions in related FRs.
-- PM-stage SRS persistence failure is a recurring pattern (issues #147, #148, #149, #150, #151, #153). Always check if SRS file is in diff immediately. This pattern now extends to engine scope (requirements-engine.md), not just sdlc scope.
+- PM-stage SRS persistence failure is a recurring pattern (issues #147, #148, #149, #150, #151, #153, #154). Always check if SRS file is in diff immediately. This pattern now extends to engine scope (requirements-engine.md), not just sdlc scope.
 
 ## Effective Strategies
 
@@ -51,3 +51,5 @@ type: feedback
 - Thirteenth session (issue #152, iteration 1): ~5 turns, PASS verdict (FR-E34 present at line 693; Appendix at line 786; 524 tests, 5/5 ACs)
 - Fourteenth session (issue #153, iteration 1): ~5 turns, FAIL verdict (FR-E35 absent from requirements-engine.md; PM agent never added §3.35 or Appendix row)
 - Fifteenth session (issue #153, iteration 2): ~5 turns, PASS verdict (FR-E35 at line 727; Appendix at line 816; 528 tests, 5/5 ACs)
+- Sixteenth session (issue #154, iteration 1): ~5 turns, FAIL verdict (FR-S36 absent from requirements-sdlc.md; PM agent never persisted it)
+- Seventeenth session (issue #154, iteration 2): ~5 turns, PASS verdict (FR-S36 present at line 821 + Appendix C line 968; wrapper script + pipeline.yaml correct; 528 tests)

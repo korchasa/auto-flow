@@ -177,7 +177,7 @@ nodes:
       Check CI status. Merge PR if all checks pass, or leave open with review comments.
       Output: {{node_dir}}/06-review.md
     run_on: always
-    after: "deno task dashboard --run-dir {{run_dir}} || true"
+    after: ".auto-flow/scripts/run-dashboard.sh {{run_dir}}"
     settings:
       on_error: continue
     validate:

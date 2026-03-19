@@ -818,6 +818,35 @@
   - [x] `deno task check` passes. Evidence: PASS (519 tests, run
     `20260319T204544`).
 
+### 3.36 FR-S36: After-Script Failure Observability
+
+- **Description:** The `after:` script in `pipeline.yaml` for the
+  `tech-lead-review` node MUST surface non-zero exit codes as a warning-level
+  log entry rather than silently suppressing them. A wrapper script replaces
+  the `|| true` pattern: it runs `deno task dashboard --run-dir "$1"`, emits
+  `[WARN] dashboard generation failed (exit $code)` to stderr on non-zero exit
+  (captured in `stream.log` by engine), and always exits 0 (non-blocking
+  behavior retained). `on_error: continue` and `run_on: always` remain
+  unchanged.
+- **Acceptance criteria:**
+  - [x] `run-dashboard.sh` created at `.auto-flow/scripts/run-dashboard.sh`.
+    Evidence: `.auto-flow/scripts/run-dashboard.sh`.
+  - [x] Wrapper receives `$1` as run_dir, executes
+    `deno task dashboard --run-dir "$1"`, captures exit code. Evidence:
+    `.auto-flow/scripts/run-dashboard.sh`.
+  - [x] On non-zero exit: emits `[WARN] dashboard generation failed (exit $code)`
+    to stderr. Evidence: `.auto-flow/scripts/run-dashboard.sh`.
+  - [x] Wrapper always exits 0 — non-blocking behavior retained. Evidence:
+    `.auto-flow/scripts/run-dashboard.sh`.
+  - [x] `pipeline.yaml` `tech-lead-review` `after:` field updated from
+    `deno task dashboard --run-dir {{run_dir}} || true` to
+    `.auto-flow/scripts/run-dashboard.sh {{run_dir}}`. Evidence:
+    `.auto-flow/pipeline.yaml`.
+  - [x] `on_error: continue` and `run_on: always` retained unchanged. Evidence:
+    `.auto-flow/pipeline.yaml`.
+  - [x] `deno task check` passes. Evidence: PASS (528 tests, run
+    `20260319T215851`).
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -936,3 +965,4 @@ engine/                                # Deno/TypeScript pipeline engine
 | —      | FR-S33 | Remove Stale Agent Symlinks from .claude/skills/ |
 | —      | FR-S34 | Dashboard Diagnostic Enhancements |
 | —      | FR-S35 | HITL Artifact Source Node Reference |
+| —      | FR-S36 | After-Script Failure Observability |
