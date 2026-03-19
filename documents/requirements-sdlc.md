@@ -684,6 +684,24 @@
   - [ ] FR-S23 ACs marked `[x]` with evidence from `documents/design-sdlc.md` §2.1 and §3.2. Evidence: `requirements-sdlc.md:561-563`.
   - [ ] `deno task check` passes. Evidence: `deno task check` exit 0.
 
+### 3.31 FR-S31: QA Agent Check Suite Extension
+
+- **Description:** QA agent may autonomously add new verification classes to `scripts/check.ts` when it identifies recurring quality issues not covered by existing checks.
+- **Motivation:** Recurring defect patterns (dead exports, unused deps, naming violations, missing error handling) require manual developer action to add checks. Enabling QA to extend the suite reduces defect escape across Developer+QA loop iterations.
+- **Rules:**
+  - Add a check only when evidence of a real recurring problem exists (not speculative).
+  - New checks MUST follow existing `check.ts` architecture: standalone function + call in main flow + `Deno.exit(1)` on failure.
+  - Each check MUST print a clear label to stdout (`--- Check Name ---`).
+  - New checks MUST NOT produce false positives on the current codebase at time of addition.
+  - QA MUST run the extended suite after adding any check to confirm zero false positives.
+  - `scripts/check.ts` MUST be listed in QA agent's `Allowed File Modifications` in `SKILL.md`.
+- **Acceptance criteria:**
+  - [ ] QA agent `SKILL.md` lists `scripts/check.ts` in `Allowed File Modifications`.
+  - [ ] QA agent `SKILL.md` documents "Extend check suite" responsibility with all constraints above.
+  - [ ] QA agent can implement and wire a new check function in `scripts/check.ts`.
+  - [ ] New checks follow existing code style and `run()`/scan pattern.
+  - [ ] `deno task check` passes after QA agent adds a new check.
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -798,3 +816,4 @@ engine/                                # Deno/TypeScript pipeline engine
 | —      | FR-S28 | Per-Agent Reflection Memory |
 | —      | FR-S29 | AGENTS.md Agent List Accuracy |
 | —      | FR-S30 | Stale Path Reference Cleanup in SDLC Artifacts |
+| —      | FR-S31 | QA Agent Check Suite Extension |

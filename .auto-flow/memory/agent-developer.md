@@ -8,7 +8,7 @@ type: feedback
 
 ## Anti-patterns
 
-- **HEAD version of out-of-scope file can have pre-existing fmt issue**: `git stash push -- <file>` only works if the file is modified in working tree. If HEAD itself is broken, stash doesn't help — must fix the file directly (or skip if truly unrelated). Pre-existing HEAD fmt issues cannot be stashed away.
+- **HEAD version of out-of-scope file can have pre-existing fmt issue**: `git stash push -- <file>` only works for local verification but NOT for engine's `deno task check` continuation — engine runs check on actual working tree. Must fix pre-existing fmt issues directly and commit them. Markdown table column alignment (trailing whitespace padding) is a common offender.
 
 - Writing complete files (Write) for simple section inserts when Edit would work
 - Not checking deno fmt compliance before writing — blank lines between headings and list items required
@@ -57,4 +57,5 @@ type: feedback
 - Run 20260315T165136: ~12 turns, scope engine, issue #92 (FR-E30), 2 files changed — PASS (stash + trailing newline fix)
 - Run 20260315T205730: ~18 turns, scope sdlc, issue #127, 12 files changed — PASS (stash pattern; Edit re-read pattern)
 - Run 20260315T213641: ~10 turns, scope engine, issue #128 (FR-E32), 4 files changed — PASS (stash pattern; HEAD fmt issue needed direct fix)
+- Run 20260315T215901: ~12 turns, scope sdlc, issue #129 (FR-S31), 3 files changed — PASS (Write full file; SDS already had content; pre-existing fmt in other agents' files needed direct fix, stash insufficient for engine check)
 - Target: ≤35 turns. Key lesson: commit before deno task check; stash pattern for pre-existing fmt issues.

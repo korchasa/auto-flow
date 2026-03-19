@@ -164,19 +164,19 @@ Deno.test("buildClaudeArgs — resume mode omits promptFile", () => {
     }),
   );
   assertEquals(args.includes("--resume"), true);
-  assertEquals(args.includes("--append-system-prompt-file"), false);
+  assertEquals(args.includes("--system-prompt-file"), false);
 });
 
-Deno.test("buildClaudeArgs — promptContent uses --append-system-prompt inline", () => {
+Deno.test("buildClaudeArgs — promptContent uses --system-prompt inline", () => {
   const args = buildClaudeArgs(
     makeInvokeOpts({
       promptContent: "You are a helpful agent.",
     }),
   );
-  const idx = args.indexOf("--append-system-prompt");
-  assertEquals(idx >= 0, true, "should contain --append-system-prompt");
+  const idx = args.indexOf("--system-prompt");
+  assertEquals(idx >= 0, true, "should contain --system-prompt");
   assertEquals(args[idx + 1], "You are a helpful agent.");
-  assertEquals(args.includes("--append-system-prompt-file"), false);
+  assertEquals(args.includes("--system-prompt-file"), false);
 });
 
 Deno.test("buildClaudeArgs — promptContent takes priority over promptFile", () => {
@@ -186,8 +186,8 @@ Deno.test("buildClaudeArgs — promptContent takes priority over promptFile", ()
       promptContent: "Cached content here.",
     }),
   );
-  assertEquals(args.includes("--append-system-prompt"), true);
-  assertEquals(args.includes("--append-system-prompt-file"), false);
+  assertEquals(args.includes("--system-prompt"), true);
+  assertEquals(args.includes("--system-prompt-file"), false);
 });
 
 Deno.test("buildClaudeArgs — promptContent omitted on resume", () => {
@@ -197,8 +197,8 @@ Deno.test("buildClaudeArgs — promptContent omitted on resume", () => {
       promptContent: "Cached content.",
     }),
   );
-  assertEquals(args.includes("--append-system-prompt"), false);
-  assertEquals(args.includes("--append-system-prompt-file"), false);
+  assertEquals(args.includes("--system-prompt"), false);
+  assertEquals(args.includes("--system-prompt-file"), false);
 });
 
 Deno.test("settings — default values", () => {

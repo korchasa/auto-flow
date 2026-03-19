@@ -108,6 +108,9 @@ graph TD
     `markNodeCompleted()` also accepts optional `result?: string` param
     (FR-E22) — persists excerpt to `NodeState.result` in `state.json`
   - `agent.ts` — Claude CLI invocation, continuation loop, retry.
+    ADR-001: `--system-prompt-file` replaces base system prompt (~5-7K dead
+    tokens eliminated). Useful base prompt sections replicated in pipeline
+    shared-rules.md.
     `AgentRunOptions.model` and `InvokeOptions.model`: optional string for
     per-node model selection. `buildClaudeArgs()` emits `--model <value>` when
     `opts.model` is set AND `opts.resumeSessionId` is NOT set (resume inherits

@@ -2,6 +2,31 @@
 
 Universal DAG-based engine for orchestrating AI agents. Define agent workflows as YAML configs — the engine handles execution, inter-agent communication, validation, loops, and resume.
 
+## Engine Architecture
+
+```mermaid
+graph TD
+    CLI["CLI<br/>deno task run"] --> ConfigLoader["Config Loader<br/>YAML → PipelineConfig"]
+    ConfigLoader --> DAG["DAG Builder<br/>toposort → levels"]
+    DAG --> Executor["Level Executor<br/>sequential per level"]
+
+    Executor --> Dispatch{Node Type?}
+    Dispatch -->|agent| Agent["Agent Runner<br/>Claude CLI"]
+    Dispatch -->|loop| Loop["Loop Runner<br/>iterative body"]
+    Dispatch -->|merge| Merge["Merge<br/>copy dirs"]
+    Dispatch -->|human| Human["Human Input<br/>terminal / HITL"]
+
+    Agent --> Validate["Validation<br/>file_exists, frontmatter,<br/>custom_script, ..."]
+    Loop --> Validate
+    Validate -->|fail| Continue["Continuation<br/>resume with error context"]
+    Continue --> Agent
+    Validate -->|pass| State["State Manager<br/>state.json"]
+    State --> Next["Next Level / Post-pipeline"]
+
+    Executor --> PostPipeline["Post-Pipeline Nodes<br/>run_on: always|success|failure"]
+    PostPipeline --> Summary["Run Summary<br/>cost, duration, results"]
+```
+
 ## Core Concepts
 
 The engine (`engine/`, Deno/TypeScript) reads a YAML pipeline config and builds a directed acyclic graph (DAG) of nodes. Nodes are topologically sorted into levels and executed sequentially.
@@ -75,6 +100,30 @@ Node-level overrides are supported for all defaults.
 
 The engine is developed using its own SDLC pipeline (dogfooding). This pipeline automates the full software development lifecycle — from GitHub Issue triage to merged PR — via a chain of specialized AI agents.
 
+```mermaid
+graph TD
+    subgraph plan ["plan"]
+        spec["<b>specification</b><br/>PM — Spec"]
+        design["<b>design</b><br/>Architect — Plan"]
+        decision["<b>decision</b><br/>Tech Lead — Decision"]
+        spec --> design --> decision
+    end
+
+    subgraph impl ["impl · loop max 3"]
+        build["<b>build</b><br/>Developer"]
+        verify["<b>verify</b><br/>QA"]
+        build --> verify
+        verify -- "verdict: FAIL" --> build
+    end
+
+    subgraph report ["report · run_on: always"]
+        review["<b>tech-lead-review</b><br/>Review + CI + Merge"]
+    end
+
+    decision --> build
+    verify -- "verdict: PASS" --> review
+```
+
 Pipeline config: `.auto-flow/pipeline.yaml`
 
 | Node | Phase | Role | Output |
@@ -83,8 +132,7 @@ Pipeline config: `.auto-flow/pipeline.yaml`
 | `design` | plan | Architect — Design-Solution Plan | `02-plan.md` |
 | `decision` | plan | Tech Lead — Decision + Branch + PR | `04-decision.md` |
 | `implementation` | impl | Developer+QA loop (max 3 iterations) | implementation + `05-qa-report.md` |
-| `review` | report | Tech Lead Review — Final Review + Merge (run_on: always) | `08-review.md` |
-| `optimize` | report | Meta-Agent — Prompt Optimization (run_on: always) | `07-changelog.md` |
+| `tech-lead-review` | report | Tech Lead Review — Final Review + Merge (run_on: always) | `08-review.md` |
 
 All 7 pipeline agents are also available as Claude Code slash commands via `.auto-flow/agents/agent-<name>/SKILL.md`:
 

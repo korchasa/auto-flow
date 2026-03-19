@@ -8,9 +8,9 @@ import {
 
 /** Low-level options for a single claude CLI invocation (initial or resume). */
 export interface InvokeOptions {
-  /** Path to system prompt file appended via --append-system-prompt-file. */
+  /** Path to system prompt file passed via --system-prompt-file. Replaces Claude Code base system prompt entirely. */
   promptFile?: string;
-  /** Cached prompt content (takes priority over promptFile). */
+  /** System prompt content (takes priority over promptFile). Passed via --system-prompt. Replaces base system prompt. */
   promptContent?: string;
   /** Task prompt passed to claude via -p flag. */
   taskPrompt: string;
@@ -97,9 +97,9 @@ export function buildClaudeArgs(opts: InvokeOptions): string[] {
 
   if (!opts.resumeSessionId) {
     if (opts.promptContent) {
-      args.push("--append-system-prompt", opts.promptContent);
+      args.push("--system-prompt", opts.promptContent);
     } else if (opts.promptFile) {
-      args.push("--append-system-prompt-file", opts.promptFile);
+      args.push("--system-prompt-file", opts.promptFile);
     }
   }
 

@@ -2,3 +2,5 @@
 .env
 .auto-flow/runs/
 documents/whiteboard.md
+tmp/
+documents/visualization/

@@ -651,7 +651,7 @@
 ### 3.32 FR-E32: `{{file()}}` Template Function
 
 - **Description:** Template engine (`engine/template.ts`) supports `{{file("path/to/file.md")}}` function syntax. Reads named file content and inserts it inline at the call site. Paths resolved relative to repo root. Inserted content NOT re-interpolated (prevents recursion, ensures predictable behavior). Fail-fast: throws descriptive error if file not found.
-- **Motivation:** Two separate mechanisms for file content injection (`prompt` field via `--append-system-prompt-file`; `task_template` via `{{variable}}` substitution) prevent composition of shared instructions across nodes without duplication. `{{file()}}` unifies inline file injection into the existing template system.
+- **Motivation:** Two separate mechanisms for file content injection (`prompt` field via `--system-prompt-file`; `task_template` via `{{variable}}` substitution) prevent composition of shared instructions across nodes without duplication. `{{file()}}` unifies inline file injection into the existing template system.
 - **Acceptance criteria:**
   - [ ] `{{file("path")}}` resolves path relative to repo root and inserts file content inline. Evidence: `engine/template.ts`
   - [ ] Inserted content is NOT re-interpolated (no nested `{{...}}` processing of included text). Evidence: `engine/template.ts`
@@ -675,7 +675,7 @@
 
 - **CLI entry:** `deno task run [--prompt "..."]`. Flags: `--resume <run-id>`, `--dry-run`, `-v` (verbose), `-q` (quiet), `-s` (semi-verbose), `--config <path>`, `--skip <node>`, `--only <node>`, `--env <K=V>`.
 - **Agent runtime:** `claude` CLI invoked by engine. Key flags:
-  - `--append-system-prompt` — role-specific instructions inline (content cached from prompt file at startup). Fallback: `--append-system-prompt-file` for template-path prompts.
+  - `--system-prompt` — role-specific instructions inline (content cached from prompt file at startup). Replaces Claude Code base system prompt. Fallback: `--system-prompt-file` for template-path prompts.
   - `--output-format stream-json` — streams JSON events; `result` event contains `result`, `session_id`, `total_cost_usd`, `duration_ms`, `num_turns`, `is_error`.
   - `--resume <session-id>` — re-invokes agent in same session for continuations (FR-E1).
   - `-p "<prompt>"` — non-interactive mode.
