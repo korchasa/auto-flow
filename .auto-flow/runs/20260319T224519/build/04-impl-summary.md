@@ -22,3 +22,22 @@
 
 PASS — 533 tests, 0 failed. All pipeline integrity, HITL, agent-list, and doc
 lint checks passed.
+
+---
+
+## Iteration 2 Summary (QA Fix)
+
+### Files Changed
+
+- `documents/requirements-sdlc.md` — added §3.38 FR-S38 (Pipeline Agent Context
+  via file() Injection in task_template) with 4 acceptance criteria (all `[x]`
+  with evidence); added FR-S38 row to Appendix C cross-reference table.
+  Root cause: PM-stage SRS persistence failure (recurring pattern #147–#156).
+
+### Tests Added / Modified
+
+- None. Documentation-only change.
+
+### deno task check Result
+
+PASS — 533 tests, 0 failures.

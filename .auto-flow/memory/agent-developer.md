@@ -79,7 +79,8 @@ type: feedback
 - Run 20260319T215851 iter2: ~4 turns, scope sdlc, issue #154 (FR-S36) QA fix — PASS (SRS: added §3.36, Appendix C row; seventh consecutive PM persistence failure #147–#154)
 - Run 20260319T221833: ~8 turns, scope engine+sdlc, issue #155 (FR-E36+FR-S37), 5 files changed — PASS (parse-time cross-check in config.ts; runtime throw in loop.ts; assertRejects not in vendor assert.ts → use try/catch; "validation_failed" not in ErrorCategory → omit error_category; pipeline.yaml coexistence pattern again)
 - Run 20260319T221833 iter2: ~5 turns, scope engine+sdlc, issue #155 QA fix — PASS (SRS: added §3.36 FR-E36 to requirements-engine.md + §3.37 FR-S37 to requirements-sdlc.md + both Appendix rows; ninth consecutive PM persistence failure #147–#155)
-- Run 20260319T224519: ~5 turns, scope sdlc, issue #156 (FR-S38), 2 files changed — PASS (pipeline.yaml prompt→file() migration; integrity test inverted: presence→absence assertion for FR-S38 AC#3)
+- Run 20260319T224519: ~5 turns, scope sdlc, issue #156 (FR-S38), 2 files changed — PASS (pipeline.yaml prompt→file() migration; integrity test inverted: presence→absence assertion for FR-S38 AC#3).
+- Run 20260319T224519 iter2: ~4 turns, scope sdlc, issue #156 QA fix — PASS (SRS: added §3.38 + Appendix C row; tenth consecutive PM persistence failure #147–#156).
 - Target: ≤35 turns. Key lesson: commit before deno task check; stash pattern for pre-existing fmt issues.
 
 ## Pipeline.yaml Coexistence Pattern
