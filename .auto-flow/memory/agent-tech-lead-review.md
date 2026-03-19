@@ -18,3 +18,5 @@ type: feedback
 - **Duplicate Appendix C row pattern:** When developer adds new FR rows to SRS Appendix C, they may inadvertently duplicate the preceding row (e.g., FR-S32 duplicated after adding FR-S33). Cosmetic, non-blocking — flag as non-blocking finding only.
 - **Parallel first turn:** Read spec + decision + QA report + `gh pr list` + `git status` + `gh run list` all in ONE turn. Then read diff in turn 2. Maximum efficiency.
 - **gh pr diff -- <file> not supported:** `gh pr diff` accepts at most 1 arg (the PR number). Cannot filter by file path. Read implementation files directly via the Read tool when diff is too large.
+- **SDS error message format:** SDS may describe error format intent rather than exact string — non-blocking if test assertions pass against actual implementation string.
+- **pipeline.yaml fix as necessary side-effect:** When engine adds a new validation rule that rejects a config pattern, pipeline.yaml must be fixed simultaneously. This is in-scope, not out-of-scope.
