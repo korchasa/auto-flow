@@ -294,7 +294,7 @@
   - [x] No symlinks in `.claude/skills/` pointing to `agents/`. Evidence: `agents/` directory removed; `.auto-flow/agents/agent-*/` are real directories (commits `6176e91`, `985e3e5`)
   - [x] `agents/` top-level directory removed after migration. Evidence: commit `985e3e5 sdlc(impl): remove agents/ directory and fix stale path references`
   - [x] Pipeline engine `prompt:` fields in `pipeline.yaml` reference `.auto-flow/agents/agent-<name>/SKILL.md`. Evidence: `.auto-flow/pipeline.yaml` (commit `6176e91`)
-  - [x] Each agent skill is invocable standalone via `/agent-<name>`. Evidence: Claude Code discovers skills from canonical `.auto-flow/agents/agent-<name>/SKILL.md` location; no symlinks required
+  - [x] Each agent skill is accessible to the pipeline engine via `.auto-flow/agents/agent-<name>/SKILL.md`. Interactive standalone invocation via `/agent-<name>` relied on `.claude/skills/` symlinks superseded by FR-S33. Evidence: `.auto-flow/pipeline.yaml` `prompt:` fields; `.auto-flow/agents/agent-*/SKILL.md` (7 files present)
   - [x] `deno task check` passes after migration. Evidence: QA PASS — 436 tests pass (run `20260313T230627`)
 
 ### 3.14 FR-S14 (ex FR-22): Project Documentation (README)
@@ -371,7 +371,7 @@
   - [x] `.auto-flow/agents/agent-developer/SKILL.md` exists: commits/pushes own code, posts PR comments, "do not commit" rule removed. Evidence: commit `f0085df sdlc(impl): rename Executor agent role to Developer (FR-37)`, `.auto-flow/agents/agent-developer/SKILL.md`
   - [x] `.auto-flow/agents/agent-qa/SKILL.md` updated: posts PR reviews via `gh pr review` ONLY (no issue comments). Evidence: `.auto-flow/agents/agent-qa/SKILL.md`
   - [x] `pipeline.yaml` updated: `finalize` (committer) node removed; `review` node renamed to `tech-lead-review` using `.auto-flow/agents/agent-tech-lead-review/SKILL.md` with `run_on: always` + merge capability. Evidence: `.auto-flow/pipeline.yaml:163-184`
-  - [x] `.claude/skills/` canonical agent directories present (no symlinks). Evidence: commit `6176e91`, `985e3e5`
+  - [x] Agent skill directories present as `.auto-flow/agents/agent-*/` (no `.claude/skills/` symlinks). Evidence: commit `6176e91`, `985e3e5`; FR-S33 removes remaining `.claude/skills/ agent-*` symlinks
   - [x] Pipeline produces 5 agent invocations in happy path (pm, architect, tech-lead, developer, qa) plus 2 post-pipeline (tech-lead-review, meta-agent). Evidence: commit `f0085df`, `.auto-flow/pipeline.yaml` (developer node in impl-loop)
   - [x] Developer creates commits on feature branch during implementation. Evidence: commit `f0085df`, `.auto-flow/agents/agent-developer/SKILL.md`
   - [x] QA posts review on PR only (not issue comment). Evidence: `.auto-flow/agents/agent-qa/SKILL.md`
@@ -723,10 +723,21 @@
     `04-decision`, `06-impl-summary`, `08-review`). Evidence: grep sweep
     post-implementation confirms zero matches across all SKILL.md files and docs.
 
+### 3.33 FR-S33: Remove Stale Agent Symlinks from .claude/skills/
+
+- **Description:** Remove 6 legacy `agent-*` symlinks from `.claude/skills/` (pointing to `.auto-flow/agents/agent-*/`), remove obsolete symlink validation from `scripts/check.ts`, and update documentation. Symlinks were legacy from pre-FR-S26 layout; since FR-S17, agent prompts are discovered directly from `.auto-flow/agents/agent-<name>/SKILL.md`. Keeping symlinks caused Claude Code to expose pipeline-only agents as interactive skills — undesirable.
+- **Supersedes:** `.claude/skills/ agent-*/` symlink pattern (from FR-S17 migration; now fully removed).
+- **Acceptance criteria:**
+  - [x] 6 `agent-*` symlinks deleted from `.claude/skills/` (`agent-pm`, `agent-architect`, `agent-tech-lead`, `agent-tech-lead-review`, `agent-developer`, `agent-qa`). Evidence: `git diff main...HEAD --name-only` shows `deleted file mode 120000` for all 6; `ls .claude/skills/` confirms no `agent-*` entries.
+  - [x] `scripts/check.ts` symlink validation block removed. Evidence: `scripts/check.ts` `pipelineIntegrity()` (lines 89–102) retains only `loadConfig()` delegation; no symlink loop remains.
+  - [x] `documents/design-sdlc.md` updated: §2.2 Agent Runtime symlink clause removed, §3.4 Purpose/Interfaces/Migration updated with FR-S33 reference. Evidence: `documents/design-sdlc.md §2.2`, `§3.4`.
+  - [x] `documents/requirements-sdlc.md` updated: this section (3.33) added; Section 4 NFR Reproducibility updated; Appendix B symlink lines removed; Appendix C FR-S33 row added.
+  - [x] `deno task check` passes. Evidence: `deno task check` PASS (493 tests, run `20260319T192055`).
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
-- **Reproducibility:** Agent prompts are versioned in the repository under `.claude/skills/`.
+- **Reproducibility:** Agent prompts are versioned in the repository under `.auto-flow/agents/`.
 - **Observability:** Full logs stored per stage in `.auto-flow/runs/<run-id>/logs/`. Total pipeline duration reported in the final PR description.
 - **Fault tolerance:** If a stage fails (agent error, timeout, continuation limit exhausted), the pipeline stops, Meta-Agent runs to analyze the failure. Manual restart via `--resume <run-id>`.
 - **Timeouts:** Each stage has a configurable timeout via `SDLC_STAGE_TIMEOUT_MINUTES` env var (default: 30 min). Engine enforces timeout per node. When a timeout fires, the stage is treated as failed — Meta-Agent is triggered for analysis.
@@ -774,8 +785,7 @@ The system is considered accepted if:
 ## Appendix B: File Structure
 
 ```
-.claude/skills/                          # Symlinks to .auto-flow/agents/ (Claude Code skill discovery)
-  agent-*/                               # Symlink → ../../.auto-flow/agents/agent-*/
+.claude/skills/                          # Non-agent project skills (agent-* symlinks removed by FR-S33)
 .auto-flow/                              # Pipeline assets (FR-S26)
   agents/                               # Canonical agent prompts (agentskills.io-compliant, FR-S17)
     agent-pm/SKILL.md                    # PM: issue triage + spec
@@ -838,4 +848,6 @@ engine/                                # Deno/TypeScript pipeline engine
 | —      | FR-S29 | AGENTS.md Agent List Accuracy |
 | —      | FR-S30 | Stale Path Reference Cleanup in SDLC Artifacts |
 | —      | FR-S31 | QA Agent Check Suite Extension |
+| —      | FR-S32 | SDLC Artifact File Numbering Standard |
+| —      | FR-S33 | Remove Stale Agent Symlinks from .claude/skills/ |
 | —      | FR-S32 | SDLC Artifact File Numbering Standard |
