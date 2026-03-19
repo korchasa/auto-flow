@@ -45,6 +45,17 @@ graph LR
     (phase subdir present when node has `phase` field in config). Note: runs
     directory remains at `.auto-flow/runs/` — engine-controlled hardcoded path;
     configurable `runs_dir` deferred to separate engine FR.
+    - **Artifact File Numbering (FR-S32):** Gapless sequential prefixes
+      `01`–`06` reflecting pipeline execution order. Convention:
+      `<NN>-<base-name>.md`. Current mapping:
+      - `01-spec.md` (specification)
+      - `02-plan.md` (design)
+      - `03-decision.md` (decision)
+      - `04-impl-summary.md` (build)
+      - `05-qa-report.md` (verify)
+      - `06-review.md` (tech-lead-review)
+      All pipeline YAML, agent prompts, SRS, and SDS references MUST use these
+      canonical filenames. Alphabetical sorting = execution order.
   - **Legacy Shell Scripts** (`.auto-flow/scripts/`): Deprecated stage scripts
     deleted per FR-S26. HITL and rollback scripts retained.
 
