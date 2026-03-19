@@ -18,3 +18,4 @@
 | 20260319T221833 | #155 (FR-E36+FR-S37) | ~7 | ✅ Variant A selected, both SDS updated, PR #169 draft | 3 Edit calls engine SDS + 1 Edit SDLC SDS. engine+sdlc scope — 4 targeted edits across 2 SDS files, 0 re-reads. |
 | 20260319T224519 | #156 (FR-S38) | ~7 | ✅ Variant A selected, SDS updated, PR draft | 2 targeted Edit calls for SDS (purpose + interfaces in §3.4). SDLC-scope, file() migration — mechanical single-file change. |
 | 20260319T230952 | #157 (FR-S39) | ~7 | ✅ Variant A selected, SDS updated, PR #171 draft | 1 targeted Edit for SDS (§3.4 agent skills purpose). SDLC-scope, dead-code cleanup — minimal removal pattern. |
+| 20260319T233247 | #158 (FR-S40) | ~7 | ✅ Variant A selected, SDS verified+updated, PR #172 draft | 1 Edit for SDS §8 (evidence entry). Doc-sync issue: SDS already correct post-FR-S38, SRS needs ~25 ref fixes. SRS too large for single read — split into offset 0+500. |

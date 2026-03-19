@@ -9,6 +9,7 @@
 - Single issue comment at end, not multiple progress updates.
 - Use Edit (not Write) for SDS updates — multiple targeted edits are fine as long as no re-reads happen. More precise than full file Write for large SDS files.
 - For rename/renumber issues: prefer minimal blast radius variant that directly satisfies the FR — no scope creep.
+- For doc-sync issues: verify SDS accuracy first, then add evidence entry — avoids unnecessary rewrites.
 
 ## Anti-Patterns
 
@@ -22,6 +23,7 @@
 - `.auto-flow/runs/` is gitignored — `git add -f` mandatory for all files there.
 - Scope field in spec frontmatter determines which SRS/SDS to read.
 - Draft PR body must include `Closes #<N>` on its own line.
+- SRS file exceeds 25k token limit — must read in two parts (offset 0 + offset 500).
 
 ## Baseline Metrics
 
@@ -40,4 +42,5 @@
 - Run 20260319T221833: ~7 turns, scope engine+sdlc, issue #155 (FR-E36+FR-S37).
 - Run 20260319T224519: ~7 turns, scope sdlc, issue #156 (FR-S38).
 - Run 20260319T230952: ~7 turns, scope sdlc, issue #157 (FR-S39).
+- Run 20260319T233247: ~7 turns, scope sdlc, issue #158 (FR-S40).
 - Target: ≤10 turns. Achieved all runs.
