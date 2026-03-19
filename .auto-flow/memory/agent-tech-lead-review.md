@@ -15,3 +15,5 @@ type: feedback
 - **gh pr merge --squash --delete-branch local checkout:** The squash merge succeeds remotely first (GitHub API), then tries to checkout main locally. If dirty files block local checkout, the merge already happened — verify with `gh pr view`. Do NOT retry merge.
 - **Dirty run artifacts (stream.log, impl-summary):** Force-tracked run artifacts in `.auto-flow/runs/` will often be dirty during a live pipeline run. Commit them with `git add -f` to unblock the merge checkout.
 - **Post-QA deno.json drift:** If `deno.json` is locally modified without commit, flag as non-blocking if QA already passed with that state. Requires separate cleanup outside this agent's scope.
+- **Duplicate Appendix C row pattern:** When developer adds new FR rows to SRS Appendix C, they may inadvertently duplicate the preceding row (e.g., FR-S32 duplicated after adding FR-S33). Cosmetic, non-blocking — flag as non-blocking finding only.
+- **Parallel first turn:** Read spec + decision + QA report + `gh pr list` + `git status` + `gh run list` all in ONE turn. Then read diff in turn 2. Maximum efficiency.
