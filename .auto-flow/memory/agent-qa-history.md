@@ -139,6 +139,18 @@
   - 524 tests (up from 519) confirms 5 new FR-E34 tests were added.
   - SRS persistence failure pattern broken for this issue — PM + Developer both delivered correctly.
 
+## 2026-03-19T30:XX — Issue #153 (iteration 1)
+
+- **Turns:** ~5
+- **Cost:** ~$0.14 (est)
+- **Verdict:** FAIL
+- **Outcome:** 5/6 criteria passed. 528 tests, 0 failures. Implementation correct: `engine/config.ts:273-289` inline forwarding validation in `validateNode()` loop branch; 4 FR-E35 tests in `config_test.ts` (lines 171–291) covering all required cases; `documents/design-engine.md` §3.1 (lines 109–116) and §5 Logic (lines 569–581) document the algorithm. Blocking: `documents/requirements-engine.md` not in diff, 0 grep matches for FR-E35 — PM agent never added §3.35 or Appendix row. Self-approval failed → used `gh issue comment` fallback on issue #153.
+- **Key learnings:**
+  - PM-stage SRS persistence failure confirmed again (7th issue: #147, #148, #149, #150, #151, #152 passed, #153 fails again). Grep-first strategy is the mandatory first verification step.
+  - 528 tests (up from 524) confirms 4 new FR-E35 tests were added.
+  - Parallel strategy (deno task check + git diff + gh issue view + grep FR-E35) confirmed FAIL in one parallel turn — blocking identified immediately.
+  - Issue #152 broke the streak (PASS on iter 1), but #153 reverts to missing SRS pattern.
+
 ## 2026-03-19T28:XX — Issue #151 (iteration 2)
 
 - **Turns:** ~6
