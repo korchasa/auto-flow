@@ -163,6 +163,18 @@
   - 528 tests unchanged from iteration 1 — no new tests needed for this sdlc-only change.
   - SDLC pipeline pattern (wrapper script replacing `|| true`) is correct approach for observable non-blocking after-script failures.
 
+## 2026-03-19T39:XX — Issue #157 (iteration 2)
+
+- **Turns:** ~5
+- **Cost:** ~$0.12 (est)
+- **Verdict:** PASS
+- **Outcome:** All 4 acceptance criteria passed. 533 tests, 0 failures. FR-S39 present at line 881 (§3.39) and Appendix C at line 1028 — blocking issue from iteration 1 resolved. `requirements-sdlc.md` IS in diff. All 6 SKILL.md files: `# BEFORE YOU DO ANYTHING` block absent, first-tool-call guidance preserved in 5 agents, agent-tech-lead-review starts directly at `# Role:`. Cross-references preserved (agent-pm:98, agent-architect:23,48, agent-tech-lead:58,102, agent-developer:63). Frontmatter intact. Self-approval failed → used `gh issue comment` fallback on issue #157.
+- **Key learnings:**
+  - Write tool requires prior Read of existing file even when overwriting QA report on iteration > 1 — always Read first.
+  - Parallel strategy (deno task check + git diff + gh issue view + grep FR-S39) confirmed PASS in one parallel turn — optimal fix-iteration pattern.
+  - 533 tests unchanged from iteration 1 — no new tests needed for SKILL.md content-only removal.
+  - PM-stage SRS persistence failure for issue #157 resolved in iter 2 — `requirements-sdlc.md` in diff with FR-S39 at all promised locations.
+
 ## 2026-03-19T38:XX — Issue #157 (iteration 1)
 
 - **Turns:** ~5
