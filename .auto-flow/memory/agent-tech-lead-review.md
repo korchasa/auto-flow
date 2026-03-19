@@ -11,3 +11,4 @@ type: feedback
 - **No CI = no gate:** This repo has no `.github` directory — no GitHub Actions. Absence of CI runs is expected, not a failure. QA's `deno task check` (run locally by QA agent) serves as the quality gate.
 - **Output dir must exist:** Create `report/tech-lead-review/` directory with `mkdir -p` before writing `08-review.md`.
 - **QA report location:** Run artifacts live at `.auto-flow/runs/<run-id>/verify/05-qa-report.md`, not `report/qa/`.
+- **git add -f required:** `.auto-flow/runs/` is gitignored; use `git add -f` for run artifacts.
