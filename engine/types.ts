@@ -140,7 +140,8 @@ export interface ValidationRule {
     | "file_not_empty"
     | "contains_section"
     | "custom_script"
-    | "frontmatter_field";
+    | "frontmatter_field"
+    | "artifact";
   /** Relative path to the artifact file being validated. */
   path: string;
   /** Expected content (section header for contains_section, script path for custom_script). */
@@ -149,6 +150,8 @@ export interface ValidationRule {
   field?: string;
   /** Allowed values for the field (for frontmatter_field rule). */
   allowed?: string[];
+  /** Required markdown section headings (for artifact rule). */
+  sections?: string[];
 }
 
 // --- Runtime State ---

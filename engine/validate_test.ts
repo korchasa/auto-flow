@@ -350,6 +350,120 @@ Deno.test("frontmatter_field — missing config field fails", async () => {
   await Deno.remove(tmpDir, { recursive: true });
 });
 
+// --- artifact tests ---
+
+Deno.test("artifact — file absent fails with path in message", async () => {
+  const rules: ValidationRule[] = [
+    {
+      type: "artifact",
+      path: "/tmp/nonexistent-artifact-abc123.md",
+      sections: ["Summary"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx("/tmp"));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(
+    results[0].message.includes("/tmp/nonexistent-artifact-abc123.md"),
+    true,
+  );
+});
+
+Deno.test("artifact — empty file fails", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/empty.md`;
+  await Deno.writeTextFile(filePath, "");
+
+  const rules: ValidationRule[] = [
+    { type: "artifact", path: filePath, sections: ["Summary"] },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("empty"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("artifact — all sections present passes", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(
+    filePath,
+    "## Summary\nsome text\n## Details\nmore text\n",
+  );
+
+  const rules: ValidationRule[] = [
+    { type: "artifact", path: filePath, sections: ["Summary", "Details"] },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("artifact — some sections missing → aggregate error listing all missing", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(filePath, "## Summary\nsome text\n");
+
+  const rules: ValidationRule[] = [
+    {
+      type: "artifact",
+      path: filePath,
+      sections: ["Summary", "Details", "Conclusion"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("Details"), true);
+  assertEquals(results[0].message.includes("Conclusion"), true);
+  assertEquals(results[0].message.includes("'Summary'"), false);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("artifact — all sections missing → aggregate error listing all", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(filePath, "# Title\nsome text\n");
+
+  const rules: ValidationRule[] = [
+    {
+      type: "artifact",
+      path: filePath,
+      sections: ["Summary", "Details"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("Summary"), true);
+  assertEquals(results[0].message.includes("Details"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("artifact — template path interpolation works", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  await Deno.writeTextFile(`${tmpDir}/output.md`, "## Summary\ncontent\n");
+
+  const rules: ValidationRule[] = [
+    {
+      type: "artifact",
+      path: "{{node_dir}}/output.md",
+      sections: ["Summary"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
 Deno.test("multiple rules — mixed results", async () => {
   const tmpDir = await Deno.makeTempDir();
   await Deno.writeTextFile(`${tmpDir}/exists.md`, "# Title\nContent");

@@ -61,6 +61,8 @@ async function runSingleValidation(
       return await checkCustomScript(rule, resolvedPath);
     case "frontmatter_field":
       return await checkFrontmatterField(rule, resolvedPath);
+    case "artifact":
+      return await checkArtifact(rule, resolvedPath);
     default:
       return {
         rule,
@@ -246,6 +248,56 @@ async function checkFrontmatterField(
     passed: true,
     message: `Field '${rule.field}' = '${value}' in ${path}`,
   };
+}
+
+/**
+ * Check that a file exists, is non-empty, and contains all required markdown sections.
+ *
+ * Fail-fast order: absent file → empty file → missing sections (collected into
+ * one aggregate error so the agent sees all gaps in a single continuation).
+ */
+async function checkArtifact(
+  rule: ValidationRule,
+  path: string,
+): Promise<ValidationResult> {
+  const sections = rule.sections ?? [];
+
+  try {
+    await Deno.stat(path);
+  } catch {
+    return { rule, passed: false, message: `File not found: ${path}` };
+  }
+
+  let content: string;
+  try {
+    content = await Deno.readTextFile(path);
+  } catch {
+    return { rule, passed: false, message: `File not found: ${path}` };
+  }
+
+  if (content.length === 0) {
+    return { rule, passed: false, message: `File is empty: ${path}` };
+  }
+
+  const missing: string[] = [];
+  for (const section of sections) {
+    const pattern = new RegExp(`^#{1,6}\\s+${escapeRegex(section)}`, "m");
+    if (!pattern.test(content)) {
+      missing.push(section);
+    }
+  }
+
+  if (missing.length > 0) {
+    return {
+      rule,
+      passed: false,
+      message: `Missing sections in ${path}: ${
+        missing.map((s) => `'${s}'`).join(", ")
+      }`,
+    };
+  }
+
+  return { rule, passed: true, message: `All sections present in ${path}` };
 }
 
 function escapeRegex(str: string): string {

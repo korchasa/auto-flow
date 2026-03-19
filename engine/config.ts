@@ -326,6 +326,7 @@ function validateValidationRule(
     "contains_section",
     "custom_script",
     "frontmatter_field",
+    "artifact",
   ];
   if (!validTypes.includes(rule.type as string)) {
     throw new Error(
@@ -336,6 +337,20 @@ function validateValidationRule(
     throw new Error(
       `Node '${nodeId}' validation rule requires a non-empty 'path'`,
     );
+  }
+  if (rule.type === "artifact") {
+    if (!Array.isArray(rule.sections) || rule.sections.length === 0) {
+      throw new Error(
+        `Node '${nodeId}' artifact rule requires a non-empty 'sections' array`,
+      );
+    }
+    if (
+      !(rule.sections as unknown[]).every((e: unknown) => typeof e === "string")
+    ) {
+      throw new Error(
+        `Node '${nodeId}' artifact rule 'sections' must be an array of strings`,
+      );
+    }
   }
 }
 

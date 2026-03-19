@@ -892,3 +892,57 @@ nodes:
     "nonexistent/developer/SKILL.md",
   );
 });
+
+// --- artifact validation rule schema tests ---
+
+Deno.test("parseConfig — artifact rule without sections throws", () => {
+  assertThrows(
+    () =>
+      parseConfig(
+        `name: test\nversion: "1"\nnodes:\n  a:\n    type: agent\n    label: A\n    task_template: x\n    validate:\n      - type: artifact\n        path: foo`,
+      ),
+    Error,
+    "non-empty 'sections'",
+  );
+});
+
+Deno.test("parseConfig — artifact rule with empty sections array throws", () => {
+  assertThrows(
+    () =>
+      parseConfig(
+        `name: test\nversion: "1"\nnodes:\n  a:\n    type: agent\n    label: A\n    task_template: x\n    validate:\n      - type: artifact\n        path: foo\n        sections: []`,
+      ),
+    Error,
+    "non-empty 'sections'",
+  );
+});
+
+Deno.test("parseConfig — artifact rule with non-string sections throws", () => {
+  assertThrows(
+    () =>
+      parseConfig(
+        `name: test\nversion: "1"\nnodes:\n  a:\n    type: agent\n    label: A\n    task_template: x\n    validate:\n      - type: artifact\n        path: foo\n        sections: [123, 456]`,
+      ),
+    Error,
+    "array of strings",
+  );
+});
+
+Deno.test("parseConfig — valid artifact rule passes", () => {
+  const yaml = `
+name: test
+version: "1"
+nodes:
+  a:
+    type: agent
+    label: A
+    task_template: x
+    validate:
+      - type: artifact
+        path: "{{node_dir}}/output.md"
+        sections: [Summary, Details]
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.nodes.a.validate![0].type, "artifact");
+  assertEquals(config.nodes.a.validate![0].sections, ["Summary", "Details"]);
+});
