@@ -724,6 +724,35 @@
     re-trigger, WARN emitted). Evidence: `engine/engine_test.ts` (FR-E34 test 4:
     hook script fails, WARN emitted, no second invocation).
 
+### 3.35 FR-E35: Loop Input Forwarding Validation
+
+- **Description:** A loop body node MAY reference external (top-level) node
+  outputs via the enclosing loop node's `inputs` list, which implicitly
+  forwards those outputs to all inner nodes. At parse time the engine MUST
+  validate that every external input referenced by a body node is listed in
+  the enclosing loop node's own `inputs`. Sibling body node references are
+  excluded from this check (intra-body refs are always valid).
+- **Motivation:** The forwarding mechanism was undocumented and unvalidated.
+  Omitting an external node from the loop's `inputs` produced no error at
+  parse time — failure was silent or surfaced as a runtime-level opaque
+  message. Parse-time rejection with a clear diagnostic upholds the
+  fail-fast principle and gives pipeline authors a reliable contract.
+- **Acceptance criteria:**
+  - [x] Body node referencing external input not listed in loop `inputs` is
+    rejected at parse time with a config error. Evidence:
+    `engine/config.ts:273-289`.
+  - [x] Error message identifies body node ID, loop node ID, and all missing
+    external input IDs. Evidence: `engine/config.ts:284-288` — message:
+    `"Loop '${id}' body node '${bodyId}' references external input(s) [${missing.join(", ")}] not listed in loop inputs"`.
+  - [x] Body node referencing a sibling body node generates no error (intra-body
+    refs are valid). Evidence: `engine/config.ts:279-280`
+    (`!bodyNodeIds.includes(inp)` guard); `engine/config_test.ts:235-262`.
+  - [x] Forwarding mechanism and validation algorithm documented in SDS
+    (`documents/design-engine.md`). Evidence: `documents/design-engine.md:109-116`
+    (§3.1 `config.ts`), `documents/design-engine.md:569-581` (§5 Logic).
+  - [x] `deno task check` green: 528 tests, 0 failures. Evidence: CI run
+    on branch `sdlc/issue-153`.
+
 ## 4. Non-Functional Requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -784,3 +813,4 @@
 | —      | FR-E32 | `{{file()}}` Template Function |
 | —      | FR-E33 | Phase Assignment Single-Mechanism Enforcement |
 | —      | FR-E34 | Error Handling Precedence (`on_error` vs `on_failure_script`) |
+| —      | FR-E35 | Loop Input Forwarding Validation |
