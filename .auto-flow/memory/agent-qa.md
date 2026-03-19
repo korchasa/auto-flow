@@ -40,3 +40,4 @@ type: feedback
 - Fourth session (issue #147, iteration 2): ~9 turns, PASS verdict (FR-S32 restored)
 - Fifth session (issue #148, iteration 1): ~8 turns, FAIL verdict (FR-S33 missing from SRS; PM agent never added it)
 - Sixth session (issue #148, iteration 2): ~7 turns, PASS verdict (FR-S33 restored + all SRS sub-sections + FR-S13 conflict resolved)
+- Seventh session (issue #149, iteration 1): ~7 turns, FAIL verdict (FR-S34 missing from SRS; PM agent never added it)
