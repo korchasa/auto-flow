@@ -159,6 +159,10 @@ nodes:
             path: "{{node_dir}}/05-qa-report.md"
           - type: file_not_empty
             path: "{{node_dir}}/05-qa-report.md"
+          - type: frontmatter_field
+            path: "{{node_dir}}/05-qa-report.md"
+            field: verdict
+            allowed: [PASS, FAIL]
           - type: contains_section
             path: "{{node_dir}}/05-qa-report.md"
             value: "Summary"

@@ -501,6 +501,12 @@ graph LR
   Developer reads QA report, fixes -> repeat (max 3). Body nodes defined
   inline via loop's `nodes` sub-object (not top-level). Execution order
   determined by topo-sort of body nodes' `inputs` declarations.
+  **Verify node verdict validation (FR-S37):** `verify` node's `validate`
+  block MUST include `frontmatter_field` rule for `verdict` field with
+  `allowed: ["PASS", "FAIL"]`. Ensures QA agent cannot silently omit the
+  verdict frontmatter — validation fails before loop reads `condition_field`.
+  Combined with engine FR-E36 parse-time cross-check, guarantees
+  `condition_field: verdict` is contractually declared in the condition node.
 - **Secret Detection**: `gitleaks detect --no-git` runs as part of
   `deno task check` (`scripts/check.ts`). `allowFailure=true` — skips if
   gitleaks binary not found. Engine-level `safetyCheckDiff()` removed.

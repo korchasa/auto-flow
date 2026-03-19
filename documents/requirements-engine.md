@@ -753,6 +753,43 @@
   - [x] `deno task check` green: 528 tests, 0 failures. Evidence: CI run
     on branch `sdlc/issue-153`.
 
+### 3.36 FR-E36: Loop Condition Field Validation
+
+- **Description:** The engine MUST validate that a loop node's `condition_field` is
+  consistent with the condition node's `validate` block at two points: (1) parse time —
+  if the condition node has a `validate` block, the block MUST contain a `frontmatter_field`
+  rule whose `field` matches `condition_field`; (2) runtime — before reading the field
+  from the condition node's output, the engine MUST verify the field is present and throw
+  a descriptive error if absent.
+- **Motivation:** Without parse-time validation, mismatches between `condition_field` and
+  the condition node's validate contract are silently ignored until runtime. Without a
+  runtime presence check, a missing field causes undefined behavior (spurious loop
+  iteration or opaque failure). Both checks enforce the fail-fast principle and give
+  pipeline authors actionable diagnostics.
+- **Acceptance criteria:**
+  - [x] Parse-time: if condition node has a non-empty `validate` block, validate that a
+    `frontmatter_field` rule with matching `field` exists. Evidence:
+    `engine/config.ts:291-312`.
+  - [x] Parse-time: if condition node has no `validate` block, skip check (no contract to
+    enforce). Evidence: `engine/config.ts:300`
+    (`if (Array.isArray(condNodeRaw.validate) && condNodeRaw.validate.length > 0)`).
+  - [x] Parse-time error message identifies loop ID, field, and condition node. Evidence:
+    `engine/config.ts:308-310` — message:
+    `"Loop '${id}' condition_field '${node.condition_field}' is not declared as a frontmatter_field in condition node '${node.condition_node}' validate block"`.
+  - [x] Runtime: `extractConditionValue()` throws descriptive error when field absent.
+    Evidence: `engine/loop.ts:224-226` — message:
+    `"Loop '${loopId}': condition_field '${field}' not found in condition node '${condNodeId}' output at '${nodeDir}'"`.
+  - [x] Runtime: `loopId` and `condNodeId` threaded through `extractConditionValue()`
+    signature (updated from 3 to 5 params); `runLoop()` passes them. Evidence:
+    `engine/loop.ts:192-198` (signature), `engine/loop.ts:144-151` (call site).
+  - [x] Parse-time tests (2): missing rule → throws (`engine/config_test.ts:1139-1173`),
+    present rule → passes (`engine/config_test.ts:1175-1206`).
+  - [x] Runtime tests (3): throws when field absent in output file
+    (`engine/loop_test.ts:281-317`), throws when output dir empty
+    (`engine/loop_test.ts:319-351`), returns value when field present
+    (`engine/loop_test.ts:353-378`).
+  - [x] `deno task check` green: 533 tests, 0 failures. Evidence: run `20260319T221833`.
+
 ## 4. Non-Functional Requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -814,3 +851,4 @@
 | —      | FR-E33 | Phase Assignment Single-Mechanism Enforcement |
 | —      | FR-E34 | Error Handling Precedence (`on_error` vs `on_failure_script`) |
 | —      | FR-E35 | Loop Input Forwarding Validation |
+| —      | FR-E36 | Loop Condition Field Validation |

@@ -1,8 +1,13 @@
 import { assertEquals } from "@std/assert";
-import { extractFrontmatterField } from "./loop.ts";
+import { extractConditionValue, extractFrontmatterField } from "./loop.ts";
 import type { LoopRunOptions } from "./loop.ts";
 import { OutputManager } from "./output.ts";
-import type { ClaudeCliOutput, PipelineConfig } from "./types.ts";
+import type {
+  ClaudeCliOutput,
+  NodeConfig,
+  PipelineConfig,
+  TemplateContext,
+} from "./types.ts";
 import { createRunState, markNodeCompleted, markNodeStarted } from "./state.ts";
 
 // Note: Full integration tests for runLoop require claude CLI.
@@ -270,3 +275,104 @@ Deno.test("loop body node — cost_usd undefined when result.output absent", () 
   assertEquals(state.nodes.build.cost_usd, undefined);
   assertEquals(state.total_cost_usd, undefined);
 });
+
+// --- FR-E36: Runtime condition_field presence check ---
+
+Deno.test(
+  "extractConditionValue — throws when condition_field not found in any output file",
+  async () => {
+    const tmpDir = Deno.makeTempDirSync();
+    Deno.writeTextFileSync(
+      `${tmpDir}/05-qa-report.md`,
+      `---\nstatus: done\n---\n# Report`,
+    );
+    const ctx: TemplateContext = {
+      node_dir: tmpDir,
+      run_dir: tmpDir,
+      run_id: "test",
+      args: {},
+      env: {},
+      input: {},
+    };
+    let caught: Error | undefined;
+    try {
+      await extractConditionValue(
+        ctx,
+        {} as NodeConfig,
+        "verdict",
+        "my-loop",
+        "verify",
+      );
+    } catch (e) {
+      caught = e as Error;
+    }
+    assertEquals(caught !== undefined, true);
+    assertEquals(
+      caught!.message.includes(
+        "condition_field 'verdict' not found in condition node 'verify' output",
+      ),
+      true,
+    );
+  },
+);
+
+Deno.test(
+  "extractConditionValue — throws with loop and node IDs when output directory is empty",
+  async () => {
+    const tmpDir = Deno.makeTempDirSync();
+    const ctx: TemplateContext = {
+      node_dir: tmpDir,
+      run_dir: tmpDir,
+      run_id: "test",
+      args: {},
+      env: {},
+      input: {},
+    };
+    let caught: Error | undefined;
+    try {
+      await extractConditionValue(
+        ctx,
+        {} as NodeConfig,
+        "verdict",
+        "impl-loop",
+        "qa",
+      );
+    } catch (e) {
+      caught = e as Error;
+    }
+    assertEquals(caught !== undefined, true);
+    assertEquals(
+      caught!.message.includes(
+        "Loop 'impl-loop': condition_field 'verdict' not found in condition node 'qa' output",
+      ),
+      true,
+    );
+  },
+);
+
+Deno.test(
+  "extractConditionValue — returns value when field present in frontmatter",
+  async () => {
+    const tmpDir = Deno.makeTempDirSync();
+    Deno.writeTextFileSync(
+      `${tmpDir}/05-qa-report.md`,
+      `---\nverdict: PASS\n---\n# QA Report`,
+    );
+    const ctx: TemplateContext = {
+      node_dir: tmpDir,
+      run_dir: tmpDir,
+      run_id: "test",
+      args: {},
+      env: {},
+      input: {},
+    };
+    const value = await extractConditionValue(
+      ctx,
+      {} as NodeConfig,
+      "verdict",
+      "my-loop",
+      "verify",
+    );
+    assertEquals(value, "PASS");
+  },
+);

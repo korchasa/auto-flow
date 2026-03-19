@@ -1133,3 +1133,74 @@ nodes:
   assertEquals(config.nodes.a.validate![0].type, "artifact");
   assertEquals(config.nodes.a.validate![0].sections, ["Summary", "Details"]);
 });
+
+// --- FR-E36: Parse-time condition_field vs frontmatter_field cross-check ---
+
+Deno.test(
+  "parseConfig — loop condition_field missing from condition node validate block → throws",
+  () => {
+    const yaml = `
+name: test
+version: "1"
+nodes:
+  my-loop:
+    type: loop
+    label: Loop
+    condition_node: qa
+    condition_field: verdict
+    exit_value: PASS
+    nodes:
+      developer:
+        type: agent
+        label: Developer
+        task_template: implement
+      qa:
+        type: agent
+        label: QA
+        task_template: verify
+        inputs: [developer]
+        validate:
+          - type: frontmatter_field
+            path: "{{node_dir}}/report.md"
+            field: status
+`;
+    assertThrows(
+      () => parseConfig(yaml),
+      Error,
+      "condition_field 'verdict' is not declared as a frontmatter_field in condition node 'qa' validate block",
+    );
+  },
+);
+
+Deno.test(
+  "parseConfig — loop condition_field present in condition node validate block → passes",
+  () => {
+    const yaml = `
+name: test
+version: "1"
+nodes:
+  my-loop:
+    type: loop
+    label: Loop
+    condition_node: qa
+    condition_field: verdict
+    exit_value: PASS
+    nodes:
+      developer:
+        type: agent
+        label: Developer
+        task_template: implement
+      qa:
+        type: agent
+        label: QA
+        task_template: verify
+        inputs: [developer]
+        validate:
+          - type: frontmatter_field
+            path: "{{node_dir}}/report.md"
+            field: verdict
+`;
+    const config = parseConfig(yaml);
+    assertEquals(config.nodes["my-loop"].condition_field, "verdict");
+  },
+);

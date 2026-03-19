@@ -8,6 +8,8 @@ type: feedback
 
 ## Anti-patterns
 
+- **`assertRejects` not in vendor assert.ts**: only `assertEquals` and `assertThrows` exported. Use try/catch + assertEquals for async throw tests.
+- **New ErrorCategory values need types.ts update**: custom category strings not in the type → either add to types.ts or omit `error_category` in the LoopResult return.
 - **HEAD version of out-of-scope file can have pre-existing fmt issue**: `git stash push -- <file>` only works for local verification but NOT for engine's `deno task check` continuation — engine runs check on actual working tree. Must fix pre-existing fmt issues directly and commit them. Markdown table column alignment (trailing whitespace padding) is a common offender.
 - **`deno-lint-ignore` inside for-loop header is not recognized**: placing `// deno-lint-ignore no-explicit-any` before `const [k, v] of Object.entries(x as Record<string, any>)` inside a for-loop header fails with `ban-unused-ignore`. Extract the cast to a separate variable on the line directly after the ignore comment instead.
 
@@ -75,6 +77,8 @@ type: feedback
 - Run 20260319T213344 iter2: ~5 turns, scope engine, issue #153 (FR-E35) QA fix — PASS (SRS: added §3.35 + Appendix row; sixth consecutive PM persistence failure #147–#153)
 - Run 20260319T215851: ~5 turns, scope sdlc, issue #154 (FR-S36), 2 files changed — PASS (shell wrapper + pipeline.yaml edit; no TS logic → no new tests; do NOT use set -euo pipefail in wrapper — must capture non-zero exit code)
 - Run 20260319T215851 iter2: ~4 turns, scope sdlc, issue #154 (FR-S36) QA fix — PASS (SRS: added §3.36, Appendix C row; seventh consecutive PM persistence failure #147–#154)
+- Run 20260319T221833: ~8 turns, scope engine+sdlc, issue #155 (FR-E36+FR-S37), 5 files changed — PASS (parse-time cross-check in config.ts; runtime throw in loop.ts; assertRejects not in vendor assert.ts → use try/catch; "validation_failed" not in ErrorCategory → omit error_category; pipeline.yaml coexistence pattern again)
+- Run 20260319T221833 iter2: ~5 turns, scope engine+sdlc, issue #155 QA fix — PASS (SRS: added §3.36 FR-E36 to requirements-engine.md + §3.37 FR-S37 to requirements-sdlc.md + both Appendix rows; ninth consecutive PM persistence failure #147–#155)
 - Target: ≤35 turns. Key lesson: commit before deno task check; stash pattern for pre-existing fmt issues.
 
 ## Pipeline.yaml Coexistence Pattern

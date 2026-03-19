@@ -847,6 +847,20 @@
   - [x] `deno task check` passes. Evidence: PASS (528 tests, run
     `20260319T215851`).
 
+### 3.37 FR-S37: Verify Node Verdict Frontmatter Validation
+
+- **Description:** The `verify` node in `.auto-flow/pipeline.yaml` MUST declare a
+  `frontmatter_field` rule for `verdict` in its `validate` block, with
+  `allowed: [PASS, FAIL]`. This ensures the engine validates the QA agent's verdict
+  field at parse time (via FR-E36) and at runtime (presence check), preventing the QA
+  agent from silently omitting the verdict.
+- **Acceptance criteria:**
+  - [x] `pipeline.yaml` `verify` node `validate` block includes `type: frontmatter_field`,
+    `field: verdict`, `allowed: [PASS, FAIL]`. Evidence: `.auto-flow/pipeline.yaml:162-165`.
+  - [x] `deno task check` passes (pipeline integrity validation confirms
+    `frontmatter_field: verdict` rule present in verify node). Evidence: run
+    `20260319T221833` (533 tests, 0 failures).
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -966,3 +980,4 @@ engine/                                # Deno/TypeScript pipeline engine
 | —      | FR-S34 | Dashboard Diagnostic Enhancements |
 | —      | FR-S35 | HITL Artifact Source Node Reference |
 | —      | FR-S36 | After-Script Failure Observability |
+| —      | FR-S37 | Verify Node Verdict Frontmatter Validation |

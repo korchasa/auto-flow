@@ -114,6 +114,15 @@ graph TD
     [<missing>] not listed in loop inputs"`. Runs inline in `validateNode()`
     loop branch — no new function or signature change. `node.inputs` accessed
     directly from the loop node object already in scope.
+    **Loop condition_field validation (FR-E36):** After FR-E35 input forwarding
+    check, inspects condition node's `validate` array for a `frontmatter_field`
+    rule whose `field` matches `condition_field`. If condition node HAS a
+    `validate` block but NO matching `frontmatter_field` rule → throws:
+    `"Loop '<id>' condition_field '<field>' is not declared as a
+    frontmatter_field in condition node '<condId>' validate block"`. If
+    condition node has no `validate` block at all → skip (no contract to
+    enforce). Inline in `validateNode()` loop branch — consistent with FR-E35
+    pattern. No new function or signature change.
   - `dag.ts` — topological sort, cycle detection, level grouping.
     Excludes loop body nodes (from `nodes` sub-object) from top-level
     graph; loop node itself remains in DAG with its declared `inputs`.
@@ -212,7 +221,14 @@ graph TD
     `buildContext()` resolves `inputs` against both sibling body nodes and
     top-level nodes. Accepts `streamLogPath` pattern from engine; computes
     iteration-qualified path `${nodeId}-iter-${i}.jsonl` per body node
-    invocation; forwards to inner `runAgent()` calls
+    invocation; forwards to inner `runAgent()` calls.
+    **Runtime condition_field presence check (FR-E36):**
+    `extractConditionValue()` — after search loop completes, if return value
+    is `undefined`, throws:
+    `Error("Loop '<loopId>': condition_field '<field>' not found in condition
+    node '<condId>' output at '<nodeDir>'")`. Requires `loopId` threaded
+    through call (closure capture or param addition). Prevents silent undefined
+    behavior on missing field — fail-fast at first loop iteration
   - `hitl.ts` — HITL detection (`detectHitlRequest`) and poll loop
     (`runHitlLoop`); injectable `scriptRunner`/`claudeRunner` for testing
   - `human.ts` — terminal user input, abort logic
@@ -579,6 +595,17 @@ graph TD
        missing input IDs. Single error per body node (all missing IDs listed).
     Parse-time check — runs during `loadConfig()` → `validateNode()`. No
     runtime overhead. Sibling body node references excluded from check.
+  - **Loop Condition Field Validation (FR-E36):** Two-layer check:
+    1. **Parse-time** (in `validateNode()` loop branch, after FR-E35 check):
+       Look up condition node's `validate` array. Filter for rules with
+       `type === "frontmatter_field"`. If `validate` block exists but no rule
+       has `field === condition_field` → throw config error. If no `validate`
+       block → skip (no contract). Inline — no new function.
+    2. **Runtime** (in `extractConditionValue()`): After search loop, if
+       result is `undefined` → throw with loop ID, field name, condition node
+       ID, and output path. Requires `loopId` threaded to function (closure
+       capture or param). Catches misconfigs that slip past parse-time (e.g.,
+       condition node with no validate block but agent omits field).
   - **Post-Pipeline Node Collection & Ordering**: `collectPostPipelineNodes()`
     collects nodes where `run_on !== undefined` (replaces `run_always`-based
     collection). `sortPostPipelineNodes()` sorts them topologically using

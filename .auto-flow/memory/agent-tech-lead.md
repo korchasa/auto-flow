@@ -37,4 +37,5 @@
 - Run 20260319T211036: ~7 turns, scope engine, issue #152 (FR-E34).
 - Run 20260319T213344: ~7 turns, scope engine, issue #153 (FR-E35).
 - Run 20260319T215851: ~7 turns, scope sdlc, issue #154 (FR-S36).
+- Run 20260319T221833: ~7 turns, scope engine+sdlc, issue #155 (FR-E36+FR-S37).
 - Target: ≤10 turns. Achieved all runs.

@@ -287,6 +287,29 @@ function validateNode(
         );
       }
     }
+
+    // Validate condition_field vs frontmatter_field in condition node (FR-E36):
+    // If condition node declares a validate block, it must include a frontmatter_field
+    // rule whose 'field' matches condition_field — fail fast on misconfigured pipelines.
+    // Skip if condition node has no validate block (no contract to enforce).
+    const condNodeRaw = bodyNodes[node.condition_node as string] as Record<
+      string,
+      unknown
+    >;
+    if (
+      Array.isArray(condNodeRaw.validate) && condNodeRaw.validate.length > 0
+    ) {
+      const rules = condNodeRaw.validate as Array<Record<string, unknown>>;
+      const hasMatchingRule = rules.some(
+        (r) =>
+          r.type === "frontmatter_field" && r.field === node.condition_field,
+      );
+      if (!hasMatchingRule) {
+        throw new Error(
+          `Loop '${id}' condition_field '${node.condition_field}' is not declared as a frontmatter_field in condition node '${node.condition_node}' validate block`,
+        );
+      }
+    }
   }
 
   if (type === "human") {

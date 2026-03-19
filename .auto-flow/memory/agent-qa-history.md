@@ -163,6 +163,29 @@
   - 528 tests unchanged from iteration 1 — no new tests needed for this sdlc-only change.
   - SDLC pipeline pattern (wrapper script replacing `|| true`) is correct approach for observable non-blocking after-script failures.
 
+## 2026-03-19T35:XX — Issue #155 (iteration 2)
+
+- **Turns:** ~5
+- **Cost:** ~$0.12 (est)
+- **Verdict:** PASS
+- **Outcome:** All 10 acceptance criteria passed. 533 tests, 0 failures. FR-E36 present at line 756 (§3.36) and Appendix at line 854 in requirements-engine.md. FR-S37 present at line 850 (§3.37) and Appendix at line 983 in requirements-sdlc.md. Both SRS files confirmed in diff — PM-stage persistence failure from iteration 1 resolved. Implementation: `config.ts` lines 291-312 (parse-time validation), `loop.ts` lines 224-226 (runtime throw with descriptive message), `pipeline.yaml` lines 162-165 (frontmatter_field: verdict + allowed: [PASS, FAIL]), 5 new tests (2 parse-time + 3 runtime). Self-approval failed → used `gh issue comment` fallback on issue #155.
+- **Key learnings:**
+  - First engine+sdlc scope issue to PASS on iteration 2 — both SRS files were in diff and both FRs found at all promised locations.
+  - 533 tests unchanged from iteration 1 — tests were already added in iter 1, no new ones needed.
+  - Parallel strategy (deno task check + git diff + gh issue view + grep FR-E36|FR-S37) confirmed PASS in one parallel turn — optimal pattern for fix iterations.
+
+## 2026-03-19T34:XX — Issue #155 (iteration 1)
+
+- **Turns:** ~5
+- **Cost:** ~$0.12 (est)
+- **Verdict:** FAIL
+- **Outcome:** 8/10 acceptance criteria passed. 533 tests, 0 failures. Implementation correct: parse-time FR-E36 check in `config.ts` (lines 291-312), runtime FR-E36 throw in `loop.ts` (lines 224-226) with updated `extractConditionValue()` signature (5 params: +loopId +condNodeId), 2 parse-time tests in `config_test.ts` (lines 1137-1206), 3 runtime tests in `loop_test.ts` (lines 279-378), `pipeline.yaml` verify node frontmatter_field: verdict + allowed: [PASS, FAIL] (lines 162-165). Blocking: both `requirements-engine.md` and `requirements-sdlc.md` absent from diff; FR-E36 and FR-S37 have 0 grep matches — PM agent failed to persist either SRS file (engine+sdlc scope). Self-approval failed → used `gh issue comment` fallback on issue #155.
+- **Key learnings:**
+  - First engine+sdlc scope issue — both SRS files can be absent simultaneously when two FRs span both scopes.
+  - 533 tests (up from 528) confirms 5 new tests added (2 config + 3 loop).
+  - `extractConditionValue()` signature extended from 3 to 5 params to include loopId + condNodeId for descriptive error messages.
+  - Parallel strategy (deno task check + git diff + gh issue view + grep FR-E36|FR-S37) confirmed FAIL in one parallel turn.
+
 ## 2026-03-19T32:XX — Issue #154 (iteration 1)
 
 - **Turns:** ~5

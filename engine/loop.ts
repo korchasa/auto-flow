@@ -138,12 +138,26 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
       }
     }
 
-    // Check exit condition (condition node is in inline nodes sub-object)
-    const conditionValue = await extractConditionValue(
-      opts.buildCtx(conditionNode, iteration),
-      loopNode.nodes![conditionNode],
-      conditionField,
-    );
+    // Check exit condition (condition node is in inline nodes sub-object).
+    // extractConditionValue throws (FR-E36) if field is missing — treat as loop failure.
+    let conditionValue: string;
+    try {
+      conditionValue = await extractConditionValue(
+        opts.buildCtx(conditionNode, iteration),
+        loopNode.nodes![conditionNode],
+        conditionField,
+        loopNodeId,
+        conditionNode,
+      );
+    } catch (e) {
+      return {
+        success: false,
+        iterations: iteration,
+        error: e instanceof Error ? e.message : String(e),
+        lastConditionValue,
+        bodyResults,
+      };
+    }
     lastConditionValue = conditionValue;
 
     if (conditionValue === exitValue) {
@@ -171,12 +185,17 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
  * Extract a condition value from a node's output artifact.
  * Looks for YAML frontmatter in the first file matching a pattern,
  * or reads a dedicated condition file.
+ *
+ * Throws (FR-E36) if the field is not found — fail fast rather than
+ * allowing the loop to continue with an undefined condition value.
  */
-async function extractConditionValue(
+export async function extractConditionValue(
   ctx: TemplateContext,
   _node: NodeConfig,
   field: string,
-): Promise<string | undefined> {
+  loopId: string,
+  condNodeId: string,
+): Promise<string> {
   // Strategy: look for the field in YAML frontmatter of any .md file
   // in the node's output directory
   const nodeDir = ctx.node_dir;
@@ -190,7 +209,7 @@ async function extractConditionValue(
       if (value !== undefined) return value;
     }
   } catch {
-    // Directory may not exist or be empty
+    // Directory may not exist or be empty — fall through to throw below
   }
 
   // Also check for a condition.json or condition.yaml file
@@ -202,7 +221,9 @@ async function extractConditionValue(
     // Not found
   }
 
-  return undefined;
+  throw new Error(
+    `Loop '${loopId}': condition_field '${field}' not found in condition node '${condNodeId}' output at '${nodeDir}'`,
+  );
 }
 
 /** Extract a field from YAML frontmatter (between --- delimiters). */
