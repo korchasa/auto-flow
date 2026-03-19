@@ -58,6 +58,28 @@
   - Stale ACs in existing FRs can become actively contradictory when a new FR removes a feature — check related FRs for semantic conflicts.
   - Pattern: PM agent added FR-S33 to spec but never persisted it to requirements-sdlc.md. Same root cause as issue #147 iter 1.
 
+## 2026-03-19T23:XX — Issue #149 (iteration 1)
+
+- **Turns:** ~7
+- **Cost:** ~$0.18 (est)
+- **Verdict:** FAIL
+- **Outcome:** 26/28 acceptance criteria passed. 509 tests, 0 failures. Implementation correct: `readStreamLog()` with head+tail truncation, inline log viewer in `renderCard()`, distinct CSS for all 4 header status values (completed/running/failed/aborted), `computePhaseStatus()` with run_on:always separation, CLI wiring. Blocking: `documents/requirements-sdlc.md` not in diff, 0 grep matches for FR-S34 — PM agent never added section 3.34 or Appendix C row. Self-approval failed → used `gh issue comment` fallback on issue #149.
+- **Key learnings:**
+  - PM-stage SRS persistence failure is a recurring pattern (issues #147, #148, #149). Running grep for FR number immediately after getting git diff is essential — saves turns.
+  - 509 tests (up from 493) confirms new tests were added for all new functions.
+  - Strategy "parallel: deno task check + git diff + gh issue view + grep FR-SXX" works well — confirms/denies blocking in one turn.
+
+## 2026-03-19T24:XX — Issue #149 (iteration 2)
+
+- **Turns:** ~6
+- **Cost:** ~$0.16 (est)
+- **Verdict:** PASS
+- **Outcome:** All 28 acceptance criteria passed. 509 tests, 0 failures. FR-S34 present at line 737 (section 3.34) and line 904 (Appendix C). Implementation: `readStreamLog()` with head+tail truncation (200+50 default), inline log viewer in `renderCard()`, 4 distinct CSS rules for header status values, `computePhaseStatus()` with run_on:always separation, CLI wiring complete. Self-approval failed → used `gh issue comment` fallback on issue #149.
+- **Key learnings:**
+  - Parallel strategy (deno task check + git diff + gh issue view + grep FR-S34) confirmed PASS in one parallel turn — no blocking issues found.
+  - For fix iterations, running the FR grep in the same batch as deno check is the optimal pattern: confirms fix before spending turns on source file reads.
+  - The spec only listed 2 SRS changes (section 3.34 + Appendix C) — no NFR or Appendix B updates needed. Verify what the spec actually promises, not what prior issues did.
+
 ## 2026-03-19T22:XX — Issue #148 (iteration 2)
 
 - **Turns:** ~7

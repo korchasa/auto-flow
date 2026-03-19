@@ -734,6 +734,57 @@
   - [x] `documents/requirements-sdlc.md` updated: this section (3.33) added; Section 4 NFR Reproducibility updated; Appendix B symlink lines removed; Appendix C FR-S33 row added.
   - [x] `deno task check` passes. Evidence: `deno task check` PASS (493 tests, run `20260319T192055`).
 
+### 3.34 FR-S34: Dashboard Diagnostic Enhancements
+
+- **Description:** Three inline diagnostic capabilities added to the HTML run
+  dashboard: (1) collapsible inline `stream.log` viewer per node card, (2)
+  accurate header run status with distinct visual styling per state value,
+  (3) phase aggregate status with `run_on: always` nodes separated from core
+  nodes so their outcomes do not mask each other.
+- **Extends:** FR-S20 (Dashboard Stream Log Links) — from file-link to inline
+  content. Reuses FR-S16 `<details>/<summary>` collapsible pattern.
+- **Acceptance criteria:**
+
+  **Group 1 — Inline collapsible stream.log viewer per node card:**
+
+  - [x] `readStreamLog(path, maxHead, maxTail)` returns full content when line
+    count ≤ `maxHead+maxTail` (default 200+50); otherwise first `maxHead` lines
+    + `\n--- truncated ---\n` + last `maxTail` lines; empty string for
+    missing/empty file. Evidence: `scripts/generate-dashboard.ts`,
+    `scripts/generate-dashboard_test.ts`.
+  - [x] `renderCard()` accepts optional `logContent?: string`; when present and
+    non-empty renders `<details><summary>stream log</summary><pre
+    class="log-content">${escHtml(logContent)}</pre></details>`; existing
+    `<a class="log-link">` href retained. Evidence:
+    `scripts/generate-dashboard.ts`.
+  - [x] `.log-content` CSS: monospace font, max-height 300px, overflow-y
+    scroll; `logContent` HTML-escaped via `escHtml()`. Evidence:
+    `scripts/generate-dashboard.ts`.
+
+  **Group 2 — Header status with distinct per-state styling:**
+
+  - [x] `<strong class="${state.status}">` uses actual state value as CSS
+    class.
+  - [x] Distinct CSS rules: `strong.completed{color:#166534}` (green),
+    `strong.running{color:#2563eb}` (blue), `strong.failed{color:#991b1b}`
+    (red), `strong.aborted{color:#854d0e}` (orange). `running` does NOT share
+    a rule with `completed`. Evidence: `scripts/generate-dashboard.ts`.
+
+  **Group 3 — Phase aggregate status with `run_on: always` separation:**
+
+  - [x] `computePhaseStatus(nodeIds, nodeStates, alwaysNodes)` exported
+    function returns `{coreStatus, alwaysStatus?}`; `alwaysStatus` omitted
+    when no always-nodes present. Core status: all completed → "completed",
+    any failed → "failed", otherwise "running". Always-node status computed
+    independently. Evidence: `scripts/generate-dashboard.ts`,
+    `scripts/generate-dashboard_test.ts`.
+  - [x] CLI entry extracts `run_on: always` from pipeline config, builds
+    `Set<string>` of always-nodes; passes to `renderHtml()`. Phase heading
+    renders secondary `phase-badge-always` badge when `alwaysStatus` present.
+    Evidence: `scripts/generate-dashboard.ts`.
+  - [x] `deno task check` passes. Evidence: PASS (509 tests, run
+    `20260319T194808`).
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -850,4 +901,4 @@ engine/                                # Deno/TypeScript pipeline engine
 | —      | FR-S31 | QA Agent Check Suite Extension |
 | —      | FR-S32 | SDLC Artifact File Numbering Standard |
 | —      | FR-S33 | Remove Stale Agent Symlinks from .claude/skills/ |
-| —      | FR-S32 | SDLC Artifact File Numbering Standard |
+| —      | FR-S34 | Dashboard Diagnostic Enhancements |

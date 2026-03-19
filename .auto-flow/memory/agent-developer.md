@@ -9,6 +9,7 @@ type: feedback
 ## Anti-patterns
 
 - **HEAD version of out-of-scope file can have pre-existing fmt issue**: `git stash push -- <file>` only works for local verification but NOT for engine's `deno task check` continuation — engine runs check on actual working tree. Must fix pre-existing fmt issues directly and commit them. Markdown table column alignment (trailing whitespace padding) is a common offender.
+- **`deno-lint-ignore` inside for-loop header is not recognized**: placing `// deno-lint-ignore no-explicit-any` before `const [k, v] of Object.entries(x as Record<string, any>)` inside a for-loop header fails with `ban-unused-ignore`. Extract the cast to a separate variable on the line directly after the ignore comment instead.
 
 - Writing complete files (Write) for simple section inserts when Edit would work
 - Not checking deno fmt compliance before writing — blank lines between headings and list items required
@@ -63,6 +64,8 @@ type: feedback
 - Run 20260319T182156 iter2: ~5 turns, scope sdlc, issue #147 (FR-S32) QA fix — PASS (PM's FR-S32 SRS addition dropped in iter 1; added section 3.32 + Appendix C row)
 - Run 20260319T192055 iter1: ~5 turns, scope sdlc, issue #148 (FR-S33), 7 files changed — PASS (delete-only + block removal; SDS already correct from tech-lead; SRS NOT updated → QA FAIL)
 - Run 20260319T192055 iter2: ~8 turns, scope sdlc, issue #148 (FR-S33) QA fix — PASS (SRS: added §3.33, NFR §4, Appendix B/C, stale FR-S13/FR-S15 ACs; same pattern as iter2 of issue #147)
+- Run 20260319T194808: ~7 turns, scope sdlc, issue #149 (FR-S34), 2 files changed — PASS (Write both files; deno-lint-ignore inside for-loop header not recognized → extract cast to separate variable before loop)
+- Run 20260319T194808 iter2: ~5 turns, scope sdlc, issue #149 (FR-S34) QA fix — PASS (SRS: added §3.34, Appendix C FR-S34 row; same PM persistence failure pattern as #147/#148)
 - Target: ≤35 turns. Key lesson: commit before deno task check; stash pattern for pre-existing fmt issues.
 
 ## QA-Fix Pattern

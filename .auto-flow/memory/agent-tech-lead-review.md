@@ -17,3 +17,4 @@ type: feedback
 - **Post-QA deno.json drift:** If `deno.json` is locally modified without commit, flag as non-blocking if QA already passed with that state. Requires separate cleanup outside this agent's scope.
 - **Duplicate Appendix C row pattern:** When developer adds new FR rows to SRS Appendix C, they may inadvertently duplicate the preceding row (e.g., FR-S32 duplicated after adding FR-S33). Cosmetic, non-blocking — flag as non-blocking finding only.
 - **Parallel first turn:** Read spec + decision + QA report + `gh pr list` + `git status` + `gh run list` all in ONE turn. Then read diff in turn 2. Maximum efficiency.
+- **gh pr diff -- <file> not supported:** `gh pr diff` accepts at most 1 arg (the PR number). Cannot filter by file path. Read implementation files directly via the Read tool when diff is too large.

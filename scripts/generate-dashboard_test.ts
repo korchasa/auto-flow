@@ -2,6 +2,7 @@ import { assertEquals } from "@std/assert";
 import {
   checkArgs,
   computeCostBars,
+  computePhaseStatus,
   computeTimeline,
   type CostBar,
   escHtml,
@@ -9,6 +10,7 @@ import {
   printUsage,
   readNodeLog,
   readRunState,
+  readStreamLog,
   renderCard,
   renderCostChart,
   renderHtml,
@@ -103,6 +105,59 @@ Deno.test("readNodeLog — returns null on malformed JSON", async () => {
   }
 });
 
+// --- readStreamLog ---
+
+Deno.test("readStreamLog — returns full content when under limit", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    const content = Array.from({ length: 10 }, (_, i) => `line${i}`).join("\n");
+    await Deno.writeTextFile(`${dir}/stream.log`, content);
+    const result = await readStreamLog(`${dir}/stream.log`);
+    assertEquals(result, content);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("readStreamLog — truncates with marker when over limit", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    // 260 lines > 200+50=250
+    const lines = Array.from({ length: 260 }, (_, i) => `line${i}`);
+    await Deno.writeTextFile(`${dir}/stream.log`, lines.join("\n"));
+    const result = await readStreamLog(`${dir}/stream.log`);
+    assertEquals(result.includes("--- truncated ---"), true);
+    // First 200 lines present
+    assertEquals(result.includes("line0"), true);
+    assertEquals(result.includes("line199"), true);
+    // Line 200 (index 200) is in the truncated middle — not present
+    assertEquals(
+      result.includes("line200\n") || result.startsWith("line200"),
+      false,
+    );
+    // Last 50 lines present (lines 210–259)
+    assertEquals(result.includes("line259"), true);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("readStreamLog — returns empty string for empty file", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await Deno.writeTextFile(`${dir}/stream.log`, "");
+    const result = await readStreamLog(`${dir}/stream.log`);
+    assertEquals(result, "");
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("readStreamLog — returns empty string for missing file", async () => {
+  const result = await readStreamLog("/nonexistent/path/stream.log");
+  assertEquals(result, "");
+});
+
 // --- renderCard ---
 
 Deno.test("renderCard — contains <details> for multi-line result", () => {
@@ -182,6 +237,41 @@ Deno.test("renderCard — 3-line preview in summary, full text in details body",
   assertEquals(html.includes("A\nB\nC"), true);
   // Full result text present in details body
   assertEquals(html.includes("A\nB\nC\nD\nE"), true);
+});
+
+Deno.test("renderCard — with logContent renders inline log <details>", () => {
+  const state: NodeState = { status: "completed" };
+  const html = renderCard(
+    "build",
+    state,
+    null,
+    undefined,
+    "log line 1\nlog line 2",
+  );
+  assertEquals(html.includes('<pre class="log-content">'), true);
+  assertEquals(html.includes("log line 1"), true);
+  assertEquals(html.includes("log line 2"), true);
+  // Must use <details><summary>stream log</summary>
+  assertEquals(html.includes("<summary>stream log</summary>"), true);
+});
+
+Deno.test("renderCard — without logContent omits inline log viewer", () => {
+  const state: NodeState = { status: "completed" };
+  const html = renderCard("build", state, null);
+  assertEquals(html.includes('class="log-content"'), false);
+});
+
+Deno.test("renderCard — logContent is HTML-escaped", () => {
+  const state: NodeState = { status: "completed" };
+  const html = renderCard(
+    "build",
+    state,
+    null,
+    undefined,
+    "<script>alert(1)</script>",
+  );
+  assertEquals(html.includes("<script>"), false);
+  assertEquals(html.includes("&lt;script&gt;"), true);
 });
 
 // --- renderHtml ---
@@ -286,6 +376,74 @@ Deno.test("renderHtml — timeline appears between header and main", () => {
   const mainStart = html.indexOf("<main>");
   assertEquals(headerEnd < timelineStart, true);
   assertEquals(timelineStart < mainStart, true);
+});
+
+Deno.test("renderHtml — header status class matches run state for completed", () => {
+  const state: RunState = {
+    run_id: "r",
+    config_path: "",
+    started_at: "2024-01-01T00:00:00Z",
+    status: "completed",
+    args: {},
+    env: {},
+    nodes: {},
+  };
+  const html = renderHtml(state, {});
+  assertEquals(
+    html.includes('<strong class="completed">completed</strong>'),
+    true,
+  );
+});
+
+Deno.test("renderHtml — header status class matches run state for running", () => {
+  const state: RunState = {
+    run_id: "r",
+    config_path: "",
+    started_at: "2024-01-01T00:00:00Z",
+    status: "running",
+    args: {},
+    env: {},
+    nodes: {},
+  };
+  const html = renderHtml(state, {});
+  assertEquals(html.includes('<strong class="running">running</strong>'), true);
+});
+
+Deno.test("renderHtml — CSS contains distinct rules for all 4 status values", () => {
+  const state: RunState = {
+    run_id: "r",
+    config_path: "",
+    started_at: "2024-01-01T00:00:00Z",
+    status: "completed",
+    args: {},
+    env: {},
+    nodes: {},
+  };
+  const html = renderHtml(state, {});
+  // All 4 status selectors must exist as distinct rules
+  assertEquals(html.includes("strong.completed{"), true);
+  assertEquals(html.includes("strong.running{"), true);
+  assertEquals(html.includes("strong.failed{"), true);
+  assertEquals(html.includes("strong.aborted{"), true);
+  // running must NOT share a combined rule with completed
+  assertEquals(html.includes("strong.completed,strong.running"), false);
+});
+
+Deno.test("renderHtml — phase status badge rendered when phases provided", () => {
+  const state: RunState = {
+    run_id: "r",
+    config_path: "",
+    started_at: "2024-01-01T00:00:00Z",
+    status: "completed",
+    args: {},
+    env: {},
+    nodes: {
+      spec: { status: "completed" },
+    },
+  };
+  const phases = { plan: ["spec"] };
+  const html = renderHtml(state, {}, phases);
+  assertEquals(html.includes('class="phase-badge'), true);
 });
 
 // --- computeTimeline ---
@@ -713,6 +871,71 @@ Deno.test("groupNodesByPhase — no phases config returns single group with all 
   assertEquals(groups.length, 1);
   assertEquals(groups[0].label, "");
   assertEquals(groups[0].ids, ["spec", "build"]);
+});
+
+// --- computePhaseStatus ---
+
+Deno.test("computePhaseStatus — all-pass core + failed always-node", () => {
+  const nodeStates: Record<string, NodeState> = {
+    build: { status: "completed" },
+    notify: { status: "failed" },
+  };
+  const alwaysNodes = new Set(["notify"]);
+  const result = computePhaseStatus(
+    ["build", "notify"],
+    nodeStates,
+    alwaysNodes,
+  );
+  assertEquals(result.coreStatus, "completed");
+  assertEquals(result.alwaysStatus, "failed");
+});
+
+Deno.test("computePhaseStatus — failed core + passed always-node", () => {
+  const nodeStates: Record<string, NodeState> = {
+    build: { status: "failed" },
+    notify: { status: "completed" },
+  };
+  const alwaysNodes = new Set(["notify"]);
+  const result = computePhaseStatus(
+    ["build", "notify"],
+    nodeStates,
+    alwaysNodes,
+  );
+  assertEquals(result.coreStatus, "failed");
+  assertEquals(result.alwaysStatus, "completed");
+});
+
+Deno.test("computePhaseStatus — mixed core statuses yields running", () => {
+  const nodeStates: Record<string, NodeState> = {
+    build: { status: "completed" },
+    test: { status: "running" },
+  };
+  const alwaysNodes = new Set<string>();
+  const result = computePhaseStatus(["build", "test"], nodeStates, alwaysNodes);
+  assertEquals(result.coreStatus, "running");
+  assertEquals(result.alwaysStatus, undefined);
+});
+
+Deno.test("computePhaseStatus — no always-nodes omits alwaysStatus", () => {
+  const nodeStates: Record<string, NodeState> = {
+    build: { status: "completed" },
+    test: { status: "completed" },
+  };
+  const alwaysNodes = new Set<string>();
+  const result = computePhaseStatus(["build", "test"], nodeStates, alwaysNodes);
+  assertEquals(result.coreStatus, "completed");
+  assertEquals(result.alwaysStatus, undefined);
+});
+
+Deno.test("computePhaseStatus — all nodes are always-nodes: coreStatus is completed", () => {
+  const nodeStates: Record<string, NodeState> = {
+    notify: { status: "failed" },
+  };
+  const alwaysNodes = new Set(["notify"]);
+  const result = computePhaseStatus(["notify"], nodeStates, alwaysNodes);
+  // coreIds is empty → computeStatus([]) = "completed"
+  assertEquals(result.coreStatus, "completed");
+  assertEquals(result.alwaysStatus, "failed");
 });
 
 // --- printUsage ---

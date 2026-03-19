@@ -42,6 +42,31 @@ export async function readNodeLog(
 }
 
 /**
+ * Read stream.log from path with head+tail truncation.
+ * Returns empty string if the file is missing.
+ * If line count ≤ maxHead+maxTail: returns full content unchanged.
+ * Otherwise: returns first maxHead lines + "\n--- truncated ---\n" + last maxTail lines.
+ */
+export async function readStreamLog(
+  path: string,
+  maxHead = 200,
+  maxTail = 50,
+): Promise<string> {
+  let content: string;
+  try {
+    content = await Deno.readTextFile(path);
+  } catch {
+    return "";
+  }
+  if (content === "") return "";
+  const lines = content.split("\n");
+  if (lines.length <= maxHead + maxTail) return content;
+  const head = lines.slice(0, maxHead).join("\n");
+  const tail = lines.slice(lines.length - maxTail).join("\n");
+  return `${head}\n--- truncated ---\n${tail}`;
+}
+
+/**
  * Group node IDs by declared phases.
  * Returns Array<{label, ids}> preserving phase ordering by construction.
  * When phases absent/empty: single group with all nodeIds and empty label.
@@ -70,6 +95,35 @@ export function groupNodesByPhase(
   return groups;
 }
 
+/**
+ * Compute aggregate status for a phase group, separating core nodes from
+ * run_on:always nodes. Core status: all completed → "completed", any failed →
+ * "failed", otherwise "running". Always-node status is computed independently
+ * and omitted when the group contains no always-nodes.
+ */
+export function computePhaseStatus(
+  nodeIds: string[],
+  nodeStates: Record<string, NodeState>,
+  alwaysNodes: Set<string>,
+): { coreStatus: string; alwaysStatus?: string } {
+  const coreIds = nodeIds.filter((id) => !alwaysNodes.has(id));
+  const alwaysIds = nodeIds.filter((id) => alwaysNodes.has(id));
+
+  const computeStatus = (ids: string[]): string => {
+    if (ids.length === 0) return "completed";
+    const statuses = ids.map((id) => nodeStates[id]?.status ?? "pending");
+    if (statuses.every((s: string) => s === "completed")) return "completed";
+    if (statuses.some((s: string) => s === "failed")) return "failed";
+    return "running";
+  };
+
+  const coreStatus = computeStatus(coreIds);
+  const alwaysStatus = alwaysIds.length > 0
+    ? computeStatus(alwaysIds)
+    : undefined;
+  return { coreStatus, alwaysStatus };
+}
+
 const PREVIEW_LINES = 3;
 
 /**
@@ -77,12 +131,15 @@ const PREVIEW_LINES = 3;
  * Multi-line results use <details>/<summary> with first 3 lines in summary.
  * Single-line results render inline without wrapper.
  * When streamLogHref is provided, renders a link to the stream log after card-meta.
+ * When logContent is provided and non-empty, renders an inline collapsible log viewer
+ * after the stream log link.
  */
 export function renderCard(
   nodeId: string,
   state: NodeState,
   log: ClaudeCliOutput | null,
   streamLogHref?: string,
+  logContent?: string,
 ): string {
   const statusClass = state.status === "completed"
     ? "ok"
@@ -117,6 +174,12 @@ export function renderCard(
     ? `\n<a class="log-link" href="${escHtml(streamLogHref)}">stream log</a>`
     : "";
 
+  const inlineLogHtml = logContent
+    ? `\n<details><summary>stream log</summary><pre class="log-content">${
+      escHtml(logContent)
+    }</pre></details>`
+    : "";
+
   return `<div class="card ${statusClass}">
 <div class="card-header">
   <span class="node-id">${escHtml(nodeId)}</span>
@@ -126,7 +189,7 @@ export function renderCard(
   <span>${escHtml(durationS)}</span>
   <span>${escHtml(cost)}</span>
   <span>turns: ${escHtml(String(turns))}</span>
-</div>${logLinkHtml}
+</div>${logLinkHtml}${inlineLogHtml}
 ${resultHtml}
 </div>`;
 }
@@ -276,19 +339,25 @@ export function renderCostChart(bars: CostBar[], totalCost: number): string {
 /**
  * Render the full self-contained HTML dashboard page.
  * Delegates phase-grouping to groupNodesByPhase(); no inline grouping logic.
+ * Per-phase status badges computed via computePhaseStatus() using alwaysNodes set.
  *
  * @param state - Parsed run state (provides run_id, timestamps, node statuses)
  * @param logs  - Map of nodeId → ClaudeCliOutput (or null if log unavailable)
  * @param phases - Optional phase grouping from pipeline config
  * @param streamLogHrefs - Optional map of nodeId → relative href to stream.log
+ * @param streamLogContents - Optional map of nodeId → truncated stream.log text
+ * @param alwaysNodes - Optional set of nodeIds with run_on:always for phase badge separation
  */
 export function renderHtml(
   state: RunState,
   logs: Record<string, ClaudeCliOutput | null>,
   phases?: Record<string, string[]>,
   streamLogHrefs?: Record<string, string>,
+  streamLogContents?: Record<string, string>,
+  alwaysNodes?: Set<string>,
 ): string {
   const nodeIds = Object.keys(state.nodes);
+  const effectiveAlwaysNodes = alwaysNodes ?? new Set<string>();
 
   const groups = groupNodesByPhase(nodeIds, phases);
   const bodySections = groups.map(({ label, ids }) => {
@@ -299,12 +368,28 @@ export function renderHtml(
           state.nodes[id],
           logs[id] ?? null,
           streamLogHrefs?.[id],
+          streamLogContents?.[id],
         )
       )
       .join("\n");
-    const heading = label
-      ? `\n<h2 class="phase-label">${escHtml(label)}</h2>`
-      : "";
+    let heading = "";
+    if (label) {
+      const { coreStatus, alwaysStatus } = computePhaseStatus(
+        ids,
+        state.nodes,
+        effectiveAlwaysNodes,
+      );
+      const alwaysBadge = alwaysStatus !== undefined
+        ? ` <span class="phase-badge phase-badge-always ${
+          escHtml(alwaysStatus)
+        }">${escHtml(alwaysStatus)} (always)</span>`
+        : "";
+      heading = `\n<h2 class="phase-label">${
+        escHtml(label)
+      } <span class="phase-badge ${escHtml(coreStatus)}">${
+        escHtml(coreStatus)
+      }</span>${alwaysBadge}</h2>`;
+    }
     return `<section>${heading}\n<div class="card-grid">\n${cards}\n</div>\n</section>`;
   }).join("\n");
 
@@ -366,9 +451,16 @@ h2.phase-label{color:#555;font-size:.85rem;margin:1.5rem 0 .75rem;letter-spacing
 pre.result-preview,pre.result-full{font-size:.8rem;color:#333;white-space:pre-wrap;word-break:break-word;margin:0}
 details summary{cursor:pointer;font-size:.8rem;color:#555}
 details[open] summary{margin-bottom:.5rem}
-strong.completed,strong.running{color:#166534}
+strong.completed{color:#166534}
+strong.running{color:#2563eb}
 strong.failed{color:#991b1b}
 strong.aborted{color:#854d0e}
+.phase-badge{font-size:.7rem;padding:.15em .5em;border-radius:999px;font-weight:600;margin-left:.3rem;vertical-align:middle}
+.phase-badge.completed{background:#dcfce7;color:#166534}
+.phase-badge.running{background:#dbeafe;color:#1d4ed8}
+.phase-badge.failed{background:#fee2e2;color:#991b1b}
+.phase-badge.aborted{background:#fef9c3;color:#854d0e}
+.phase-badge-always{opacity:.8}
 .timeline{background:#fff;border-radius:8px;padding:1rem 1.5rem;margin-bottom:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.1)}
 .timeline h2{font-size:1rem;margin:0 0 .75rem;color:#333}
 .timeline-empty{color:#999;font-size:.85rem;margin:0}
@@ -384,7 +476,8 @@ strong.aborted{color:#854d0e}
 .cost-chart-svg{display:block;overflow:visible}
 .cost-bar-rect{fill:#a78bfa}
 .cost-bar-label{font-size:.7rem;fill:#fff}
-.log-link{font-family:monospace;font-size:.75rem;color:#6b7280;display:inline-block;margin-bottom:.5rem}`
+.log-link{font-family:monospace;font-size:.75rem;color:#6b7280;display:inline-block;margin-bottom:.5rem}
+.log-content{font-family:monospace;font-size:.75rem;white-space:pre-wrap;word-break:break-word;max-height:300px;overflow-y:scroll;margin:0}`
   .trim();
 
 export function printUsage(): string {
@@ -442,8 +535,9 @@ if (import.meta.main) {
 
   const state = await readRunState(runDir);
 
-  // Load phases from pipeline config (best-effort)
+  // Load phases and node configs from pipeline config (best-effort)
   let phases: Record<string, string[]> | undefined;
+  const alwaysNodes = new Set<string>();
   try {
     const configContent = await Deno.readTextFile(state.config_path);
     // deno-lint-ignore no-explicit-any
@@ -451,8 +545,17 @@ if (import.meta.main) {
     if (config.phases && typeof config.phases === "object") {
       phases = config.phases as Record<string, string[]>;
     }
+    if (config.nodes && typeof config.nodes === "object") {
+      // deno-lint-ignore no-explicit-any
+      const configNodes = config.nodes as Record<string, any>;
+      for (const [nodeId, nodeConfig] of Object.entries(configNodes)) {
+        if (nodeConfig?.run_on === "always") {
+          alwaysNodes.add(nodeId);
+        }
+      }
+    }
   } catch {
-    // Config unreadable — proceed without phase grouping
+    // Config unreadable — proceed without phase grouping or always-nodes
   }
 
   // Build reverse phase map: nodeId → phase
@@ -465,20 +568,21 @@ if (import.meta.main) {
     }
   }
 
-  // Scan stream.log existence and build href map
+  // Read stream.log content (with truncation) for each node; build href map
   const streamLogHrefs: Record<string, string> = {};
+  const streamLogContents: Record<string, string> = {};
   for (const nodeId of Object.keys(state.nodes)) {
     const phase = nodePhaseMap[nodeId];
     const nodeDir = phase
       ? `${runDir}/${phase}/${nodeId}`
       : `${runDir}/${nodeId}`;
-    try {
-      await Deno.stat(`${nodeDir}/stream.log`);
+    const logPath = `${nodeDir}/stream.log`;
+    const content = await readStreamLog(logPath);
+    if (content.length > 0) {
+      streamLogContents[nodeId] = content;
       streamLogHrefs[nodeId] = phase
         ? `${phase}/${nodeId}/stream.log`
         : `${nodeId}/stream.log`;
-    } catch {
-      // stream.log absent — skip
     }
   }
 
@@ -488,7 +592,14 @@ if (import.meta.main) {
     logs[nodeId] = await readNodeLog(runDir, nodeId);
   }
 
-  const html = renderHtml(state, logs, phases, streamLogHrefs);
+  const html = renderHtml(
+    state,
+    logs,
+    phases,
+    streamLogHrefs,
+    streamLogContents,
+    alwaysNodes,
+  );
   const outPath = `${runDir}/index.html`;
   await Deno.writeTextFile(outPath, html);
   console.log(`Dashboard written to: ${outPath}`);

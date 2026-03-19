@@ -300,19 +300,40 @@ graph LR
     single group with all `nodeIds` (empty label). Array return type preserves
     phase ordering by construction. Unit-tested independently (4 scenarios:
     phased grouping, unphased "other" group, empty nodeIds, no phases config).
-  - `renderCard(nodeId, state, log, streamLogHref?)` — HTML card: status badge,
-    timing, cost, result summary via `<details><summary>` (first 3 lines
-    preview, full text in details body). Single-line results render without
-    `<details>` wrapper. When `streamLogHref` provided: renders
+  - `readStreamLog(path, maxHead?, maxTail?)` — reads `stream.log`, truncates
+    if lines exceed `maxHead + maxTail` (defaults: 200, 50). Returns first
+    `maxHead` lines + `--- truncated ---` marker + last `maxTail` lines. Empty
+    string on missing file. Exported for unit testing (FR-S34)
+  - `renderCard(nodeId, state, log, streamLogHref?, logContent?)` — HTML card:
+    status badge, timing, cost, result summary via `<details><summary>` (first
+    3 lines preview, full text in details body). Single-line results render
+    without `<details>` wrapper. When `streamLogHref` provided: renders
     `<a class="log-link" href="${escHtml(streamLogHref)}">stream log</a>` after
-    card-meta div. Omitted when absent (backward-compatible).
-  - `renderHtml(runDir, state, logs, streamLogHrefs?)` — full page: run metadata
-    header, phase-grouped card grid, inlined CSS. Delegates phase-grouping to
+    card-meta div. When `logContent` provided (FR-S34): renders inline
+    `<details><summary>stream log</summary><pre class="log-content">
+    ${escHtml(logContent)}</pre></details>` after link. `.log-content` CSS:
+    monospace, max-height 400px, overflow-y scroll. Omitted when absent
+    (backward-compatible)
+  - `renderHtml(runDir, state, logs, streamLogHrefs?, logContents?,
+    runOnAlwaysNodes?)` — full page: run metadata header, phase-grouped card
+    grid, inlined CSS. Delegates phase-grouping to
     `groupNodesByPhase(Object.keys(state.nodes), phases)` — no inline
     phase-grouping logic remains. Single `groups.map()` path generates
-    `<section>` HTML per group (collapses former if/else branch). 4th param
+    `<section>` HTML per group (collapses former if/else branch).
     `streamLogHrefs?: Record<string, string>` maps nodeId → relative href;
-    threaded to each `renderCard()` call via lookup
+    `logContents?: Record<string, string>` maps nodeId → truncated log text
+    (FR-S34); both threaded to each `renderCard()` call. Header status (FR-S34):
+    `<strong class="${state.status}">` with distinct CSS per value — `completed`
+    (green), `failed` (red), `aborted` (orange), `running` (blue). Phase
+    aggregate status (FR-S34): each phase section header renders core-node
+    aggregate badge + optional always-node badge via `computePhaseStatus()`.
+    `runOnAlwaysNodes?: Set<string>` identifies always-nodes for separation
+  - `computePhaseStatus(nodeIds, nodeStates, alwaysNodes)` — separates phase
+    members into core (non-always) and always groups. Core status: all completed
+    → "completed", any failed → "failed", else "running". Always-node status
+    computed independently, returned as optional secondary value. Returns
+    `{coreStatus: string, alwaysStatus?: string}`. Exported for unit testing
+    (FR-S34)
   - `escHtml(str)` — escape `<>&"'` for XSS-safe HTML embedding
   - `computeTimeline(state: RunState)` — iterates `state.nodes`, parses
     `started_at` ISO timestamps, computes `offsetPct`/`widthPct` relative to
@@ -331,6 +352,13 @@ graph LR
   `<nodeId>/stream.log`. Builds `Record<string, string>` href map, passes to
   `renderHtml()` → threaded to `renderCard()`. CSS: `.log-link` class (monospace,
   smaller font, muted color — distinct from result text).
+- **Inline log content flow (FR-S34, issue #149):** CLI entry reads each
+  `stream.log` via `readStreamLog()` (truncated to 200+50 lines). Builds
+  `Record<string, string>` content map, passes to `renderHtml()` → threaded to
+  `renderCard()`. Extracts `run_on` from pipeline config nodes to build
+  `Set<string>` of always-nodes, passed to `renderHtml()` for phase aggregate.
+  Header status CSS: 4 distinct rules for `completed`/`failed`/`aborted`/
+  `running`.
 - **Functions (continued):**
   - `computeCostBars(state: RunState)` — filters `state.nodes` by
     `cost_usd > 0`, computes proportional `widthPct` relative to max cost.
