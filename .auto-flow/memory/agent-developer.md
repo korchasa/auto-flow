@@ -69,6 +69,7 @@ type: feedback
 - Run 20260319T201620: ~10 turns, scope engine, issue #150 (FR-E33), 5 files changed — PASS (mutual-exclusivity validation; pipeline.yaml used both mechanisms → necessary fix outside tasks[].files; task breakdown should always include all affected files)
 - Run 20260319T201620 iter2: ~5 turns, scope engine, issue #150 QA fix — PASS (SRS: added §3.33, updated FR-E9 criterion, Appendix row; fourth consecutive PM persistence failure across #147/#148/#149/#150)
 - Run 20260319T204544: ~8 turns, scope sdlc, issue #151 (FR-S35), 5 files changed — PASS (template interpolation in buildScriptArgs + SDLC-level validation in check.ts; pure validator function pattern same as validateAgentListContent)
+- Run 20260319T204544 iter2: ~5 turns, scope sdlc, issue #151 (FR-S35) QA fix — PASS (SRS: added §3.35, Appendix C row; fifth consecutive PM persistence failure #147/#148/#149/#150/#151)
 - Target: ≤35 turns. Key lesson: commit before deno task check; stash pattern for pre-existing fmt issues.
 
 ## Pipeline.yaml Coexistence Pattern
