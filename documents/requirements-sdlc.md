@@ -861,6 +861,23 @@
     `frontmatter_field: verdict` rule present in verify node). Evidence: run
     `20260319T221833` (533 tests, 0 failures).
 
+### 3.38 FR-S38: Pipeline Agent Context via file() Injection in task_template
+
+- **Description:** All 6 agent nodes in `.auto-flow/pipeline.yaml` MUST inject
+  shared rules and their SKILL.md into the agent prompt via `{{file(...)}}` in
+  `task_template`, separated by `---`. No agent node may use the `prompt:` field.
+  This makes prompt composition explicit and declarative in the pipeline config,
+  replacing the implicit `prompt:` loading mechanism.
+- **Acceptance criteria:**
+  - [x] All 6 agent nodes include `{{file(".auto-flow/agents/shared-rules.md")}}`
+    in `task_template`. Evidence: `.auto-flow/pipeline.yaml:39, 77, 102, 138, 162, 191`.
+  - [x] All 6 agent nodes include `{{file(".auto-flow/agents/agent-<name>/SKILL.md")}}`
+    in `task_template`. Evidence: `.auto-flow/pipeline.yaml:41, 79, 104, 140, 164, 193`.
+  - [x] No agent node in `pipeline.yaml` uses the `prompt:` field. Evidence:
+    `pipeline_integrity_test.ts` test "pipeline.yaml — no agent node uses prompt: field
+    (FR-S38 AC#3)" passes; run `20260319T224519` (533 tests, 0 failures).
+  - [x] `deno task check` passes. Evidence: PASS (533 tests, run `20260319T224519`).
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -981,3 +998,4 @@ engine/                                # Deno/TypeScript pipeline engine
 | —      | FR-S35 | HITL Artifact Source Node Reference |
 | —      | FR-S36 | After-Script Failure Observability |
 | —      | FR-S37 | Verify Node Verdict Frontmatter Validation |
+| —      | FR-S38 | Pipeline Agent Context via file() Injection in task_template |
