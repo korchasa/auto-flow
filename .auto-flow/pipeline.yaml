@@ -115,7 +115,7 @@ nodes:
   implementation:
     type: loop
     label: "Developer+QA Implementation Loop"
-    inputs: [decision]
+    inputs: [specification, decision]
     condition_node: verify
     condition_field: verdict
     exit_value: PASS

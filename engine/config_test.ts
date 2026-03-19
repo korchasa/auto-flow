@@ -168,6 +168,128 @@ nodes:
   assertEquals(config.nodes["impl-loop"].nodes!.developer.inputs, ["spec"]);
 });
 
+// --- loop input forwarding validation tests (FR-E35) ---
+
+Deno.test(
+  "parseConfig — loop forwarding: body node references external input in loop.inputs → passes",
+  () => {
+    const yaml = `
+name: test
+version: "1"
+nodes:
+  spec:
+    type: agent
+    label: Spec
+    task_template: "write spec"
+  my-loop:
+    type: loop
+    label: Loop
+    inputs: [spec]
+    condition_node: worker
+    condition_field: status
+    exit_value: DONE
+    nodes:
+      worker:
+        type: agent
+        label: Worker
+        task_template: "work"
+        inputs: [spec]
+`;
+    const config = parseConfig(yaml);
+    assertEquals(config.nodes["my-loop"].nodes!.worker.inputs, ["spec"]);
+  },
+);
+
+Deno.test(
+  "parseConfig — loop forwarding: body node references external input NOT in loop.inputs → throws",
+  () => {
+    const yaml = `
+name: test
+version: "1"
+nodes:
+  spec:
+    type: agent
+    label: Spec
+    task_template: "write spec"
+  my-loop:
+    type: loop
+    label: Loop
+    condition_node: worker
+    condition_field: status
+    exit_value: DONE
+    nodes:
+      worker:
+        type: agent
+        label: Worker
+        task_template: "work"
+        inputs: [spec]
+`;
+    assertThrows(
+      () => parseConfig(yaml),
+      Error,
+      "references external input(s) [spec] not listed in loop inputs",
+    );
+  },
+);
+
+Deno.test(
+  "parseConfig — loop forwarding: body node references sibling body node → no error",
+  () => {
+    const yaml = `
+name: test
+version: "1"
+nodes:
+  my-loop:
+    type: loop
+    label: Loop
+    condition_node: qa
+    condition_field: verdict
+    exit_value: PASS
+    nodes:
+      developer:
+        type: agent
+        label: Developer
+        task_template: "implement"
+      qa:
+        type: agent
+        label: QA
+        task_template: "verify"
+        inputs: [developer]
+`;
+    const config = parseConfig(yaml);
+    assertEquals(config.nodes["my-loop"].nodes!.qa.inputs, ["developer"]);
+  },
+);
+
+Deno.test(
+  "parseConfig — loop forwarding: body node with no inputs → no error",
+  () => {
+    const yaml = `
+name: test
+version: "1"
+nodes:
+  spec:
+    type: agent
+    label: Spec
+    task_template: "write spec"
+  my-loop:
+    type: loop
+    label: Loop
+    inputs: [spec]
+    condition_node: worker
+    condition_field: status
+    exit_value: DONE
+    nodes:
+      worker:
+        type: agent
+        label: Worker
+        task_template: "work"
+`;
+    const config = parseConfig(yaml);
+    assertEquals(config.nodes["my-loop"].nodes!.worker.inputs, undefined);
+  },
+);
+
 Deno.test("parseConfig — human node", () => {
   const config = parseConfig(MINIMAL_HUMAN);
   assertEquals(config.nodes.review.type, "human");

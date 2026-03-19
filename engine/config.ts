@@ -269,6 +269,24 @@ function validateNode(
       const bodyNode = rawBody as Record<string, unknown>;
       validateNode(bodyId, bodyNode, validInputIds);
     }
+
+    // Validate loop input forwarding (FR-E35): body nodes referencing external inputs
+    // must declare those inputs in the enclosing loop node's own inputs list.
+    const loopInputs = new Set((node.inputs as string[] | undefined) ?? []);
+    for (const [bodyId, rawBody] of Object.entries(bodyNodes)) {
+      const bodyNode = rawBody as Record<string, unknown>;
+      if (!Array.isArray(bodyNode.inputs)) continue;
+      const missing = (bodyNode.inputs as string[]).filter(
+        (inp: string) => !bodyNodeIds.includes(inp) && !loopInputs.has(inp),
+      );
+      if (missing.length > 0) {
+        throw new Error(
+          `Loop '${id}' body node '${bodyId}' references external input(s) [${
+            missing.join(", ")
+          }] not listed in loop inputs`,
+        );
+      }
+    }
   }
 
   if (type === "human") {
