@@ -80,6 +80,13 @@ type: feedback
   the appendix — it was missing (section existed in main but row was never added). Safe to
   fix both in the same QA-fix commit.
 
+## Hook Template Validation Pattern (FR-E7)
+
+- `validateTemplateVars()` is the pure validation twin of `resolve()` in template.ts — same prefix/key logic, no I/O, accumulates errors.
+- Hook validation in `validateNode()` placed after type-specific checks (agent/loop/human), before `run_on` validation.
+- Loop body nodes automatically get the combined `[...allNodeIds, ...bodyNodeIds]` context via the existing `validInputIds` already passed to recursive `validateNode()` calls — no special-casing needed.
+- `env.*` and `args.*` are always accepted in validateTemplateVars (any suffix valid, resolved at runtime).
+
 ## Baseline Metrics
 
 - Run 20260315T003418: ~14 turns, scope sdlc, issue #121 (FR-S29), 7 SKILL.md + 2 memory files — PASS
@@ -115,6 +122,7 @@ type: feedback
 - Run 20260320T092158: ~5 turns, scope sdlc, issue #174 (FR-S42), 1 file changed — PASS (config-only: 19 validate rules → 6 artifact rules in pipeline.yaml; pipeline integrity check is acceptance gate; no tests needed).
 - Run 20260320T092158 iter2: ~4 turns, scope sdlc, issue #174 (FR-S42) QA fix — PASS (SRS: added §3.42 + Appendix C row; sixteenth consecutive PM persistence failure #147–#174).
 - Run 20260320T094502 iter2: ~5 turns, scope engine, issue #175 (FR-E37) QA fix — PASS (SRS: added §3.37, updated FR-E1 §3.1 Future→[x], Appendix FR-E36+FR-E37 rows; seventeenth consecutive PM persistence failure #147–#175).
+- Run 20260320T101834: ~6 turns, scope engine, issue #176 (FR-E7), 4 files changed — PASS (validateTemplateVars() in template.ts + hook validation in config.ts; 12+8 new tests; loop body nodes inherit combined IDs via existing recursive call).
 - Target: ≤35 turns. Key lesson: commit before deno task check; stash pattern for pre-existing fmt issues.
 
 ## Pipeline.yaml Coexistence Pattern
