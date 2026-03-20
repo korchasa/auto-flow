@@ -48,6 +48,10 @@ graph TD
     contains_section, custom_script, frontmatter_field)
   - **Continuation Engine**: `--resume` based re-invocation on validation
     failure or safety-check violation (shared `max_continuations` budget)
+  - **Binary Distribution** (FR-E39): `deno compile`-based build pipeline.
+    `scripts/compile.ts` generates self-contained executables for 4 platform
+    targets. `.github/workflows/release.yml` publishes GitHub Release assets
+    on version tag push
 
 ## 3. Components
 
@@ -540,6 +544,35 @@ graph TD
   moved from `self_runner_test.ts`.
 - **Deps:** None (pure function, no imports).
 
+### 3.5 Binary Compile Script (`scripts/compile.ts`) — FR-E39
+
+- **Status:** Pending.
+- **Purpose:** Cross-platform binary build via `deno compile`. Generates
+  self-contained executables for distribution without Deno on target.
+- **Targets:** 4 platform tuples as constant array:
+  `[{os: "linux", arch: "x86_64", denoTarget: "x86_64-unknown-linux-gnu"},
+   {os: "linux", arch: "arm64", denoTarget: "aarch64-unknown-linux-gnu"},
+   {os: "darwin", arch: "x86_64", denoTarget: "x86_64-apple-darwin"},
+   {os: "darwin", arch: "arm64", denoTarget: "aarch64-apple-darwin"}]`
+- **Output:** `dist/auto-flow-<os>-<arch>` per target.
+- **Flags:** `--allow-all` (engine needs Deno.Command, env, file I/O).
+  Entry: `engine/cli.ts`.
+- **CLI:** `--dry-run` prints commands without executing.
+- **Tests:** `scripts/compile_test.ts` — target list, filename convention,
+  dry-run behavior.
+- **Deps:** Deno std only (no external).
+
+### 3.6 Release CI Workflow (`.github/workflows/release.yml`) — FR-E39
+
+- **Status:** Pending.
+- **Purpose:** Automated GitHub Release asset publishing on version tags.
+- **Trigger:** `on: push: tags: ["v*"]`.
+- **Runner:** `ubuntu-latest` (cross-compilation via `--target` flag, no
+  native runner needed).
+- **Steps:** checkout → setup-deno → `deno task compile` → `gh release create
+  $TAG dist/* --generate-notes`.
+- **Assets:** 4 binaries named `auto-flow-<os>-<arch>`.
+
 ## 4. Data
 
 - **Entities:**
@@ -806,6 +839,15 @@ graph TD
     all blocks (backward-compatible). Log file writes call without verbosity
     (full output preserved). `onOutput` callback path passes verbosity from
     `AgentRunOptions` so terminal output is filtered at source.
+  - **Binary Compile Flow (FR-E39):** `scripts/compile.ts` iterates
+    `TARGETS` array. Per target: construct `deno compile --allow-all --target
+    <denoTarget> --output dist/auto-flow-<os>-<arch> engine/cli.ts`. If
+    `--dry-run`: print command string, skip execution. Otherwise:
+    `new Deno.Command("deno", { args })` → `output()` → check
+    `success`; on failure: throw with target + stderr. `dist/` dir created
+    via `Deno.mkdirSync("dist", { recursive: true })` before loop.
+    Release workflow: `gh release create` uploads all `dist/*` files as
+    release assets. Tag name extracted from `GITHUB_REF_NAME` env var.
 - **Rules:**
   - Artifacts overwritten on re-run (git history preserves previous).
   - QA iteration numbering restarts on re-run.
@@ -824,6 +866,9 @@ graph TD
 - **Simplified:** Pipeline runs sequentially (no parallel stages in v1).
 - **Deferred:** Multi-repo support. Parallel pipelines for multiple issues.
   Issue size/complexity limits. Cost budget limits and alerts (per-node cost
-  aggregation implemented in FR-32; budget enforcement deferred). Windows
+  aggregation implemented in FR-32; budget enforcement deferred). Binary smoke
+  tests in CI matrix (FR-E39 Variant B — deferred until base release pipeline
+  proven). Package manager distribution (brew, npm). Windows binary targets.
+  Auto-update mechanism. Windows
   binary target (FR-E39). Package manager distribution (brew, npm). Auto-update
   mechanism. SHA256 checksums for release assets.
