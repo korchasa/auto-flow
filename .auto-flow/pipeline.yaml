@@ -47,25 +47,15 @@ nodes:
           then problem, affected requirements, SRS changes, scope boundaries)
         - Update the target SRS file(s) based on issue scope (see Scope Detection in prompt)
     validate:
-      - type: file_exists
+      - type: artifact
         path: "{{node_dir}}/01-spec.md"
-      - type: file_not_empty
-        path: "{{node_dir}}/01-spec.md"
+        sections: ["Problem Statement", "Scope", "Summary"]
       - type: frontmatter_field
         path: "{{node_dir}}/01-spec.md"
         field: issue
       - type: frontmatter_field
         path: "{{node_dir}}/01-spec.md"
         field: scope
-      - type: contains_section
-        path: "{{node_dir}}/01-spec.md"
-        value: "Problem Statement"
-      - type: contains_section
-        path: "{{node_dir}}/01-spec.md"
-        value: "Scope"
-      - type: contains_section
-        path: "{{node_dir}}/01-spec.md"
-        value: "Summary"
 
   # Stage 2: Architect — design-solution plan with variants
   design:
@@ -84,13 +74,9 @@ nodes:
       Produce an implementation plan with 2-3 variants.
       Output: {{node_dir}}/02-plan.md
     validate:
-      - type: file_exists
+      - type: artifact
         path: "{{node_dir}}/02-plan.md"
-      - type: file_not_empty
-        path: "{{node_dir}}/02-plan.md"
-      - type: contains_section
-        path: "{{node_dir}}/02-plan.md"
-        value: "Summary"
+        sections: ["Summary"]
 
   # Stage 3: Tech Lead — critique, decision, SDS update, branch + draft PR
   decision:
@@ -112,13 +98,9 @@ nodes:
       Create feature branch (or rebase existing onto origin/main) and draft PR.
       Output: {{node_dir}}/03-decision.md
     validate:
-      - type: file_exists
+      - type: artifact
         path: "{{node_dir}}/03-decision.md"
-      - type: file_not_empty
-        path: "{{node_dir}}/03-decision.md"
-      - type: contains_section
-        path: "{{node_dir}}/03-decision.md"
-        value: "Summary"
+        sections: ["Summary"]
 
   # Stages 4-5: Developer + QA loop (body nodes defined inline)
   implementation:
@@ -149,11 +131,9 @@ nodes:
         validate:
           - type: custom_script
             path: "deno task check"
-          - type: file_exists
+          - type: artifact
             path: "{{node_dir}}/04-impl-summary.md"
-          - type: contains_section
-            path: "{{node_dir}}/04-impl-summary.md"
-            value: "Summary"
+            sections: ["Summary"]
       verify:
         type: agent
         label: "QA — Verification"
@@ -170,17 +150,13 @@ nodes:
           Post verdict as PR review (approve or request-changes).
           Output: {{node_dir}}/05-qa-report.md with YAML frontmatter containing verdict: PASS or FAIL
         validate:
-          - type: file_exists
+          - type: artifact
             path: "{{node_dir}}/05-qa-report.md"
-          - type: file_not_empty
-            path: "{{node_dir}}/05-qa-report.md"
+            sections: ["Summary"]
           - type: frontmatter_field
             path: "{{node_dir}}/05-qa-report.md"
             field: verdict
             allowed: [PASS, FAIL]
-          - type: contains_section
-            path: "{{node_dir}}/05-qa-report.md"
-            value: "Summary"
 
   # Post-pipeline: Tech Lead Review — final review + CI gate + merge
   tech-lead-review:
@@ -203,10 +179,6 @@ nodes:
     settings:
       on_error: continue
     validate:
-      - type: file_exists
+      - type: artifact
         path: "{{node_dir}}/06-review.md"
-      - type: file_not_empty
-        path: "{{node_dir}}/06-review.md"
-      - type: contains_section
-        path: "{{node_dir}}/06-review.md"
-        value: "Summary"
+        sections: ["Summary"]
