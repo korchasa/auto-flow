@@ -14,6 +14,10 @@
 - `engine/scope-check_test.ts`: 13 new tests (12 `findViolations` + 1 `snapshotModifiedFiles`)
 - `engine/agent_test.ts`: 4 new tests
 
+- `documents/requirements-engine.md` (iter 2): added §3.37 FR-E37 section (9 ACs with
+  evidence), updated §3.1 FR-E1 `[ ] Future` bullet to `[x]` referencing FR-E37, added
+  FR-E36 and FR-E37 rows to Appendix FR cross-reference table.
+
 ### deno task check Result
 
 PASS — 549 tests passed, 0 failed

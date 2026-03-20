@@ -51,7 +51,7 @@
   - **Secret detection (moved to `deno task check`):**
     - [x] `gitleaks detect --no-git` runs as part of `scripts/check.ts` (after lint, before tests). `allowFailure=true` — skips if gitleaks binary not found. Evidence: `scripts/check.ts:87`
     - Scope check (`allowed_paths`) and engine-level `safetyCheckDiff()` removed. Rationale: engine no longer commits per-node; scope enforcement via agent prompts and QA validation.
-    - [ ] Future: simplified safety checks via `git diff` + file hash comparison
+    - [x] Scope-based file modification detection implemented via FR-E37 (`allowed_paths` per-node config, pre/post snapshot using `git diff`, violations as continuation-triggering validation failures). Evidence: `engine/scope-check.ts`, `engine/agent.ts:155-211`.
   - **Stage script responsibilities (legacy path — `.auto-flow/scripts/`):**
     - [x] Legacy shell implementation in `lib.sh`: `continuation_loop()`, `safety_check_diff()`, `run_agent()`, `retry_with_backoff()`. Evidence: `.auto-flow/scripts/lib.sh:59-233`
 - **Quality metrics:**
@@ -790,6 +790,44 @@
     (`engine/loop_test.ts:353-378`).
   - [x] `deno task check` green: 533 tests, 0 failures. Evidence: run `20260319T221833`.
 
+### 3.37 FR-E37: Scope-Based File Modification Detection
+
+- **Description:** The engine supports optional per-node `allowed_paths` configuration.
+  When present, the engine snapshots the working-tree modified file set before each agent
+  invocation and compares it after. Any new modifications outside `allowed_paths` are
+  treated as a validation failure, triggering continuation via the existing FR-E1
+  mechanism.
+- **Motivation:** Without scope enforcement, agents can silently modify out-of-scope files
+  during continuation loops — undetected until QA stage, wasting continuation budget.
+  `allowed_paths` provides a lightweight, optional per-node safeguard without violating
+  the domain-agnostic invariant.
+- **Acceptance criteria:**
+  - [x] Optional `allowed_paths?: string[]` field added to `NodeConfig`; scope check
+    skipped entirely when field is absent. Evidence: `engine/types.ts:124`,
+    `engine/agent.ts:157`.
+  - [x] Pre-invocation snapshot via `snapshotModifiedFiles()` called before first
+    invocation; stores set of already-modified files as baseline. Evidence:
+    `engine/scope-check.ts:19-41`, `engine/agent.ts:155-158`.
+  - [x] Post-invocation comparison via `findViolations()` pure function; called after
+    each invocation to detect new out-of-scope modifications. Evidence:
+    `engine/scope-check.ts:55-68`, `engine/agent.ts:194-211`.
+  - [x] Out-of-scope detection injects synthetic `ValidationResult` (type `scope_check`,
+    failed, message listing violation paths) into validation results; continuation
+    triggered by FR-E1 mechanism. Evidence: `engine/agent.ts:200-208`.
+  - [x] Pre-existing uncommitted modifications excluded from violation detection
+    (baseline subtracted before comparing). Evidence: `engine/scope-check.ts:62`
+    (`if (before.has(path)) continue`), `engine/scope-check_test.ts:20-25`.
+  - [x] Sub-second latency — `git diff --name-only HEAD` and
+    `git ls-files --others --exclude-standard` run in parallel via `Promise.all`.
+    Evidence: `engine/scope-check.ts:30-33`.
+  - [x] Continuation limit exhaustion applies to scope violations same as artifact
+    validation failures (shared continuation budget). Evidence: `engine/agent.ts:225-236`.
+  - [x] Unit tests: `findViolations()` pure function (no violations, violations detected,
+    glob matching, empty sets); `snapshotModifiedFiles()` with git fixture; `agent.ts`
+    integration (snapshot injection, shared continuation budget). Evidence:
+    `engine/scope-check_test.ts`, `engine/agent_test.ts`; 549 tests pass, 0 failed.
+  - [x] `deno task check` green: 549 tests, 0 failures. Evidence: run `20260320T094502`.
+
 ## 4. Non-Functional Requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -851,4 +889,6 @@
 | —      | FR-E33 | Phase Assignment Single-Mechanism Enforcement |
 | —      | FR-E34 | Error Handling Precedence (`on_error` vs `on_failure_script`) |
 | —      | FR-E35 | Loop Input Forwarding Validation |
+| —      | FR-E36 | Loop Condition Field Validation |
+| —      | FR-E37 | Scope-Based File Modification Detection |
 | —      | FR-E36 | Loop Condition Field Validation |
