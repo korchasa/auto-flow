@@ -115,6 +115,12 @@ graph LR
     direct-branch path). Hardcoded `korchasa`; configurability deferred.
   - `agent-architect` — design-solution role: produces implementation plan with
     2-3 variants, affected files, effort estimates, risk analysis.
+    **Codebase Exploration (FR-S43):** Before variant design, launches 2–3
+    parallel `Agent` sub-agents with distinct focus areas (prior art,
+    architecture layers, integration points). Sub-agents run within same
+    session — no separate pipeline node. Exploration findings provide concrete
+    file:line evidence consumed by variant design phase. Explicit `Agent` tool
+    allowance overrides `shared-rules.md` default prohibition.
   - `agent-tech-lead` — critique + decision + SDS update + branch creation
     (`git checkout -b sdlc/issue-<N>`) or rebase existing branch onto
     `origin/main` (`git rebase origin/main`, with conflict resolution) +
@@ -130,6 +136,17 @@ graph LR
     to evidence-based additions only, standalone function pattern, label to
     stdout, `Deno.exit(1)` on failure, zero false positives confirmed by
     running extended suite post-addition.
+    **Confidence Scoring (FR-S44):** Applies 0–100 confidence score to each
+    finding. Findings ≥ 80 → verdict-affecting (included in main report).
+    Findings < 80 → listed in `## Observations` section (non-blocking, do not
+    affect verdict). QA report frontmatter gains optional
+    `high_confidence_issues: <N>` field.
+    **Multi-Focus Parallel Review (FR-S45):** Launches 2–3 parallel `Agent`
+    sub-agents with distinct focus: (1) correctness/bugs, (2) simplicity/DRY,
+    (3) conventions/abstractions. Sub-agents run within same QA session — no
+    new pipeline node. Findings consolidated into per-focus sections in QA
+    report. All findings subject to confidence scoring per FR-S44. Explicit
+    `Agent` tool allowance overrides `shared-rules.md` default prohibition.
   - `agent-tech-lead-review` — post-pipeline: final code review + CI gate
     check + merge. `run_on: always`. Handles missing-PR case gracefully.
 - **Removed agents (FR-26):** `tech-lead-reviewer`, `tech-lead-sds`,
