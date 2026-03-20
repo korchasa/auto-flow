@@ -124,6 +124,7 @@ type: feedback
 - Run 20260320T094502 iter2: ~5 turns, scope engine, issue #175 (FR-E37) QA fix — PASS (SRS: added §3.37, updated FR-E1 §3.1 Future→[x], Appendix FR-E36+FR-E37 rows; seventeenth consecutive PM persistence failure #147–#175).
 - Run 20260320T101834: ~6 turns, scope engine, issue #176 (FR-E7), 4 files changed — PASS (validateTemplateVars() in template.ts + hook validation in config.ts; 12+8 new tests; loop body nodes inherit combined IDs via existing recursive call).
 - Run 20260320T101834 iter2: ~4 turns, scope engine, issue #176 (FR-E7) QA fix — PASS (SRS: replaced vague FR-E7 criterion with 4 detailed [x] criteria + evidence; nineteenth consecutive PM persistence failure #147–#176).
+- Run 20260320T104440: ~6 turns, scope sdlc, issue #178 (FR-S43/44/45), 2 files changed — PASS (doc-only: Architect Codebase Exploration + QA Confidence Scoring + QA Multi-Focus Review + Agent tool allowances; 4 tasks, 2 Write calls).
 - Target: ≤35 turns. Key lesson: commit before deno task check; stash pattern for pre-existing fmt issues.
 
 ## Pipeline.yaml Coexistence Pattern
