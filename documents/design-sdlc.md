@@ -172,15 +172,19 @@ graph LR
   - Interactive: Removed (FR-S33). Legacy `.claude/skills/agent-<name>`
     symlinks deleted. Pipeline-only agents are no longer discoverable as
     interactive Claude Code skills.
-- **Agent Execution Summary (FR-40, FR-42):** All 6 agents must produce a
-  `## Summary` section in their output artifacts. Content: 2-5 bullet points
-  (actions taken, key decisions, artifacts produced, issues encountered).
+- **Agent Execution Summary (FR-40, FR-42, FR-S42):** All 6 agents must
+  produce a `## Summary` section in their output artifacts. Content: 2-5 bullet
+  points (actions taken, key decisions, artifacts produced, issues encountered).
   5 agents (PM, Architect, Tech Lead, QA, Tech Lead Review) append `## Summary`
   to their markdown artifact files. Developer includes summary in commit message
-  body (no separate artifact file). Pipeline enforces via `contains_section:
-  Summary` validation on 5 nodes (`specification`, `design`, `decision`,
-  `verify`, `tech-lead-review`). Developer (`build`) excluded from file-based
-  validation — uses existing `custom_script: deno task check`.
+  body (no separate artifact file). Pipeline enforces via composite `artifact`
+  validation rule (FR-S42) on all 6 agent nodes — each node declares a single
+  `type: artifact` rule combining `file_exists` + `file_not_empty` +
+  `contains_section` (via `sections` array). `build` also retains
+  `custom_script: deno task check`. `specification` additionally validates
+  sections `Problem Statement` and `Scope`. `verify` retains separate
+  `frontmatter_field: verdict` rule. `specification` retains separate
+  `frontmatter_field` rules for `issue` and `scope`.
 - **Voice Convention (FR-40, FR-43):** Each SKILL.md contains a `## Voice`
   section (after `# Role:` heading, before `## Responsibilities`) mandating
   first-person narrative ("I") in all agent outputs. Scope explicitly includes
@@ -669,6 +673,16 @@ FR-S40 documentation sync (issue #158):
   documented, §3.4 Interfaces shows current `task_template` pattern. No stale
   `phases:` or `prompt:` references found in SDS. SRS, pipeline-report, and
   spec-unified-task-template corrections handled by developer.
+
+FR-S42 pipeline validate migration (issue #174):
+
+- **FR-S42 (Migrate Pipeline Validate Rules to Composite Artifact Type):**
+  All 6 agent node validate blocks in `pipeline.yaml` migrated from separate
+  `file_exists` + `file_not_empty` + `contains_section` rules to single
+  composite `type: artifact` rule per node. `build` node gains implicit
+  `file_not_empty` check (no-op tightening — file with `## Summary` cannot
+  be empty). `frontmatter_field` and `custom_script` rules unchanged.
+  Variant C selected. Evidence: `.auto-flow/pipeline.yaml` validate blocks.
 
 Engine refactoring (issue #92):
 

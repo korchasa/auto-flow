@@ -969,6 +969,41 @@
     `git checkout -f main`, `git reset --hard origin/main`, `git clean -fd`.
     Evidence: `reset-to-main.sh:22-27`, run `20260320T000829`.
 
+### 3.42 FR-S42: Migrate Pipeline Validate Rules to Composite Artifact Type
+
+- **Description:** The SDLC pipeline config (`.auto-flow/pipeline.yaml`)
+  validates each agent artifact using 2–3 separate rules (`file_exists`,
+  `file_not_empty`, `contains_section`) per node, creating ~20 lines of
+  redundant config across 6 agent nodes. FR-S42 migrates all 6 nodes to the
+  engine's composite `artifact` rule type, which handles existence +
+  non-emptiness + section checks in a single declaration. `frontmatter_field`
+  and `custom_script` rules remain unchanged (not covered by `artifact` type).
+  Validation behavior is identical post-migration.
+- **Dep:** FR-S21 (agent output summary section), FR-S37 (verify verdict
+  frontmatter).
+- **Acceptance criteria:**
+  - [x] `specification` node validates `01-spec.md` with `type: artifact`,
+    sections `["Problem Statement", "Scope", "Summary"]`. Evidence:
+    `.auto-flow/pipeline.yaml`, run `20260320T092158`.
+  - [x] `design` node validates `02-plan.md` with `type: artifact`, sections
+    `["Summary"]`. Evidence: `.auto-flow/pipeline.yaml`, run `20260320T092158`.
+  - [x] `decision` node validates `03-decision.md` with `type: artifact`,
+    sections `["Summary"]`. Evidence: `.auto-flow/pipeline.yaml`, run
+    `20260320T092158`.
+  - [x] `build` node validates `04-impl-summary.md` with `type: artifact`,
+    sections `["Summary"]`; `custom_script` preserved. Evidence:
+    `.auto-flow/pipeline.yaml`, run `20260320T092158`.
+  - [x] `verify` node validates `05-qa-report.md` with `type: artifact`,
+    sections `["Summary"]`; `frontmatter_field: verdict` preserved. Evidence:
+    `.auto-flow/pipeline.yaml`, run `20260320T092158`.
+  - [x] `tech-lead-review` node validates `06-review.md` with `type: artifact`,
+    sections `["Summary"]`. Evidence: `.auto-flow/pipeline.yaml`, run
+    `20260320T092158`.
+  - [x] `frontmatter_field` rules for `specification` (issue, scope) unchanged.
+    Evidence: `.auto-flow/pipeline.yaml`, run `20260320T092158`.
+  - [x] `deno task check` passes. Evidence: run `20260320T092158` (533 tests,
+    pipeline integrity valid).
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -1089,4 +1124,5 @@ engine/                                # Deno/TypeScript pipeline engine
 | —      | FR-S38 | Pipeline Agent Context via file() Injection in task_template |
 | —      | FR-S39 | Remove Redundant shared-rules.md Read Instruction from SKILL.md Files |
 | —      | FR-S40 | Pipeline Format Change Documentation Sync |
-| —      | FR-S41 | pre_run Auto-Stash of Uncommitted Changes |
+| —      | FR-S41 | pre_run Auto-Stash of Uncommitted Changes           |
+| —      | FR-S42 | Migrate Pipeline Validate Rules to Composite Artifact Type |

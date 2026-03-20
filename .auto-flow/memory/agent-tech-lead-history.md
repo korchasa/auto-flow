@@ -20,3 +20,4 @@
 | 20260319T230952 | #157 (FR-S39) | ~7 | ✅ Variant A selected, SDS updated, PR #171 draft | 1 targeted Edit for SDS (§3.4 agent skills purpose). SDLC-scope, dead-code cleanup — minimal removal pattern. |
 | 20260319T233247 | #158 (FR-S40) | ~7 | ✅ Variant A selected, SDS verified+updated, PR #172 draft | 1 Edit for SDS §8 (evidence entry). Doc-sync issue: SDS already correct post-FR-S38, SRS needs ~25 ref fixes. SRS too large for single read — split into offset 0+500. |
 | 20260320T000829 | #159 (FR-S41) | ~7 | ✅ Variant A selected, SDS updated, PR #173 draft | 2 targeted Edit calls for SDS (§2.2 Legacy Shell Scripts + §5 Logic pre_run auto-stash flow). SDLC-scope, script-only change — no engine impact. |
+| 20260320T092158 | #174 (FR-S42) | ~7 | ✅ Variant C selected, SDS updated, PR #177 draft | 2 targeted Edit calls for SDS (§3.4 Agent Execution Summary + §8 evidence). SDLC-scope, pipeline.yaml validate block migration — mechanical single-file change. |
