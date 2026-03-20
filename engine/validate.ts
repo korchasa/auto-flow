@@ -251,16 +251,19 @@ async function checkFrontmatterField(
 }
 
 /**
- * Check that a file exists, is non-empty, and contains all required markdown sections.
+ * Check that a file exists, is non-empty, contains all required markdown
+ * sections, and has all required frontmatter fields with non-empty values.
  *
- * Fail-fast order: absent file → empty file → missing sections (collected into
- * one aggregate error so the agent sees all gaps in a single continuation).
+ * Fail-fast order: absent file → empty file → missing sections → missing/empty
+ * fields (each category collected into one aggregate error so the agent sees
+ * all gaps in a single continuation).
  */
 async function checkArtifact(
   rule: ValidationRule,
   path: string,
 ): Promise<ValidationResult> {
   const sections = rule.sections ?? [];
+  const fields = rule.fields ?? [];
 
   try {
     await Deno.stat(path);
@@ -297,7 +300,40 @@ async function checkArtifact(
     };
   }
 
-  return { rule, passed: true, message: `All sections present in ${path}` };
+  // Check frontmatter field presence if fields are specified (FR-E38)
+  if (fields.length > 0) {
+    const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+    if (!fmMatch) {
+      return {
+        rule,
+        passed: false,
+        message: `No YAML frontmatter found in ${path}`,
+      };
+    }
+    const fm = fmMatch[1];
+    const missingFields: string[] = [];
+    for (const fieldKey of fields) {
+      const fieldPattern = new RegExp(
+        `^${escapeRegex(fieldKey)}:\\s*(.*)$`,
+        "m",
+      );
+      const fieldMatch = fm.match(fieldPattern);
+      if (!fieldMatch || !fieldMatch[1].trim()) {
+        missingFields.push(fieldKey);
+      }
+    }
+    if (missingFields.length > 0) {
+      return {
+        rule,
+        passed: false,
+        message: `Missing or empty frontmatter fields in ${path}: ${
+          missingFields.map((f) => `'${f}'`).join(", ")
+        }`,
+      };
+    }
+  }
+
+  return { rule, passed: true, message: `Artifact validated: ${path}` };
 }
 
 function escapeRegex(str: string): string {

@@ -160,6 +160,8 @@ export interface ValidationRule {
   allowed?: string[];
   /** Required markdown section headings (for artifact rule). */
   sections?: string[];
+  /** Required frontmatter field keys to check for presence and non-empty value (for artifact rule). */
+  fields?: string[];
 }
 
 // --- Runtime State ---

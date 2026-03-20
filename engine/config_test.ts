@@ -1082,25 +1082,25 @@ nodes:
 
 // --- artifact validation rule schema tests ---
 
-Deno.test("parseConfig — artifact rule without sections throws", () => {
+Deno.test("parseConfig — artifact rule without sections or fields throws", () => {
   assertThrows(
     () =>
       parseConfig(
         `name: test\nversion: "1"\nnodes:\n  a:\n    type: agent\n    label: A\n    task_template: x\n    validate:\n      - type: artifact\n        path: foo`,
       ),
     Error,
-    "non-empty 'sections'",
+    "requires at least one of 'sections' or 'fields'",
   );
 });
 
-Deno.test("parseConfig — artifact rule with empty sections array throws", () => {
+Deno.test("parseConfig — artifact rule with empty sections array and no fields throws", () => {
   assertThrows(
     () =>
       parseConfig(
         `name: test\nversion: "1"\nnodes:\n  a:\n    type: agent\n    label: A\n    task_template: x\n    validate:\n      - type: artifact\n        path: foo\n        sections: []`,
       ),
     Error,
-    "non-empty 'sections'",
+    "requires at least one of 'sections' or 'fields'",
   );
 });
 
@@ -1132,6 +1132,47 @@ nodes:
   const config = parseConfig(yaml);
   assertEquals(config.nodes.a.validate![0].type, "artifact");
   assertEquals(config.nodes.a.validate![0].sections, ["Summary", "Details"]);
+});
+
+Deno.test("parseConfig — artifact rule with non-string field entry throws", () => {
+  assertThrows(
+    () =>
+      parseConfig(
+        `name: test\nversion: "1"\nnodes:\n  a:\n    type: agent\n    label: A\n    task_template: x\n    validate:\n      - type: artifact\n        path: foo\n        fields: [123]`,
+      ),
+    Error,
+    "non-empty strings",
+  );
+});
+
+Deno.test("parseConfig — artifact rule with empty-string field entry throws", () => {
+  assertThrows(
+    () =>
+      parseConfig(
+        `name: test\nversion: "1"\nnodes:\n  a:\n    type: agent\n    label: A\n    task_template: x\n    validate:\n      - type: artifact\n        path: foo\n        fields: [""]`,
+      ),
+    Error,
+    "non-empty strings",
+  );
+});
+
+Deno.test("parseConfig — artifact rule with fields-only (no sections) accepted", () => {
+  const yaml = `
+name: test
+version: "1"
+nodes:
+  a:
+    type: agent
+    label: A
+    task_template: x
+    validate:
+      - type: artifact
+        path: "{{node_dir}}/output.md"
+        fields: [variant, scope]
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.nodes.a.validate![0].type, "artifact");
+  assertEquals(config.nodes.a.validate![0].fields, ["variant", "scope"]);
 });
 
 // --- FR-E36: Parse-time condition_field vs frontmatter_field cross-check ---

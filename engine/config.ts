@@ -426,17 +426,37 @@ function validateValidationRule(
     );
   }
   if (rule.type === "artifact") {
-    if (!Array.isArray(rule.sections) || rule.sections.length === 0) {
+    const hasSections = Array.isArray(rule.sections) &&
+      rule.sections.length > 0;
+    const hasFields = Array.isArray(rule.fields) &&
+      (rule.fields as unknown[]).length > 0;
+
+    if (!hasSections && !hasFields) {
       throw new Error(
-        `Node '${nodeId}' artifact rule requires a non-empty 'sections' array`,
+        `Node '${nodeId}' artifact rule requires at least one of 'sections' or 'fields'`,
       );
     }
-    if (
-      !(rule.sections as unknown[]).every((e: unknown) => typeof e === "string")
-    ) {
-      throw new Error(
-        `Node '${nodeId}' artifact rule 'sections' must be an array of strings`,
-      );
+
+    if (Array.isArray(rule.sections)) {
+      if (
+        !(rule.sections as unknown[]).every(
+          (e: unknown) => typeof e === "string",
+        )
+      ) {
+        throw new Error(
+          `Node '${nodeId}' artifact rule 'sections' must be an array of strings`,
+        );
+      }
+    }
+
+    if (Array.isArray(rule.fields)) {
+      for (const entry of rule.fields) {
+        if (typeof entry !== "string" || !entry) {
+          throw new Error(
+            `Node '${nodeId}' artifact rule 'fields' must be an array of non-empty strings`,
+          );
+        }
+      }
     }
   }
 }

@@ -464,6 +464,96 @@ Deno.test("artifact — template path interpolation works", async () => {
   await Deno.remove(tmpDir, { recursive: true });
 });
 
+// --- artifact fields tests (FR-E38) ---
+
+Deno.test("artifact fields — absent (no field check) — file without frontmatter passes sections check", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  // No YAML frontmatter, just sections — fields check skipped since fields absent
+  await Deno.writeTextFile(filePath, "## Summary\ncontent\n## Details\nmore\n");
+
+  const rules: ValidationRule[] = [
+    { type: "artifact", path: filePath, sections: ["Summary", "Details"] },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("artifact fields — all present with values — passes", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(
+    filePath,
+    '---\nvariant: "Variant A"\nscope: engine\n---\n## Summary\ncontent\n',
+  );
+
+  const rules: ValidationRule[] = [
+    {
+      type: "artifact",
+      path: filePath,
+      sections: ["Summary"],
+      fields: ["variant", "scope"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("artifact fields — one field missing from frontmatter — fails", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(
+    filePath,
+    '---\nvariant: "Variant A"\n---\n## Summary\ncontent\n',
+  );
+
+  const rules: ValidationRule[] = [
+    {
+      type: "artifact",
+      path: filePath,
+      sections: ["Summary"],
+      fields: ["variant", "scope"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("scope"), true);
+  assertEquals(results[0].message.includes("variant"), false);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("artifact fields — one field present but empty-valued — fails", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(
+    filePath,
+    '---\nvariant: "Variant A"\nscope:\n---\n## Summary\ncontent\n',
+  );
+
+  const rules: ValidationRule[] = [
+    {
+      type: "artifact",
+      path: filePath,
+      sections: ["Summary"],
+      fields: ["variant", "scope"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("scope"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
 Deno.test("multiple rules — mixed results", async () => {
   const tmpDir = await Deno.makeTempDir();
   await Deno.writeTextFile(`${tmpDir}/exists.md`, "# Title\nContent");
