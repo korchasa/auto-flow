@@ -51,3 +51,4 @@ type: feedback
 - Run 20260315T213641: ~9 turns, main branch, issue #128 (engine scope), FR-E32 added. 3 targeted Edits. Bash tail used.
 - Run 20260315T215901: ~8 turns, main branch, issue #129 (sdlc scope), FR-S31 added. python3 str.replace() pattern.
 - Run 20260319T182156: ~8 turns, main branch, issue #147 (sdlc scope), FR-S32 added. python3 str.replace(). Efficient.
+- Run 20260320T213059: ~7 turns, main branch, issue #182 (engine scope), FR-E38 added. python3 str.replace() for insertion + appendix fix. Removed stale duplicate FR-E36 appendix entry.

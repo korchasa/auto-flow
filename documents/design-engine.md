@@ -109,10 +109,12 @@ graph TD
     `validateAllowedPaths()` (FR-E37): when `allowed_paths` present on node,
     validates array of non-empty strings. Invalid → config error at parse time.
     Called from `validateNode()`.
-    `validateValidationRule()` (FR-E33): `"artifact"` added to `validTypes`.
-    When `type === "artifact"`: validates `sections` is present, is array,
-    non-empty, all elements are strings. Missing/invalid → config error at
-    parse time.
+    `validateValidationRule()` (FR-E33, FR-E38): `"artifact"` added to
+    `validTypes`. When `type === "artifact"`: at least one of `sections` or
+    `fields` required (both optional individually). `sections` validated as
+    non-empty string array when present. `fields` validated as non-empty
+    string array (no empty strings) when present. Missing both → config error.
+    Invalid entries → config error at parse time.
     **Phase mutual-exclusivity validation (FR-E33):** After existing `phases:`
     block structure validation (~line 128), new pass iterates all nodes checking
     for `phase:` field while `config.phases` is defined. If both mechanisms
@@ -150,12 +152,16 @@ graph TD
     graph; loop node itself remains in DAG with its declared `inputs`.
   - `validate.ts` — artifact validation rules (file_exists, not_empty,
     contains_section, custom_script, frontmatter_field, artifact).
-    `checkArtifact(path, sections)` (FR-E33): self-contained private function.
-    Stat → read → heading-regex loop → aggregate. Fail-fast on absent/empty
-    file (single error, skip section checks). All missing sections collected
-    into one aggregate `ValidationResult`. Heading regex duplicated from
-    `checkContainsSection()` (~1 line) — intentional, avoids refactoring
-    existing private helpers
+    `checkArtifact(path, sections, fields)` (FR-E33, FR-E38): self-contained
+    private function. Stat → read → heading-regex loop → field-presence check
+    → aggregate. Fail-fast order: absent file → empty file → missing sections
+    → missing/empty fields. All missing sections collected into one aggregate
+    `ValidationResult`. Heading regex duplicated from `checkContainsSection()`
+    (~1 line) — intentional. Frontmatter field presence: parse frontmatter via
+    `^---\n([\s\S]*?)\n---` regex (same approach as `checkFrontmatterField`),
+    extract key-value pairs, check each `fields` entry exists with non-empty
+    value. Missing/empty fields aggregated into single error. Regex duplication
+    intentional — distinct semantic context (presence-only vs value-constraint)
   - `state.ts` — RunState persistence to `state.json`, resume logic,
     phase registry (`setPhaseRegistry()`, `getPhaseForNode()`,
     `clearPhaseRegistry()` — see §3.2),
@@ -512,8 +518,9 @@ graph TD
     (supports `{{run_dir}}`, `{{run_id}}`, `{{env.*}}`, `{{args.*}}` only).
   - ValidationRule: `{ type: "file_exists"|"file_not_empty"|"contains_section"|
     "custom_script"|"frontmatter_field"|"artifact", path?, field?, allowed?,
-    sections?: string[], ... }` — `sections` required when `type === "artifact"`
-    (FR-E33)
+    sections?: string[], fields?: string[], ... }` — when `type === "artifact"`:
+    at least one of `sections` or `fields` required (FR-E33, FR-E38).
+    `fields` = frontmatter field names for presence-only checks
   - LoopResult: `{ ..., bodyResults: AgentResult[] }` — accumulated per-iteration
     agent results; consumed by `executeLoopNode()` callback for log saving
   - LoopNodeConfig: `{ ..., nodes: Record<string, NodeConfig> }` — inline
@@ -550,11 +557,13 @@ graph TD
   file_not_empty, contains_section, custom_script, frontmatter_field) after
   each node. Validation failures trigger continuation (resume with error
   context) rather than immediate node failure.
-  - `artifact` (FR-E33): Composite rule — file existence + multi-section
-    presence in single rule. Config: `{ type: "artifact", path, sections }`.
-    Fail-fast: file absent/empty → single error, no section checks. File
-    present → check all sections via heading regex, collect missing into one
-    aggregate error. Section matching identical to `contains_section`.
+  - `artifact` (FR-E33, FR-E38): Composite rule — file existence +
+    multi-section presence + frontmatter field presence in single rule. Config:
+    `{ type: "artifact", path, sections?, fields? }` (at least one of
+    `sections`/`fields` required). Fail-fast: file absent/empty → single error,
+    no further checks. File present → check sections via heading regex →
+    check fields via frontmatter parse. Missing sections and missing/empty
+    fields each produce one aggregate error.
   - `frontmatter_field`: Reads artifact file, extracts YAML frontmatter via
     `^---\n([\s\S]*?)\n---` regex, parses target field, checks value against
     allowed set. Config: `{ type: "frontmatter_field", path, field, allowed }`.
