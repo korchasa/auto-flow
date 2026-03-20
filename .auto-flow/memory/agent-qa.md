@@ -12,7 +12,8 @@ type: feedback
 - When developer uses a Write (full rewrite) for a large SRS file, PM-stage additions (like FR-S32, FR-S33) can be silently dropped. Check for new sections promised in spec's "SRS Changes" section even if `deno task check` passes.
 - When `requirements-engine.md` or `requirements-sdlc.md` is NOT in `git diff main...HEAD --name-only`, it means the PM agent never added the promised FR section. Grep for the FR number to confirm before writing verdict.
 - Stale ACs in existing FRs can become contradictory after a new FR removes a feature (e.g., FR-S13 AC claiming standalone invocability after FR-S33 removes interactive skill discovery). Check for contradictions in related FRs.
-- PM-stage SRS persistence failure is a recurring pattern (issues #147–#157). Always check if SRS file is in diff immediately. This pattern extends to engine scope (requirements-engine.md) too. 12 consecutive failures; resolved in iter 2 for each issue.
+- PM-stage SRS persistence failure is a recurring pattern (issues #147–#158). Always check if SRS file is in diff immediately. This pattern extends to engine scope (requirements-engine.md) too. 13 consecutive failures; resolved in iter 2 for each issue.
+- For documentation-only issues: even when SRS file IS in the diff (developer made doc fixes), the PM-stage FR section may still be missing. The file being in diff does NOT guarantee FR-S<N> section was added. Always grep for FR number explicitly.
 - Issue #155 (engine+sdlc scope): both requirements-engine.md AND requirements-sdlc.md can be absent from diff simultaneously when two new FRs span both scopes in same issue.
 - Write tool requires reading a file before overwriting it, even in QA report path — always Read existing QA report before Write on iteration > 1.
 
@@ -63,3 +64,5 @@ type: feedback
 - Twenty-first session (issue #156, iteration 2): ~5 turns, PASS verdict (FR-S38 at line 864; 533 tests, 4/4 ACs)
 - Twenty-second session (issue #157, iteration 1): ~5 turns, FAIL verdict (FR-S39 absent; 12th consecutive PM failure; SKILL.md changes correct)
 - Twenty-third session (issue #157, iteration 2): ~5 turns, PASS verdict (FR-S39 at line 881 §3.39 + Appendix C line 1028; requirements-sdlc.md in diff; all 6 SKILL.md files correct; 533 tests, 4/4 ACs)
+- Twenty-fourth session (issue #158, iteration 1): ~7 turns, FAIL verdict (FR-S40 absent; 13th consecutive PM failure; requirements-sdlc.md in diff but developer edits only)
+- Twenty-fifth session (issue #158, iteration 2): ~6 turns, PASS verdict (FR-S40 at line 904 §3.40 + Appendix C line 1064; requirements-sdlc.md in diff; all 4 required files in diff; 533 tests, 9/9 ACs)

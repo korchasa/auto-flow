@@ -647,6 +647,15 @@ FR-S24 evidence (issue #96):
   (Verification-Only) — no code changes, evidence marking only. Dashboard
   phase-aware path computation deferred. FR-E5 and FR-E7 deferred.
 
+FR-S40 documentation sync (issue #158):
+
+- **FR-S40 (Pipeline Format Change Documentation Sync):** Documentation-only.
+  SDS verified post-FR-S38: §2.2 `phases:` description accurate, §3.4
+  `prompt:` correctly marked as removed with `{{file(...)}}` replacement
+  documented, §3.4 Interfaces shows current `task_template` pattern. No stale
+  `phases:` or `prompt:` references found in SDS. SRS, pipeline-report, and
+  spec-unified-task-template corrections handled by developer.
+
 Engine refactoring (issue #92):
 
 - **engine.ts module size reduction:** Pure engine-scope refactoring — no SDLC

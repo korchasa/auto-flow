@@ -163,6 +163,30 @@
   - 528 tests unchanged from iteration 1 — no new tests needed for this sdlc-only change.
   - SDLC pipeline pattern (wrapper script replacing `|| true`) is correct approach for observable non-blocking after-script failures.
 
+## 2026-03-20T41:XX — Issue #158 (iteration 2)
+
+- **Turns:** ~6
+- **Cost:** ~$0.15 (est)
+- **Verdict:** PASS
+- **Outcome:** All 9 acceptance criteria passed. 533 tests, 0 failures. FR-S40 present at line 904 (§3.40) and Appendix C at line 1064 — blocking issues from iteration 1 resolved. All 4 required files in diff. `requirements-sdlc.md`: 18 targeted edits confirmed (agent count 7→6, meta-agent removed, Appendix A/B fixed, Section 5 Interfaces updated). `design-sdlc.md` correct (Tech Lead pre-applied). `pipeline-report.md` canonical numbering. `spec-unified-task-template.md` Phase 1/2 → done. Self-approval failed → used `gh issue comment` fallback on issue #158.
+- **Key learnings:**
+  - Parallel strategy (deno task check + git diff + gh issue view + grep FR-S40) confirmed PASS in one parallel turn — optimal fix-iteration pattern.
+  - `requirements-sdlc.md` IS in diff and FR-S40 found at lines 904 and 1064 — PM-stage persistence failure from iter 1 resolved.
+  - 533 tests unchanged — no new tests for documentation-only issues.
+  - For documentation-only issues, implementation is correct when all targeted doc edits are applied; SRS FR section is the only recurring failure point.
+
+## 2026-03-19T40:XX — Issue #158 (iteration 1)
+
+- **Turns:** ~7
+- **Cost:** ~$0.18 (est)
+- **Verdict:** FAIL
+- **Outcome:** 7/9 criteria passed (inferred; FR-S40 section absent). 533 tests, 0 failures. All 4 required files in diff. Implementation correct: 18 targeted edits to `requirements-sdlc.md` (agent count 7→6, meta-agent active refs removed, Appendix A Stage 7 + artifact name fix, Appendix B agent-meta-agent removed, Section 5 Interfaces updated, Section 6 AC#7 removed); `pipeline-report.md` numbering fixed to FR-S32 canonical; `spec-unified-task-template.md` Phase 1/2 → done; `design-sdlc.md` already correct (Tech Lead pre-applied FR-S40 §8 entry). Blocking: FR-S40 section 3.40 and Appendix C row missing from `requirements-sdlc.md` — PM-stage persistence failure (13th consecutive: #147–#158). Self-request-changes failed (author = reviewer) → used `gh issue comment` fallback on issue #158.
+- **Key learnings:**
+  - `requirements-sdlc.md` being in the diff does NOT guarantee PM-stage FR section is present — developer doc edits can be in the same file without the PM-added FR section. Always grep for FR number.
+  - For documentation-only issues (no code changes), grep-first strategy is still mandatory.
+  - `design-sdlc.md` may already be correct before developer touches it (Tech Lead updated it during design phase) — check impl-summary for "no changes" claim.
+  - 533 tests unchanged — no new tests for documentation-only issues.
+
 ## 2026-03-19T39:XX — Issue #157 (iteration 2)
 
 - **Turns:** ~5

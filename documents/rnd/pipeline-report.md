@@ -2,7 +2,7 @@
 
 ## 2. Artifact numbering inconsistency
 
-- 01-spec -> 02-plan -> **04**-decision -> **06**-impl-summary -> **05**-qa-report -> **08**-review
+- 01-spec -> 02-plan -> 03-decision -> 04-impl-summary -> 05-qa-report -> 06-review
 - Missing: 03, 07. Numbers 05/06 reversed (build=06, verify=05)
 
 ## 3. Phases — double definition

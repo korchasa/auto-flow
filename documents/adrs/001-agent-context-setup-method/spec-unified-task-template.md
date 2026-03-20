@@ -80,7 +80,7 @@ existing system prompt (CLAUDE.md), and SKILL.md content is task instructions
 
 ## Phase 1: Update pipeline.yaml — replace prompt with file() in task_template
 
-**Status:** not-started | **Prerequisites:** none
+**Status:** done | **Prerequisites:** none
 
 ### Goal
 
@@ -123,7 +123,7 @@ Rewrite each agent node in pipeline.yaml: remove `prompt` field, prepend
 
 ## Phase 2: Clean up SKILL.md files — remove shared-rules read instruction
 
-**Status:** not-started | **Prerequisites:** Phase 1
+**Status:** done | **Prerequisites:** Phase 1
 
 ### Goal
 

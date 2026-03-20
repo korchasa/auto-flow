@@ -140,7 +140,7 @@
 
 - **Description:** The Developer and QA agents work as an iterative pair. Developer implements, QA verifies. If QA finds issues, Developer fixes them. The loop continues until QA passes or the iteration limit is reached.
 - **Orchestration:** The loop is managed by the engine's `loop` node type (`engine/loop.ts`). It invokes the Developer agent, then QA agent. Based on the QA verdict, it either exits the loop (on `PASS`) or re-invokes the Developer with the QA report (on `FAIL`). Legacy: `stage-6-developer.sh` calls `stage-7-qa.sh` as sub-step.
-- **Developer Input:** `03-decision.md`, `documents/requirements-sdlc.md`, `documents/design-sdlc.md`, source code. On subsequent iterations: previous QA report (`05-qa-report-N.md`).
+- **Developer Input:** `03-decision.md`, `documents/requirements-sdlc.md`, `documents/design-sdlc.md`, source code. On subsequent iterations: previous QA report (`05-qa-report.md`).
 - **Developer Output:** Code changes, tests, commits and pushes on feature branch. PR comment with implementation summary.
 - **QA Input:** `01-spec.md`, `03-decision.md`, all changed files, test results.
 - **QA Output:** `05-qa-report.md` in node output directory. PR review verdict (`gh pr review`: approve/request-changes).
@@ -152,8 +152,8 @@
   ```
   - `verdict` field: required, enum `PASS` | `FAIL`.
   - Frontmatter MUST be the first content in the file (lines 1-3 minimum).
-  - Primary parsing: `yq --front-matter=extract '.verdict' 05-qa-report-N.md` (requires yq >= 4.18).
-  - Fallback parsing: `sed -n '2p' 05-qa-report-N.md | grep -oE '(PASS|FAIL)'` (no yq dependency).
+  - Primary parsing: `yq --front-matter=extract '.verdict' 05-qa-report.md` (requires yq >= 4.18).
+  - Fallback parsing: `sed -n '2p' 05-qa-report.md | grep -oE '(PASS|FAIL)'` (no yq dependency).
 - **Acceptance criteria:**
   - **Developer:**
     - Agent reads all input artifacts listed above.
@@ -287,7 +287,7 @@
 ### 3.13 FR-S13 (ex FR-19): Agents as Skills
 
 - **Description:** Each pipeline agent is a Claude Code project skill stored canonically in `.auto-flow/agents/agent-<name>/SKILL.md` per the agentskills.io specification. Each skill directory may include a `scripts/` subdirectory with co-located stage scripts. No symlinks. Each agent can be invoked standalone via `/agent-<name>` or used by the pipeline engine.
-- **Agents (7):** pm, architect, tech-lead, tech-lead-review, developer, qa, meta-agent. (FR-S15: reduced from 10-agent set; removed committer, tech-lead-reviewer, tech-lead-sds; presenter has no agent directory. FR-S18: executor renamed to developer.)
+- **Agents (6):** pm, architect, tech-lead, tech-lead-review, developer, qa. (FR-S15: reduced from 10-agent set; removed committer, tech-lead-reviewer, tech-lead-sds; presenter has no agent directory. FR-S9: meta-agent removed. FR-S18: executor renamed to developer.)
 - **Supersedes:** Original layout `agents/<name>/SKILL.md` with `.claude/skills/` symlinks (superseded by FR-S17).
 - **Acceptance criteria:**
   - [x] Each of 7 agents has a canonical directory `.auto-flow/agents/agent-<name>/` containing `SKILL.md` with spec-compliant YAML frontmatter (`name`, `description`, `compatibility`, `allowed-tools`; no `disable-model-invocation`). Expected: `.auto-flow/agents/agent-pm/SKILL.md`, `.auto-flow/agents/agent-architect/SKILL.md`, `.auto-flow/agents/agent-tech-lead/SKILL.md`, `.auto-flow/agents/agent-tech-lead-review/SKILL.md`, `.auto-flow/agents/agent-developer/SKILL.md`, `.auto-flow/agents/agent-qa/SKILL.md`, `.auto-flow/agents/agent-meta-agent/SKILL.md`. Evidence: commits `6176e91`, `985e3e5`, `f0085df`; QA PASS runs `20260313T230627`, `20260314T000902`
@@ -372,7 +372,7 @@
   - [x] `.auto-flow/agents/agent-qa/SKILL.md` updated: posts PR reviews via `gh pr review` ONLY (no issue comments). Evidence: `.auto-flow/agents/agent-qa/SKILL.md`
   - [x] `pipeline.yaml` updated: `finalize` (committer) node removed; `review` node renamed to `tech-lead-review` using `.auto-flow/agents/agent-tech-lead-review/SKILL.md` with `run_on: always` + merge capability. Evidence: `.auto-flow/pipeline.yaml:163-184`
   - [x] Agent skill directories present as `.auto-flow/agents/agent-*/` (no `.claude/skills/` symlinks). Evidence: commit `6176e91`, `985e3e5`; FR-S33 removes remaining `.claude/skills/ agent-*` symlinks
-  - [x] Pipeline produces 5 agent invocations in happy path (pm, architect, tech-lead, developer, qa) plus 2 post-pipeline (tech-lead-review, meta-agent). Evidence: commit `f0085df`, `.auto-flow/pipeline.yaml` (developer node in impl-loop)
+  - [x] Pipeline produces 5 agent invocations in happy path (pm, architect, tech-lead, developer, qa) plus 1 post-pipeline (tech-lead-review). Evidence: commit `f0085df`, `.auto-flow/pipeline.yaml` (developer node in impl-loop)
   - [x] Developer creates commits on feature branch during implementation. Evidence: commit `f0085df`, `.auto-flow/agents/agent-developer/SKILL.md`
   - [x] QA posts review on PR only (not issue comment). Evidence: `.auto-flow/agents/agent-qa/SKILL.md`
   - [x] Tech-lead-review merges PR if CI green, or leaves open with comments. Evidence: `.auto-flow/agents/agent-tech-lead-review/SKILL.md`
@@ -498,23 +498,21 @@
   operators must parse the full artifact to assess outcomes — increasing cost
   and latency.
 - **Acceptance criteria:**
-  - [x] All 7 agent SKILL.md files include documented requirement for a
+  - [x] All 6 agent SKILL.md files include documented requirement for a
     `## Summary` section in their output artifact.
     Agents: `agent-pm`, `agent-architect`, `agent-tech-lead`,
-    `agent-developer`, `agent-qa`, `agent-tech-lead-review`, `agent-meta-agent`.
+    `agent-developer`, `agent-qa`, `agent-tech-lead-review`.
     Evidence: `.auto-flow/agents/agent-pm/SKILL.md:113`,
     `.auto-flow/agents/agent-architect/SKILL.md:120`,
     `.auto-flow/agents/agent-tech-lead/SKILL.md:87`,
     `.auto-flow/agents/agent-developer/SKILL.md:92`,
     `.auto-flow/agents/agent-qa/SKILL.md:113`,
-    `.auto-flow/agents/agent-meta-agent/SKILL.md:81,93`,
     `.auto-flow/agents/agent-tech-lead-review/SKILL.md:55`.
   - [x] `pipeline.yaml` validation rules include `contains_section: Summary`
-    for all 7 agent nodes (`specification`, `design`, `decision`, `build`,
-    `verify`, `tech-lead-review`, `optimize`).
+    for all 6 agent nodes (`specification`, `design`, `decision`, `build`,
+    `verify`, `tech-lead-review`).
     Evidence: `.auto-flow/pipeline.yaml:61` (specification), `:83` (design),
-    `:108` (decision), `:140` (build), `:159` (verify), `:185` (optimize),
-    `:210` (tech-lead-review).
+    `:108` (decision), `:140` (build), `:159` (verify), `:210` (tech-lead-review).
   - [x] Continuation mechanism is triggered when `## Summary` is absent
     (same `contains_section` rule behavior as other section validations).
     Evidence: Inherent behavior of `contains_section` validation in engine;
@@ -525,7 +523,7 @@
 
 ### 3.22 FR-S22 (ex FR-43): Agent First-Person Voice in GitHub Interactions
 
-- **Description:** All 7 agent SKILL.md files MUST include a `## Voice` section
+- **Description:** All 6 agent SKILL.md files MUST include a `## Voice` section
   that: (1) explicitly covers GitHub issue comments, PR descriptions, and status
   updates in scope; (2) provides correct/incorrect example pairs including one
   targeting GitHub interactions; (3) uses first-person ("I") in all hardcoded
@@ -542,16 +540,15 @@
     `.auto-flow/agents/agent-architect/SKILL.md`,
     `.auto-flow/agents/agent-tech-lead/SKILL.md`
   - [x] "This includes GitHub issue comments, PR descriptions, and status
-    updates." scope sentence added to all 7 `## Voice` sections. Evidence:
+    updates." scope sentence added to all 6 `## Voice` sections. Evidence:
     `.auto-flow/agents/agent-pm/SKILL.md`,
     `.auto-flow/agents/agent-architect/SKILL.md`,
     `.auto-flow/agents/agent-tech-lead/SKILL.md`,
     `.auto-flow/agents/agent-developer/SKILL.md`,
     `.auto-flow/agents/agent-qa/SKILL.md`,
-    `.auto-flow/agents/agent-tech-lead-review/SKILL.md`,
-    `.auto-flow/agents/agent-meta-agent/SKILL.md`
+    `.auto-flow/agents/agent-tech-lead-review/SKILL.md`
   - [x] Third correct/incorrect example pair targeting GitHub interactions added
-    to all 7 `## Voice` sections. Evidence: all 7 SKILL.md files listed above.
+    to all 6 `## Voice` sections. Evidence: all 6 SKILL.md files listed above.
   - [x] `deno task check` passes.
 
 ### 3.23 FR-S23: SDLC Documentation Accuracy
@@ -599,7 +596,7 @@
   .auto-flow/
   ├── pipeline.yaml          # from .auto-flow/pipeline.yaml
   ├── agents/                # from .auto-flow/agents/agent-*/
-  │   └── <name>/SKILL.md   # 7 agents
+  │   └── <name>/SKILL.md   # 6 agents
   ├── scripts/               # active scripts only (from .auto-flow/scripts/)
   │   ├── rollback-uncommitted.sh
   │   ├── hitl-ask.sh
@@ -615,7 +612,7 @@
   - `.claude/hooks/guard-deno-direct.sh` stays in `.claude/hooks/` (Claude Code hooks dir is fixed by Claude Code; not movable).
 - **Acceptance:**
   - [ ] `pipeline.yaml` at `.auto-flow/pipeline.yaml`
-  - [ ] Agent prompts at `.auto-flow/agents/<name>/SKILL.md` (7 agents: pm, architect, tech-lead, developer, qa, tech-lead-review, meta-agent)
+  - [ ] Agent prompts at `.auto-flow/agents/<name>/SKILL.md` (6 agents: pm, architect, tech-lead, developer, qa, tech-lead-review)
   - [ ] Active scripts at `.auto-flow/scripts/` (rollback-uncommitted.sh, hitl-ask.sh, hitl-check.sh, lib.sh)
   - [ ] Tasks at `.auto-flow/tasks/`; runs at `.auto-flow/runs/`
   - [ ] Deprecated stage scripts (`stage-*.sh`) and their `*_test.ts` files deleted
@@ -652,10 +649,10 @@
   - Effective strategies discovered empirically.
   - Environment quirks and gotchas.
   - Baseline metrics (turns, cost) for self-assessment.
-- **Scope:** All 7 pipeline agents: pm, architect, tech-lead, tech-lead-review, developer, qa, meta-agent.
+- **Scope:** All 6 pipeline agents: pm, architect, tech-lead, tech-lead-review, developer, qa.
 - **Acceptance criteria:**
   - [ ] `.auto-flow/memory/` directory exists in repo.
-  - [ ] Each of 7 agent `SKILL.md` files includes: (a) read-memory step at session start, (b) rewrite-memory step at session end.
+  - [ ] Each of 6 agent `SKILL.md` files includes: (a) read-memory step at session start, (b) rewrite-memory step at session end.
   - [ ] `pipeline.yaml` `task_templates` or `defaults` exposes `.auto-flow/memory/<agent-name>.md` path to each agent.
   - [ ] `documents/meta.md` removed or repurposed (no longer used as shared cross-run memory).
   - [ ] At least one end-to-end pipeline run completes with agents reading/writing their own memory files.
@@ -663,10 +660,10 @@
 
 ### 3.29 FR-S29: AGENTS.md Agent List Accuracy
 
-- **Description:** `AGENTS.md` must list exactly the 7 active pipeline agents: PM, Architect, Tech Lead, Developer, QA, Tech Lead Review, Meta-Agent. Deprecated/absorbed agents (e.g., Presenter, absorbed into Tech Lead + Tech Lead Review per FR-S15) must not appear as active agents.
-- **Rationale:** Stale agent references in `AGENTS.md` mislead contributors about pipeline structure. Presenter agent was absorbed into Tech Lead + Tech Lead Review per FR-S15. `AGENTS.md` now lists exactly 7 correct agents; Presenter reference removed.
+- **Description:** `AGENTS.md` must list exactly the 6 active pipeline agents: PM, Architect, Tech Lead, Developer, QA, Tech Lead Review. Deprecated/absorbed agents (e.g., Presenter, absorbed into Tech Lead + Tech Lead Review per FR-S15; Meta-Agent, removed per FR-S9) must not appear as active agents.
+- **Rationale:** Stale agent references in `AGENTS.md` mislead contributors about pipeline structure. Presenter agent was absorbed into Tech Lead + Tech Lead Review per FR-S15. Meta-Agent removed per FR-S9. `AGENTS.md` now lists exactly 6 correct agents; Presenter and Meta-Agent references removed.
 - **Acceptance criteria:**
-  - [x] `AGENTS.md` agent list contains exactly: PM, Architect, Tech Lead, Developer, QA, Tech Lead Review, Meta-Agent (7 agents total). Evidence: `AGENTS.md` (7 agents listed, no Presenter), `scripts/check.ts:134-171` (`validateAgentListContent`), `scripts/check_test.ts:96-100` (real AGENTS.md integration test).
+  - [x] `AGENTS.md` agent list contains exactly: PM, Architect, Tech Lead, Developer, QA, Tech Lead Review (6 agents total). Evidence: `AGENTS.md` (6 agents listed, no Presenter, no Meta-Agent), `scripts/check.ts:134-171` (`validateAgentListContent`), `scripts/check_test.ts:96-100` (real AGENTS.md integration test).
   - [x] No reference to "Presenter" as an active agent in `AGENTS.md`. Evidence: `scripts/check.ts:134-171` (`validateAgentListContent` rejects deprecated agents), `scripts/check_test.ts:73-78` (Presenter rejection test).
   - [x] `deno task check` passes. Evidence: `scripts/check.ts:173-184` (`agentListAccuracy` runs as part of check), `scripts/check_test.ts:54-100` (6 test cases).
 
@@ -904,20 +901,61 @@
   - [x] `deno task check` passes. Evidence: PASS (533 tests, run
     `20260319T230952`).
 
+### 3.40 FR-S40: Pipeline Format Change Documentation Sync
+
+- **Description:** After PRs #147–#157 implemented FR-S26–FR-S39, multiple
+  documentation artifacts were out of sync with the actual pipeline structure:
+  SRS referenced 7 agents including removed meta-agent; Appendix A showed Stage
+  7 Meta-Agent and old artifact filename `05-qa-report-N.md`; Appendix B listed
+  `agent-meta-agent/SKILL.md` and old `prompt:` field pattern; SDS described
+  `phases:` block and `prompt:` fields; `pipeline-report.md` had outdated
+  artifact numbering; `spec-unified-task-template.md` marked Phase 1/2 as
+  not-started. FR-S40 formalizes the full documentation sync across SRS, SDS,
+  and supporting docs.
+- **Dep:** FR-S9 (meta-agent removal), FR-S32 (artifact naming), FR-S38
+  (file() injection), FR-S39 (SKILL.md cleanup).
+- **Acceptance criteria:**
+  - [x] `documents/requirements-sdlc.md`: active agent count updated 7→6 in
+    all descriptions; meta-agent removed from all active sections. Evidence:
+    `documents/requirements-sdlc.md`, run `20260319T233247` (18 targeted edits,
+    impl-summary confirmed).
+  - [x] `documents/requirements-sdlc.md` Appendix A: Stage 7 Meta-Agent row
+    removed; `05-qa-report-N.md` → `05-qa-report.md`. Evidence:
+    `documents/requirements-sdlc.md`, run `20260319T233247`.
+  - [x] `documents/requirements-sdlc.md` Appendix B: `agent-meta-agent/SKILL.md`
+    entry removed; `prompt:` field references replaced with `task_template`/
+    `{{file(...)}}` pattern. Evidence: `documents/requirements-sdlc.md`, run
+    `20260319T233247`.
+  - [x] `documents/requirements-sdlc.md` Section 5 Interfaces:
+    `--append-system-prompt` description replaced with `-p`/`task_template`/
+    `{{file(...)}}` mechanism (FR-S38). Evidence:
+    `documents/requirements-sdlc.md:916–917`.
+  - [x] `documents/design-sdlc.md`: §3.4 marks `prompt:` field as removed with
+    `{{file(...)}}` replacement; §8 FR-S40 evidence entry present. Evidence:
+    `documents/design-sdlc.md` (Tech Lead pre-applied), run `20260319T233247`.
+  - [x] `documents/rnd/pipeline-report.md`: artifact numbering updated to
+    `01-spec → 02-plan → 03-decision → 04-impl-summary → 05-qa-report →
+    06-review`. Evidence: `documents/rnd/pipeline-report.md:5`, run
+    `20260319T233247`.
+  - [x] `documents/adrs/001-agent-context-setup-method/spec-unified-task-template.md`:
+    Phase 1 status → "done"; Phase 2 status → "done". Evidence:
+    `documents/adrs/001-agent-context-setup-method/spec-unified-task-template.md:83,126`,
+    run `20260319T233247`.
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
 - **Reproducibility:** Agent prompts are versioned in the repository under `.auto-flow/agents/`.
 - **Observability:** Full logs stored per stage in `.auto-flow/runs/<run-id>/logs/`. Total pipeline duration reported in the final PR description.
-- **Fault tolerance:** If a stage fails (agent error, timeout, continuation limit exhausted), the pipeline stops, Meta-Agent runs to analyze the failure. Manual restart via `--resume <run-id>`.
-- **Timeouts:** Each stage has a configurable timeout via `SDLC_STAGE_TIMEOUT_MINUTES` env var (default: 30 min). Engine enforces timeout per node. When a timeout fires, the stage is treated as failed — Meta-Agent is triggered for analysis.
+- **Fault tolerance:** If a stage fails (agent error, timeout, continuation limit exhausted), the pipeline stops. Manual restart via `--resume <run-id>`.
+- **Timeouts:** Each stage has a configurable timeout via `SDLC_STAGE_TIMEOUT_MINUTES` env var (default: 30 min). Engine enforces timeout per node. When a timeout fires, the stage is treated as failed.
 - **Security:** Enforced at the engine/stage script level via diff-based checks (see engine SRS FR-8). Agents run with the local user's permissions.
 
 ## 5. Interfaces
 
 - **Trigger:** Single entry point `deno task run [--prompt "..."]`. PM agent autonomously selects and triages open GitHub issues. `--prompt` passes optional additional context to PM. Common engine flags: `--resume`, `--dry-run`, `-v`, `-q`, `--config`.
-- **Agent runtime:** `claude` CLI invoked by the Deno engine. Prompt content cached at config load time and passed inline via `--append-system-prompt`; fallback to `--append-system-prompt-file` for template paths. Key flags:
-  - `--append-system-prompt` — adds role-specific instructions inline (content cached from `.auto-flow/agents/agent-<name>/SKILL.md` at startup). Preserves Claude Code's built-in capabilities. Fallback: `--append-system-prompt-file` for template-path prompts.
+- **Agent runtime:** `claude` CLI invoked by the Deno engine. Agent context (shared rules + SKILL.md) injected via `{{file(...)}}` in `task_template`, delivered as user message (`-p`) per FR-S38. Key flags:
+  - `-p "<task>"` — passes task prompt derived from `task_template`. Shared rules and SKILL.md inlined via `{{file(...)}}` template function (FR-S38). No `--append-system-prompt` used for pipeline agents.
   - `--output-format stream-json` — streams JSON events line-by-line; `result` event contains `result`, `session_id`, `total_cost_usd`, `duration_ms`, `num_turns`, `is_error`.
   - `--resume <session-id>` — re-invokes agent in the same session for continuations (engine SRS FR-8).
   - `-p "<prompt>"` — non-interactive mode, task description is passed as the prompt argument.
@@ -936,8 +974,7 @@ The system is considered accepted if:
 4. The Developer+QA loop iterates until quality checks pass.
 5. Tech Lead creates draft PR; Tech Lead Review performs final review and merge.
 6. All agent logs are preserved and accessible.
-7. The Meta-Agent runs after every pipeline execution and produces actionable analysis.
-8. Re-running the pipeline on the same issue cleanly overwrites artifacts.
+7. Re-running the pipeline on the same issue cleanly overwrites artifacts.
 
 ## Appendix A: Pipeline Stage Map
 
@@ -946,11 +983,10 @@ The system is considered accepted if:
 | 1     | Project Manager  | `01-spec.md` + updated SRS              | Has all 4 sections, no SDS details           |
 | 2     | Architect        | `02-plan.md`                            | 2-3 variants with concrete file refs         |
 | 3     | Tech Lead        | `03-decision.md` + SDS + branch + PR    | Variant selected, SDS updated, PR opened     |
-| 4-5   | Developer + QA   | Code + commits + `05-qa-report-N.md`    | `deno task check` passes, PR reviews posted  |
+| 4-5   | Developer + QA   | Code + commits + `05-qa-report.md`      | `deno task check` passes, PR reviews posted  |
 | 6*    | Tech Lead Review | PR review + merge                       | CI green, code review passed                 |
-| 7*    | Meta-Agent       | `07-changelog.md` + prompt fixes        | Evidence-based suggestions with prompt diffs |
 
-\* Post-pipeline nodes. Tech Lead Review and Meta-Agent run as `run_on: always`.
+\* Post-pipeline node. Tech Lead Review runs as `run_on: always`.
 
 ## Appendix B: File Structure
 
@@ -964,7 +1000,6 @@ The system is considered accepted if:
     agent-tech-lead-review/SKILL.md      # Final code review + CI gate + merge (post-pipeline)
     agent-developer/SKILL.md             # Implementation + commits + push (FR-S18)
     agent-qa/SKILL.md                    # QA via PR reviews
-    agent-meta-agent/SKILL.md            # Prompt optimization + failure analysis (post-pipeline)
   scripts/                              # HITL scripts (engine infrastructure)
     lib.sh                              # Shared functions (logging, continuation loop, git ops)
     hitl-ask.sh                         # HITL question delivery via GitHub issue
@@ -1026,3 +1061,4 @@ engine/                                # Deno/TypeScript pipeline engine
 | —      | FR-S37 | Verify Node Verdict Frontmatter Validation |
 | —      | FR-S38 | Pipeline Agent Context via file() Injection in task_template |
 | —      | FR-S39 | Remove Redundant shared-rules.md Read Instruction from SKILL.md Files |
+| —      | FR-S40 | Pipeline Format Change Documentation Sync |

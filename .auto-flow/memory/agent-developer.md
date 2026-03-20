@@ -57,6 +57,16 @@ type: feedback
 - When the task is pure markdown deletion from SKILL.md files (no TS logic), no tests are needed per "DO NOT test constants/templates".
 - All 6 edits can be issued in parallel in one turn for maximum efficiency.
 
+## Doc-Only Run Pattern
+
+- When all 4 tasks are documentation-only (no TS logic), no tests needed.
+- Large markdown files (>89KB) can't be Read in full — use targeted Grep + Read
+  by offset/limit to locate specific sections, then issue multiple Edit calls.
+- Multiple parallel Edit calls on same large file is efficient and reliable when
+  each old_string is unique (avoids full-file Write which requires full read).
+- design-sdlc.md may already be updated by Tech Lead in the decide phase — check §8
+  for existing FR-S<N> entry before writing.
+
 ## Baseline Metrics
 
 - Run 20260315T003418: ~14 turns, scope sdlc, issue #121 (FR-S29), 7 SKILL.md + 2 memory files — PASS
