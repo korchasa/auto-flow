@@ -209,6 +209,18 @@
   - Continuation loop condition `while (validationRules.length > 0 || node.allowed_paths !== undefined)` ensures scope-check nodes enter loop even without artifact rules — important subtlety for AC #7 verification.
   - 18th consecutive pattern: PM stage fails on iter 1, dev restores on iter 2. Pattern continues.
 
+## 2026-03-20T57:XX — Issue #183 (iteration 3)
+
+- **Turns:** ~10
+- **Cost:** ~$0.22 (est)
+- **Verdict:** PASS
+- **Outcome:** All 7 FR-E39 acceptance criteria passed. 587 tests, 0 failures. All 4 blocking issues from iteration 2 resolved: (1) FR-E39 at line 861 §3.39 + Appendix row at line 954 — requirements-engine.md in diff; (2) `scripts/compile_test.ts` exists with 9 tests (4 target mappings, 1 naming convention, 3 stripVersionPrefix); (3) platform names correct (x86_64/darwin, not amd64/macos); (4) double-v bug fixed via `stripVersionPrefix()` in `compile.ts:33–35`. Self-approval failed → used `gh issue comment` fallback on issue #183.
+- **Key learnings:**
+  - Issue #183 required 3 iterations — only issue in history to need iter 3 (iter 2 had 4 blocking issues: SRS + 3 implementation bugs).
+  - Multi-focus review sub-agents found only non-blocking observations in iter 3: decision's --dry-run flag absent (not an AC), README covers 2/4 platforms, output dir deviation from decision.
+  - `--env-file` in `deno compile` embeds vars into the binary for runtime use; CI env var `VERSION` is what compile.ts reads and strips before embedding — not a conflict.
+  - 25th consecutive PM-stage SRS persistence failure resolved in iteration 3 for issue #183.
+
 ## 2026-03-20T56:XX — Issue #183 (iteration 2)
 
 - **Turns:** ~8
