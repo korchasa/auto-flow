@@ -1,5 +1,5 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { parseArgs } from "./cli.ts";
+import { getVersionString, parseArgs, VERSION } from "./cli.ts";
 
 Deno.test("parseArgs — --prompt sets args.prompt", () => {
   const opts = parseArgs(["--prompt", "Fix the login bug"]);
@@ -87,4 +87,13 @@ Deno.test("parseArgs — -s combined with other flags", () => {
 Deno.test("parseArgs — default verbosity is normal", () => {
   const opts = parseArgs([]);
   assertEquals(opts.verbosity, "normal");
+});
+
+Deno.test("VERSION — is a non-empty string", () => {
+  assertEquals(typeof VERSION, "string");
+  assertEquals(VERSION.length > 0, true);
+});
+
+Deno.test("getVersionString — format is 'auto-flow v<version>'", () => {
+  assertEquals(getVersionString(), `auto-flow v${VERSION}`);
 });

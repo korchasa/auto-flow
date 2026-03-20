@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            artifact: auto-flow-linux-amd64
+          - target: aarch64-unknown-linux-gnu
+            artifact: auto-flow-linux-arm64
+          - target: x86_64-apple-darwin
+            artifact: auto-flow-macos-amd64
+          - target: aarch64-apple-darwin
+            artifact: auto-flow-macos-arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Compile
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: deno task compile --target ${{ matrix.target }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: Create release and attach binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "auto-flow ${{ github.ref_name }}" \
+            --generate-notes \
+            dist/auto-flow-linux-amd64 \
+            dist/auto-flow-linux-arm64 \
+            dist/auto-flow-macos-amd64 \
+            dist/auto-flow-macos-arm64

@@ -14,7 +14,8 @@
     "loop-in-claude": "deno run -A --no-check scripts/loop_in_claude.ts",
     "dev": "echo 'No dev server for pipeline project'",
     "prod": "echo 'No prod mode for pipeline project'",
-    "dashboard": "deno run --allow-read --allow-write scripts/generate-dashboard.ts"
+    "dashboard": "deno run --allow-read --allow-write scripts/generate-dashboard.ts",
+    "compile": "deno run -A scripts/compile.ts"
   },
   "fmt": {
     "proseWrap": "preserve",

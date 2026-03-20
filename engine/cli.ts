@@ -16,11 +16,20 @@
  *   --env <KEY=VAL>       Set environment variable (repeatable)
  *   --skip <node-ids>     Comma-separated node IDs to skip
  *   --only <node-ids>     Comma-separated node IDs to run exclusively
+ *   --version / -V        Print version and exit
  */
 
 import type { EngineOptions, Verbosity } from "./types.ts";
 import { Engine } from "./engine.ts";
 import { installSignalHandlers } from "./process-registry.ts";
+
+/** Version string embedded at compile time via VERSION env var. Defaults to "dev". */
+export const VERSION = Deno.env.get("VERSION") ?? "dev";
+
+/** Returns the formatted version string for `--version` output. */
+export function getVersionString(): string {
+  return `auto-flow v${VERSION}`;
+}
 
 /**
  * Parse CLI arguments into EngineOptions.
@@ -82,6 +91,11 @@ export function parseArgs(args: string[]): EngineOptions {
       case "--only":
         onlyNodes = args[++i].split(",").map((s) => s.trim());
         break;
+      case "--version":
+      case "-V":
+        console.log(getVersionString());
+        Deno.exit(0);
+        break;
       case "--help":
       case "-h":
         printUsage();
@@ -129,6 +143,7 @@ Options:
   --env <KEY=VAL>       Set environment variable (repeatable)
   --skip <node-ids>     Comma-separated node IDs to skip
   --only <node-ids>     Comma-separated node IDs to run exclusively
+  -V, --version         Print version and exit
   -h, --help            Show this help
 
 Examples:

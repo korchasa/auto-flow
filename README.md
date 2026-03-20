@@ -169,9 +169,31 @@ scripts/
   check.ts                       # Full verification: fmt, lint, test, gitleaks
 ```
 
+## Installation
+
+Download a pre-built binary from the [latest release](../../releases/latest) — no Deno required:
+
+```bash
+# Linux x86_64
+gh release download --repo <owner>/auto-flow --pattern auto-flow-linux-amd64
+chmod +x auto-flow-linux-amd64 && mv auto-flow-linux-amd64 auto-flow
+
+# macOS Apple Silicon
+gh release download --repo <owner>/auto-flow --pattern auto-flow-macos-arm64
+chmod +x auto-flow-macos-arm64 && mv auto-flow-macos-arm64 auto-flow
+
+# Verify
+./auto-flow --version
+
+# Run a pipeline
+./auto-flow --config .auto-flow/pipeline.yaml
+```
+
+Alternatively, run directly with Deno (see Prerequisites below).
+
 ## Prerequisites
 
-- [Deno](https://deno.land/) runtime
+- [Deno](https://deno.land/) runtime (required only if not using a pre-built binary)
 - Docker / devcontainer (runtime environment)
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude`)
 - [`gh` CLI](https://cli.github.com/) for GitHub API interaction (SDLC pipeline)
