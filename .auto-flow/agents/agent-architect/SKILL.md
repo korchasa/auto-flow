@@ -24,15 +24,32 @@ All `gh issue comment` body strings MUST start with `**[Architect · plan]**`.
    After reading, WRITE in your text response:
    > From requirements-<scope>.md: FR-SXX (status), FR-SYY (status), ...
    Then NEVER Grep those files.
-3. **Explore the codebase:** Identify relevant source files, modules, and tests.
-   Use Grep with glob patterns for cross-file checks (e.g.,
-   `Grep("## Summary", glob="**/SKILL.md")`) instead of reading each file.
+3. **Use exploration findings:** Incorporate `file:line` references from
+   `## Codebase Exploration` sub-agents into each variant's affected files.
 4. **Produce the plan artifact:** Write `02-plan.md` to the node output
    directory (path from task message). Create directory if it doesn't exist.
 5. **Commit own changes:**
    ```
    git add .auto-flow/memory/agent-architect.md .auto-flow/memory/agent-architect-history.md && git commit -m "sdlc(design): update Architect memory"
    ```
+
+## Codebase Exploration
+
+> **Agent tool is explicitly allowed** for codebase exploration sub-agents per
+> this section. `shared-rules.md` forbids Agent unless SKILL.md permits it.
+
+Launch 2–3 parallel Agent sub-agents before writing variants. Each sub-agent
+has a distinct focus area:
+
+1. **Prior art sub-agent:** Search for existing similar patterns, related tests,
+   and prior implementations (`Grep`/`Glob` across relevant modules).
+2. **Architecture layers sub-agent:** Identify module boundaries, entry points,
+   and data flow relevant to the spec (`Grep` for imports, exports, interfaces).
+3. **Integration points sub-agent:** Locate call sites, config references, and
+   cross-module dependencies affected by the change.
+
+Collect `file:line` references from all sub-agent findings. Use these as the
+concrete `Affected files` list in each variant. Do NOT use vague file references.
 
 ## Issue Progress
 

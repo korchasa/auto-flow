@@ -209,6 +209,31 @@
   - Continuation loop condition `while (validationRules.length > 0 || node.allowed_paths !== undefined)` ensures scope-check nodes enter loop even without artifact rules — important subtlety for AC #7 verification.
   - 18th consecutive pattern: PM stage fails on iter 1, dev restores on iter 2. Pattern continues.
 
+## 2026-03-20T51:XX — Issue #178 (iteration 2)
+
+- **Turns:** ~10
+- **Cost:** ~$0.25 (est)
+- **Verdict:** PASS
+- **Outcome:** All 15 acceptance criteria passed. 569 tests, 0 failures. FR-S43 (§3.43, line 1007), FR-S44 (§3.44, line 1027), FR-S45 (§3.45, line 1045) + Appendix C rows (lines 1185–1187) all present — blocking issue from iteration 1 resolved. SKILL.md implementations confirmed correct. 6 non-blocking findings (documentation quality gaps). Self-approval failed → used `gh issue comment` fallback on issue #178.
+- **Key learnings:**
+  - 22nd consecutive PM-stage SRS persistence failure resolved in iteration 2 — `requirements-sdlc.md` in diff with all 3 FR sections at correct lines.
+  - Three FRs simultaneously (FR-S43/S44/S45): grepping for all 3 in one command confirms all 3 in one operation.
+  - Multi-focus review sub-agents add thoroughness but produce mostly non-blocking documentation quality findings for prompt-level-only changes.
+  - SKILL.md internal tensions (responsibility #4 vs #7 for SKILL.md file reviews) are non-blocking spec-compliance gaps.
+
+## 2026-03-20T50:XX — Issue #178 (iteration 1)
+
+- **Turns:** ~9
+- **Cost:** ~$0.20 (est)
+- **Verdict:** FAIL
+- **Outcome:** 9/10 acceptance criteria passed. 569 tests, 0 failures. SKILL.md implementations fully correct: `agent-architect/SKILL.md` has `## Codebase Exploration` section (2-3 parallel sub-agents: Prior art, Architecture layers, Integration points; Agent tool explicitly allowed; Responsibility #3 updated). `agent-qa/SKILL.md` has `## Confidence Scoring` (0-100, ≥80 threshold) and `## Multi-Focus Review` (2-3 parallel sub-agents; Agent tool explicitly allowed; Responsibility #4 delegates). Blocking: `documents/requirements-sdlc.md` not in diff, 0 matches for FR-S43/FR-S44/FR-S45 — PM-stage SRS persistence failure (21st consecutive: #147–#178). Self-request-changes failed (author = reviewer) → used `gh issue comment` fallback on issue #178.
+- **Key learnings:**
+  - 21st consecutive PM-stage SRS persistence failure. Same pattern: grep for FR numbers returns 0 immediately.
+  - This issue adds 3 FRs simultaneously (FR-S43/S44/S45) — none persisted to requirements-sdlc.md.
+  - Multi-focus review sub-agents work well; conventions sub-agent found all patterns correct (Agent tool allowance, section naming, additive scope adherence).
+  - SKILL.md-only changes with no TypeScript — test count unchanged at 569 from prior issue (#176).
+  - Parallel strategy (deno task check + git diff + gh issue view + grep FR-S43/S44/S45) confirmed FAIL in one parallel turn.
+
 ## 2026-03-20T49:XX — Issue #176 (iteration 2)
 
 - **Turns:** ~6

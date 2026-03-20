@@ -42,7 +42,8 @@ All `gh pr review` and `gh issue comment` body strings MUST start with
    different FRs → blocking "spec drift from issue".
 3. **Verify acceptance criteria:** Check each criterion from `01-spec.md`.
 4. **Review changed files:** `git diff main...HEAD --name-only` (once), then
-   parallel Read of all changed files. Inspect for quality and correctness.
+   delegate to `## Multi-Focus Review` sub-agents. Consolidate findings into
+   per-focus sections in the QA report.
 5. **Produce QA report:** Write verdict (PASS/FAIL) with detailed findings.
 6. **Commit own changes:**
    ```
@@ -56,12 +57,43 @@ All `gh pr review` and `gh issue comment` body strings MUST start with
    **If task involves verifying SKILL.md changes:** Use ONE Grep call with
    `glob="**/*SKILL.md"` to check the pattern. Do NOT Read each file.
 
+## Confidence Scoring
+
+Assign a confidence score (0–100) to each finding before determining its impact:
+
+- **≥ 80:** High confidence — finding is verdict-affecting. Include in
+  `## Issues Found` with full evidence. Counts toward blocking/non-blocking verdict.
+- **< 80:** Low confidence — do NOT affect verdict. List in `## Observations`
+  section as non-blocking notes for the developer's awareness.
+
+Score based on: direct code evidence (high), inference from context (medium),
+speculation without evidence (low). State the score inline: `[confidence: 85]`.
+
+## Multi-Focus Review
+
+> **Agent tool is explicitly allowed** for multi-focus review sub-agents per
+> this section. `shared-rules.md` forbids Agent unless SKILL.md permits it.
+
+After `git diff` identifies changed files, launch 2–3 parallel Agent sub-agents,
+each reading the changed files with a distinct review lens:
+
+1. **Correctness/bugs sub-agent:** Check for logic errors, incorrect assertions,
+   off-by-one errors, missing edge cases, and broken contracts.
+2. **Simplicity/DRY sub-agent:** Check for unnecessary complexity, duplication,
+   over-engineering, and violations of project "Fail Fast, Fail Clearly" strategy.
+3. **Conventions/abstractions sub-agent:** Check for naming consistency, code
+   style adherence, proper use of existing abstractions, and scope compliance.
+
+Consolidate findings from all sub-agents into separate per-focus sections in the
+QA report. Apply confidence scoring to each finding before including it.
+
 ## PR Progress
 
 Find PR number (run ONCE):
 `gh pr list --head "$(git branch --show-current)" --json number -q '.[0].number'`
 
 Post verdict as PR review:
+
 - PASS: `gh pr review <N> --approve --body "**[QA · verify]** QA: PASS — all acceptance criteria met"`
 - FAIL: `gh pr review <N> --request-changes --body "**[QA · verify]** QA: FAIL — <summary>"`
 
@@ -82,8 +114,12 @@ MUST begin with YAML frontmatter:
 ```yaml
 ---
 verdict: PASS
+high_confidence_issues: 0
 ---
 ```
+
+(`high_confidence_issues` is optional on PASS; required on FAIL with count of
+blocking + non-blocking high-confidence findings.)
 
 ### Required sections
 
@@ -92,15 +128,18 @@ verdict: PASS
    requirement + coverage. Spec drift = blocking.
 3. **Acceptance Criteria:** Pass/fail per criterion from `01-spec.md`.
 4. **Issues Found:** Each with description, affected file, severity
-   (`blocking` / `non-blocking`).
-5. **Verdict Details:** Human-readable explanation.
-6. **Summary:** 2-4 lines: verdict, criterion counts, blocking issue count.
+   (`blocking` / `non-blocking`), and confidence score.
+5. **Observations:** Low-confidence findings (< 80). Non-blocking. Format:
+   `- <finding> [confidence: <N>]`. Omit section if empty.
+6. **Verdict Details:** Human-readable explanation.
+7. **Summary:** 2-4 lines: verdict, criterion counts, blocking issue count.
 
 ### Example (FAIL)
 
 ```markdown
 ---
 verdict: FAIL
+high_confidence_issues: 2
 ---
 
 ## Check Results
@@ -116,10 +155,14 @@ verdict: FAIL
 
 ## Issues Found
 
-1. **Test failure in handler_test.ts**
+1. **Test failure in handler_test.ts** [confidence: 95]
    - File: `src/handler_test.ts:42`
    - Severity: blocking
    - Two assertions fail due to incorrect error format.
+
+## Observations
+
+- Variable name `tmp` is generic; consider `pendingResult` [confidence: 55]
 
 ## Verdict Details
 

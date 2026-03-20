@@ -1004,6 +1004,62 @@
   - [x] `deno task check` passes. Evidence: run `20260320T092158` (533 tests,
     pipeline integrity valid).
 
+### 3.43 FR-S43: Codebase Exploration inside Architect Agent
+
+- **Description:** Before writing design variants, the Architect agent launches
+  2–3 parallel exploration sub-agents (via the `Agent` tool) with distinct focus
+  areas: prior art/existing patterns, architecture layers/module boundaries, and
+  integration points/external dependencies. Sub-agent findings are incorporated
+  as concrete `file:line` references in the variant design. This reduces vague
+  component references and improves variant quality without adding new pipeline
+  phases.
+- **Dep:** FR-S3 (Architect stage).
+- **Acceptance criteria:**
+  - [x] `agent-architect/SKILL.md` contains `## Codebase Exploration` section
+    defining 2–3 parallel sub-agent launch pattern (Prior art, Architecture
+    layers, Integration points). Evidence: `.auto-flow/agents/agent-architect/SKILL.md`.
+  - [x] `Agent` tool explicitly allowed in `## Codebase Exploration` with
+    shared-rules.md override reference. Evidence:
+    `.auto-flow/agents/agent-architect/SKILL.md`.
+  - [x] Architect Responsibility #3 updated to incorporate exploration findings
+    as `file:line` references. Evidence: `.auto-flow/agents/agent-architect/SKILL.md`.
+
+### 3.44 FR-S44: Confidence-Scored QA Review
+
+- **Description:** QA agent assigns a 0–100 confidence score to each finding.
+  Findings with confidence ≥ 80 are verdict-affecting; findings with confidence
+  < 80 are listed in an `## Observations` section (non-blocking). QA report
+  frontmatter includes an optional `high_confidence_issues: <N>` field (required
+  on FAIL, optional on PASS). This filters noise from low-confidence
+  observations and ensures only high-confidence findings drive the verdict.
+- **Dep:** FR-S7 (QA stage), FR-S31 (QA check suite).
+- **Acceptance criteria:**
+  - [x] `agent-qa/SKILL.md` contains `## Confidence Scoring` section with 0–100
+    scale, ≥80 verdict-affecting, <80 non-blocking. Evidence:
+    `.auto-flow/agents/agent-qa/SKILL.md`.
+  - [x] QA report frontmatter template includes `high_confidence_issues` field.
+    Evidence: `.auto-flow/agents/agent-qa/SKILL.md`.
+  - [x] `## Observations` section template defined for low-confidence findings;
+    omitted when empty. Evidence: `.auto-flow/agents/agent-qa/SKILL.md`.
+
+### 3.45 FR-S45: Multi-Focus Parallel Review inside QA Agent
+
+- **Description:** QA agent launches 2–3 parallel sub-agents (via the `Agent`
+  tool) with distinct review focus areas: (1) correctness/bugs, (2)
+  simplicity/DRY, (3) conventions/abstractions. Each sub-agent reports findings
+  independently; QA consolidates into per-focus sections in the QA report.
+  Responsibility #4 ("Review changed files") delegates to sub-agents.
+- **Dep:** FR-S7 (QA stage), FR-S44 (confidence scoring).
+- **Acceptance criteria:**
+  - [x] `agent-qa/SKILL.md` contains `## Multi-Focus Review` section defining
+    2–3 parallel Agent sub-agents with distinct focus areas. Evidence:
+    `.auto-flow/agents/agent-qa/SKILL.md`.
+  - [x] `Agent` tool explicitly allowed in `## Multi-Focus Review` with
+    shared-rules.md override reference. Evidence:
+    `.auto-flow/agents/agent-qa/SKILL.md`.
+  - [x] QA Responsibility #4 updated to delegate to sub-agents with per-focus
+    consolidation. Evidence: `.auto-flow/agents/agent-qa/SKILL.md`.
+
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one pipeline at a time). Concurrent execution is not supported.
@@ -1126,3 +1182,6 @@ engine/                                # Deno/TypeScript pipeline engine
 | —      | FR-S40 | Pipeline Format Change Documentation Sync |
 | —      | FR-S41 | pre_run Auto-Stash of Uncommitted Changes           |
 | —      | FR-S42 | Migrate Pipeline Validate Rules to Composite Artifact Type |
+| —      | FR-S43 | Codebase Exploration inside Architect Agent                |
+| —      | FR-S44 | Confidence-Scored QA Review                               |
+| —      | FR-S45 | Multi-Focus Parallel Review inside QA Agent               |
