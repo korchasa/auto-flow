@@ -209,6 +209,18 @@
   - Continuation loop condition `while (validationRules.length > 0 || node.allowed_paths !== undefined)` ensures scope-check nodes enter loop even without artifact rules — important subtlety for AC #7 verification.
   - 18th consecutive pattern: PM stage fails on iter 1, dev restores on iter 2. Pattern continues.
 
+## 2026-03-20T54:XX — Issue #182 (iteration 2)
+
+- **Turns:** ~9
+- **Cost:** ~$0.22 (est)
+- **Verdict:** PASS
+- **Outcome:** All 8 acceptance criteria passed. 576 tests, 0 failures. FR-E38 at line 834 (§3.38, all 7 ACs marked [x]) and Appendix row at line 924 — blocking issues from iteration 1 resolved. `requirements-engine.md` IS in diff. Duplicate FR-E36 Appendix row removed (now sequential FR-E35/36/37/38 at lines 921-924). Behavioral implementation confirmed: `engine/types.ts:164`, `engine/config.ts:428-461`, `engine/validate.ts:261-337`, 3 config_test + 4 validate_test cases. Self-approval failed → used `gh issue comment` fallback on issue #182.
+- **Key learnings:**
+  - 23rd consecutive PM-stage SRS persistence failure resolved in iteration 2 — `requirements-engine.md` in diff with FR-E38 at §3.38 and Appendix.
+  - Parallel strategy (deno task check + git diff + gh issue view + grep FR-E38) confirmed PASS in one parallel turn — optimal fix-iteration pattern.
+  - Duplicate Appendix row removal (FR-E36 duplicate from iter 1) confirmed by sequential line scan — grep shows FR-E35/36/37/38 at lines 921-924.
+  - 576 tests unchanged from iter 1 (all tests already added in iter 1); only SRS doc updated in iter 2.
+
 ## 2026-03-20T52:XX — Issue #182 (iteration 1)
 
 - **Turns:** ~8
