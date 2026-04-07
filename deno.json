@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0",
+  "version": "0.1.1",
   "imports": {
     "@std/assert": "./vendor/assert.ts",
     "@std/yaml": "./vendor/yaml.ts"
@@ -21,9 +21,15 @@
   },
   "fmt": {
     "proseWrap": "preserve",
-    "exclude": ["**/*.md", ".*/**/*.md"]
+    "exclude": [
+      "**/*.md",
+      ".*/**/*.md"
+    ]
   },
   "lint": {
-    "exclude": [".claude/", ".flowai-workflow/agents/"]
+    "exclude": [
+      ".claude/",
+      ".flowai-workflow/agents/"
+    ]
   }
 }
