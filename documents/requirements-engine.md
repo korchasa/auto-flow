@@ -947,6 +947,90 @@
   - [x] AC9: 22 tests for update module. Evidence: `engine/update_test.ts`.
   - [x] AC10: `deno task check` green: 612 tests, 0 failures.
 
+### 3.42 FR-E42: Per-Node Effort Level (`effort`)
+
+- **Description:** Optional `effort` field on `WorkflowDefaults` and `NodeConfig`
+  that maps to Claude Code's `--effort` CLI flag. Controls reasoning depth per
+  invocation. Supported values: `low`, `medium`, `high`, `max`. Per-node
+  override cascades: node → defaults → omit (CLI default). Skipped on
+  `--resume` (session inherits original effort level).
+- **Motivation:** Simple nodes (PM triage, merge) don't benefit from deep
+  reasoning. Complex nodes (architect, developer) do. `--effort low` reduces
+  thinking tokens and latency on simple tasks; `--effort high` improves quality
+  on complex ones. Experimentally verified: `claude --effort low -p ...` works
+  in headless `-p` mode (Claude Code v2.1.92).
+- **Config schema:**
+  ```yaml
+  defaults:
+    effort: medium          # default for all nodes
+  nodes:
+    architect:
+      effort: high          # override for complex stages
+    pm:
+      effort: low           # override for simple stages
+  ```
+- **Engine behavior:**
+  - On fresh invocation: if `effort` resolved (node-level or default), append
+    `--effort <value>` to Claude CLI args.
+  - On `--resume`: do NOT emit `--effort`. Session inherits from original
+    invocation (same pattern as `--model`, FR-E12).
+  - Loop body nodes: inherit loop node's `effort` unless overridden in inline
+    `nodes` config.
+- **Acceptance criteria:**
+  - [ ] AC1: `WorkflowDefaults` in `types.ts` has `effort?: string` field.
+  - [ ] AC2: `NodeConfig` in `types.ts` has `effort?: string` field.
+  - [ ] AC3: Config validation rejects invalid values (must be one of `low`,
+    `medium`, `high`, `max`). Error message identifies node ID and invalid
+    value.
+  - [ ] AC4: `buildClaudeArgs()` emits `--effort <value>` when set AND
+    `resumeSessionId` is NOT set.
+  - [ ] AC5: Per-node override resolution (node → defaults → omit) in
+    `node-dispatch.ts` and `loop.ts`. Same pattern as `model` (FR-E12).
+  - [ ] AC6: Loop body nodes inherit effort from enclosing loop node unless
+    overridden.
+  - [ ] AC7: Unit tests: flag emission, skip on resume, invalid value
+    rejection, cascade resolution.
+  - [ ] AC8: `deno task check` passes.
+
+### 3.43 FR-E43: Fallback Model (`fallback_model`)
+
+- **Description:** Optional `fallback_model` field on `WorkflowDefaults` that
+  maps to Claude Code's `--fallback-model` CLI flag. Enables automatic model
+  fallback when primary model is overloaded (works only with `-p` mode, which
+  is our execution mode). Applied globally — not per-node (failover policy is
+  a workflow concern, not a node concern).
+- **Motivation:** Long-running workflows (30+ min) are vulnerable to transient
+  model overloads mid-execution. Without fallback, the node fails and the
+  entire workflow stops. `--fallback-model` provides transparent retry on a
+  cheaper model, keeping the workflow alive. Experimentally verified: flag
+  accepted by Claude Code v2.1.92 in `-p` mode.
+- **Config schema:**
+  ```yaml
+  defaults:
+    model: claude-opus-4-6
+    fallback_model: claude-sonnet-4-6   # auto-fallback on overload
+  ```
+- **Engine behavior:**
+  - On fresh invocation: if `fallback_model` set, append
+    `--fallback-model <value>` to Claude CLI args.
+  - On `--resume`: do NOT emit `--fallback-model`. Session inherits model
+    context from original invocation.
+  - Workflow-level only (`WorkflowDefaults`). Not per-node — overload is
+    transient and model-specific, not task-specific.
+- **Acceptance criteria:**
+  - [ ] AC1: `WorkflowDefaults` in `types.ts` has `fallback_model?: string`
+    field.
+  - [ ] AC2: `buildClaudeArgs()` emits `--fallback-model <value>` when set AND
+    `resumeSessionId` is NOT set.
+  - [ ] AC3: Config validation: if `fallback_model` set, `model` (defaults or
+    node-level) must also be set (fallback without primary is meaningless).
+    Error: `"fallback_model requires defaults.model to be set"`.
+  - [ ] AC4: Not exposed on `NodeConfig` — workflow-level only. No per-node
+    override.
+  - [ ] AC5: Unit tests: flag emission, skip on resume, validation
+    (fallback without model), absence (no flag).
+  - [ ] AC6: `deno task check` passes.
+
 ## 4. Non-Functional Requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one workflow at a time). Concurrent execution is not supported.
@@ -965,7 +1049,10 @@
   - `--resume <session-id>` — re-invokes agent in same session for continuations (FR-E1).
   - `-p "<prompt>"` — non-interactive mode.
   - `--model <model>` — per-node model override (FR-E12).
-- **Config format:** YAML workflow config with `defaults` (global settings) and `nodes` (DAG definition). Node types: `agent`, `loop`, `merge`, `human`. Fields per type: `prompt`, `inputs`, `validate`, `model`, `run_on`, `after`/`before` hooks.
+  - `--effort <level>` — reasoning depth: `low`|`medium`|`high`|`max` (FR-E42).
+  - `--fallback-model <model>` — auto-fallback on primary model overload (FR-E43, `-p` only).
+  - `--permission-mode <mode>` — permission mode override (FR-E40).
+- **Config format:** YAML workflow config with `defaults` (global settings) and `nodes` (DAG definition). Node types: `agent`, `loop`, `merge`, `human`. Fields per type: `prompt`, `inputs`, `validate`, `model`, `effort`, `run_on`, `after`/`before` hooks.
 - **State:** `<run-dir>/state.json` — node statuses (`pending`/`running`/`completed`/`failed`/`waiting`/`skipped`), session IDs, cost data, timing, HITL question JSON.
 - **Template variables:** `{{input.<node-id>}}` (node output dir), `{{node_dir}}` (current node output dir), `{{run_dir}}` (run root), `{{run_id}}`, `{{loop.iteration}}` (loop body only), `{{env.<KEY>}}`, `{{file("path")}}` (inline file content, path relative to repo root; FR-E32).
 
@@ -1014,3 +1101,5 @@
 | —      | FR-E39 | Standalone Binary Distribution |
 | —      | FR-E40 | Permission Mode Configuration |
 | —      | FR-E41 | CLI Auto-Update and Automated Release Pipeline |
+| —      | FR-E42 | Per-Node Effort Level (`effort`) |
+| —      | FR-E43 | Fallback Model (`fallback_model`) |
