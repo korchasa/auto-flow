@@ -563,17 +563,28 @@
   - [ ] `deno task check` (no args) continues to run all checks unchanged (backward-compatible).
   - [ ] `deno task check` passes (self-check).
 
-### 3.24 FR-E24: Pre-Run Script (`pre_run`)
+### 3.24 FR-E24: Worktree Isolation (replaces pre_run)
 
-- **Description:** Workflow config supports an optional `pre_run` field (top-level string). When present, the engine executes it as a shell script **before** fully loading the config. Two-phase loading: (1) read raw YAML, extract `pre_run`; (2) execute script; (3) re-read and fully parse config. Enables self-healing (e.g. reset to stable branch before workflow starts).
-- **Motivation:** Workflow may be invoked from a broken branch where config/prompts are corrupted. `pre_run` can reset to a known-good state before the engine loads any node definitions.
+- **Description:** ~~Pre-run script (`pre_run`)~~ **Superseded.** Engine now
+  creates a git worktree per run for execution isolation, eliminating destructive
+  `git reset --hard`. Two-phase loading: (1) read raw YAML, extract
+  `defaults.worktree_disabled`; (2) if not disabled, create worktree from
+  `origin/main`; (3) load full config from worktree. All subprocesses, file I/O,
+  and template `{{file()}}` resolution use the worktree path (`cwd`/`workDir`).
+  On success, worktree removed; on failure, preserved for `--resume`. State
+  copied to original repo before cleanup.
+- **Motivation:** `pre_run` relied on destructive git operations that could lose
+  work. Worktree isolation provides clean execution environment without modifying
+  the original working tree.
 - **Acceptance criteria:**
-  - [x] `WorkflowConfig.pre_run` is an optional string field. Evidence: `engine/types.ts:14-16`
-  - [x] `extractPreRun(yaml)` extracts only `pre_run` without full schema validation. Evidence: `engine/config.ts:33-42`
-  - [x] `Engine.run()` reads raw YAML, calls `extractPreRun`, executes script if present, then re-reads config via `loadConfig`. Evidence: `engine/engine.ts:72-82`
-  - [x] `runPreRunScript()` throws on script failure (non-zero exit). Evidence: `engine/engine.ts:662-690`
-  - [x] `pre_run` absent → no script executed, backward-compatible. Evidence: `engine/config_test.ts:262-263`
-  - [x] Tests cover: field parsing, extraction, script success, script failure, nonexistent script. Evidence: `engine/config_test.ts:256-295`, `engine/engine_test.ts:900-949`
+  - [x] `pre_run` field rejected with migration error at config validation. Evidence: `engine/config.ts:220-224`
+  - [x] `extractWorktreeDisabled(yaml)` extracts `defaults.worktree_disabled` without full parsing. Evidence: `engine/config.ts:51-57`
+  - [x] `worktree.ts` module: `createWorktree()`, `removeWorktree()`, `worktreeExists()`, `copyToOriginalRepo()`. Evidence: `engine/worktree.ts`
+  - [x] Engine creates worktree for new runs, reuses existing for resume, skips when `worktree_disabled: true`. Evidence: `engine/engine.ts:120-136`
+  - [x] `workPath()` utility centralizes workDir prefix logic. Evidence: `engine/state.ts:126-128`
+  - [x] All subprocess-spawning functions accept `cwd` parameter (agent, claude-process, hitl, validate, scope-check, loop). Evidence: `engine/agent.ts`, `engine/claude-process.ts`, `engine/hitl.ts`, `engine/validate.ts`, `engine/scope-check.ts`, `engine/loop.ts`
+  - [x] Template `interpolate()` and config `validateFileReferences()` accept `workDir` for `{{file()}}` resolution. Evidence: `engine/template.ts`, `engine/config.ts`
+  - [x] Tests: worktree lifecycle, path computation, error handling, config validation. Evidence: `engine/worktree_test.ts`, `engine/config_test.ts`
 
 ### 3.25 FR-E25: Graceful Shutdown (Signal Handling)
 
@@ -629,7 +640,7 @@
 
 ### 3.30 FR-E30: Workflow Prepare Command (`prepare_command`)
 
-- **Description:** `WorkflowDefaults` supports optional `prepare_command` (string). Executed as a shell command once, after config validation and run directory creation, before any node starts. Skipped on `--resume`. Failure (non-zero exit) is fatal: workflow aborts immediately. Supports template interpolation: `{{run_dir}}`, `{{run_id}}`, `{{env.*}}`, `{{args.*}}`. Completes the hook lifecycle: `pre_run` (pre-config) → config load → `prepare_command` (pre-node) → node execution → `on_failure_script` (post-failure).
+- **Description:** `WorkflowDefaults` supports optional `prepare_command` (string). Executed as a shell command once, after config validation and run directory creation, before any node starts. Skipped on `--resume`. Failure (non-zero exit) is fatal: workflow aborts immediately. Supports template interpolation: `{{run_dir}}`, `{{run_id}}`, `{{env.*}}`, `{{args.*}}`. Completes the hook lifecycle: worktree creation → config load → `prepare_command` (pre-node) → node execution → `on_failure_script` (post-failure).
 - **Motivation:** Workflow-level environment preparation (e.g., repo reset to clean state) belongs before node execution, not inside a node's `before` hook. Node hooks are unreliable for env prep: with `--skip`, `--only`, or `--resume`, the first node may be bypassed, leaving the environment unprepared.
 - **Acceptance criteria:**
   - [ ] `WorkflowDefaults.prepare_command` is an optional string field; validated at config load. Evidence: `engine/types.ts`
@@ -1083,7 +1094,7 @@
 | FR-41  | FR-E21 | Semi-Verbose Output Mode (`-s`) |
 | —      | FR-E22 | Workflow Final Summary with Node Results |
 | —      | FR-E23 | CLI Help for `deno task check` |
-| —      | FR-E24 | Pre-Run Script (`pre_run`) |
+| —      | FR-E24 | Worktree Isolation (replaces pre_run) |
 | —      | FR-E25 | Graceful Shutdown (Signal Handling) |
 | —      | FR-E26 | Engine Codebase Housekeeping |
 | —      | FR-E27 | Test Suite Integrity |

@@ -95,6 +95,8 @@ export interface AgentRunOptions {
   streamLogPath?: string;
   /** Verbosity level for terminal output filtering. */
   verbosity?: Verbosity;
+  /** Working directory for subprocesses (worktree path or "."). */
+  cwd?: string;
 }
 
 /**
@@ -132,6 +134,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     nodeId,
     streamLogPath,
     verbosity,
+    cwd,
   } = opts;
 
   // Derive onOutput callback from OutputManager
@@ -141,12 +144,12 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
 
   // Run before hook
   if (node.before) {
-    const hookCmd = interpolate(node.before, ctx);
-    await runShellCommand(hookCmd, "before hook");
+    const hookCmd = interpolate(node.before, ctx, cwd);
+    await runShellCommand(hookCmd, "before hook", cwd);
   }
 
   // Build task prompt
-  const taskPrompt = node.prompt ? interpolate(node.prompt, ctx) : "";
+  const taskPrompt = node.prompt ? interpolate(node.prompt, ctx, cwd) : "";
 
   // Verbose: show interpolated prompt
   if (output && nodeId) {
@@ -156,14 +159,14 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
   // Scope check: snapshot before first invocation (FR-E37)
   let beforeSnapshot: Set<string> | undefined;
   if (node.allowed_paths !== undefined) {
-    beforeSnapshot = await snapshotModifiedFiles();
+    beforeSnapshot = await snapshotModifiedFiles(cwd);
   }
 
   // Initial invocation
   let result = await invokeClaudeCli({
     agent: node.agent,
     systemPrompt: node.system_prompt
-      ? interpolate(node.system_prompt, ctx)
+      ? interpolate(node.system_prompt, ctx, cwd)
       : undefined,
     taskPrompt,
     claudeArgs,
@@ -175,6 +178,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     onOutput,
     streamLogPath,
     verbosity,
+    cwd,
   });
 
   let continuations = 0;
@@ -192,11 +196,11 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
 
   // Continuation loop: runs when validate rules exist OR scope check is active
   while (validationRules.length > 0 || node.allowed_paths !== undefined) {
-    const validationResults = await runValidations(validationRules, ctx);
+    const validationResults = await runValidations(validationRules, ctx, cwd);
 
     // Inject scope_check result if out-of-scope modifications detected (FR-E37)
     if (node.allowed_paths !== undefined && beforeSnapshot !== undefined) {
-      const afterSnapshot = await snapshotModifiedFiles();
+      const afterSnapshot = await snapshotModifiedFiles(cwd);
       const violations = findViolations(
         beforeSnapshot,
         afterSnapshot,
@@ -279,6 +283,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       onOutput,
       streamLogPath,
       verbosity,
+      cwd,
     });
   }
 
@@ -295,9 +300,9 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
 
   // Run after hook
   if (node.after) {
-    const hookCmd = interpolate(node.after, ctx);
+    const hookCmd = interpolate(node.after, ctx, cwd);
     try {
-      await runShellCommand(hookCmd, "after hook");
+      await runShellCommand(hookCmd, "after hook", cwd);
     } catch (err) {
       return {
         success: false,
@@ -325,11 +330,13 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
 async function runShellCommand(
   command: string,
   label: string,
+  cwd?: string,
 ): Promise<void> {
   const cmd = new Deno.Command("sh", {
     args: ["-c", command],
     stdout: "piped",
     stderr: "piped",
+    ...(cwd ? { cwd } : {}),
   });
   const output = await cmd.output();
   if (!output.success) {

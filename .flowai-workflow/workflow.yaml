@@ -5,7 +5,6 @@
 
 name: "flowai-workflow-sdlc"
 version: "1"
-pre_run: ".flowai-workflow/scripts/reset-to-main.sh"
 
 defaults:
   max_parallel: 2

@@ -15,15 +15,26 @@ export const FILE_INCLUSION_SIZE_WARN_BYTES = 102400;
  * - `{{file("path")}}` — inline file content (single-pass, no re-interpolation)
  *
  * Unresolved placeholders throw an error (fail fast).
+ *
+ * @param workDir — base directory for resolving relative `{{file()}}` paths.
+ *   Defaults to `Deno.cwd()`. When running in a worktree, pass the worktree path.
  */
-export function interpolate(template: string, ctx: TemplateContext): string {
+export function interpolate(
+  template: string,
+  ctx: TemplateContext,
+  workDir?: string,
+): string {
   return template.replace(/\{\{([^}]+)\}\}/g, (_match, expr: string) => {
     const key = expr.trim();
-    return resolve(key, ctx);
+    return resolve(key, ctx, workDir);
   });
 }
 
-function resolve(key: string, ctx: TemplateContext): string {
+function resolve(
+  key: string,
+  ctx: TemplateContext,
+  workDir?: string,
+): string {
   // Direct fields
   if (key === "node_dir") return ctx.node_dir;
   if (key === "run_dir") return ctx.run_dir;
@@ -33,7 +44,8 @@ function resolve(key: string, ctx: TemplateContext): string {
   const fileMatch = key.match(/^file\("(.+)"\)$/);
   if (fileMatch) {
     const path = fileMatch[1];
-    const resolved = path.startsWith("/") ? path : `${Deno.cwd()}/${path}`;
+    const base = workDir ?? Deno.cwd();
+    const resolved = path.startsWith("/") ? path : `${base}/${path}`;
     let content: string;
     try {
       content = Deno.readTextFileSync(resolved);

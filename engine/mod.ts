@@ -22,7 +22,7 @@ export type {
 export { interpolate } from "./template.ts";
 export {
   DEFAULT_SETTINGS,
-  extractPreRun,
+  extractWorktreeDisabled,
   loadConfig,
   parseConfig,
 } from "./config.ts";
@@ -64,4 +64,4 @@ export type {
   VerboseInput,
   VerboseValidationResult,
 } from "./output.ts";
-export { Engine, runPreRunScript } from "./engine.ts";
+export { Engine } from "./engine.ts";

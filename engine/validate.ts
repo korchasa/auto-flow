@@ -19,14 +19,16 @@ export interface ValidationResult {
   message: string;
 }
 
-/** Run all validation rules for a node. Returns results for each rule. */
+/** Run all validation rules for a node. Returns results for each rule.
+ * @param cwd — working directory for custom_script execution. */
 export async function runValidations(
   rules: ValidationRule[],
   ctx: TemplateContext,
+  cwd?: string,
 ): Promise<ValidationResult[]> {
   const results: ValidationResult[] = [];
   for (const rule of rules) {
-    results.push(await runSingleValidation(rule, ctx));
+    results.push(await runSingleValidation(rule, ctx, cwd));
   }
   return results;
 }
@@ -47,6 +49,7 @@ export function formatFailures(results: ValidationResult[]): string {
 async function runSingleValidation(
   rule: ValidationRule,
   ctx: TemplateContext,
+  cwd?: string,
 ): Promise<ValidationResult> {
   const resolvedPath = interpolate(rule.path, ctx);
 
@@ -58,7 +61,7 @@ async function runSingleValidation(
     case "contains_section":
       return await checkContainsSection(rule, resolvedPath);
     case "custom_script":
-      return await checkCustomScript(rule, resolvedPath);
+      return await checkCustomScript(rule, resolvedPath, cwd);
     case "frontmatter_field":
       return await checkFrontmatterField(rule, resolvedPath);
     case "artifact":
@@ -140,12 +143,14 @@ async function checkContainsSection(
 async function checkCustomScript(
   rule: ValidationRule,
   scriptPath: string,
+  cwd?: string,
 ): Promise<ValidationResult> {
   try {
     const cmd = new Deno.Command("sh", {
       args: ["-c", scriptPath],
       stdout: "piped",
       stderr: "piped",
+      ...(cwd ? { cwd } : {}),
     });
     const output = await cmd.output();
     const stdout = new TextDecoder().decode(output.stdout).trim();

@@ -32,10 +32,6 @@ export interface WorkflowConfig {
   name: string;
   /** Config schema version; only "1" is currently supported. */
   version: "1";
-  /** Shell script executed before config is fully loaded and workflow starts.
-   * Enables self-healing (e.g. reset to stable branch). The engine reads only
-   * this field first, runs the script, then re-reads the full config. */
-  pre_run?: string;
   /** Global defaults applied to all nodes unless overridden at node level. */
   defaults?: WorkflowDefaults;
   /** Global environment variables accessible via `{{env.<key>}}` in templates. */
@@ -49,6 +45,8 @@ export interface WorkflowConfig {
 
 /** Global defaults applied to all nodes unless overridden. */
 export interface WorkflowDefaults extends NodeSettings {
+  /** When true, skip worktree creation and run in CWD (default false). */
+  worktree_disabled?: boolean;
   /** Maximum parallel node executions; 0 means unlimited (default). */
   max_parallel?: number;
   /** Extra CLI args forwarded to every claude invocation. */

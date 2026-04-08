@@ -56,6 +56,8 @@ export interface LoopRunOptions {
   verbosity?: Verbosity;
   /** Persist run state to disk after node completion. */
   saveState?: () => Promise<void>;
+  /** Working directory for subprocesses (worktree path or undefined for CWD). */
+  cwd?: string;
 }
 
 /**
@@ -110,6 +112,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         nodeId: bodyNodeId,
         streamLogPath,
         verbosity: opts.verbosity,
+        cwd: opts.cwd,
       });
 
       bodyResults.push(result);

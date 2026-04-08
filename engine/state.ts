@@ -122,17 +122,30 @@ export function getLogsDir(runId: string): string {
   return `${getRunDir(runId)}/logs`;
 }
 
-/** Save RunState to state.json. */
-export async function saveState(state: RunState): Promise<void> {
-  const path = getStatePath(state.run_id);
-  const dir = getRunDir(state.run_id);
+/** Prefix a relative path with workDir. No-op when workDir is ".". */
+export function workPath(workDir: string, relativePath: string): string {
+  return workDir === "." ? relativePath : `${workDir}/${relativePath}`;
+}
+
+/** Save RunState to state.json.
+ * @param workDir — base directory prefix for file I/O. Defaults to "." (CWD). */
+export async function saveState(
+  state: RunState,
+  workDir = ".",
+): Promise<void> {
+  const path = `${workDir}/${getStatePath(state.run_id)}`;
+  const dir = `${workDir}/${getRunDir(state.run_id)}`;
   await Deno.mkdir(dir, { recursive: true });
   await Deno.writeTextFile(path, JSON.stringify(state, null, 2) + "\n");
 }
 
-/** Load RunState from state.json. */
-export async function loadState(runId: string): Promise<RunState> {
-  const path = getStatePath(runId);
+/** Load RunState from state.json.
+ * @param workDir — base directory prefix for file I/O. Defaults to "." (CWD). */
+export async function loadState(
+  runId: string,
+  workDir = ".",
+): Promise<RunState> {
+  const path = `${workDir}/${getStatePath(runId)}`;
   const text = await Deno.readTextFile(path);
   return JSON.parse(text) as RunState;
 }

@@ -98,8 +98,8 @@ graph TD
     array (empty = valid). Pure function, no I/O. Co-located with `resolve()`
     to maintain single source of truth for valid template variables
   - `config.ts` — YAML parsing, schema validation, defaults merge,
-    `run_on` normalization. `extractPreRun()`: lightweight pre-parse
-    extracting only `pre_run` field for two-phase loading (FR-E24). `validateNode()`: if `run_on` present, must be
+    `run_on` normalization. `extractWorktreeDisabled()`: lightweight pre-parse
+    extracting only `defaults.worktree_disabled` for two-phase loading (FR-E24). `validateNode()`: if `run_on` present, must be
     one of `"always"|"success"|"failure"`; error:
     `Node '<id>' has invalid run_on value '<val>'. Must be one of: always, success, failure`.
     `validateFileReferences(config)` (FR-E32): scans all `task_template`

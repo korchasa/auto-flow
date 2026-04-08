@@ -941,32 +941,14 @@
     Evidence: run `20260319T233247`. (ADR-001 deleted — superseded, content
     covered by FR-S38/FR-S39.)
 
-### 3.41 FR-S41: pre_run Auto-Stash of Uncommitted Changes
+### 3.41 FR-S41: ~~pre_run Auto-Stash~~ (Superseded)
 
-- **Description:** The `pre_run` reset script (`reset-to-main.sh`) must
-  preserve uncommitted changes before executing destructive git operations
-  (`git reset --hard`, `git clean -fd`). Without preservation, running
-  `deno task run` with a dirty working tree silently destroys all local
-  modifications. FR-S41 adds a dirty-check + auto-stash block that displays
-  branch + diff stat, stashes all changes (tracked, staged, untracked) with a
-  timestamped message, and confirms the stash ref + restore command. Clean
-  working trees proceed silently with no behavior change.
-- **Dep:** FR-S15 (workflow git workflow).
-- **Acceptance criteria:**
-  - [x] Display branch name and diff stat (tracked + staged + untracked) when
-    working tree is dirty before stashing. Evidence:
-    `reset-to-main.sh:11-15`, run `20260320T000829`.
-  - [x] Stash all uncommitted changes via `git stash push --include-untracked`
-    with timestamped message before any destructive git ops. Evidence:
-    `reset-to-main.sh:17`, run `20260320T000829`.
-  - [x] Display stash ref and restore command (`git stash pop`) after stashing.
-    Evidence: `reset-to-main.sh:18-19`, run `20260320T000829`.
-  - [x] Clean working tree proceeds silently — no stash created, no extra
-    output. Evidence: `reset-to-main.sh:9` (`if [ -n "$(git status --porcelain)" ]`
-    guard), run `20260320T000829`.
-  - [x] Post-stash reset behavior unchanged: `git fetch origin main`,
-    `git checkout -f main`, `git reset --hard origin/main`, `git clean -fd`.
-    Evidence: `reset-to-main.sh:22-27`, run `20260320T000829`.
+- **Description:** ~~pre_run auto-stash of uncommitted changes.~~ **Superseded
+  by engine FR-E24 (worktree isolation).** Engine now creates a git worktree per
+  run instead of destructive `git reset --hard`. No auto-stash needed — original
+  working tree is never modified. `pre_run` field removed from engine; using it
+  throws a migration error.
+- **Status:** Superseded. `reset-to-main.sh` no longer invoked.
 
 ### 3.42 FR-S42: Migrate Workflow Validate Rules to Composite Artifact Type
 
@@ -1179,7 +1161,7 @@ engine/                                # Deno/TypeScript workflow engine
 | —      | FR-S38 | Workflow Agent Context via file() Injection in task_template |
 | —      | FR-S39 | Remove Redundant shared-rules.md Read Instruction from SKILL.md Files |
 | —      | FR-S40 | Workflow Format Change Documentation Sync |
-| —      | FR-S41 | pre_run Auto-Stash of Uncommitted Changes           |
+| —      | FR-S41 | ~~pre_run Auto-Stash~~ (Superseded by FR-E24)       |
 | —      | FR-S42 | Migrate Workflow Validate Rules to Composite Artifact Type |
 | —      | FR-S43 | Codebase Exploration inside Architect Agent                |
 | —      | FR-S44 | Confidence-Scored QA Review                               |

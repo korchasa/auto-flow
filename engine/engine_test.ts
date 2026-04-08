@@ -8,7 +8,7 @@ import type {
 } from "./types.ts";
 import { resolveInputArtifacts } from "./agent.ts";
 import { collectAllNodeIds, findNodeConfig } from "./config.ts";
-import { Engine, runPrepareCommand, runPreRunScript } from "./engine.ts";
+import { Engine, runPrepareCommand } from "./engine.ts";
 import {
   collectPostWorkflowNodes,
   executePostWorkflow,
@@ -896,59 +896,6 @@ Deno.test("summary() — omits nodeResults section when no nodes have results", 
     joined.split("\n").filter((l) => l.match(/^\s+\w.*\s{2}/)).length,
     0,
   );
-});
-
-// --- pre_run tests ---
-
-Deno.test("runPreRunScript — executes script successfully", async () => {
-  const tmpScript = await Deno.makeTempFile({ suffix: ".sh" });
-  try {
-    await Deno.writeTextFile(tmpScript, "#!/bin/bash\necho 'pre_run ok'");
-    await Deno.chmod(tmpScript, 0o755);
-    const cap = createCapture();
-    const out = new OutputManager("normal", cap.writer);
-    await runPreRunScript(tmpScript, out);
-    const output = cap.lines.join("");
-    assertEquals(output.includes("PRE_RUN"), true);
-    assertEquals(output.includes("pre_run ok"), true);
-  } finally {
-    await Deno.remove(tmpScript);
-  }
-});
-
-Deno.test("runPreRunScript — throws on script failure", async () => {
-  const tmpScript = await Deno.makeTempFile({ suffix: ".sh" });
-  try {
-    await Deno.writeTextFile(tmpScript, "#!/bin/bash\nexit 1");
-    await Deno.chmod(tmpScript, 0o755);
-    const cap = createCapture();
-    const out = new OutputManager("normal", cap.writer);
-    let thrown = false;
-    try {
-      await runPreRunScript(tmpScript, out);
-    } catch (e) {
-      thrown = true;
-      assertEquals(
-        (e as Error).message.includes("pre_run script failed"),
-        true,
-      );
-    }
-    assertEquals(thrown, true);
-  } finally {
-    await Deno.remove(tmpScript);
-  }
-});
-
-Deno.test("runPreRunScript — throws on nonexistent script", async () => {
-  const cap = createCapture();
-  const out = new OutputManager("normal", cap.writer);
-  let thrown = false;
-  try {
-    await runPreRunScript("/nonexistent/pre_run.sh", out);
-  } catch {
-    thrown = true;
-  }
-  assertEquals(thrown, true);
 });
 
 // --- FR-E30: runPrepareCommand tests ---

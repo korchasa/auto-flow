@@ -16,12 +16,15 @@
  * sub-second for ≤1000 files (AC #6) and correctly excludes staged-only
  * or committed changes.
  */
-export async function snapshotModifiedFiles(): Promise<Set<string>> {
+export async function snapshotModifiedFiles(
+  cwd?: string,
+): Promise<Set<string>> {
   const run = async (args: string[]): Promise<string> => {
     const cmd = new Deno.Command("git", {
       args,
       stdout: "piped",
       stderr: "null",
+      ...(cwd ? { cwd } : {}),
     });
     const out = await cmd.output();
     return new TextDecoder().decode(out.stdout);

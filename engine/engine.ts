@@ -8,7 +8,7 @@ import type {
 import type { AgentResult } from "./agent.ts";
 import {
   collectAllNodeIds,
-  extractPreRun,
+  extractWorktreeDisabled,
   findNodeConfig,
   loadConfig,
 } from "./config.ts";
@@ -29,6 +29,7 @@ import {
   generateRunId,
   getNodeDir,
   getRunDir,
+  getStatePath,
   isNodeCompleted,
   loadState,
   markNodeCompleted,
@@ -39,6 +40,7 @@ import {
   markRunFailed,
   saveState,
   setPhaseRegistry,
+  workPath,
 } from "./state.ts";
 import { interpolate } from "./template.ts";
 import type { EngineContext } from "./node-dispatch.ts";
@@ -48,6 +50,13 @@ import {
   executeLoopNode,
   executeMergeNode,
 } from "./node-dispatch.ts";
+import {
+  copyToOriginalRepo,
+  createWorktree,
+  getWorktreePath,
+  removeWorktree,
+  worktreeExists,
+} from "./worktree.ts";
 
 /** Main workflow engine. Orchestrates node execution across DAG levels. */
 export class Engine {
@@ -57,6 +66,8 @@ export class Engine {
   private options: EngineOptions;
   private userInput: UserInput;
   private startTime = 0;
+  /** Working directory: worktree path or "." when worktree disabled. */
+  private workDir = ".";
 
   /** Create an engine instance with the given options and optional user-input provider. */
   constructor(options: EngineOptions, userInput: UserInput = terminalInput) {
@@ -69,26 +80,14 @@ export class Engine {
   async run(): Promise<RunState> {
     this.startTime = Date.now();
 
-    // Two-phase config loading:
-    // 1. Read raw YAML, extract pre_run script path
-    // 2. If pre_run exists, execute it (e.g. reset to stable branch)
-    // 3. Re-read and fully parse config (now from potentially updated files)
+    // Phase 1: Minimal YAML pre-parse — extract worktree_disabled
     const rawYaml = await Deno.readTextFile(this.options.config_path);
-    const preRun = extractPreRun(rawYaml);
-    if (preRun) {
-      await runPreRunScript(preRun, this.output);
-    }
+    const worktreeDisabled = extractWorktreeDisabled(rawYaml);
 
-    // Load config (re-reads file after pre_run may have changed it)
-    this.config = await loadConfig(this.options.config_path);
-    // Merge env overrides
-    const env = { ...this.config.env, ...this.options.env_overrides };
-
-    // Build execution levels
-    const levels = buildLevels(this.config);
-
-    // Handle dry-run
+    // Dry-run: load config from CWD (no worktree needed), print plan, exit
     if (this.options.dry_run) {
+      this.config = await loadConfig(this.options.config_path);
+      const levels = buildLevels(this.config);
       const labels: Record<string, string> = {};
       for (const [id, node] of Object.entries(this.config.nodes)) {
         labels[id] = node.label;
@@ -115,13 +114,47 @@ export class Engine {
       return this.createDryRunState(levels);
     }
 
+    // Phase 2: Set up workDir (worktree or CWD)
+    // Generate runId once — shared between worktree path and run state
+    const runLabel = this.options.args.prompt?.slice(0, 20) ?? undefined;
+    const runId = this.options.run_id ?? generateRunId(runLabel);
+
+    if (this.options.resume && this.options.run_id) {
+      // Resume: reuse existing worktree if it exists
+      if (!worktreeDisabled && worktreeExists(this.options.run_id)) {
+        this.workDir = getWorktreePath(this.options.run_id);
+        this.output.status("engine", `RESUME worktree: ${this.workDir}`);
+      } else {
+        this.workDir = ".";
+      }
+    } else if (!worktreeDisabled) {
+      // New run: create worktree
+      this.output.status("engine", "Creating worktree...");
+      this.workDir = await createWorktree(runId);
+      this.output.status("engine", `Worktree: ${this.workDir}`);
+    } else {
+      this.workDir = ".";
+    }
+
+    // Phase 3: Load config from workDir
+    const configPath = this.workDir === "."
+      ? this.options.config_path
+      : `${this.workDir}/${this.options.config_path}`;
+    this.config = await loadConfig(
+      configPath,
+      this.workDir === "." ? undefined : this.workDir,
+    );
+    // Merge env overrides
+    const env = { ...this.config.env, ...this.options.env_overrides };
+
+    // Build execution levels
+    const levels = buildLevels(this.config);
+
     // Initialize or resume state
     if (this.options.resume && this.options.run_id) {
-      this.state = await loadState(this.options.run_id);
+      this.state = await loadState(this.options.run_id, this.workDir);
       this.state.status = "running";
     } else {
-      const runLabel = this.options.args.prompt?.slice(0, 20) ?? undefined;
-      const runId = this.options.run_id ?? generateRunId(runLabel);
       const allNodeIds = collectAllNodeIds(this.config);
       this.state = createRunState(
         runId,
@@ -143,7 +176,7 @@ export class Engine {
       onShutdown(async () => {
         if (this.state.status === "running") {
           markRunFailed(this.state);
-          await saveState(this.state);
+          await saveState(this.state, this.workDir);
         }
       }),
     ];
@@ -166,10 +199,11 @@ export class Engine {
 
     // Create run directory structure
     await this.ensureRunDirs(levels);
-    await saveState(this.state);
+    await saveState(this.state, this.workDir);
 
     // Run prepare_command before level loop (skip on resume)
     const prepareCmd = this.config.defaults?.prepare_command ?? "";
+    const cwd = this.workDir !== "." ? this.workDir : undefined;
     if (!this.options.resume && prepareCmd) {
       await runPrepareCommand(
         prepareCmd,
@@ -178,6 +212,7 @@ export class Engine {
         this.state.env,
         this.state.args,
         this.output,
+        cwd,
       );
     }
 
@@ -196,9 +231,10 @@ export class Engine {
 
     // Ensure post-workflow node dirs exist
     for (const nodeId of postWorkflowNodeIds) {
-      await Deno.mkdir(getNodeDir(this.state.run_id, nodeId), {
-        recursive: true,
-      });
+      await Deno.mkdir(
+        workPath(this.workDir, getNodeDir(this.state.run_id, nodeId)),
+        { recursive: true },
+      );
     }
 
     // Execute regular levels
@@ -225,6 +261,8 @@ export class Engine {
       failureScript: this.config.defaults?.on_failure_script,
       output: this.output,
       executeNode: (nodeId) => this.executeNode(nodeId),
+      cwd,
+      workDir: this.workDir,
     });
 
     // Finalize run state
@@ -233,7 +271,35 @@ export class Engine {
     } else {
       markRunFailed(this.state);
     }
-    await saveState(this.state);
+    await saveState(this.state, this.workDir);
+
+    // Worktree cleanup: copy state to original repo on success, then remove
+    if (this.workDir !== ".") {
+      const statePath = getStatePath(this.state.run_id);
+      try {
+        await copyToOriginalRepo(this.workDir, statePath);
+      } catch (err) {
+        this.output.warn(
+          `Failed to copy state to original repo: ${(err as Error).message}`,
+        );
+      }
+      if (workflowSuccess) {
+        try {
+          await removeWorktree(this.workDir);
+          this.output.status("engine", "Worktree removed (success)");
+        } catch (err) {
+          this.output.warn(
+            `Failed to remove worktree: ${(err as Error).message}`,
+          );
+        }
+      } else {
+        this.output.status(
+          "engine",
+          `Worktree preserved for resume: ${this.workDir}`,
+        );
+      }
+    }
+
     this.printSummary();
     return this.state;
   }
@@ -305,7 +371,7 @@ export class Engine {
     // Capture waiting state before markNodeStarted overwrites status
     const wasWaiting = this.state.nodes[nodeId]?.status === "waiting";
     markNodeStarted(this.state, nodeId);
-    await saveState(this.state);
+    await saveState(this.state, this.workDir);
 
     const extra = node.type === "loop"
       ? `loop, max ${node.max_iterations ?? 3} iterations`
@@ -326,7 +392,8 @@ export class Engine {
         userInput: this.userInput,
         buildContext: (nId, loopIteration?) =>
           this.buildContext(nId, loopIteration),
-        saveState: () => saveState(this.state),
+        saveState: () => saveState(this.state, this.workDir),
+        workDir: this.workDir,
       };
 
       switch (node.type) {
@@ -390,11 +457,11 @@ export class Engine {
         }
       }
 
-      await saveState(this.state);
+      await saveState(this.state, this.workDir);
       return success;
     } catch (err) {
       markNodeFailed(this.state, nodeId, (err as Error).message, "unknown");
-      await saveState(this.state);
+      await saveState(this.state, this.workDir);
       this.output.nodeFailed(nodeId, (err as Error).message);
       return false;
     }
@@ -413,15 +480,18 @@ export class Engine {
 
     // Map input node IDs to their output directories
     for (const inputId of node.inputs ?? []) {
-      input[inputId] = getNodeDir(this.state.run_id, inputId);
+      input[inputId] = workPath(
+        this.workDir,
+        getNodeDir(this.state.run_id, inputId),
+      );
     }
 
     // Merge node-level env with global env (node overrides global)
     const env = node.env ? { ...this.state.env, ...node.env } : this.state.env;
 
     return {
-      node_dir: getNodeDir(this.state.run_id, nodeId),
-      run_dir: getRunDir(this.state.run_id),
+      node_dir: workPath(this.workDir, getNodeDir(this.state.run_id, nodeId)),
+      run_dir: workPath(this.workDir, getRunDir(this.state.run_id)),
       run_id: this.state.run_id,
       args: this.state.args,
       env,
@@ -434,14 +504,15 @@ export class Engine {
 
   /** Ensure all node directories exist. */
   private async ensureRunDirs(levels: string[][]): Promise<void> {
-    const runDir = getRunDir(this.state.run_id);
+    const runDir = workPath(this.workDir, getRunDir(this.state.run_id));
     await Deno.mkdir(`${runDir}/logs`, { recursive: true });
 
     for (const level of levels) {
       for (const nodeId of level) {
-        await Deno.mkdir(getNodeDir(this.state.run_id, nodeId), {
-          recursive: true,
-        });
+        await Deno.mkdir(
+          workPath(this.workDir, getNodeDir(this.state.run_id, nodeId)),
+          { recursive: true },
+        );
       }
     }
 
@@ -449,9 +520,10 @@ export class Engine {
     for (const [_, node] of Object.entries(this.config.nodes)) {
       if (node.type === "loop" && node.nodes) {
         for (const bodyId of Object.keys(node.nodes)) {
-          await Deno.mkdir(getNodeDir(this.state.run_id, bodyId), {
-            recursive: true,
-          });
+          await Deno.mkdir(
+            workPath(this.workDir, getNodeDir(this.state.run_id, bodyId)),
+            { recursive: true },
+          );
         }
       }
     }
@@ -496,34 +568,6 @@ export class Engine {
 }
 
 /**
- * Execute the pre_run shell script before full config loading.
- * Enables self-healing workflows (e.g. reset to stable branch).
- * Throws on script failure — workflow cannot start from unstable state.
- */
-export async function runPreRunScript(
-  scriptPath: string,
-  output: OutputManager,
-): Promise<void> {
-  output.status("engine", `PRE_RUN: ${scriptPath}`);
-  const cmd = new Deno.Command("sh", {
-    args: ["-c", scriptPath],
-    stdout: "piped",
-    stderr: "piped",
-  });
-  const result = await cmd.output();
-  const stdout = new TextDecoder().decode(result.stdout).trim();
-  const stderr = new TextDecoder().decode(result.stderr).trim();
-  if (stdout) output.status("engine", stdout);
-  if (!result.success) {
-    const msg = `pre_run script failed: ${scriptPath}${
-      stderr ? `\n${stderr}` : ""
-    }`;
-    output.error(msg);
-    throw new Error(msg);
-  }
-}
-
-/**
  * Execute prepare_command once before the node level loop on fresh runs.
  * Supports template interpolation for run_dir, run_id, env.*, args.*.
  * node_dir and input.* resolve to empty string (not meaningful at workflow scope).
@@ -537,6 +581,7 @@ export async function runPrepareCommand(
   env: Record<string, string>,
   args: Record<string, string>,
   output: OutputManager,
+  cwd?: string,
 ): Promise<void> {
   const ctx: TemplateContext = {
     node_dir: "",
@@ -552,6 +597,7 @@ export async function runPrepareCommand(
     args: ["-c", interpolated],
     stdout: "piped",
     stderr: "piped",
+    ...(cwd ? { cwd } : {}),
   });
   const result = await proc.output();
   const stdout = new TextDecoder().decode(result.stdout).trim();

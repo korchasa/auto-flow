@@ -42,12 +42,14 @@ export function sortPostWorkflowNodes(
 export async function runFailureHook(
   script: string | undefined,
   output: OutputManager,
+  cwd?: string,
 ): Promise<void> {
   if (!script) return;
   try {
     const cmd = new Deno.Command(script, {
       stdout: "piped",
       stderr: "piped",
+      ...(cwd ? { cwd } : {}),
     });
     const result = await cmd.output();
     const stdout = new TextDecoder().decode(result.stdout).trim();
@@ -74,6 +76,10 @@ export interface PostWorkflowOptions {
   output: OutputManager;
   /** Execute a single node by ID. Errors are swallowed by executePostWorkflow. */
   executeNode: (nodeId: string) => Promise<boolean>;
+  /** Working directory for hooks (worktree path or undefined for CWD). */
+  cwd?: string;
+  /** Working directory for state I/O. Defaults to ".". */
+  workDir?: string;
 }
 
 /**
@@ -92,12 +98,14 @@ export async function executePostWorkflow(
     failureScript,
     output,
     executeNode,
+    cwd,
+    workDir,
   } = opts;
 
   if (nodeIds.length === 0) return;
 
   if (!workflowSuccess) {
-    await runFailureHook(failureScript, output);
+    await runFailureHook(failureScript, output, cwd);
   }
 
   for (const nodeId of nodeIds) {
@@ -107,7 +115,7 @@ export async function executePostWorkflow(
     if (nodeRunOn === "success" && !workflowSuccess) {
       markNodeSkipped(state, nodeId);
       output.nodeSkipped(nodeId, "skipped: run_on=success but workflow failed");
-      await saveState(state);
+      await saveState(state, workDir);
       continue;
     }
     if (nodeRunOn === "failure" && workflowSuccess) {
@@ -116,7 +124,7 @@ export async function executePostWorkflow(
         nodeId,
         "skipped: run_on=failure but workflow succeeded",
       );
-      await saveState(state);
+      await saveState(state, workDir);
       continue;
     }
 

@@ -34,6 +34,8 @@ export interface InvokeOptions {
   streamLogPath?: string;
   /** Verbosity level for terminal output filtering (semi-verbose suppresses tool_use). */
   verbosity?: Verbosity;
+  /** Working directory for the claude subprocess. Defaults to process CWD. */
+  cwd?: string;
 }
 
 interface InvokeResult {
@@ -56,6 +58,7 @@ export async function invokeClaudeCli(
         opts.onOutput,
         opts.streamLogPath,
         opts.verbosity,
+        opts.cwd,
       );
       if (output.is_error) {
         lastError = `Claude CLI returned error: ${output.result}`;
@@ -131,6 +134,7 @@ async function executeClaudeProcess(
   onOutput?: (line: string) => void,
   streamLogPath?: string,
   verbosity?: Verbosity,
+  cwd?: string,
 ): Promise<ClaudeCliOutput> {
   // Unset CLAUDECODE to allow nested claude CLI invocations.
   // Claude Code checks this variable and refuses to launch inside another session.
@@ -141,6 +145,7 @@ async function executeClaudeProcess(
     stdout: "piped",
     stderr: "piped",
     env: { CLAUDECODE: "" },
+    ...(cwd ? { cwd } : {}),
   });
 
   const process = cmd.spawn();

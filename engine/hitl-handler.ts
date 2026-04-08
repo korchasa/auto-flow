@@ -8,7 +8,7 @@ import type {
 import type { AgentResult } from "./agent.ts";
 import type { HitlQuestion } from "./hitl.ts";
 import { runHitlLoop } from "./hitl.ts";
-import { getRunDir, markNodeFailed, markNodeWaiting } from "./state.ts";
+import { markNodeFailed, markNodeWaiting } from "./state.ts";
 import { saveAgentLog } from "./log.ts";
 import type { OutputManager } from "./output.ts";
 
@@ -25,6 +25,8 @@ interface HitlBaseParams {
   permissionMode?: string;
   model?: string;
   output: OutputManager;
+  /** Working directory for subprocesses (worktree path or undefined for CWD). */
+  cwd?: string;
 }
 
 /** Resume-from-waiting mode: node was previously set to waiting state. */
@@ -62,8 +64,10 @@ export async function handleAgentHitl(
     permissionMode,
     model,
     output,
+    cwd,
   } = params;
-  const runDir = getRunDir(state.run_id);
+  // ctx.run_dir already includes workDir prefix from buildContext
+  const runDir = ctx.run_dir;
 
   if (params.mode === "resume") {
     const nodeState = state.nodes[nodeId];
@@ -94,6 +98,7 @@ export async function handleAgentHitl(
         permissionMode,
         model,
         output,
+        cwd,
       },
       true, /* skipAsk — question already delivered */
     );
@@ -140,6 +145,7 @@ export async function handleAgentHitl(
       permissionMode,
       model,
       output,
+      cwd,
     },
     false, /* skipAsk=false — deliver question */
   );

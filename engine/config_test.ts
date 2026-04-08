@@ -1,5 +1,9 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { DEFAULT_SETTINGS, extractPreRun, parseConfig } from "./config.ts";
+import {
+  DEFAULT_SETTINGS,
+  extractWorktreeDisabled,
+  parseConfig,
+} from "./config.ts";
 
 const MINIMAL_AGENT = `
 name: test-workflow
@@ -374,13 +378,68 @@ nodes:
   assertEquals(config.nodes.a.after, "deno task check");
 });
 
-// --- pre_run tests ---
+// --- pre_run removal tests ---
 
-Deno.test("parseConfig — pre_run field is preserved", () => {
+Deno.test("parseConfig — pre_run field throws migration error", () => {
   const yaml = `
 name: test
 version: "1"
 pre_run: "./scripts/reset.sh"
+nodes:
+  a:
+    type: agent
+    label: A
+    prompt: "do something"
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "pre_run removed",
+  );
+});
+
+// --- worktree_disabled tests ---
+
+Deno.test("extractWorktreeDisabled — returns false when absent", () => {
+  assertEquals(extractWorktreeDisabled(MINIMAL_AGENT), false);
+});
+
+Deno.test("extractWorktreeDisabled — returns true when set", () => {
+  const yaml = `
+name: test
+version: "1"
+defaults:
+  worktree_disabled: true
+nodes:
+  a:
+    type: agent
+    label: A
+    prompt: "do something"
+`;
+  assertEquals(extractWorktreeDisabled(yaml), true);
+});
+
+Deno.test("extractWorktreeDisabled — returns false when explicitly false", () => {
+  const yaml = `
+name: test
+version: "1"
+defaults:
+  worktree_disabled: false
+nodes:
+  a:
+    type: agent
+    label: A
+    prompt: "do something"
+`;
+  assertEquals(extractWorktreeDisabled(yaml), false);
+});
+
+Deno.test("parseConfig — worktree_disabled is preserved in defaults", () => {
+  const yaml = `
+name: test
+version: "1"
+defaults:
+  worktree_disabled: true
 nodes:
   a:
     type: agent
@@ -388,30 +447,7 @@ nodes:
     prompt: "do something"
 `;
   const config = parseConfig(yaml);
-  assertEquals(config.pre_run, "./scripts/reset.sh");
-});
-
-Deno.test("parseConfig — pre_run absent is undefined", () => {
-  const config = parseConfig(MINIMAL_AGENT);
-  assertEquals(config.pre_run, undefined);
-});
-
-Deno.test("extractPreRun — extracts pre_run from YAML without full parsing", () => {
-  const yaml = `
-name: test
-version: "1"
-pre_run: "./scripts/reset.sh"
-nodes:
-  a:
-    type: agent
-    label: A
-    prompt: "do something"
-`;
-  assertEquals(extractPreRun(yaml), "./scripts/reset.sh");
-});
-
-Deno.test("extractPreRun — returns undefined when no pre_run", () => {
-  assertEquals(extractPreRun(MINIMAL_AGENT), undefined);
+  assertEquals(config.defaults?.worktree_disabled, true);
 });
 
 // --- Error cases ---

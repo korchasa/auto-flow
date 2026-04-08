@@ -17,6 +17,7 @@ import {
   getRunDir,
   markNodeFailed,
   markRunAborted,
+  workPath,
 } from "./state.ts";
 import type {
   EngineOptions,
@@ -38,6 +39,8 @@ export interface EngineContext {
   buildContext: (nodeId: string, loopIteration?: number) => TemplateContext;
   /** Persist current run state to disk. */
   saveState: () => Promise<void>;
+  /** Working directory (worktree path or "."). All subprocesses and I/O use this. */
+  workDir: string;
 }
 
 /** Run an agent node: invoke Claude CLI, handle HITL if triggered, save logs. */
@@ -53,6 +56,7 @@ export async function executeAgentNode(
   const effectiveModel = node.model ?? eng.config.defaults?.model;
   const effectivePermissionMode = node.permission_mode ??
     eng.config.defaults?.permission_mode;
+  const cwd = eng.workDir !== "." ? eng.workDir : undefined;
 
   // Resume path: node was waiting for human reply
   if (wasWaiting) {
@@ -78,6 +82,7 @@ export async function executeAgentNode(
       permissionMode: effectivePermissionMode,
       model: effectiveModel,
       output: eng.output,
+      cwd,
     });
   }
 
@@ -99,6 +104,7 @@ export async function executeAgentNode(
     nodeId,
     streamLogPath,
     verbosity: eng.options.verbosity,
+    cwd,
   });
 
   if (!result.success) {
@@ -139,6 +145,7 @@ export async function executeAgentNode(
         permissionMode: effectivePermissionMode,
         model: effectiveModel,
         output: eng.output,
+        cwd,
       });
     }
   }
@@ -150,7 +157,7 @@ export async function executeAgentNode(
 
   // Save agent log (JSON output + JSONL transcript)
   if (result.output) {
-    const runDir = getRunDir(eng.state.run_id);
+    const runDir = workPath(eng.workDir, getRunDir(eng.state.run_id));
     await saveAgentLog(runDir, nodeId, result.output);
   }
 
@@ -163,12 +170,15 @@ export async function executeMergeNode(
   nodeId: string,
   node: NodeConfig,
 ): Promise<boolean> {
-  const nodeDir = getNodeDir(eng.state.run_id, nodeId);
+  const nodeDir = workPath(eng.workDir, getNodeDir(eng.state.run_id, nodeId));
   await Deno.mkdir(nodeDir, { recursive: true });
 
   // Copy input directories as subdirectories
   for (const inputId of node.inputs ?? []) {
-    const inputDir = getNodeDir(eng.state.run_id, inputId);
+    const inputDir = workPath(
+      eng.workDir,
+      getNodeDir(eng.state.run_id, inputId),
+    );
     const targetDir = `${nodeDir}/${inputId}`;
     try {
       await copyDir(inputDir, targetDir);
@@ -214,7 +224,7 @@ export async function executeLoopNode(
 
       // Save agent log for successful loop body nodes (iteration-qualified)
       if (result.success && result.output) {
-        const runDir = getRunDir(eng.state.run_id);
+        const runDir = workPath(eng.workDir, getRunDir(eng.state.run_id));
         const iterNodeId = `${id}-iter-${iteration}`;
         saveAgentLog(runDir, iterNodeId, result.output).catch((err) => {
           eng.output.warn(
@@ -228,6 +238,7 @@ export async function executeLoopNode(
     output: eng.output,
     verbosity: eng.options.verbosity,
     saveState: eng.saveState,
+    cwd: eng.workDir !== "." ? eng.workDir : undefined,
   });
 
   if (!result.success) {

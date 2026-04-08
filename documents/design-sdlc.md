@@ -58,12 +58,9 @@ graph LR
   - **Legacy Shell Scripts** (`.flowai-workflow/scripts/`): Deprecated stage scripts
     deleted per FR-S26. HITL, rollback, and dashboard wrapper scripts retained.
     `run-dashboard.sh` wraps `deno task dashboard` with warning logging on
-    failure (FR-S36). `reset-to-main.sh` is the `pre_run:` script — resets
-    working tree to `origin/main`. **Auto-stash (FR-S41):** before destructive
-    ops, checks `git status --porcelain`; if dirty, displays branch + diff stat,
-    runs `git stash push --include-untracked -m "flowai-workflow pre_run: <timestamp>"`,
-    displays stash ref + restore command. Clean tree → silent proceed. Stash
-    failure aborts workflow (`set -euo pipefail`).
+    failure (FR-S36). ~~`reset-to-main.sh`~~ **Superseded** — engine FR-E24
+    worktree isolation replaces `pre_run:` script. `reset-to-main.sh` no longer
+    invoked; `pre_run` field removed from engine config.
 
 ## 3. Components
 
@@ -547,15 +544,9 @@ graph LR
   verdict frontmatter — validation fails before loop reads `condition_field`.
   Combined with engine FR-E36 parse-time cross-check, guarantees
   `condition_field: verdict` is contractually declared in the condition node.
-- **Pre-Run Auto-Stash (FR-S41):** `reset-to-main.sh` (invoked via `pre_run:`
-  in `workflow.yaml`) preserves uncommitted changes before destructive reset.
-  Flow: `git status --porcelain` → if non-empty: display branch name
-  (`git branch --show-current`), diff stat (`git diff --stat HEAD`,
-  `git diff --stat --cached`, untracked list), stash
-  (`git stash push --include-untracked -m "flowai-workflow pre_run: <ISO timestamp>"`),
-  display stash ref + restore command (`git stash pop`). If clean: silent
-  proceed. Post-stash: existing fetch/checkout/reset/clean unchanged. Stash
-  failure → workflow abort (script uses `set -euo pipefail`).
+- **~~Pre-Run Auto-Stash (FR-S41)~~:** Superseded by engine FR-E24 (worktree
+  isolation). Engine creates a git worktree per run — original working tree
+  untouched. `pre_run` field removed; `reset-to-main.sh` no longer invoked.
 - **Secret Detection**: `gitleaks detect --no-git` runs as part of
   `deno task check` (`scripts/check.ts`). `allowFailure=true` — skips if
   gitleaks binary not found. Engine-level `safetyCheckDiff()` removed.

@@ -67,6 +67,8 @@ export interface HitlRunOptions {
   scriptRunner?: ScriptRunner;
   /** Injected claude CLI runner — defaults to real invokeClaudeCli; override in tests. */
   claudeRunner?: ClaudeRunner;
+  /** Working directory for subprocesses (worktree path or undefined for CWD). */
+  cwd?: string;
 }
 
 /**
@@ -139,7 +141,9 @@ export async function runHitlLoop(
     output,
   } = opts;
 
-  const runner = opts.scriptRunner ?? defaultScriptRunner;
+  const cwdOpt = opts.cwd;
+  const runner = opts.scriptRunner ??
+    ((path: string, args: string[]) => defaultScriptRunner(path, args, cwdOpt));
   const claudeRun = opts.claudeRunner ??
     (await import("./claude-process.ts")).invokeClaudeCli;
 
@@ -207,6 +211,7 @@ export async function runHitlLoop(
         timeoutSeconds: settings.timeout_seconds,
         maxRetries: settings.max_retries,
         retryDelaySeconds: settings.retry_delay_seconds,
+        cwd: cwdOpt,
       });
 
       if (result.error) {
@@ -286,11 +291,13 @@ function buildScriptArgs(
 async function defaultScriptRunner(
   path: string,
   args: string[],
+  cwd?: string,
 ): Promise<{ exitCode: number; stdout: string }> {
-  const cmd = new Deno.Command("bash", {
+  const cmd = new Deno.Command("sh", {
     args: [path, ...args],
     stdout: "piped",
     stderr: "piped",
+    ...(cwd ? { cwd } : {}),
   });
   const output = await cmd.output();
   return {

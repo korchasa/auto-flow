@@ -30,6 +30,7 @@ export const DEFAULT_WORKFLOW_DEFAULTS: Required<
   Omit<WorkflowDefaults, "permission_mode">
 > = {
   ...DEFAULT_SETTINGS,
+  worktree_disabled: false,
   max_parallel: 0,
   claude_args: [],
   model: "",
@@ -44,36 +45,48 @@ export const DEFAULT_WORKFLOW_DEFAULTS: Required<
 };
 
 /**
- * Extract only the `pre_run` field from YAML without full config parsing.
- * Used for two-phase loading: read pre_run → execute → re-read full config.
+ * Extract only `worktree_disabled` from YAML without full config parsing.
+ * Used for two-phase loading: check worktree_disabled → create worktree → load full config from worktree.
  */
-export function extractPreRun(yaml: string): string | undefined {
+export function extractWorktreeDisabled(yaml: string): boolean {
   const raw = parseYaml(yaml);
-  if (!raw || typeof raw !== "object") return undefined;
+  if (!raw || typeof raw !== "object") return false;
   const config = raw as Record<string, unknown>;
-  const preRun = config.pre_run;
-  return typeof preRun === "string" ? preRun : undefined;
+  if (!config.defaults || typeof config.defaults !== "object") return false;
+  const defaults = config.defaults as Record<string, unknown>;
+  return defaults.worktree_disabled === true;
 }
 
-/** Parse YAML string into WorkflowConfig, validate schema, merge defaults. */
-export function parseConfig(yaml: string): WorkflowConfig {
+/** Parse YAML string into WorkflowConfig, validate schema, merge defaults.
+ * @param workDir — base directory for resolving {{file()}} references. */
+export function parseConfig(yaml: string, workDir?: string): WorkflowConfig {
   const raw = parseYaml(yaml);
   if (!raw || typeof raw !== "object") {
     throw new Error("Workflow config must be a YAML object");
   }
   const config = raw as Record<string, unknown>;
   validateSchema(config);
-  return mergeDefaults(config as unknown as WorkflowConfig);
+  return mergeDefaults(config as unknown as WorkflowConfig, workDir);
 }
 
-/** Load and parse workflow config from a file path. */
-export async function loadConfig(path: string): Promise<WorkflowConfig> {
+/** Load and parse workflow config from a file path.
+ * @param workDir — base directory for resolving {{file()}} references. */
+export async function loadConfig(
+  path: string,
+  workDir?: string,
+): Promise<WorkflowConfig> {
   const yaml = await Deno.readTextFile(path);
-  return parseConfig(yaml);
+  return parseConfig(yaml, workDir);
 }
 
 /** Validate required fields and node type constraints. */
 function validateSchema(config: Record<string, unknown>): void {
+  // Reject removed pre_run field with migration message
+  if ("pre_run" in config) {
+    throw new Error(
+      "pre_run removed; worktree isolation replaces it. Set defaults.worktree_disabled: true to opt out.",
+    );
+  }
   if (typeof config.name !== "string" || !config.name) {
     throw new Error("Workflow config requires a non-empty 'name' field");
   }
@@ -540,7 +553,10 @@ function validateAllowedPaths(
  * that predates the `run_on` enum. We canonicalise it to `run_on: "always"`
  * here so all downstream code only needs to handle `run_on`.
  */
-function mergeDefaults(config: WorkflowConfig): WorkflowConfig {
+function mergeDefaults(
+  config: WorkflowConfig,
+  workDir?: string,
+): WorkflowConfig {
   const workflowDefaults: WorkflowDefaults = {
     ...DEFAULT_WORKFLOW_DEFAULTS,
     ...config.defaults,
@@ -592,7 +608,7 @@ function mergeDefaults(config: WorkflowConfig): WorkflowConfig {
     defaults: workflowDefaults,
     nodes: mergedNodes,
   };
-  validateFileReferences(result);
+  validateFileReferences(result, workDir);
   return result;
 }
 
@@ -602,9 +618,15 @@ function mergeDefaults(config: WorkflowConfig): WorkflowConfig {
  * Scans top-level and loop body nodes. Paths containing `{{` are skipped
  * (unresolvable template variables at load time). Throws immediately on the
  * first missing file, including the node ID for context.
+ *
+ * @param workDir — base directory for resolving relative paths. Defaults to CWD.
  */
-export function validateFileReferences(config: WorkflowConfig): void {
+export function validateFileReferences(
+  config: WorkflowConfig,
+  workDir?: string,
+): void {
   const FILE_REF_RE = /\{\{file\("([^"]+)"\)\}\}/g;
+  const base = workDir ?? Deno.cwd();
 
   function scanNode(nodeId: string, node: NodeConfig): void {
     const fields = [node.prompt, node.system_prompt].filter(
@@ -616,11 +638,12 @@ export function validateFileReferences(config: WorkflowConfig): void {
       while ((match = FILE_REF_RE.exec(field)) !== null) {
         const path = match[1];
         if (path.includes("{{")) continue;
+        const resolved = path.startsWith("/") ? path : `${base}/${path}`;
         try {
-          Deno.statSync(path);
+          Deno.statSync(resolved);
         } catch {
           throw new Error(
-            `Node '${nodeId}': {{file("${path}")}} — file not found: ${path}`,
+            `Node '${nodeId}': {{file("${path}")}} — file not found: ${resolved}`,
           );
         }
       }
@@ -678,6 +701,7 @@ function extractNodeSettings(defaults: WorkflowDefaults): NodeSettings {
     claude_args: _ca,
     hitl: _hitl,
     permission_mode: _pm,
+    worktree_disabled: _wd,
     ...settings
   } = defaults;
   return settings;
