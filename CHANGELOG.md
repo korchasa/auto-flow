@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.3](https://github.com/korchasa/flowai-workflows/compare/v0.1.2...v0.1.3) (2026-04-08)
+
+
+### Code Refactoring
+
+* **ci:** merge release workflow into CI pipeline ([7c0510e](https://github.com/korchasa/flowai-workflows/commit/7c0510ecf8406905bae558e21b9d38120c082367))
+
 ### 0.1.2 (2026-04-08)
 
 
