@@ -1,5 +1,5 @@
 {
-  "version": "0.1.4",
+  "version": "0.1.5",
   "imports": {
     "@std/assert": "./vendor/assert.ts",
     "@std/yaml": "./vendor/yaml.ts"
