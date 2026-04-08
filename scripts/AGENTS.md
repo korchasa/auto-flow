@@ -1,5 +1,9 @@
 # Development Commands
 
+## Shell Environment
+- Always use `NO_COLOR=1` when running shell commands — ANSI escape codes waste tokens and clutter output.
+- When writing scripts, respect the `NO_COLOR` env var (https://no-color.org/) — disable ANSI colors when it is set.
+
 ## Standard Interface
 
 - `check` - The main command for comprehensive project verification. Performs

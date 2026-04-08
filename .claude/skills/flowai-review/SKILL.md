@@ -27,8 +27,8 @@ the entire project. Your two hats:
 Input sources:
 - Git diff (`git diff`, `git diff --cached`, `git diff <base>..HEAD`).
 - The original User Request (from chat history).
-- The Plan (task management tool or a whiteboard in `documents/whiteboards/`).
-- Project conventions (`AGENTS.md`, linter/formatter configs).
+- The Plan (task management tool or a whiteboard in `documents/whiteboard.md`).
+- Project conventions (`CLAUDE.md`, linter/formatter configs, `deno.json`).
 </context>
 
 ## Rules & Constraints
@@ -49,6 +49,9 @@ Input sources:
    improvement.
 7. **Output**: Final verdict is **Approve**, **Request Changes**, or
    **Needs Discussion** with actionable items.
+8. **Scope separation**: Verify changes respect engine/SDLC scope boundary.
+   Engine code (`engine/`) must remain domain-agnostic — no git, GitHub, PR,
+   or SDLC-specific logic.
 </rules>
 
 ## Instructions
@@ -62,6 +65,10 @@ Input sources:
      report "No changes to review" and STOP.
 
 2. **Gather Context**
+   - If you don't know the content of the SRS and SDS documents — read them now.
+     This project has separate docs per scope:
+     - Engine: `documents/requirements-engine.md` (SRS), `documents/design-engine.md` (SDS)
+     - SDLC: `documents/requirements-sdlc.md` (SRS), `documents/design-sdlc.md` (SDS)
    - Create a review plan in the task management tool.
    - Collect the diff: `git diff` (unstaged), `git diff --cached` (staged),
      or `git log --oneline <base>..HEAD` + `git diff <base>..HEAD` for
@@ -69,27 +76,22 @@ Input sources:
    - **Untracked files**: `git diff` does NOT show untracked files. Check
      `git status` output from step 1 — for each untracked file, read its
      content directly and include it in the review scope.
-   - Read the original user request and the plan (whiteboard in `documents/whiteboards/` / task list).
-   - Look for project conventions in `AGENTS.md` and config files.
-     If these files do not exist, rely on conventions visible in the diff
-     and surrounding code.
+   - Read the original user request and the plan (whiteboard in `documents/whiteboard.md` / task list).
+   - Look for project conventions in config files (`deno.json`, `deno.lock`).
+     Rely on conventions visible in the diff and surrounding code.
 
    **Parallel Delegation** (after gathering context):
    - **Small diff shortcut**: If `git diff --stat` shows < 50 changed lines,
      skip delegation — run all steps inline (overhead not justified).
-   - Otherwise, delegate **3 independent tasks in parallel** (via subagents,
+   - Otherwise, delegate **2 independent tasks in parallel** (via subagents,
      background tasks, or IDE-specific parallel execution — e.g., `Task`,
      `Agent`, `parallel`):
-     - **SA1**: Run the project check command (`deno task check`, `npm run
-       lint`, `make check`, etc.). Delegate to a console/shell-capable agent
-       (e.g., `flowai-console-expert`). Return pass/fail + full output.
+     - **SA1**: Run `deno task check`. Delegate to a console/shell-capable
+       agent (e.g., `flowai-console-expert`). Return pass/fail + full output.
      - **SA2**: Run hygiene grep scan on diff output — search for `TODO`,
        `FIXME`, `HACK`, `XXX`, `console.log`, `temp_*`, `*.tmp`, `*.bak`,
        hardcoded secrets patterns. Delegate to a console/shell-capable agent.
        Return findings list.
-     - **SA3**: Analyze diff for atomic commit grouping. Delegate to
-       `flowai-diff-specialist` (or equivalent diff analysis agent). Return
-       JSON with proposed commits.
    - **Fallback rule**: If any delegated task fails or times out, the main
      agent performs that step inline. No hard dependency on delegation success.
    - Continue with steps 3, 5, 6, 7 (main agent review) while delegated
@@ -120,6 +122,9 @@ Input sources:
 5. **Code Review: Design & Architecture**
    - **Responsibility**: Does each changed file/module stay within its stated
      responsibility? Flag scope creep.
+   - **Scope boundary**: Verify engine/SDLC scope separation. Engine code
+     (`engine/`) must not contain git, GitHub, branch, PR, or domain-specific
+     logic. SDLC concerns belong in workflow YAML and agent definitions.
    - **Coupling**: Are new dependencies (imports, API calls) justified?
      Flag tight coupling or circular dependencies.
    - **Abstraction**: Is the level of abstraction appropriate? Flag
@@ -130,13 +135,14 @@ Input sources:
    - **Naming**: Are new identifiers (vars, funcs, types) clear and consistent
      with project conventions?
    - **Error handling**: Are errors handled explicitly? Flag swallowed
-     exceptions, missing error paths, generic catch-all handlers.
+     exceptions, missing error paths, generic catch-all handlers. This project
+     follows "fail fast, fail clearly" strategy.
    - **Edge cases**: Are boundary conditions (null, empty, overflow, concurrent
      access) handled?
    - **Types & contracts**: Are type signatures precise? Flag `any`, untyped
      parameters, missing return types (where project conventions require them).
    - **Tests**: Do new/changed behaviors have corresponding tests? Are existing
-     tests updated for changed behavior?
+     tests updated for changed behavior? This project follows TDD.
 
 7. **Code Review: Readability & Style**
    - **Consistency**: Do changes follow the project's established patterns
@@ -152,11 +158,8 @@ Input sources:
 8. **Run Automated Checks** _(collect SA1 result if available; otherwise run inline)_
    - If SA1 completed: use its pass/fail result and output. Do NOT re-run.
    - If SA1 failed/timed out or skipped (small diff): run inline:
-   - If the project has a check command (`deno task check`, `npm run lint`,
-     `make check`, etc.), run it and include results.
-   - If no check command is found, explicitly note "No automated checks
-     configured" in the report — do not silently skip.
-   - If tests exist, run them and report failures.
+   - Run `deno task check` (linter, formatter, type-checker).
+   - If tests exist, run `deno test` and report failures.
 
 9. **Final Report**
    Output a structured report with the verdict on the FIRST line:
@@ -193,9 +196,10 @@ Input sources:
 [ ] Each requirement/plan item mapped to changes.
 [ ] Hygiene check: no temp files, debug output, unfinished markers in diff.
 [ ] Design review: responsibility, coupling, abstraction checked.
+[ ] Scope boundary: engine/SDLC separation verified.
 [ ] Implementation review: naming, errors, edge cases, types, tests checked.
 [ ] Readability: consistency, comments, complexity checked.
-[ ] Automated checks executed (or explicitly noted as missing).
+[ ] Automated checks executed (`deno task check`) or explicitly noted as missing.
 [ ] Structured report produced with severity-tagged findings.
 [ ] Verdict on the first line of the report.
 </verification>

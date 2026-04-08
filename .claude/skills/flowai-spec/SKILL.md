@@ -5,6 +5,8 @@ description: >-
   Produces documents/spec-{name}.md with dependency-ordered phases, atomic tasks,
   explicit boundaries, and per-phase status tracking.
 disable-model-invocation: true
+argument-hint: feature name or description
+effort: high
 ---
 
 # Feature Specification
@@ -51,8 +53,9 @@ documentation, web) to understand the problem before asking the user.
    - Use a task management tool (e.g., `todo_write`, `todowrite`) to create a plan based on these steps.
 
 2. **Deep Context & Research**
-   - Follow `Proactive Resolution` from AGENTS.md: analyze prompt, codebase, docs.
-   - Use search tools (e.g., `glob`, `grep`, `ripgrep`, `search`, `webfetch`) for gaps.
+   - If you don't know the content of the SRS and SDS documents — read them now. This project has scope-split docs: `documents/requirements-engine.md`, `documents/design-engine.md` (engine scope) and `documents/requirements-sdlc.md`, `documents/design-sdlc.md` (SDLC scope). Read the ones relevant to your feature.
+   - Follow `Proactive Resolution` from AGENTS.md: analyze prompt, codebase, search for gaps.
+   - Use search tools (e.g., `glob`, `grep`, `ripgrep`, `search`, `webfetch`) for unknowns.
    - If uncertainties remain: ask user clarifying questions. STOP and wait.
 
 3. **Draft Spec Header**

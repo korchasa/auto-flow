@@ -24,29 +24,9 @@
             "command": ".claude/hooks/guard-deno-direct.sh"
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "deno run -A .claude/scripts/flowai-test-before-commit/run.ts",
-            "timeout": 600
-          }
-        ],
-        "matcher": "Bash"
       }
     ],
     "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "deno run -A .claude/scripts/flowai-lint-on-write/run.ts",
-            "timeout": 30
-          }
-        ],
-        "matcher": "Write|Edit"
-      },
       {
         "hooks": [
           {

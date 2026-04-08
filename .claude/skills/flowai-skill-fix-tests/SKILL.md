@@ -1,6 +1,7 @@
 ---
 name: flowai-skill-fix-tests
 description: How to fix tests
+effort: high
 ---
 
 ## HOW TO FIX TESTS
@@ -12,6 +13,8 @@ description: How to fix tests
 2. **[CRITICAL] Run failing test first**: Execute ONLY the failing test to
    confirm the failure and capture the exact error output. This baseline MUST be
    established before any code changes.
+   - Single test file: `deno test <file_test.ts>`
+   - Single test case: `deno test --filter "<test name>" <file_test.ts>`
 3. Study tests: Examine the test code, comments, and descriptions to understand
    the expected behavior.
 4. Review codebase: Locate the relevant sections of the code being tested and
@@ -33,6 +36,8 @@ description: How to fix tests
 
 10. **[CRITICAL] Verify**: Run the full test suite to confirm the fix and ensure
     no regressions.
+    - Full suite: `deno test`
+    - With permissions: `deno test --allow-read --allow-write --allow-run`
 
 ## Verification
 

@@ -4,6 +4,7 @@ description: >-
   Analyze and answer user questions in Autonomous Mode by reading documentation
   and inspecting codebase
 disable-model-invocation: true
+argument-hint: question about the project
 ---
 
 # Task Answer
@@ -50,10 +51,10 @@ The user has a question about the project's logic, architecture, or implementati
    - Explicitly list assumptions, missing details, and the intended scope of the
      answer.
 3. **Documentation-based analysis**
-   - Map the question to relevant requirements in `documents/requirements.md`
-     (SRS).
-   - Map the question to relevant design decisions in `documents/design.md`
-     (SDS).
+   - Map the question to relevant requirements in `documents/requirements-engine.md`
+     or `documents/requirements-sdlc.md` (SRS, scope-separated).
+   - Map the question to relevant design decisions in `documents/design-engine.md`
+     or `documents/design-sdlc.md` (SDS, scope-separated).
    - Consider architecture, constraints, and interfaces described in the
      documentation.
 4. **Code analysis**

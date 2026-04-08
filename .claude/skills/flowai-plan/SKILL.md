@@ -4,6 +4,8 @@ description: >-
   Create critiqued plan in documents/whiteboards/ using GODS framework with
   proactive uncertainty resolution
 disable-model-invocation: true
+argument-hint: task description or issue URL
+effort: high
 ---
 
 # Task Planning
@@ -38,8 +40,9 @@ You are autonomous and proactive. You exhaust all available resources (codebase,
 1. **Initialize**
    - Use a task management tool (e.g., `todo_write`, `todowrite`) to create a plan based on these steps.
 2. **Deep Context & Uncertainty Resolution**
-   - Follow `Proactive Resolution` from AGENTS.md: analyze prompt, codebase, docs.
-   - Use search tools (e.g., `glob`, `grep`, `ripgrep`, `search`, `webfetch`) for gaps.
+   - If you don't know the content of the SRS and SDS documents — read the relevant ones now. This project has scope-separated docs: `documents/requirements-engine.md` and `documents/design-engine.md` (engine scope), `documents/requirements-sdlc.md` and `documents/design-sdlc.md` (SDLC scope). Read the docs matching the task's scope.
+   - Follow `Proactive Resolution` from AGENTS.md: analyze prompt, codebase, search for gaps.
+   - Use search tools (e.g., `glob`, `grep`, `ripgrep`, `search`, `webfetch`) for unknowns.
    - If uncertainties remain: ask user clarifying questions. STOP and wait.
 3. **Draft Framework (G-O-D)**
    - Create Goal, Overview, Definition of Done in `documents/whiteboards/<date>-<slug>.md` following `### GODS Format` from AGENTS.md.

@@ -34,7 +34,7 @@ Each scope has its own SRS and SDS files.
    workflow. Source of truth. FR-S numbering.
 4. **SDS Engine** (`documents/design-engine.md`): "How" for engine.
 5. **SDS SDLC** (`documents/design-sdlc.md`): "How" for SDLC workflow.
-6. **Whiteboard** (`documents/whiteboard.md`): Temporary notes.
+6. **Whiteboards** (`documents/whiteboards/<YYYY-MM-DD>-<slug>.md`): Temporary plans/notes per task.
 
 ## Rules
 
@@ -104,10 +104,13 @@ Separate files per scope. Same structure in each:
 ## 7. Constraints
 ```
 
-## Whiteboard (`documents/whiteboard.md`)
+## Whiteboards (`documents/whiteboards/`)
 
-- Temp notes/plans. Clean up after session.
-- Issue or plan in GODS format.
+- One file per task or session: `<YYYY-MM-DD>-<slug>.md` (kebab-case slug, max 40 chars).
+- Examples: `2026-03-24-add-dark-mode.md`, `2026-03-24-fix-auth-bug.md`.
+- Do not reuse another session's whiteboard — create a new file. Old whiteboards provide context but may contain outdated decisions.
+- Use GODS format (see below) for issues and plans.
+- Directory is gitignored. Files accumulate — this is expected.
 
 ### GODS Format
 
