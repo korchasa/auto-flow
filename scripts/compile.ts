@@ -66,6 +66,7 @@ async function run(): Promise<void> {
         args: [
           "compile",
           "--allow-all",
+          "--no-check",
           "--target",
           triple,
           "--env-file",
@@ -74,8 +75,10 @@ async function run(): Promise<void> {
           name,
           "engine/cli.ts",
         ],
+        stdout: "inherit",
+        stderr: "inherit",
       });
-      const { success } = await cmd.output();
+      const { success } = await cmd.spawn().status;
       if (!success) {
         console.error(`Compile failed for target: ${triple}`);
         Deno.exit(1);
