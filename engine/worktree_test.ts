@@ -106,7 +106,7 @@ Deno.test("worktree lifecycle — create, exists, remove", async () => {
 
   try {
     // Set up origin repo
-    await runGitCmd(["init", "--bare"], tmpOrigin);
+    await runGitCmd(["init", "--bare", "--initial-branch=main"], tmpOrigin);
 
     // Clone it to get a working repo with origin
     const clone = new Deno.Command("git", {
@@ -116,13 +116,14 @@ Deno.test("worktree lifecycle — create, exists, remove", async () => {
     });
     await clone.output();
 
-    // Configure and create initial commit
+    // Configure and create initial commit on 'main'
     await runGitCmd(["config", "user.email", "test@test.com"], tmpClone);
     await runGitCmd(["config", "user.name", "Test"], tmpClone);
+    await runGitCmd(["checkout", "-b", "main"], tmpClone);
     await Deno.writeTextFile(`${tmpClone}/README.md`, "test");
     await runGitCmd(["add", "."], tmpClone);
     await runGitCmd(["commit", "-m", "init"], tmpClone);
-    await runGitCmd(["push", "origin", "main"], tmpClone);
+    await runGitCmd(["push", "-u", "origin", "main"], tmpClone);
 
     // Create worktrees directory
     await Deno.mkdir(`${tmpClone}/.flowai-workflow/worktrees`, {
