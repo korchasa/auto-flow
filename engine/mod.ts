@@ -85,3 +85,7 @@ export type {
   VerboseValidationResult,
 } from "./output.ts";
 export { Engine } from "./engine.ts";
+export { buildUpdateCommand, checkForUpdate, VERSION } from "./version.ts";
+export type { CheckForUpdateOptions, VersionCheckResult } from "./version.ts";
+export { extractCliFlags, getVersionString, parseArgs } from "./cli.ts";
+export type { CliFlags } from "./cli.ts";

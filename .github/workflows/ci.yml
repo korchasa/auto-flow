@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   check:
@@ -18,11 +19,11 @@ jobs:
       tag: ${{ steps.create-release.outputs.tag }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
-      - uses: denoland/setup-deno@v2
+      - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
         with:
           deno-version: v2.x
 
@@ -34,6 +35,9 @@ jobs:
 
       - name: Run checks
         run: deno task check
+
+      - name: Verify JSR publish (dry-run)
+        run: deno publish --dry-run --allow-dirty
 
       - name: Verify no files modified by check
         run: |
@@ -94,11 +98,11 @@ jobs:
             artifact: flowai-workflow-darwin-arm64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ needs.check.outputs.tag }}
 
-      - uses: denoland/setup-deno@v2
+      - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
         with:
           deno-version: v2.x
 
@@ -107,7 +111,7 @@ jobs:
           VERSION: ${{ needs.check.outputs.tag }}
         run: deno task compile --target ${{ matrix.target }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}
@@ -117,17 +121,21 @@ jobs:
     needs: [check, build]
     if: needs.check.outputs.released == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: ${{ needs.check.outputs.tag }}
           fetch-depth: 0
 
-      - uses: denoland/setup-deno@v2
+      - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
         with:
           deno-version: v2.x
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: dist/
           merge-multiple: true
@@ -157,3 +165,6 @@ jobs:
             dist/flowai-workflow-linux-arm64 \
             dist/flowai-workflow-darwin-x86_64 \
             dist/flowai-workflow-darwin-arm64
+
+      - name: Publish to JSR
+        run: deno publish --allow-dirty

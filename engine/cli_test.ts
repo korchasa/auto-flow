@@ -1,5 +1,10 @@
 import { assertEquals } from "@std/assert";
-import { getVersionString, parseArgs, VERSION } from "./cli.ts";
+import {
+  extractCliFlags,
+  getVersionString,
+  parseArgs,
+  VERSION,
+} from "./cli.ts";
 
 Deno.test("parseArgs — --prompt sets args.prompt", async () => {
   const opts = await parseArgs(["--prompt", "Fix the login bug"]);
@@ -103,4 +108,48 @@ Deno.test("VERSION — is a non-empty string", () => {
 
 Deno.test("getVersionString — format is 'flowai-workflow v<version>'", () => {
   assertEquals(getVersionString(), `flowai-workflow v${VERSION}`);
+});
+
+Deno.test("extractCliFlags — absent flag keeps args intact", () => {
+  const { skipUpdateCheck, remaining } = extractCliFlags([
+    "--prompt",
+    "Fix",
+    "-v",
+  ]);
+  assertEquals(skipUpdateCheck, false);
+  assertEquals(remaining, ["--prompt", "Fix", "-v"]);
+});
+
+Deno.test("extractCliFlags — --skip-update-check is stripped and flag set", () => {
+  const { skipUpdateCheck, remaining } = extractCliFlags([
+    "--skip-update-check",
+    "--prompt",
+    "Fix",
+  ]);
+  assertEquals(skipUpdateCheck, true);
+  assertEquals(remaining, ["--prompt", "Fix"]);
+});
+
+Deno.test("extractCliFlags — --skip-update-check can appear anywhere", () => {
+  const { skipUpdateCheck, remaining } = extractCliFlags([
+    "--config",
+    "x.yaml",
+    "--skip-update-check",
+    "-v",
+  ]);
+  assertEquals(skipUpdateCheck, true);
+  assertEquals(remaining, ["--config", "x.yaml", "-v"]);
+});
+
+Deno.test("extractCliFlags — output passes through parseArgs cleanly", () => {
+  const { skipUpdateCheck, remaining } = extractCliFlags([
+    "--skip-update-check",
+    "--prompt",
+    "Ship it",
+    "-q",
+  ]);
+  assertEquals(skipUpdateCheck, true);
+  const opts = parseArgs(remaining);
+  assertEquals(opts.args.prompt, "Ship it");
+  assertEquals(opts.verbosity, "quiet");
 });

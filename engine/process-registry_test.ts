@@ -1,7 +1,6 @@
 import { assertEquals } from "@std/assert";
 import {
   _getProcesses,
-  _getShutdownCallbacks,
   _reset,
   installSignalHandlers,
   killAll,

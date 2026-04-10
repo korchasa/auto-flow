@@ -16,6 +16,7 @@
  *   --env <KEY=VAL>       Set environment variable (repeatable)
  *   --skip <node-ids>     Comma-separated node IDs to skip
  *   --only <node-ids>     Comma-separated node IDs to run exclusively
+ *   --skip-update-check   Do not check JSR for a newer version on startup
  *   --version / -V        Print version and exit
  */
 
@@ -26,9 +27,36 @@ import {
   runOpenCodeHitlMcpServer,
 } from "./opencode-hitl-mcp.ts";
 import { installSignalHandlers } from "./process-registry.ts";
+import { checkForUpdate } from "./version.ts";
 
 /** Version string embedded at compile time via VERSION env var. Defaults to "dev". */
-export const VERSION = Deno.env.get("VERSION") ?? "dev";
+export const VERSION: string = Deno.env.get("VERSION") ?? "dev";
+
+/** Result of {@link extractCliFlags}: CLI-only flags plus the remaining args. */
+export interface CliFlags {
+  /** True when user passed `--skip-update-check`. */
+  skipUpdateCheck: boolean;
+  /** Remaining args with CLI-only flags stripped; passed to {@link parseArgs}. */
+  remaining: string[];
+}
+
+/**
+ * Extract CLI-only flags (things that never belong on {@link EngineOptions}
+ * because they are not domain concerns of the engine). Currently handles
+ * `--skip-update-check`. Returns both the parsed flags and the remaining
+ * args so the caller can forward the rest to {@link parseArgs}.
+ */
+export function extractCliFlags(args: string[]): CliFlags {
+  let skipUpdateCheck = false;
+  const remaining = args.filter((a) => {
+    if (a === "--skip-update-check") {
+      skipUpdateCheck = true;
+      return false;
+    }
+    return true;
+  });
+  return { skipUpdateCheck, remaining };
+}
 
 /** Returns the formatted version string for `--version` output. */
 export function getVersionString(): string {
@@ -151,6 +179,7 @@ Options:
   --env <KEY=VAL>       Set environment variable (repeatable)
   --skip <node-ids>     Comma-separated node IDs to skip
   --only <node-ids>     Comma-separated node IDs to run exclusively
+  --skip-update-check   Do not check JSR for a newer version on startup
   -V, --version         Print version and exit
   -h, --help            Show this help
 
@@ -175,7 +204,22 @@ if (import.meta.main) {
   installSignalHandlers();
 
   try {
-    const options = parseArgs(Deno.args);
+    const { skipUpdateCheck, remaining } = extractCliFlags(Deno.args);
+    const options = parseArgs(remaining);
+
+    // Notify the user if a newer version is on JSR. Fail-open: any network
+    // or parse error returns null and we silently continue. Skipped when
+    // the binary was built without a real VERSION (local `deno run`) or
+    // when the user explicitly opted out.
+    if (!skipUpdateCheck && VERSION !== "dev") {
+      const update = await checkForUpdate(VERSION);
+      if (update?.updateAvailable) {
+        console.error(
+          `Update available: ${update.currentVersion} → ${update.latestVersion}\n` +
+            `Run: ${update.updateCommand}\n`,
+        );
+      }
+    }
 
     // Load .env file if it exists
     try {

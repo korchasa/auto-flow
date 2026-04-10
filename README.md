@@ -4,6 +4,19 @@ Universal DAG-based engine for orchestrating AI agents. Define agent workflows a
 
 ## Install
 
+### Via Deno (recommended)
+
+Requires [Deno](https://deno.com/) 2.x.
+
+```bash
+deno install -g -A -n flowai-workflow jsr:@korchasa/flowai-workflow
+```
+
+The CLI checks JSR for newer versions on startup (fail-open, non-blocking).
+Pass `--skip-update-check` to suppress the check.
+
+### Pre-built binary
+
 Download the latest binary for your platform:
 
 ```bash
