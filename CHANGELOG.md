@@ -141,7 +141,6 @@ All notable changes to this project will be documented in this file. See [standa
 * migrate pipeline assets to native Claude Code primitives ([33d55a0](https://github.com/korchasa/flowai-workflow/commit/33d55a08fc36dd34f923b22ec40cf22cf05ed4af))
 * **pipeline:** consolidate commit nodes and merge presenter into committer ([6ae4c38](https://github.com/korchasa/flowai-workflow/commit/6ae4c38ed12d4bd7493db5e11c09311ae6d2ca4a))
 * rename pipeline → workflow in code, configs, and docs ([69bf81e](https://github.com/korchasa/flowai-workflow/commit/69bf81e7590737672eab3b973cdb48a5b13bc8c4))
-* rename project flowai-pipelines → flowai-workflow ([87cbfb5](https://github.com/korchasa/flowai-workflow/commit/87cbfb5178c7e1424c147c0b67cd3c9dc9be1e18))
 * replace start-in-claude with loop-in-claude, rename run:self to loop ([1144aae](https://github.com/korchasa/flowai-workflow/commit/1144aae2c91f63b984cde29528f998a95172231b))
 * **sdlc:** extract shared agent rules, compress SKILL.md prompts ([22b3717](https://github.com/korchasa/flowai-workflow/commit/22b37179c1d21ba4440c7238b8ed036fe397ee66))
 
@@ -267,7 +266,6 @@ All notable changes to this project will be documented in this file. See [standa
 * migrate pipeline assets to native Claude Code primitives ([33d55a0](https://github.com/korchasa/flowai-workflow/commit/33d55a08fc36dd34f923b22ec40cf22cf05ed4af))
 * **pipeline:** consolidate commit nodes and merge presenter into committer ([6ae4c38](https://github.com/korchasa/flowai-workflow/commit/6ae4c38ed12d4bd7493db5e11c09311ae6d2ca4a))
 * rename pipeline → workflow in code, configs, and docs ([69bf81e](https://github.com/korchasa/flowai-workflow/commit/69bf81e7590737672eab3b973cdb48a5b13bc8c4))
-* rename project flowai-pipelines → flowai-workflow ([87cbfb5](https://github.com/korchasa/flowai-workflow/commit/87cbfb5178c7e1424c147c0b67cd3c9dc9be1e18))
 * replace start-in-claude with loop-in-claude, rename run:self to loop ([1144aae](https://github.com/korchasa/flowai-workflow/commit/1144aae2c91f63b984cde29528f998a95172231b))
 * **sdlc:** extract shared agent rules, compress SKILL.md prompts ([22b3717](https://github.com/korchasa/flowai-workflow/commit/22b37179c1d21ba4440c7238b8ed036fe397ee66))
 
