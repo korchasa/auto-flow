@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.6](https://github.com/korchasa/flowai-workflows/compare/v0.1.5...v0.1.6) (2026-04-10)
+
+
+### Features
+
+* **engine:** add OpenCode runtime support with provider-agnostic abstraction ([#186](https://github.com/korchasa/flowai-workflows/issues/186)) ([f418386](https://github.com/korchasa/flowai-workflows/commit/f4183867b7a9e064a64d4e195ec3bdd4aded906f))
+
 ### [0.1.5](https://github.com/korchasa/flowai-workflows/compare/v0.1.4...v0.1.5) (2026-04-08)
 
 

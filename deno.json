@@ -1,5 +1,5 @@
 {
-  "version": "0.1.5",
+  "version": "0.1.6",
   "imports": {
     "@std/assert": "./vendor/assert.ts",
     "@std/path": "jsr:@std/path@1.1.4",
