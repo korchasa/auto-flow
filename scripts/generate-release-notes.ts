@@ -97,7 +97,7 @@ if (import.meta.main) {
     subjects,
     fromTag,
     toTag,
-    repo ?? "korchasa/flowai-pipelines",
+    repo ?? "korchasa/flowai-workflow",
   );
   console.log(notes);
 }
