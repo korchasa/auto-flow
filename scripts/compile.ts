@@ -4,30 +4,34 @@
  * Produces standalone binaries via `deno compile` for each supported target.
  *
  * Usage:
- *   deno task compile                    # Build all 4 targets
+ *   deno task compile                    # Build all targets
  *   deno task compile --target <triple>  # Build a single target
  *
- * Supported targets:
- *   x86_64-unknown-linux-gnu   → flowai-workflow-linux-x86_64
- *   aarch64-unknown-linux-gnu  → flowai-workflow-linux-arm64
- *   x86_64-apple-darwin        → flowai-workflow-darwin-x86_64
- *   aarch64-apple-darwin       → flowai-workflow-darwin-arm64
+ * Supported targets are loaded from `scripts/targets.json` — the single
+ * source of truth shared with `.github/workflows/ci.yml`. To add/remove
+ * a platform, edit that file.
  *
  * The VERSION env var is embedded at compile time (defaults to "dev").
  * Leading "v" prefix is stripped (e.g., tag "v1.2.3" embeds as "1.2.3").
  */
 
+import targetsData from "./targets.json" with { type: "json" };
+
+/**
+ * Single compile target.
+ * Field names deliberately match GitHub Actions matrix conventions
+ * (`matrix.target`, `matrix.artifact`) so the same JSON feeds both
+ * this script and `.github/workflows/ci.yml` via `fromJSON`.
+ */
 export interface Target {
-  triple: string;
-  name: string;
+  /** Rust-style triple passed to `deno compile --target`. */
+  target: string;
+  /** Output filename for the compiled binary. */
+  artifact: string;
 }
 
-export const TARGETS: Target[] = [
-  { triple: "x86_64-unknown-linux-gnu", name: "flowai-workflow-linux-x86_64" },
-  { triple: "aarch64-unknown-linux-gnu", name: "flowai-workflow-linux-arm64" },
-  { triple: "x86_64-apple-darwin", name: "flowai-workflow-darwin-x86_64" },
-  { triple: "aarch64-apple-darwin", name: "flowai-workflow-darwin-arm64" },
-];
+/** Single source of truth: loaded from `scripts/targets.json`. */
+export const TARGETS: Target[] = targetsData as Target[];
 
 /** Strip leading "v" prefix from a version tag (e.g., "v1.2.3" → "1.2.3"). */
 export function stripVersionPrefix(v: string): string {
@@ -44,14 +48,14 @@ async function run(): Promise<void> {
   const version = stripVersionPrefix(Deno.env.get("VERSION") ?? "dev");
 
   const targets: Target[] = targetIdx !== -1
-    ? TARGETS.filter((t) => t.triple === cliArgs[targetIdx + 1])
+    ? TARGETS.filter((t) => t.target === cliArgs[targetIdx + 1])
     : TARGETS;
 
   if (targetIdx !== -1 && targets.length === 0) {
     const requested = cliArgs[targetIdx + 1];
     console.error(`Unknown target: ${requested}`);
     console.error(
-      `Supported targets: ${TARGETS.map((t) => t.triple).join(", ")}`,
+      `Supported targets: ${TARGETS.map((t) => t.target).join(", ")}`,
     );
     Deno.exit(1);
   }
@@ -65,18 +69,18 @@ async function run(): Promise<void> {
   try {
     await Deno.writeTextFile(envFile, `VERSION=${version}\n`);
 
-    for (const { triple, name } of targets) {
-      console.log(`Compiling ${name} (${triple})...`);
+    for (const { target, artifact } of targets) {
+      console.log(`Compiling ${artifact} (${target})...`);
       const cmd = new Deno.Command("deno", {
         args: [
           "compile",
           "--allow-all",
           "--no-check",
           "--target",
-          triple,
+          target,
           "--env-file",
           "--output",
-          name,
+          artifact,
           "engine/cli.ts",
         ],
         stdout: "inherit",
@@ -84,10 +88,10 @@ async function run(): Promise<void> {
       });
       const { success } = await cmd.spawn().status;
       if (!success) {
-        console.error(`Compile failed for target: ${triple}`);
+        console.error(`Compile failed for target: ${target}`);
         Deno.exit(1);
       }
-      console.log(`  → ${name}`);
+      console.log(`  → ${artifact}`);
     }
   } finally {
     // Restore or remove .env

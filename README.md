@@ -21,22 +21,22 @@ Download the latest binary for your platform:
 
 ```bash
 # macOS (Apple Silicon)
-curl -fsSL https://github.com/korchasa/flowai-pipelines/releases/latest/download/flowai-workflow-darwin-arm64 -o flowai-workflow
+curl -fsSL https://github.com/korchasa/flowai-workflow/releases/latest/download/flowai-workflow-darwin-arm64 -o flowai-workflow
 chmod +x flowai-workflow
 sudo mv flowai-workflow /usr/local/bin/
 
 # macOS (Intel)
-curl -fsSL https://github.com/korchasa/flowai-pipelines/releases/latest/download/flowai-workflow-darwin-x86_64 -o flowai-workflow
+curl -fsSL https://github.com/korchasa/flowai-workflow/releases/latest/download/flowai-workflow-darwin-x86_64 -o flowai-workflow
 chmod +x flowai-workflow
 sudo mv flowai-workflow /usr/local/bin/
 
 # Linux (x86_64)
-curl -fsSL https://github.com/korchasa/flowai-pipelines/releases/latest/download/flowai-workflow-linux-x86_64 -o flowai-workflow
+curl -fsSL https://github.com/korchasa/flowai-workflow/releases/latest/download/flowai-workflow-linux-x86_64 -o flowai-workflow
 chmod +x flowai-workflow
 sudo mv flowai-workflow /usr/local/bin/
 
 # Linux (ARM64)
-curl -fsSL https://github.com/korchasa/flowai-pipelines/releases/latest/download/flowai-workflow-linux-arm64 -o flowai-workflow
+curl -fsSL https://github.com/korchasa/flowai-workflow/releases/latest/download/flowai-workflow-linux-arm64 -o flowai-workflow
 chmod +x flowai-workflow
 sudo mv flowai-workflow /usr/local/bin/
 ```

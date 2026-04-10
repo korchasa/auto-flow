@@ -98,22 +98,33 @@ jobs:
             echo "released=false" >> $GITHUB_OUTPUT
           fi
 
+  # Reads scripts/targets.json (single source of truth, also consumed by
+  # scripts/compile.ts) and emits a GitHub Actions matrix. Keeping the list
+  # in one file prevents drift between the local compile script and CI.
+  setup-matrix:
+    name: Resolve build matrix
+    needs: check
+    if: needs.check.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.check.outputs.tag }}
+
+      - name: Build matrix from scripts/targets.json
+        id: targets
+        run: echo "matrix=$(jq -c . scripts/targets.json)" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build ${{ matrix.target }}
-    needs: check
+    needs: [check, setup-matrix]
     if: needs.check.outputs.released == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-          - target: x86_64-unknown-linux-gnu
-            artifact: flowai-workflow-linux-x86_64
-          - target: aarch64-unknown-linux-gnu
-            artifact: flowai-workflow-linux-arm64
-          - target: x86_64-apple-darwin
-            artifact: flowai-workflow-darwin-x86_64
-          - target: aarch64-apple-darwin
-            artifact: flowai-workflow-darwin-arm64
+        include: ${{ fromJSON(needs.setup-matrix.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -175,14 +186,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+        # dist/ contains only files produced by the matrixed build job
+        # (download-artifact with merge-multiple flattens artifacts into
+        # dist/). Using a glob removes the last hardcoded copy of the
+        # target list — the matrix itself is derived from targets.json.
         run: |
           gh release create "${{ needs.check.outputs.tag }}" \
             --title "flowai-workflow ${{ needs.check.outputs.tag }}" \
             --notes-file "${{ steps.notes.outputs.notes_file }}" \
-            dist/flowai-workflow-linux-x86_64 \
-            dist/flowai-workflow-linux-arm64 \
-            dist/flowai-workflow-darwin-x86_64 \
-            dist/flowai-workflow-darwin-arm64
+            dist/*
 
       - name: Publish to JSR
         run: deno publish --allow-dirty

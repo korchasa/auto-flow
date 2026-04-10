@@ -6,39 +6,46 @@ Deno.test("TARGETS — has exactly 4 platform targets", () => {
 });
 
 Deno.test("TARGETS — linux x86_64 maps to flowai-workflow-linux-x86_64", () => {
-  const t = TARGETS.find((t) => t.triple === "x86_64-unknown-linux-gnu");
-  assertEquals(t?.name, "flowai-workflow-linux-x86_64");
+  const t = TARGETS.find((t) => t.target === "x86_64-unknown-linux-gnu");
+  assertEquals(t?.artifact, "flowai-workflow-linux-x86_64");
 });
 
 Deno.test("TARGETS — linux arm64 maps to flowai-workflow-linux-arm64", () => {
-  const t = TARGETS.find((t) => t.triple === "aarch64-unknown-linux-gnu");
-  assertEquals(t?.name, "flowai-workflow-linux-arm64");
+  const t = TARGETS.find((t) => t.target === "aarch64-unknown-linux-gnu");
+  assertEquals(t?.artifact, "flowai-workflow-linux-arm64");
 });
 
 Deno.test("TARGETS — darwin x86_64 maps to flowai-workflow-darwin-x86_64", () => {
-  const t = TARGETS.find((t) => t.triple === "x86_64-apple-darwin");
-  assertEquals(t?.name, "flowai-workflow-darwin-x86_64");
+  const t = TARGETS.find((t) => t.target === "x86_64-apple-darwin");
+  assertEquals(t?.artifact, "flowai-workflow-darwin-x86_64");
 });
 
 Deno.test("TARGETS — darwin arm64 maps to flowai-workflow-darwin-arm64", () => {
-  const t = TARGETS.find((t) => t.triple === "aarch64-apple-darwin");
-  assertEquals(t?.name, "flowai-workflow-darwin-arm64");
+  const t = TARGETS.find((t) => t.target === "aarch64-apple-darwin");
+  assertEquals(t?.artifact, "flowai-workflow-darwin-arm64");
 });
 
-Deno.test("TARGETS — all names follow flowai-workflow-<os>-<arch> naming convention", () => {
-  for (const { name } of TARGETS) {
+Deno.test("TARGETS — all artifacts follow flowai-workflow-<os>-<arch> naming convention", () => {
+  for (const { artifact } of TARGETS) {
     assertEquals(
-      name.startsWith("flowai-workflow-"),
+      artifact.startsWith("flowai-workflow-"),
       true,
-      `${name} does not start with flowai-workflow-`,
+      `${artifact} does not start with flowai-workflow-`,
     );
-    const suffix = name.slice("flowai-workflow-".length);
+    const suffix = artifact.slice("flowai-workflow-".length);
     assertEquals(
       suffix.includes("-"),
       true,
-      `${name} suffix "${suffix}" missing os-arch separator`,
+      `${artifact} suffix "${suffix}" missing os-arch separator`,
     );
   }
+});
+
+Deno.test("TARGETS — matches scripts/targets.json on disk (single source of truth)", async () => {
+  const json = JSON.parse(
+    await Deno.readTextFile(new URL("./targets.json", import.meta.url)),
+  );
+  assertEquals(TARGETS, json);
 });
 
 Deno.test("stripVersionPrefix — strips leading v from version tag", () => {

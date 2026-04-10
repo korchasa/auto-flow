@@ -1,0 +1,18 @@
+[
+  {
+    "target": "x86_64-unknown-linux-gnu",
+    "artifact": "flowai-workflow-linux-x86_64"
+  },
+  {
+    "target": "aarch64-unknown-linux-gnu",
+    "artifact": "flowai-workflow-linux-arm64"
+  },
+  {
+    "target": "x86_64-apple-darwin",
+    "artifact": "flowai-workflow-darwin-x86_64"
+  },
+  {
+    "target": "aarch64-apple-darwin",
+    "artifact": "flowai-workflow-darwin-arm64"
+  }
+]
