@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.8](https://github.com/korchasa/flowai-workflow/compare/v0.1.7...v0.1.8) (2026-04-10)
+
+
+### Bug Fixes
+
+* **ci:** detect engine: commits as releasable; force patch bump ([#191](https://github.com/korchasa/flowai-workflow/issues/191)) ([1e7e06e](https://github.com/korchasa/flowai-workflow/commit/1e7e06ec0e4c627999caef9334db40f211995bee))
+
 ### [0.1.7](https://github.com/korchasa/flowai-workflows/compare/v0.1.6...v0.1.7) (2026-04-10)
 
 
