@@ -58,15 +58,33 @@ jobs:
           git config --local user.name "github-actions[bot]"
 
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          # Detect releasable commits and pick a bump level.
+          #
+          # Conventional-commit prefixes (feat/fix/...) are handled by
+          # standard-version directly. Project-style engine: and
+          # engine+sdlc: prefixes are detected here and forced to a
+          # patch bump because standard-version does not understand
+          # them. sdlc: commits do NOT trigger a release — SDLC workflow
+          # changes are dev tooling, not engine code.
+          RELEASABLE=false
+          BUMP_ARGS=""
+
           if [ -z "$LATEST_TAG" ]; then
             RELEASABLE=true
           else
-            COMMITS=$(git log --oneline --extended-regexp --grep="^(feat|fix|perf|break|refactor|build)" ${LATEST_TAG}..HEAD | wc -l)
-            if [ "$COMMITS" -gt 0 ]; then RELEASABLE=true; else RELEASABLE=false; fi
+            COMMITS_SINCE=$(git log --format='%s' ${LATEST_TAG}..HEAD)
+            if echo "$COMMITS_SINCE" | grep -qE '^feat'; then
+              RELEASABLE=true
+              # standard-version decides minor/major automatically.
+            elif echo "$COMMITS_SINCE" | grep -qE '^(fix|perf|refactor|build|engine)'; then
+              RELEASABLE=true
+              BUMP_ARGS="--release-as patch"
+            fi
           fi
 
           if [ "$RELEASABLE" = "true" ]; then
-            deno task release
+            deno task release $BUMP_ARGS
             NEW_VERSION=$(deno eval "console.log(JSON.parse(Deno.readTextFileSync('deno.json')).version)")
             NEW_TAG="v${NEW_VERSION}"
             git tag -a "$NEW_TAG" -m "Release ${NEW_TAG}"
