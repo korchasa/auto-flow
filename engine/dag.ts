@@ -1,13 +1,13 @@
-import type { WorkflowConfig } from "./types.ts";
-
 /**
- * Build a DAG from workflow config and produce execution levels.
- * Each level is a set of node IDs that can run in parallel.
- * Nodes in level N depend only on nodes in levels < N.
- *
- * Loop body nodes are excluded from the main DAG — they are
- * managed by the loop executor internally.
+ * @module
+ * DAG construction and topological sorting for workflow execution ordering.
+ * Builds execution levels from node dependencies: each level is a set of
+ * node IDs that can run in parallel. Loop body nodes are excluded from the
+ * main DAG — managed by the loop executor internally.
+ * Entry points: {@link buildLevels}, {@link buildLoopBodyOrder}.
  */
+
+import type { WorkflowConfig } from "./types.ts";
 
 /** Nodes grouped into parallel execution levels. */
 export type ExecutionLevels = string[][];

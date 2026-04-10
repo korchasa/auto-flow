@@ -1,3 +1,10 @@
+/**
+ * @module
+ * Post-workflow node execution: nodes with `run_on` (always/success/failure)
+ * execute after all DAG levels complete. Also runs the on_failure_script hook.
+ * Entry point: {@link executePostWorkflow}.
+ */
+
 import type { NodeConfig, RunState } from "./types.ts";
 import type { OutputManager } from "./output.ts";
 import { topoSort } from "./dag.ts";

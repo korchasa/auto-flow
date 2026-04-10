@@ -1,7 +1,10 @@
-/** Workflow lock to prevent parallel runs.
+/**
+ * @module
+ * Workflow lock to prevent parallel runs.
  * Lock file contains JSON with PID, hostname, run_id, and timestamp.
  * Stale detection: always PID check. Hostname is stored for diagnostics only.
- * Rationale: lock file lives on local FS, so if readable — PID is checkable. */
+ * Rationale: lock file lives on local FS, so if readable — PID is checkable.
+ */
 
 /** Lock file content structure. */
 export interface LockInfo {

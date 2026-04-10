@@ -1,3 +1,12 @@
+/**
+ * @module
+ * Human-in-the-loop (HITL) detection and poll loop.
+ * Detects AskUserQuestion requests in Claude CLI output, delivers questions
+ * via external ask_script, polls check_script for replies, and resumes the
+ * agent session with the human response.
+ * Entry points: {@link detectHitlRequest}, {@link runHitlLoop}.
+ */
+
 import type {
   ClaudeCliOutput,
   HitlConfig,

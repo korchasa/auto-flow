@@ -1,3 +1,11 @@
+/**
+ * @module
+ * Main workflow engine: orchestrates node execution across DAG levels.
+ * Handles config loading, worktree setup, state management, lock
+ * acquisition, post-workflow hooks, and final summary output.
+ * Entry point: {@link Engine.run}.
+ */
+
 import type {
   EngineOptions,
   NodeConfig,

@@ -1,3 +1,12 @@
+/**
+ * @module
+ * Claude CLI process management: builds CLI arguments, spawns the claude
+ * subprocess with stream-json output, processes NDJSON events in real-time,
+ * and returns normalized {@link ClaudeCliOutput}. Includes retry logic with
+ * exponential backoff.
+ * Entry point: {@link invokeClaudeCli}.
+ */
+
 import type { ClaudeCliOutput, Verbosity } from "./types.ts";
 import { register, unregister } from "./process-registry.ts";
 import {

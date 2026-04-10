@@ -1,3 +1,11 @@
+/**
+ * @module
+ * Claude CLI stream-json event processing: parses NDJSON events, extracts
+ * {@link ClaudeCliOutput} from result events, formats one-line summaries
+ * for terminal and log output, and tracks repeated file reads.
+ * Entry points: {@link processStreamEvent}, {@link extractClaudeOutput}.
+ */
+
 import type { ClaudeCliOutput, Verbosity } from "./types.ts";
 
 /**

@@ -1,3 +1,11 @@
+/**
+ * @module
+ * Unified HITL orchestration handler for agent nodes.
+ * Consolidates two paths: resume-from-waiting (node was persisted as "waiting")
+ * and detect-after-run (HITL question found in agent output).
+ * Delegates to {@link runHitlLoop} for the actual poll cycle.
+ */
+
 import type {
   HitlConfig,
   NodeConfig,

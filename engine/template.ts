@@ -1,3 +1,13 @@
+/**
+ * @module
+ * Template interpolation engine: resolves `{{var}}` placeholders in prompt
+ * and hook strings using the provided {@link TemplateContext}.
+ * Supports dotted paths (input.*, args.*, env.*, loop.iteration),
+ * direct keys (node_dir, run_dir, run_id), and file inclusion via
+ * `{{file("path")}}`.
+ * Entry points: {@link interpolate}, {@link validateTemplateVars}.
+ */
+
 import type { TemplateContext } from "./types.ts";
 
 /** File inclusion size threshold. Files larger than this emit a console warning. */

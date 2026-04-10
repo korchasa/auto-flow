@@ -1,3 +1,10 @@
+/**
+ * @module
+ * Agent log persistence: saves JSON output and JSONL session transcripts
+ * to the run's logs directory after each node completes.
+ * Entry point: {@link saveAgentLog}.
+ */
+
 import type { ClaudeCliOutput, RuntimeId } from "./types.ts";
 
 /** Default path where Claude Code stores project session transcripts. */

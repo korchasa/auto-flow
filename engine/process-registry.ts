@@ -1,4 +1,5 @@
 /**
+ * @module
  * Global process registry for graceful shutdown.
  * Tracks spawned child processes and shutdown callbacks.
  * On SIGINT/SIGTERM: kills all registered processes, runs callbacks, exits.

@@ -1,4 +1,5 @@
 /**
+ * @module
  * Type declarations for the configurable node-based workflow engine.
  * No logic — pure type definitions.
  */

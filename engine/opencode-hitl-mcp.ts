@@ -1,4 +1,5 @@
 /**
+ * @module
  * Minimal stdio MCP server exposing a single HITL tool for OpenCode.
  *
  * Why a separate stdio process: OpenCode can inject local MCP servers per

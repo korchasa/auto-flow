@@ -1,3 +1,11 @@
+/**
+ * @module
+ * OpenCode runtime adapter: builds CLI arguments, spawns the opencode process,
+ * parses JSON event stream, extracts normalized output, and handles HITL
+ * interception for the OpenCode runtime.
+ * Entry point: {@link invokeOpenCodeCli}.
+ */
+
 import { basename, fromFileUrl } from "@std/path";
 import type { ClaudeCliOutput, Verbosity } from "./types.ts";
 import type {

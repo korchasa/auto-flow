@@ -1,3 +1,10 @@
+/**
+ * @module
+ * Human node execution: prompt the operator for input via terminal,
+ * save the response as an artifact, and check abort conditions.
+ * Entry point: {@link runHuman}.
+ */
+
 import type { NodeConfig, TemplateContext } from "./types.ts";
 import { interpolate } from "./template.ts";
 

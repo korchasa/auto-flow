@@ -1,4 +1,5 @@
 /**
+ * @module
  * Node executor functions for the engine.
  * Encapsulates all node-type-specific execution logic, keeping engine.ts as a
  * pure orchestrator (config loading, state management, level iteration).

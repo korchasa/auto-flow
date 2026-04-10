@@ -1,3 +1,12 @@
+/**
+ * @module
+ * Loop node execution: iterates body nodes sequentially, checks an exit
+ * condition after each iteration, and repeats until the condition matches
+ * or max_iterations is reached. Condition values are extracted from YAML
+ * frontmatter in body node output artifacts.
+ * Entry points: {@link runLoop}, {@link extractConditionValue}.
+ */
+
 import { parse as parseYaml } from "@std/yaml";
 import type {
   ErrorCategory,
