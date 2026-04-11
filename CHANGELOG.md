@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.11](https://github.com/korchasa/flowai-workflow/compare/v0.1.10...v0.1.11) (2026-04-11)
+
+
+### Features
+
+* **engine:** extract IDE CLI wrapper to @korchasa/ai-ide-cli (FR-E44) ([be79c1b](https://github.com/korchasa/flowai-workflow/commit/be79c1b8f2571d3283ca30acc3f174329b03d754))
+* **sdlc:** add `flowai-workflow init` project scaffolder (FR-S46) ([cc28d67](https://github.com/korchasa/flowai-workflow/commit/cc28d67b7e5c02c5b66afa6cfaeb67a844f99014))
+
+
+### Bug Fixes
+
+* **sdlc:** remove flowai-init preflight binary checks (FR-S46) ([ca8905f](https://github.com/korchasa/flowai-workflow/commit/ca8905f136280cc7eb1f04f4daf42e6141c4502e))
+
+
+### Documentation
+
+* **fr-ids:** unify FR naming scheme (FR-E*/FR-S*), drop legacy FR-N aliases ([9181f56](https://github.com/korchasa/flowai-workflow/commit/9181f56d30d9095f66940e3f5143275691b8895a))
+* **readme:** link to GitHub Releases instead of listing curl commands ([dc750ea](https://github.com/korchasa/flowai-workflow/commit/dc750ea670adb65ae01c08af68dae2886714ac55))
+* **srs:** add Proposals section (P1-P4) to engine SRS ([27c0f36](https://github.com/korchasa/flowai-workflow/commit/27c0f36e5379615bd77d7668b78fc71f628db3f8))
+* **srs:** add SDLC proposals (P1-S, P2-S, P3-S) and refocus engine P2 ([9ad9916](https://github.com/korchasa/flowai-workflow/commit/9ad99165c2200c1a184e0682efbab8d747b97126))
+
+
+### Chores
+
+* **check:** enforce JSR publish dry-run in local check + document Deno workspace quirks ([93f5117](https://github.com/korchasa/flowai-workflow/commit/93f51172bf4efe077becf56ce49a9a11c302bac1))
+* **git:** ignore documents/rnd/ research artifacts ([#194](https://github.com/korchasa/flowai-workflow/issues/194)) ([e77be1b](https://github.com/korchasa/flowai-workflow/commit/e77be1bb18073e19d448d43acd457c12309641bc))
+
 ### [0.1.10](https://github.com/korchasa/flowai-workflow/compare/v0.1.9...v0.1.10) (2026-04-10)
 
 
