@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.16](https://github.com/korchasa/flowai-workflow/compare/v0.1.15...v0.1.16) (2026-04-12)
+
+
+### Features
+
+* **ai-ide-cli:** add env and onEvent options to all runtime invoke interfaces ([1e08b8f](https://github.com/korchasa/flowai-workflow/commit/1e08b8fb6837fcaa0a6a617ab8696659e2c2d6d6))
+
+
+### Documentation
+
+* mark implemented FRs as done in SRS ([4443981](https://github.com/korchasa/flowai-workflow/commit/44439811c889d8932a030a08d71e8e5664fdcdd4))
+
 ### [0.1.15](https://github.com/korchasa/flowai-workflow/compare/v0.1.14...v0.1.15) (2026-04-12)
 
 
