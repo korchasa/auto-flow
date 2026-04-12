@@ -19,7 +19,7 @@ Deno.test("loadBundledSkills: init skill has correct metadata", async () => {
   );
   assertEquals(init!.frontmatter["user-invocable"], true);
   assertEquals(init!.body.length > 0, true);
-  assertEquals(init!.files, []);
+  assertEquals(init!.files, ["init.py"]);
 });
 
 Deno.test("loadBundledSkills: adapt-agents skill has correct metadata", async () => {

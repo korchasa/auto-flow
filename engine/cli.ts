@@ -174,6 +174,7 @@ Usage:
 Subcommands:
   (default)             Interactive AI-assisted REPL (asks runtime on first use)
   run                   Execute DAG workflow engine
+  init                  Scaffold .flowai-workflow/ directory (run init --help for details)
 
 Run options:
   --config <path>       Workflow config file (default: .flowai-workflow/workflow.yaml)
@@ -281,6 +282,15 @@ if (import.meta.main) {
   // Subcommand: `run` → DAG workflow engine
   if (subcommand === "run") {
     await runEngine(Deno.args.slice(1));
+  }
+
+  // Subcommand: `init` → project scaffolder (non-interactive via --answers)
+  if (subcommand === "init") {
+    const { runInit } = await import("./init/mod.ts");
+    const exitCode = await runInit(Deno.args.slice(1), {
+      engineVersion: VERSION,
+    });
+    Deno.exit(exitCode);
   }
 
   // Backward-compat shim: bare `--` flags without `run` prefix.
