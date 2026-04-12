@@ -46,6 +46,10 @@ Each scope has its own SRS and SDS files.
 7. **SDS SDLC** (`documents/design-sdlc.md` — index; sections under
    `documents/design-sdlc/*.md`): "How" for SDLC workflow.
 8. **Tasks** (`documents/tasks/<YYYY-MM-DD>-<slug>.md`): Temporary plans/notes per task.
+9. **IDE Differences** (`documents/ides-difference.md` — index; sections under
+   `documents/ides-difference/*.md`): R&D reference on AI IDE/CLI capabilities,
+   context primitives, config formats, migration paths. Per-IDE files +
+   cross-IDE comparison + Cursor→Claude Code conversion guide.
 
 ### File size budget
 
