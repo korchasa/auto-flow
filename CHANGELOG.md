@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.13](https://github.com/korchasa/flowai-workflow/compare/v0.1.12...v0.1.13) (2026-04-12)
+
+
+### Documentation
+
+* **srs/sds:** split monoliths into index + section files to fit Read tool budget ([d25557a](https://github.com/korchasa/flowai-workflow/commit/d25557ae0355084f52cd26fba0e0dd7df6b11d15))
+
+
+### Code Refactoring
+
+* **scripts/check:** extract docs-budget pure core and link token/byte constants ([9a51b15](https://github.com/korchasa/flowai-workflow/commit/9a51b153cc1f71a20c76df50d6819719f6f85f2a))
+
+
+### Chores
+
+* **framework:** update flowai framework ([a767870](https://github.com/korchasa/flowai-workflow/commit/a767870bb495e7fc9447d427ee8fbe03280e452c))
+
 ### [0.1.12](https://github.com/korchasa/flowai-workflow/compare/v0.1.11...v0.1.12) (2026-04-11)
 
 ### [0.1.11](https://github.com/korchasa/flowai-workflow/compare/v0.1.10...v0.1.11) (2026-04-11)
