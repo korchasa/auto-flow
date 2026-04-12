@@ -15,7 +15,7 @@
     "check": "deno run -A scripts/check.ts",
     "test": "deno test -A --no-check --ignore=.claude/",
     "test:lib": "deno test -A --no-check .flowai-workflow/scripts/lib_test.ts",
-    "run": "deno run -A --no-check engine/cli.ts --config .flowai-workflow/workflow.yaml",
+    "run": "deno run -A --no-check engine/cli.ts run --config .flowai-workflow/workflow.yaml",
     "loop": "deno run -A --no-check scripts/self-runner.ts",
     "test:engine": "deno test -A --no-check engine/",
     "fmt": "deno fmt",

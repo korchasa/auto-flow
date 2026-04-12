@@ -94,27 +94,27 @@
     `executeLoopNode()`: passes result excerpt in `onNodeComplete` callback.
     `printSummary()`: builds `nodeResults` from `state.nodes[*].result`,
     passes to `summary()` for per-node result rendering.
-  - `cli.ts` — regular workflow CLI entry and hidden internal helper mode for
-    OpenCode HITL. When invoked with
-    `--internal-opencode-hitl-mcp`, it starts the stdio MCP helper server
-    instead of the workflow engine. This lets the same compiled binary or
-    `deno run` entrypoint serve as the per-invocation local MCP command.
-    Dry-run path (FR-E13): applies `collectPostWorkflowNodes()` +
-    `sortPostWorkflowNodes()` + level filtering before calling
-    `dryRunPlan()`, passing filtered levels and post-workflow node IDs with
-    `run_on` conditions — mirrors normal execution path's filtering logic.
-    On config load: iterates all nodes; for loop nodes with `nodes`
-    sub-object, flattens nested body node IDs into master ID list passed
-    to `createRunState()` (ensures state.json tracks both top-level and
-    nested body node IDs).
-    Computes `streamLogPath = ${runDir}/logs/${nodeId}.jsonl` for each agent
-    node; passes to `runAgent()`. For loop nodes: passes path pattern to
-    loop executor for iteration-qualified derivation
-  - `cli.ts` — CLI entry point: argument parsing, .env loading.
-    `VERSION` constant: `Deno.env.get("VERSION") ?? "dev"` — injected at
-    compile time via `deno compile --env VERSION=<tag>`. `--version` / `-V`
-    flag: prints version and exits.
-    `parseArgs()` is synchronous
+  - `cli.ts` — CLI entry point with subcommand routing (FR-E45):
+    `--internal-opencode-hitl-mcp` → HITL MCP server,
+    `run` → `runEngine(args)` (DAG workflow — former default),
+    `--version`/`--help` → global handlers,
+    bare `--` flags → backward-compat shim (deprecated, delegates to `run`),
+    default (no args) → dynamic import `repl/mod.ts` → `launchRepl()`.
+    `runEngine()` extracted as named function shared by `run` and compat shim.
+    `parseArgs()` unchanged (synchronous).
+    `VERSION` constant: `Deno.env.get("VERSION") ?? "dev"`.
+  - `repl/mod.ts` — interactive REPL module (FR-E46):
+    `resolveRuntime()` — flag → persisted config
+    (`~/.config/flowai-workflow/runtime.json`) → terminal prompt.
+    `loadBundledSkills()` — `parseSkill()` for each subdir of
+    `engine/repl/skills/` (uses `import.meta.url` for compiled binary compat).
+    `launchRepl()` — orchestrates: resolve runtime, check `interactive`
+    capability, load skills, build system prompt, call
+    `adapter.launchInteractive()`. MVP skills: `init`, `adapt-agents`.
+  - `repl/skills/init/SKILL.md` — guided project initialization skill
+    (replaces removed `flowai-workflow init` subcommand).
+  - `repl/skills/adapt-agents/SKILL.md` — agent adaptation after framework
+    update.
   - `mod.ts` — barrel re-export serving as `deno doc --lint` entry point
     (not a runtime public API; sole non-redundant consumer is
     `scripts/check.ts` JSDoc validation)
@@ -144,9 +144,9 @@
   Follows `engine/cli.ts` format. Exported `printUsage()`/`checkArgs()` for
   unit testing
 - **Interfaces:**
-  - CLI: `deno task run [--prompt <text>] [--config <path>] [--resume <run-id>]
-    [--dry-run] [-v|-s|-q] [--env KEY=VAL] [--skip nodes] [--only nodes]
-    [--version|-V]`
+  - CLI: `flowai-workflow` (REPL), `flowai-workflow run [--prompt <text>]
+    [--config <path>] [--resume <run-id>] [--dry-run] [-v|-s|-q]
+    [--env KEY=VAL] [--skip nodes] [--only nodes]`, `--version|-V`, `--help`
   - Config: `.flowai-workflow/workflow.yaml` (YAML, version "1")
   - State: `.flowai-workflow/runs/<run-id>/state.json` (JSON)
 - **Node types:** `agent`, `merge`, `loop` (with inline `nodes` sub-object

@@ -2,10 +2,12 @@
 /**
  * @module
  * CLI entry point for the workflow engine.
- * Parses arguments and delegates to {@link Engine}.
- * Usage: flowai-workflow [options] | flowai-workflow init [init-options]
+ * Parses arguments and delegates to the appropriate subcommand:
  *
- * Options:
+ * - `flowai-workflow` (no args) → interactive REPL with bundled management skills
+ * - `flowai-workflow run [options]` → DAG workflow engine
+ *
+ * Run options:
  *   --config <path>       Workflow config file (default: .flowai-workflow/workflow.yaml)
  *   --prompt <text>       Additional context for PM agent (sets args.prompt)
  *   --resume <run-id>     Resume a previous run from its state
@@ -166,10 +168,14 @@ function printUsage(): void {
 Workflow Engine — Configurable multi-agent workflow runner
 
 Usage:
-  flowai-workflow [options]
-  flowai-workflow init [init-options]
+  flowai-workflow                Launch interactive REPL with bundled management skills
+  flowai-workflow run [options]  Execute DAG workflow
 
-Options:
+Subcommands:
+  (default)             Interactive AI-assisted REPL (asks runtime on first use)
+  run                   Execute DAG workflow engine
+
+Run options:
   --config <path>       Workflow config file (default: .flowai-workflow/workflow.yaml)
   --prompt <text>       Additional context for PM agent (optional)
   --resume <run-id>     Resume a previous run
@@ -181,47 +187,31 @@ Options:
   --skip <node-ids>     Comma-separated node IDs to skip
   --only <node-ids>     Comma-separated node IDs to run exclusively
   --skip-update-check   Do not check JSR for a newer version on startup
+
+Global options:
   -V, --version         Print version and exit
   -h, --help            Show this help
 
-Subcommands:
-  init                  Scaffold .flowai-workflow/ directory (run init --help for details)
-
 Examples:
   flowai-workflow
-  flowai-workflow --prompt "Focus on the login bug"
-  flowai-workflow --config custom.yaml -v
-  flowai-workflow --resume 20260308T143022
-  flowai-workflow --dry-run
-  flowai-workflow --skip meta-agent --env DEBUG=true
-  flowai-workflow init
+  flowai-workflow run --prompt "Focus on the login bug"
+  flowai-workflow run --config custom.yaml -v
+  flowai-workflow run --resume 20260308T143022
+  flowai-workflow run --dry-run
 `);
 }
 
 // --- Main ---
 
-if (import.meta.main) {
-  if (Deno.args[0] === INTERNAL_OPENCODE_HITL_MCP_ARG) {
-    await runOpenCodeHitlMcpServer();
-    Deno.exit(0);
-  }
-
-  // Dispatch `flowai-workflow init` to the scaffolder module. Dynamic
-  // import keeps the init code and its bundled templates out of the
-  // engine module graph when the user invokes any other subcommand —
-  // the engine remains domain-agnostic (FR-E14).
-  if (Deno.args[0] === "init") {
-    const { runInit } = await import("./init/mod.ts");
-    const exitCode = await runInit(Deno.args.slice(1), {
-      engineVersion: VERSION,
-    });
-    Deno.exit(exitCode);
-  }
-
+/**
+ * Run the DAG workflow engine with the given args (after `run` is stripped).
+ * Shared between the `run` subcommand and the backward-compat shim.
+ */
+async function runEngine(args: string[]): Promise<never> {
   installSignalHandlers();
 
   try {
-    const { skipUpdateCheck, remaining } = extractCliFlags(Deno.args);
+    const { skipUpdateCheck, remaining } = extractCliFlags(args);
     const options = parseArgs(remaining);
 
     // Notify the user if a newer version is on JSR. Fail-open: any network
@@ -263,10 +253,49 @@ if (import.meta.main) {
     const engine = new Engine(options);
     const state = await engine.run();
 
-    // Exit with appropriate code
     Deno.exit(state.status === "completed" ? 0 : 1);
   } catch (err) {
     console.error(`Error: ${(err as Error).message}`);
     Deno.exit(2);
   }
+}
+
+if (import.meta.main) {
+  // Internal dispatch: OpenCode HITL MCP server
+  if (Deno.args[0] === INTERNAL_OPENCODE_HITL_MCP_ARG) {
+    await runOpenCodeHitlMcpServer();
+    Deno.exit(0);
+  }
+
+  const subcommand = Deno.args[0];
+
+  // Global flags handled before subcommand dispatch
+  if (subcommand === "--version" || subcommand === "-V") {
+    handleVersion();
+  }
+  if (subcommand === "--help" || subcommand === "-h") {
+    printUsage();
+    Deno.exit(0);
+  }
+
+  // Subcommand: `run` → DAG workflow engine
+  if (subcommand === "run") {
+    await runEngine(Deno.args.slice(1));
+  }
+
+  // Backward-compat shim: bare `--` flags without `run` prefix.
+  // Treat as `run <args>` with a deprecation warning. Remove after 2 minor releases.
+  if (subcommand && subcommand.startsWith("--")) {
+    console.error(
+      "[DEPRECATED] Running engine with bare flags is deprecated. " +
+        "Use `flowai-workflow run [options]` instead.\n",
+    );
+    await runEngine(Deno.args);
+  }
+
+  // Default (no args or unknown subcommand): launch REPL.
+  // Dynamic import keeps REPL code out of the engine module graph.
+  const { launchRepl } = await import("./repl/mod.ts");
+  const exitCode = await launchRepl({ engineVersion: VERSION });
+  Deno.exit(exitCode);
 }

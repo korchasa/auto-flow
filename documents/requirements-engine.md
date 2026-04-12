@@ -74,3 +74,5 @@ FR-IDs are stable — never renumber them on move.
 - FR-E42 (Per-Node Effort Level)     → 02-nodes-and-models
 - FR-E43 (Fallback Model)            → 02-nodes-and-models
 - FR-E44 (IDE CLI Wrapper Split)     → 06-distribution-and-housekeeping
+- FR-E45 (Subcommand Routing)        → 05-cli-and-observability
+- FR-E46 (Interactive REPL)           → 05-cli-and-observability

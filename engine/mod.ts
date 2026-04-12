@@ -54,11 +54,14 @@ export type { AgentResult, AgentRunOptions } from "./agent.ts";
 // public AgentRunOptions / HitlRunOptions / ClaudeRunner remain self-contained
 // from deno doc --lint's point of view.
 export type {
+  InteractiveOptions,
+  InteractiveResult,
   RuntimeAdapter,
   RuntimeCapabilities,
   RuntimeInvokeOptions,
   RuntimeInvokeResult,
 } from "@korchasa/ai-ide-cli/runtime/types";
+export type { SkillDef, SkillFrontmatter } from "@korchasa/ai-ide-cli/skill";
 export { detectHitlRequest, runHitlLoop } from "./hitl.ts";
 export type {
   ClaudeRunner,

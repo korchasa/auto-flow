@@ -202,3 +202,52 @@
   - [x] `deno task check` passes (self-check).
 
 
+### 3.45 FR-E45: Subcommand Routing
+
+- **Description:** CLI restructured: `flowai-workflow` (no args) → REPL (new
+  default), `flowai-workflow run [options]` → DAG engine (former default).
+  `init` subcommand removed (replaced by `init` skill in REPL). Backward-compat
+  shim: bare `--` flags without `run` → treated as `run <args>` with
+  deprecation warning. `--version` and `--help` handled before subcommand
+  dispatch.
+- **Motivation:** Lowers barrier for new users — REPL guides through setup and
+  management. Power users use `run` explicitly.
+- **Acceptance:**
+  - [x] No args → `launchRepl()` via dynamic import.
+    Evidence: `engine/cli.ts:281-283`.
+  - [x] `run` subcommand → engine with all current flags.
+    Evidence: `engine/cli.ts:272-274`.
+  - [x] `init` subcommand removed from dispatch.
+    Evidence: `engine/cli.ts` (no `init` handler).
+  - [x] Backward-compat shim for bare `--` flags.
+    Evidence: `engine/cli.ts:276-280`.
+  - [x] `deno task run` updated with `run` subcommand.
+    Evidence: `deno.json:18`.
+  - [x] Existing parseArgs tests pass unchanged.
+    Evidence: `engine/cli_test.ts` (20 tests).
+
+
+### 3.46 FR-E46: Interactive REPL
+
+- **Description:** `engine/repl/mod.ts` — interactive AI-assisted REPL. On
+  launch: resolves runtime (CLI flag → persisted config → interactive prompt),
+  loads bundled skills from `engine/repl/skills/`, launches
+  `adapter.launchInteractive()` with skills + system prompt. Runtime choice
+  persisted at `~/.config/flowai-workflow/runtime.json`.
+- **Motivation:** Single entry point for project management operations (init,
+  adapt agents) via AI-assisted conversation.
+- **Acceptance:**
+  - [x] `resolveRuntime()` checks override → config → interactive prompt.
+    Evidence: `engine/repl/mod.ts:46-80`.
+  - [x] Runtime persisted to `~/.config/flowai-workflow/runtime.json`.
+    Evidence: `engine/repl/mod.ts:82-94`.
+  - [x] `loadBundledSkills()` loads skills via `parseSkill()`.
+    Evidence: `engine/repl/mod.ts:107-125`.
+  - [x] MVP skills: `init`, `adapt-agents`.
+    Evidence: `engine/repl/skills/init/SKILL.md`, `engine/repl/skills/adapt-agents/SKILL.md`.
+  - [x] `launchRepl()` orchestrates runtime + skills + launch.
+    Evidence: `engine/repl/mod.ts:145-172`.
+  - [x] Tests: skill loading, metadata verification.
+    Evidence: `engine/repl/mod_test.ts`.
+
+
