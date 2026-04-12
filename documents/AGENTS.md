@@ -38,7 +38,7 @@ Each scope has its own SRS and SDS files.
    `documents/design-engine/*.md`): "How" for engine.
 5. **SDS SDLC** (`documents/design-sdlc.md` — index; sections under
    `documents/design-sdlc/*.md`): "How" for SDLC workflow.
-6. **Whiteboards** (`documents/whiteboards/<YYYY-MM-DD>-<slug>.md`): Temporary plans/notes per task.
+6. **Tasks** (`documents/tasks/<YYYY-MM-DD>-<slug>.md`): Temporary plans/notes per task.
 
 ### File size budget
 
@@ -113,17 +113,21 @@ Separate files per scope. Same structure in each:
 ## 7. Constraints
 ```
 
-## Whiteboards (`documents/whiteboards/`)
+## Tasks (`documents/tasks/`)
 
 - One file per task or session: `<YYYY-MM-DD>-<slug>.md` (kebab-case slug, max 40 chars).
 - Examples: `2026-03-24-add-dark-mode.md`, `2026-03-24-fix-auth-bug.md`.
-- Do not reuse another session's whiteboard — create a new file. Old whiteboards provide context but may contain outdated decisions.
+- Do not reuse another session's task file — create a new file. Old task files provide context but may contain outdated decisions.
 - Use GODS format (see below) for issues and plans.
 - Directory is gitignored. Files accumulate — this is expected.
 
 ### GODS Format
 
 ```markdown
+---
+implements:
+  - FR-E<N>  # or FR-S<N> for SDLC scope; omit block if no FR yet
+---
 # [Task Title]
 
 ## Goal
@@ -160,7 +164,7 @@ variant.]
 ## Compressed Style Rules (All Docs)
 
 - **No History**: No changelogs.
-- **English Only(Except whiteboard.md)**.
+- **English Only(Except task files)**.
 - **Summarize**: Extract facts -> compress. No loss of facts.
 - **Essential Info**: No fluff. High-info words.
 - **Compact**: Lists, tables, YAML, Mermaid.

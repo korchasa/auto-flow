@@ -261,13 +261,13 @@ export function validateDocsTokenBudget(
 
 /**
  * Enforces per-file size budget on `documents/` so every doc fits in the
- * `Read` tool's 10k-token limit in one call. Whiteboards and rnd/ are
+ * `Read` tool's 10k-token limit in one call. Tasks and rnd/ are
  * excluded at walk level — temp/reference, not subject to the budget.
  * Size comparison and message formatting live in `validateDocsTokenBudget`.
  */
 async function docsTokenBudget(): Promise<void> {
   console.log("\n--- Docs Token Budget ---");
-  const skipDirs = new Set(["whiteboards", "rnd"]);
+  const skipDirs = new Set(["tasks", "rnd"]);
   const files: Array<{ path: string; size: number }> = [];
   for await (const entry of walkDir("documents", skipDirs)) {
     if (!entry.endsWith(".md")) continue;

@@ -4,12 +4,12 @@
     "flowai-skill-structure-validate": {
       "event": "PostToolUse",
       "matcher": "Write|Edit",
-      "installedAt": "2026-04-08T01:34:56.460Z"
+      "installedAt": "2026-04-12T00:38:26.833Z"
     },
     "flowai-mermaid-validate": {
       "event": "PostToolUse",
       "matcher": "Write|Edit",
-      "installedAt": "2026-04-08T01:34:56.460Z"
+      "installedAt": "2026-04-12T00:38:26.833Z"
     }
   }
 }

@@ -2,7 +2,6 @@
 .env
 .flowai-workflow/runs/
 .flowai-workflow/worktrees/
-documents/whiteboard.md
-documents/whiteboards/
+documents/tasks/
 tmp/
 documents/visualization/
