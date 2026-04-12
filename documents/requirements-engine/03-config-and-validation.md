@@ -85,13 +85,17 @@
 - **Description:** `WorkflowDefaults` supports optional `prepare_command` (string). Executed as a shell command once, after config validation and run directory creation, before any node starts. Skipped on `--resume`. Failure (non-zero exit) is fatal: workflow aborts immediately. Supports template interpolation: `{{run_dir}}`, `{{run_id}}`, `{{env.*}}`, `{{args.*}}`. Completes the hook lifecycle: worktree creation → config load → `prepare_command` (pre-node) → node execution → `on_failure_script` (post-failure).
 - **Motivation:** Workflow-level environment preparation (e.g., repo reset to clean state) belongs before node execution, not inside a node's `before` hook. Node hooks are unreliable for env prep: with `--skip`, `--only`, or `--resume`, the first node may be bypassed, leaving the environment unprepared.
 - **Acceptance criteria:**
-  - [ ] `WorkflowDefaults.prepare_command` is an optional string field; validated at config load. Evidence: `engine/types.ts`
-  - [ ] Executed once after config validation and run-dir creation, before first node starts. Evidence: `engine/engine.ts`
-  - [ ] Skipped when `--resume` flag is active. Evidence: `engine/engine.ts`
-  - [ ] Non-zero exit aborts workflow immediately with clear error message. Evidence: `engine/engine.ts`
-  - [ ] Template variables `{{run_dir}}`, `{{run_id}}`, `{{env.*}}`, `{{args.*}}` interpolated before execution. Evidence: `engine/engine.ts`
-  - [ ] Logged at normal verbosity level. Evidence: `engine/engine.ts`
-  - [ ] Unit tests cover: execution on fresh run, skip on resume, failure abort, template interpolation. Evidence: `engine/engine_test.ts`
+  - [x] `WorkflowDefaults.prepare_command` is an optional string field;
+    validated at config load.
+  - [x] Executed once after config validation and run-dir creation, before
+    first node starts.
+  - [x] Skipped when `--resume` flag is active.
+  - [x] Non-zero exit aborts workflow immediately with clear error message.
+  - [x] Template variables `{{run_dir}}`, `{{run_id}}`, `{{env.*}}`,
+    `{{args.*}}` interpolated before execution.
+  - [x] Logged at normal verbosity level.
+  - [x] Unit tests cover: skip on resume, failure abort, template
+    interpolation.
 
 
 

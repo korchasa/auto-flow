@@ -92,12 +92,16 @@
   - Baseline metrics (turns, cost) for self-assessment.
 - **Scope:** All 6 workflow agents: pm, architect, tech-lead, tech-lead-review, developer, qa.
 - **Acceptance criteria:**
-  - [ ] `.flowai-workflow/memory/` directory exists in repo.
-  - [ ] Each of 6 agent `SKILL.md` files includes: (a) read-memory step at session start, (b) rewrite-memory step at session end.
-  - [ ] `workflow.yaml` `task_templates` or `defaults` exposes `.flowai-workflow/memory/<agent-name>.md` path to each agent.
-  - [ ] `documents/meta.md` removed or repurposed (no longer used as shared cross-run memory).
-  - [ ] At least one end-to-end workflow run completes with agents reading/writing their own memory files.
-  - [ ] `deno task check` passes after changes.
+  - [x] `.flowai-workflow/memory/` directory exists in repo.
+  - [x] Each of 6 agent `SKILL.md` files includes: (a) read-memory step at
+    session start, (b) rewrite-memory step at session end.
+  - [x] `workflow.yaml` `task_templates` or `defaults` exposes
+    `.flowai-workflow/memory/<agent-name>.md` path to each agent.
+  - [ ] `documents/meta.md` removed or repurposed (no longer used as shared
+    cross-run memory).
+  - [x] At least one end-to-end workflow run completes with agents
+    reading/writing their own memory files.
+  - [x] `deno task check` passes after changes.
 
 
 

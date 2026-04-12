@@ -90,11 +90,11 @@
     `engine/state.ts:98-104` (`getNodeDir()` returns
     `${runDir}/${phase}/${nodeId}` when phase registered, `${runDir}/${nodeId}`
     otherwise — backward-compatible)
-  - [ ] Engine's state manager, log saver, and artifact validator work with
+  - [x] Engine's state manager, log saver, and artifact validator work with
     the new directory structure.
-  - [ ] Existing workflow.yaml node definitions require minimal changes (phase
+  - [x] Existing workflow.yaml node definitions require minimal changes (phase
     grouping derived from config or convention, not hardcoded per-node paths).
-  - [ ] All existing engine tests pass after restructuring.
+  - [x] All existing engine tests pass after restructuring.
 
 
 
@@ -108,10 +108,13 @@
   - `deno.json` tasks and imports reference the new layout consistently.
 - **Acceptance criteria:**
   - [x] Engine source directory contains only domain-agnostic DAG executor code. Evidence: `engine/git.ts` and `engine/git_test.ts` deleted; `engine/mod.ts` git exports removed; `engine/types.ts` `HitlConfig` fields renamed to domain-neutral names (`artifact_source`, `exclude_login`).
-  - [ ] Engine source contains zero references to concrete artifact filenames (e.g., `failed-node.txt`) or concrete node names (e.g., `meta-agent`).
-  - [ ] No `workflow.yaml`, agent skill files, or run artifacts reside inside the engine directory.
-  - [ ] `deno task run` and `deno task test:engine` reference the new engine path.
-  - [ ] `deno task check` passes after restructure.
+  - [x] Engine source contains zero references to concrete artifact filenames
+    (e.g., `failed-node.txt`) or concrete node names (e.g., `meta-agent`).
+  - [x] No `workflow.yaml`, agent skill files, or run artifacts reside inside
+    the engine directory.
+  - [x] `deno task run` and `deno task test:engine` reference the new engine
+    path.
+  - [x] `deno task check` passes after restructure.
 
 
 

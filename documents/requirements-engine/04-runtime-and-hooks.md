@@ -112,14 +112,20 @@
 - **Description:** Template engine (`engine/template.ts`) supports `{{file("path/to/file.md")}}` function syntax. Reads named file content and inserts it inline at the call site. Paths resolved relative to repo root. Inserted content NOT re-interpolated (prevents recursion, ensures predictable behavior). Fail-fast: throws descriptive error if file not found.
 - **Motivation:** Two separate mechanisms for file content injection (`prompt` field via `--system-prompt-file`; `task_template` via `{{variable}}` substitution) prevent composition of shared instructions across nodes without duplication. `{{file()}}` unifies inline file injection into the existing template system.
 - **Acceptance criteria:**
-  - [ ] `{{file("path")}}` resolves path relative to repo root and inserts file content inline. Evidence: `engine/template.ts`
-  - [ ] Inserted content is NOT re-interpolated (no nested `{{...}}` processing of included text). Evidence: `engine/template.ts`
-  - [ ] Missing file throws a fail-fast error with the missing path in the message. Evidence: `engine/template.ts`
-  - [ ] `deno task check` validates `{{file()}}` references at load time by executing real file reads (not stub substitution). Evidence: `engine/config.ts`
-  - [ ] Validation error identifies the missing file path for quick diagnosis. Evidence: `engine/config.ts`
-  - [ ] Size warning emitted when included file content exceeds a threshold. Evidence: `engine/template.ts`
-  - [ ] Unit tests: successful inclusion, missing file error, no re-interpolation of included content. Evidence: `engine/template_test.ts`
-  - [ ] Config check tests: `deno task check` catches missing `{{file()}}` path in `task_template`. Evidence: `engine/config_test.ts`
+  - [x] `{{file("path")}}` resolves path relative to repo root and inserts
+    file content inline.
+  - [x] Inserted content is NOT re-interpolated (no nested `{{...}}`
+    processing of included text).
+  - [x] Missing file throws a fail-fast error with the missing path in the
+    message.
+  - [x] `deno task check` validates `{{file()}}` references at load time by
+    executing real file reads.
+  - [x] Validation error identifies the missing file path for quick diagnosis.
+  - [x] Size warning emitted when included file content exceeds a threshold.
+  - [x] Unit tests: successful inclusion, missing file error, no
+    re-interpolation of included content.
+  - [x] Config check tests: `deno task check` catches missing `{{file()}}`
+    path in `task_template`.
 
 
 
@@ -140,8 +146,7 @@
     Evidence: `engine/claude-process.ts:88-90`.
   - [x] AC3: Config validation rejects invalid values. Evidence:
     `engine/config.ts:138-149`; `engine/config_test.ts` (invalid mode tests).
-  - [ ] AC4: (Removed) `claude_args` field removed in favor of universal
-    `runtime_args`.
+  - [x] AC4: `claude_args` field removed in favor of universal `runtime_args`.
   - [x] AC5: Per-node override resolution (node → defaults → omit) in
     `node-dispatch.ts` and `loop.ts`. Evidence: `engine/node-dispatch.ts:54`,
     `engine/loop.ts:93-94`.

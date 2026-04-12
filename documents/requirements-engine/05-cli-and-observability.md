@@ -192,10 +192,13 @@
 - **Description:** `scripts/check.ts` (`deno task check`) must respond to `--help` / `-h` with a usage synopsis describing what checks are run and exit 0. Unknown flags must produce an error message referencing `--help` and exit non-zero. Output format follows the pattern established by `engine/cli.ts`.
 - **Motivation:** Users must read source code to discover what `deno task check` does and whether any options exist. No help text forces unnecessary source inspection.
 - **Acceptance criteria:**
-  - [ ] `--help` / `-h` prints usage synopsis (`<Tool name> — <description>`, `Usage:`, `Options:`, `Examples:`) and exits 0.
-  - [ ] Usage text documents all checks performed (type-check, tests, lint, workflow integrity, secret detection) and any flags.
-  - [ ] Unknown flags print an error message referencing `--help` and exit non-zero.
-  - [ ] `deno task check` (no args) continues to run all checks unchanged (backward-compatible).
-  - [ ] `deno task check` passes (self-check).
+  - [x] `--help` / `-h` prints usage synopsis and exits 0.
+  - [x] Usage text documents all checks performed (type-check, tests, lint,
+    workflow integrity, secret detection) and any flags.
+  - [x] Unknown flags print an error message referencing `--help` and exit
+    non-zero.
+  - [x] `deno task check` (no args) continues to run all checks unchanged
+    (backward-compatible).
+  - [x] `deno task check` passes (self-check).
 
 

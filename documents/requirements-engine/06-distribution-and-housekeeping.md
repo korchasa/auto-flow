@@ -20,8 +20,10 @@
 - **Description:** Every test function in `engine/` test files must contain ≥1 explicit assertion. Tests with no assertions pass trivially, provide zero coverage value, and mask implementation errors.
 - **Motivation:** `engine/lock_test.ts:143` — test "releaseLock - no error if lock file already removed" contained no assertions, silently passing while verifying nothing.
 - **Acceptance criteria:**
-  - [ ] Test "releaseLock - no error if lock file already removed" in `engine/lock_test.ts` includes `assertEquals(await releaseLock(lockPath), undefined)`. Evidence: `engine/lock_test.ts:143`
-  - [ ] All engine tests pass after change. Evidence: `deno task check` PASS
+  - [x] Test "releaseLock - no error if lock file already removed" in
+    `engine/lock_test.ts` includes
+    `assertEquals(await releaseLock(lockPath), undefined)`.
+  - [x] All engine tests pass after change.
 
 
 
@@ -30,10 +32,12 @@
 - **Description:** `nextPause()` function is duplicated in `scripts/self-runner.ts` and `scripts/loop-in-claude.ts`. Extract into a shared `scripts/backoff.ts` module to eliminate duplication.
 - **Motivation:** DRY violation — backoff logic changes must be applied in multiple places; shared module ensures consistency.
 - **Acceptance criteria:**
-  - [ ] `scripts/backoff.ts` exists and exports `nextPause()`. Evidence: `scripts/backoff.ts`.
-  - [ ] `scripts/self-runner.ts` imports `nextPause` from `scripts/backoff.ts`; no local `nextPause` definition remains. Evidence: `scripts/self-runner.ts`.
-  - [ ] `scripts/loop-in-claude.ts` imports `nextPause` from `scripts/backoff.ts`; no local `nextPause` definition remains. Evidence: `scripts/loop-in-claude.ts`.
-  - [ ] All tests pass. Evidence: `deno task check` PASS.
+  - [x] `scripts/backoff.ts` exists and exports `nextPause()`.
+  - [x] `scripts/self-runner.ts` imports `nextPause` from `scripts/backoff.ts`;
+    no local `nextPause` definition remains.
+  - [x] `scripts/loop-in-claude.ts` imports `nextPause` from
+    `scripts/backoff.ts`; no local `nextPause` definition remains.
+  - [x] All tests pass.
 
 
 

@@ -64,14 +64,21 @@
 - **Description:** README.md must accurately reflect current project state: vision, architecture (DAG-based engine), usage (`deno task run` with flags), prerequisites (Deno, Docker/devcontainer, Claude CLI, `gh`), available `deno task` commands, configuration mechanism (YAML `workflow.yaml`), project directory structure, and agents-as-skills.
 - **Scenario:** A new contributor reads README.md and gets correct, up-to-date information about how to set up, configure, and run the workflow.
 - **Acceptance criteria:**
-  - [ ] README.md reflects DAG-based engine architecture (not shell script orchestration).
-  - [ ] Usage section documents `deno task run` with current flags (`--prompt`, `--resume`, `--dry-run`, `-v`, `-q`, `--config`, `--skip`, `--only`, `--env`).
-  - [ ] Prerequisites list: Deno, Docker/devcontainer, Claude Code CLI, `gh` CLI, Git.
-  - [ ] Available `deno task` commands documented (run, check, test).
-  - [ ] Configuration section references `workflow.yaml` (not env vars).
-  - [ ] Project directory structure matches actual layout (`engine/`, `.flowai-workflow/runs/`, `.claude/skills/`).
-  - [ ] Agents-as-skills mentioned with `/agent-<name>` slash command examples.
-  - [ ] Installation/setup instructions are accurate for devcontainer workflow.
+  - [x] README.md reflects DAG-based engine architecture (not shell script
+    orchestration).
+  - [x] Usage section documents `deno task run` with current flags
+    (`--prompt`, `--resume`, `--dry-run`, `-v`, `-q`, `--config`, `--skip`,
+    `--only`, `--env`).
+  - [x] Prerequisites list: Deno, Docker/devcontainer, Claude Code CLI, `gh`
+    CLI, Git.
+  - [x] Available `deno task` commands documented (run, check, test).
+  - [x] Configuration section references `workflow.yaml` (not env vars).
+  - [x] Project directory structure matches actual layout (`engine/`,
+    `.flowai-workflow/`).
+  - [x] Agents-as-skills mentioned with `/agent-<name>` slash command
+    examples.
+  - [x] Installation/setup instructions are accurate for devcontainer
+    workflow.
 
 
 

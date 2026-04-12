@@ -152,9 +152,13 @@
     - If `PASS`: loop ends, proceeds to next stage.
     - If `FAIL`: loop repeats with the next Developer iteration.
   - **Loop config structure:**
-    - [ ] Loop body nodes (`developer`, `qa`) MUST be defined inline within the loop node config, not as top-level workflow nodes. Body node IDs are loop-scoped.
-    - [ ] Body nodes can declare `inputs` referencing both sibling body nodes (within the same loop) and external top-level nodes.
-    - [ ] `{{loop.iteration}}` template variable is only available in loop body node contexts.
+    - [x] Loop body nodes (`developer`, `qa`) MUST be defined inline within
+      the loop node config, not as top-level workflow nodes. Body node IDs are
+      loop-scoped.
+    - [x] Body nodes can declare `inputs` referencing both sibling body nodes
+      (within the same loop) and external top-level nodes.
+    - [x] `{{loop.iteration}}` template variable is only available in loop
+      body node contexts.
   - **Loop constraints:**
     - Maximum iterations: configurable (default 3).
     - If limit reached without `PASS`: workflow stops and reports failure on the issue. Meta-Agent is triggered (see FR-S8).

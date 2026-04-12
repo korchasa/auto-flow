@@ -23,12 +23,14 @@
 - **Description:** SDLC utility scripts that accept CLI arguments must respond to `--help` / `-h` with a usage synopsis and exit 0. Unknown flags must produce an error message referencing `--help` and exit non-zero. Output format follows the pattern in `engine/cli.ts`. Applies to: `scripts/self-runner.ts`, `scripts/loop-in-claude.ts`, `scripts/generate-dashboard.ts`.
 - **Motivation:** Users must read source code to discover available options for SDLC utility scripts. No help text forces unnecessary source inspection and increases risk of misuse.
 - **Acceptance criteria:**
-  - [ ] `scripts/self-runner.ts`: `--help` / `-h` prints usage (loop interval, stop conditions, pass-through args) and exits 0.
-  - [ ] `scripts/loop-in-claude.ts`: `--help` / `-h` prints usage (description, relation to `self-runner`, accepted args) and exits 0.
-  - [ ] `scripts/generate-dashboard.ts`: `--help` / `-h` prints usage (`--run-dir` flag, output path) and exits 0.
-  - [ ] All three scripts: unknown flags produce error message referencing `--help` and exit non-zero.
-  - [ ] Output format follows `engine/cli.ts` pattern: `<Tool> — <description>\n\nUsage:\n  deno task <name> [options]\n\nOptions:\n  ...\n\nExamples:\n  ...`.
-  - [ ] `deno task check` passes.
+  - [x] `scripts/self-runner.ts`: `--help` / `-h` prints usage and exits 0.
+  - [x] `scripts/loop-in-claude.ts`: `--help` / `-h` prints usage and exits 0.
+  - [x] `scripts/generate-dashboard.ts`: `--help` / `-h` prints usage and
+    exits 0.
+  - [x] All three scripts: unknown flags produce error message referencing
+    `--help` and exit non-zero.
+  - [x] Output format follows `engine/cli.ts` pattern.
+  - [x] `deno task check` passes.
 
 
 

@@ -26,9 +26,12 @@
   - QA MUST run the extended suite after adding any check to confirm zero false positives.
   - `scripts/check.ts` MUST be listed in QA agent's `Allowed File Modifications` in `SKILL.md`.
 - **Acceptance criteria:**
-  - [ ] QA agent `SKILL.md` lists `scripts/check.ts` in `Allowed File Modifications`.
-  - [ ] QA agent `SKILL.md` documents "Extend check suite" responsibility with all constraints above.
-  - [ ] QA agent can implement and wire a new check function in `scripts/check.ts`.
+  - [x] QA agent `SKILL.md` lists `scripts/check.ts` in `Allowed File
+    Modifications`.
+  - [x] QA agent `SKILL.md` documents "Extend check suite" responsibility
+    with all constraints above.
+  - [x] QA agent can implement and wire a new check function in
+    `scripts/check.ts`.
   - [ ] New checks follow existing code style and `run()`/scan pattern.
   - [ ] `deno task check` passes after QA agent adds a new check.
 
