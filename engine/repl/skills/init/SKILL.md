@@ -1,49 +1,45 @@
 ---
 name: flowai-workflow-init
 description: >-
-  Initialize a new flowai-workflow project. Autodetects project settings
-  and scaffolds the .flowai-workflow/ directory with workflow config,
-  agent definitions, and memory structure.
+  Initialize a new flowai-workflow project. Scaffolds the .flowai-workflow/
+  directory with workflow config, agent definitions, and memory structure.
 user-invocable: true
-argument-hint: "[--template <name>] [--dry-run] [--allow-dirty]"
+argument-hint: "[--template <name>] [--dry-run]"
 ---
 
 # Initialize flowai-workflow Project
 
 ## Overview
 
-Set up a new flowai-workflow project in the current directory. Autodetects
-project name, default branch, test and lint commands from manifest files
-(deno.json, package.json, Cargo.toml, go.mod, pyproject.toml). Scaffolds
-`.flowai-workflow/` directory from a template.
+Scaffold a `.flowai-workflow/` directory in the current project with workflow
+config, agent definitions, memory files, and HITL scripts.
 
-## Usage
+## Instructions
 
-Run the init script:
+1. Run `flowai-workflow init` via Bash tool. Pass user-provided flags as-is.
+2. If init fails due to uncommitted changes, ask the user whether to pass
+   `--allow-dirty` or commit first.
+3. If `.flowai-workflow/` already exists, inform the user. Do not overwrite
+   without explicit confirmation.
+4. After successful init, suggest next steps:
+   - Review agents in `.flowai-workflow/agents/agent-*.md`
+   - Review workflow in `.flowai-workflow/workflow.yaml`
+   - Run `flowai-workflow run` to execute the workflow
 
-```bash
-python3 init.py
+## CLI Reference
+
 ```
+flowai-workflow init [options]
 
-The script:
-1. Autodetects project settings (name, branch, test/lint commands).
-2. Prints detected values for the user to review.
-3. Calls `flowai-workflow init --answers <detected-values>` to scaffold.
-
-### Options (passed through to `flowai-workflow init`)
-
-- `--template <name>` — template to use (default: `sdlc-claude`)
-- `--dry-run` — print files that would be created, don't write
-- `--allow-dirty` — skip clean-git-tree preflight check
-
-## After Initialization
-
-1. Review agent definitions in `.flowai-workflow/agents/agent-*.md`
-   and adapt to your project conventions.
-2. Review `.flowai-workflow/workflow.yaml` for workflow structure.
-3. Run: `flowai-workflow run` to execute the first workflow.
+Options:
+  --template <name>   Template to use (default: sdlc-claude)
+  --answers <file>    YAML file with pre-filled answers (non-interactive)
+  --allow-dirty       Skip clean-git-tree preflight check
+  --dry-run           Print files that would be created, exit without writing
+  -h, --help          Show init help
+```
 
 ## Available Templates
 
-- `sdlc-claude` (default) — Full SDLC workflow with 6 agents (PM,
-  Architect, Tech Lead, Developer, QA, Tech Lead Review).
+- `sdlc-claude` (default) — 6-agent SDLC workflow for Claude Code runtime
+  (PM → Architect → Tech Lead → Developer/QA → Tech Lead Review)
