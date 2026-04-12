@@ -3,7 +3,7 @@
  * @module
  * CLI entry point for the workflow engine.
  * Parses arguments and delegates to {@link Engine}.
- * Usage: flowai-workflow [options]
+ * Usage: flowai-workflow [options] | flowai-workflow init [init-options]
  *
  * Options:
  *   --config <path>       Workflow config file (default: .flowai-workflow/workflow.yaml)
@@ -167,6 +167,7 @@ Workflow Engine — Configurable multi-agent workflow runner
 
 Usage:
   flowai-workflow [options]
+  flowai-workflow init [init-options]
 
 Options:
   --config <path>       Workflow config file (default: .flowai-workflow/workflow.yaml)
@@ -183,6 +184,9 @@ Options:
   -V, --version         Print version and exit
   -h, --help            Show this help
 
+Subcommands:
+  init                  Scaffold .flowai-workflow/ directory (run init --help for details)
+
 Examples:
   flowai-workflow
   flowai-workflow --prompt "Focus on the login bug"
@@ -190,6 +194,7 @@ Examples:
   flowai-workflow --resume 20260308T143022
   flowai-workflow --dry-run
   flowai-workflow --skip meta-agent --env DEBUG=true
+  flowai-workflow init
 `);
 }
 
