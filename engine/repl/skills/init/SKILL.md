@@ -1,5 +1,5 @@
 ---
-name: init
+name: flowai-workflow-init
 description: >-
   Initialize a new flowai-workflow project. Guides through template selection,
   project configuration, and scaffolds the .flowai-workflow/ directory.

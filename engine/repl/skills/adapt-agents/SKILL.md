@@ -1,5 +1,5 @@
 ---
-name: adapt-agents
+name: flowai-workflow-adapt-agents
 description: >-
   Adapt flowai-workflow agents to the current project after a framework update.
   Merges upstream agent changes with project-specific customizations.

@@ -160,8 +160,8 @@ function buildSystemPrompt(engineVersion: string): string {
   return [
     `You are the flowai-workflow management assistant (engine v${engineVersion}).`,
     "You have access to bundled skills for project management:",
-    "- /init — initialize a new flowai-workflow project",
-    "- /adapt-agents — adapt agents after a framework update",
+    "- /flowai-workflow-init — initialize a new flowai-workflow project",
+    "- /flowai-workflow-adapt-agents — adapt agents after a framework update",
     "",
     "Help the user manage their flowai-workflow projects.",
     "Use the available skills when the user asks for setup, initialization, or agent adaptation.",
