@@ -126,14 +126,18 @@
     `markNodeCompleted()` when optional `costUsd` param provided, FR-E17).
     `markNodeCompleted()` also accepts optional `result?: string` param
     (FR-E22) — persists excerpt to `NodeState.result` in `state.json`
-  - **IDE CLI wrapper layer (FR-E44)** — extracted to
-    `@korchasa/ai-ide-cli` (sibling workspace member `ai-ide-cli/`, published
-    separately on JSR). Runtime adapters, low-level Claude/OpenCode/Cursor
-    runners, stream parsers, HITL MCP helper, and process registry live in
-    that package. Engine imports via sub-path specifiers (e.g.
-    `@korchasa/ai-ide-cli/runtime`, `@korchasa/ai-ide-cli/claude/process`).
-    Library has zero imports from engine (one-way dependency invariant).
-    See `ai-ide-cli/documents/design.md` for full module descriptions.
+  - **IDE CLI wrapper layer (FR-E44)** — maintained in the sibling repo
+    [`korchasa/ai-ide-cli`](https://github.com/korchasa/ai-ide-cli),
+    published separately on JSR. Runtime adapters, low-level
+    Claude/OpenCode/Cursor runners, stream parsers, HITL MCP helper, and
+    process registry live in that package. Engine pins the dependency
+    via `jsr:@korchasa/ai-ide-cli@^0.2.0` in `engine/deno.json` and
+    imports via sub-path specifiers (e.g. `@korchasa/ai-ide-cli/runtime`,
+    `@korchasa/ai-ide-cli/claude/process`). Library has zero imports
+    from engine (one-way dependency invariant). Local development
+    resolves the JSR specifier to a sibling checkout through the
+    `links` field in the root `deno.json`. See the sibling repo's
+    `documents/design.md` for full module descriptions.
   - `agent.ts` — runtime-agnostic agent invocation, continuation loop, retry.
     Agent context injected via `--agent` + `--append-system-prompt` (native
     Claude Code subagents in `.claude/agents/*.md`). Pipeline-specific context
@@ -148,6 +152,6 @@
     validation rejects invalid values. Non-claude runtimes (`opencode`,
     `cursor`) accept only `bypassPermissions`.
     Low-level CLI invocation, stream parsing, event formatting, and
-    `FileReadTracker` live in `@korchasa/ai-ide-cli` — see
-    `ai-ide-cli/documents/design/01-modules.md` for details
+    `FileReadTracker` live in `@korchasa/ai-ide-cli` — see the sibling
+    repo's `documents/design/01-modules.md` for details
 

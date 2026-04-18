@@ -52,7 +52,8 @@
 - **CLI entry:** `deno task run [--prompt "..."]`. Flags: `--resume <run-id>`, `--dry-run`, `-v` (verbose), `-q` (quiet), `-s` (semi-verbose), `--config <path>`, `--skip <node>`, `--only <node>`, `--env <K=V>`.
 - **Agent runtime:** runtime selected by config. Supported: `claude`
   (default), `opencode`, `cursor`. CLI invocation contracts per runtime
-  documented in `ai-ide-cli/documents/requirements/00-meta.md` §5.
+  documented in the sibling `korchasa/ai-ide-cli` repo
+  (`documents/requirements/00-meta.md` §5).
 - **Config format:** YAML workflow config with `defaults` (global settings) and `nodes` (DAG definition). Node types: `agent`, `loop`, `merge`, `human`. Fields per type include `runtime`, `runtime_args`, `prompt`, `inputs`, `validate`, `model`, `run_on`, `after`/`before` hooks. `permission_mode` is Claude-only. Config validation rejects non-claude runtimes with unsupported permission modes.
 - **State:** `<run-dir>/state.json` — node statuses (`pending`/`running`/`completed`/`failed`/`waiting`/`skipped`), session IDs, cost data, timing, HITL question JSON.
 - **Template variables:** `{{input.<node-id>}}` (node output dir), `{{node_dir}}` (current node output dir), `{{run_dir}}` (run root), `{{run_id}}`, `{{loop.iteration}}` (loop body only), `{{env.<KEY>}}`, `{{file("path")}}` (inline file content, path relative to repo root; FR-E32).

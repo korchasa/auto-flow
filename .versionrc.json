@@ -1,5 +1,5 @@
 {
-  "$comment": "bumpFiles MUST list every workspace-member deno.json — standard-version does not walk Deno workspaces. packageFiles is the canonical version source (engine/deno.json).",
+  "$comment": "engine/deno.json is the single canonical version source. ai-ide-cli now lives in a sibling repo and manages its own versioning.",
   "types": [
     { "type": "feat", "section": "Features" },
     { "type": "fix", "section": "Bug Fixes" },
@@ -15,8 +15,7 @@
   "compareUrlFormat": "{{host}}/{{owner}}/{{repository}}/compare/{{previousTag}}...{{currentTag}}",
   "issueUrlFormat": "{{host}}/{{owner}}/{{repository}}/issues/{{id}}",
   "bumpFiles": [
-    { "filename": "engine/deno.json", "type": "json" },
-    { "filename": "ai-ide-cli/deno.json", "type": "json" }
+    { "filename": "engine/deno.json", "type": "json" }
   ],
   "packageFiles": [{ "filename": "engine/deno.json", "type": "json" }]
 }

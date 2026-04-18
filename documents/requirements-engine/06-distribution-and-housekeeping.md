@@ -107,62 +107,55 @@
 ### 3.44 FR-E44: IDE CLI Wrapper Library Split
 
 - **Description:** The engine no longer owns the agent-CLI wrapper code
-  (Claude/OpenCode low-level runners, NDJSON stream parser, runtime
-  adapter interface, HITL MCP helper, process registry). This layer is
-  extracted to a standalone JSR package `@korchasa/ai-ide-cli`, developed in
-  a Deno workspace alongside the engine. Engine depends on the library
-  one-way; library has zero imports from engine. The workspace lets
-  contributors iterate atomically across both packages while keeping the
-  scope boundary explicit.
+  (Claude/OpenCode/Cursor low-level runners, NDJSON stream parser,
+  runtime adapter interface, HITL MCP helper, process registry). This
+  layer is maintained as a standalone JSR package `@korchasa/ai-ide-cli`
+  in the sibling repository
+  [`korchasa/ai-ide-cli`](https://github.com/korchasa/ai-ide-cli).
+  Engine depends on the library one-way via JSR
+  (`jsr:@korchasa/ai-ide-cli@^0.2.0`) pinned in `engine/deno.json`. For
+  local development the root workspace `deno.json` uses the `links` field
+  to resolve the JSR specifier from a sibling checkout of the library
+  repo. Library has zero imports from engine.
 - **Motivation:** Other projects (CLI tools, agent hosts, MCP proxies)
   need Claude/OpenCode subprocess management without pulling the full
-  DAG workflow engine. Independent package versioning also lets the
-  engine upgrade on its own cadence as IDE CLI surfaces evolve.
-- **Scope:** Files moved from `engine/` to `ai-ide-cli/`:
-  `claude-process.ts` → `ai-ide-cli/claude/process.ts`;
-  `stream.ts` → `ai-ide-cli/claude/stream.ts`;
-  `opencode-process.ts` → `ai-ide-cli/opencode/process.ts`;
-  `opencode-hitl-mcp.ts` → `ai-ide-cli/opencode/hitl-mcp.ts`;
-  `runtime/{types,index,claude-adapter,opencode-adapter}.ts` →
-  `ai-ide-cli/runtime/`. Pure-tracker portion of `process-registry.ts`
-  moved to `ai-ide-cli/process-registry.ts`; engine retains
-  `installSignalHandlers()` + `_reset()` wrapping it. Normalized
-  runtime output `ClaudeCliOutput` renamed to `CliRunOutput` — hard
-  rename, no alias (Step 0 audit confirmed zero external JSR
-  consumers of the symbol).
+  DAG workflow engine. Independent repository + release cadence
+  eliminates the monorepo-wide release coupling, isolates issue
+  trackers, and lets the library follow IDE-CLI surface evolution on
+  its own timeline.
+- **Scope:** Library package exports unchanged from the workspace-member
+  era. Repository split preserves per-file git history via
+  `git filter-repo --subdirectory-filter ai-ide-cli`.
 - **Acceptance:**
-  - [x] `ai-ide-cli/` exists as a workspace member with its own
-    `deno.json`, `mod.ts`, and sub-path exports for `types`,
+  - [x] `@korchasa/ai-ide-cli` lives in `korchasa/ai-ide-cli` with its
+    own `deno.json`, `mod.ts`, and sub-path exports for `types`,
     `process-registry`, `runtime`, `runtime/types`, `claude/process`,
-    `claude/stream`, `opencode/process`, `opencode/hitl-mcp`.
-    Evidence: `ai-ide-cli/deno.json`, `ai-ide-cli/mod.ts`.
+    `claude/stream`, `cursor/process`, `opencode/process`,
+    `opencode/hitl-mcp`, `skill`. Evidence: sibling repo `deno.json`.
   - [x] Library has zero imports from `engine/` or
-    `@korchasa/flowai-workflow`. Evidence:
-    `rg -n "from \"\.\./engine|from \"@korchasa/flowai-workflow" ai-ide-cli/`
-    returns no matches.
+    `@korchasa/flowai-workflow`. Evidence: Grep over sibling repo.
   - [x] Engine has no imports from deleted paths
     (`./claude-process`, `./opencode-process`, `./stream`,
-    `./opencode-hitl-mcp`, `./runtime/`). Evidence:
-    `rg -n "from \"\./claude-process|..." engine/` returns no matches.
+    `./opencode-hitl-mcp`, `./runtime/`).
   - [x] OpenCode runner's HITL MCP self-spawn is a consumer-provided
     callback (`RuntimeInvokeOptions.hitlMcpCommandBuilder`). Engine's
     `hitl-mcp-command.ts` supplies a builder pointing at engine's own
     `cli.ts`. Runner throws a clear error if a consumer sets
     `hitlConfig` without a builder. Evidence:
-    `ai-ide-cli/opencode/process.ts` (`buildOpenCodeConfigContent`),
     `engine/hitl-mcp-command.ts`, `engine/agent.ts:179-196,290-307`,
     `engine/hitl.ts:243-256`.
   - [x] `ClaudeCliOutput` renamed to `CliRunOutput` in code (docs
     updated to match); no compatibility alias is exported.
-  - [x] `@korchasa/flowai-workflow` publishes from `engine/deno.json`;
-    `@korchasa/ai-ide-cli` publishes from `ai-ide-cli/deno.json`. Both
-    `deno publish --dry-run` pass. Evidence: workspace root
-    `deno.json` with `workspace: ["./engine", "./ai-ide-cli"]`.
+  - [x] `@korchasa/flowai-workflow` publishes from `engine/deno.json`
+    with a JSR dep on `@korchasa/ai-ide-cli@^0.2.0`;
+    `@korchasa/ai-ide-cli` publishes from the sibling repo's root
+    `deno.json`. Each repo `deno publish --dry-run` passes. Evidence:
+    `engine/deno.json#imports`, workspace root `deno.json#links`.
   - [x] `deno compile engine/cli.ts` produces a working binary that
-    resolves the workspace dependency inline.
-  - [x] Full `deno task check` passes: fmt, lint, type-check
-    (engine + ai-ide-cli), CLI smoke test, tests (including moved
-    `ai-ide-cli/opencode/process_test.ts`), doc lint, workflow integrity,
-    agent list accuracy, comment scan.
+    inlines the library (`links` makes the local source self-contained).
+  - [x] Full `deno task check` passes in flowai-workflow: fmt, lint,
+    type-check engine + scripts, CLI smoke test, tests, doc lint,
+    workflow integrity, agent list accuracy, comment scan. Library
+    has its own `deno task check` in the sibling repo.
 
 

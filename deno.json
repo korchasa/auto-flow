@@ -1,7 +1,9 @@
 {
   "workspace": [
-    "./engine",
-    "./ai-ide-cli"
+    "./engine"
+  ],
+  "links": [
+    "../ai-ide-cli"
   ],
   "imports": {
     "@std/assert": "jsr:@std/assert@^1.0.19",

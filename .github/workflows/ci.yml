@@ -38,12 +38,6 @@ jobs:
       - name: Run checks
         run: deno task check
 
-      # Workspace with multiple members: `deno publish` from root only
-      # picks one member. Dry-run each member explicitly to cover both.
-      - name: Verify JSR publish of @korchasa/ai-ide-cli (dry-run)
-        working-directory: ai-ide-cli
-        run: deno publish --dry-run --allow-dirty
-
       - name: Verify JSR publish of @korchasa/flowai-workflow (dry-run)
         working-directory: engine
         run: deno publish --dry-run --allow-dirty
@@ -231,14 +225,8 @@ jobs:
         with:
           deno-version: v2.x
 
-      # Publish ai-ide-cli first so the engine import of @korchasa/ai-ide-cli
-      # resolves at publish time. If ai-ide-cli fails, engine publish is
-      # skipped by the default step failure behavior, preventing an engine
-      # version from shipping with a dangling library dependency.
-      - name: Publish @korchasa/ai-ide-cli to JSR
-        working-directory: ai-ide-cli
-        run: deno publish
-
+      # @korchasa/ai-ide-cli is maintained in korchasa/ai-ide-cli and
+      # published from there. Engine imports the stable JSR version.
       - name: Publish @korchasa/flowai-workflow to JSR
         working-directory: engine
         run: deno publish

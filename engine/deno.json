@@ -4,6 +4,9 @@
   "version": "0.2.0",
   "license": "MIT",
   "exports": "./cli.ts",
+  "imports": {
+    "@korchasa/ai-ide-cli": "jsr:@korchasa/ai-ide-cli@^0.2.0"
+  },
   "publish": {
     "include": [
       "./",

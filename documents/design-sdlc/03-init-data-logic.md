@@ -99,9 +99,10 @@
 - **Exit codes:** 0 (success / help / dry-run), 1 (preflight / scaffold
   failure), 3 (invalid CLI argument).
 - **Root check delegation:** `scripts/check.ts` delegates to
-  `flowai-init/scripts/check.ts` via `deno task check` with `cwd=flowai-init`,
-  following the `ai-ide-cli` pattern. Each workspace member owns its own
-  fmt/lint/type-check/tests/doc-lint/publish-dry-run pipeline.
+  `flowai-init/scripts/check.ts` via `deno task check` with `cwd=flowai-init`.
+  Each workspace member owns its own fmt/lint/type-check/tests/doc-lint/
+  publish-dry-run pipeline. (The pre-split `ai-ide-cli` member followed
+  the same pattern before being extracted to a sibling repo.)
 - **Deps:** `@std/yaml` (manifest parser), `@std/path`. Engine module
   dispatcher imports `@korchasa/flowai-workflow-init` via workspace package
   name (no static coupling — dynamic `await import()` lazy-loads only on

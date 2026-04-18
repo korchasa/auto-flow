@@ -339,9 +339,9 @@ if (import.meta.main) {
   await run("deno", ["fmt"], "Formatting (auto-fix)");
   await run("deno", ["lint"], "Linting");
 
-  // Type check engine/ and scripts/ .ts files. ai-ide-cli has its own
-  // self-contained check (see below) that owns the library's type-check,
-  // tests, doc-lint, and publish dry-run.
+  // Type check engine/ and scripts/ .ts files. The ai-ide-cli library
+  // lives in a sibling repo and runs its own check there; engine imports
+  // it via JSR (resolved locally through the `links` field in deno.json).
   const typeCheckFiles: string[] = [];
   for (const dir of ["engine", "scripts"]) {
     for await (const entry of Deno.readDir(dir)) {
@@ -403,23 +403,6 @@ if (import.meta.main) {
   const { success: enginePublishOk } = await enginePublish.output();
   if (!enginePublishOk) {
     console.error("FAILED: Publish Dry-Run (engine)");
-    Deno.exit(1);
-  }
-
-  // Delegate library-specific checks (fmt, lint, type-check, tests,
-  // doc-lint, publish dry-run) to @korchasa/ai-ide-cli's self-contained
-  // check task. Runs with CWD set to the workspace member.
-  console.log("\n--- @korchasa/ai-ide-cli (delegated) ---");
-  console.log("> deno task check (cwd=ai-ide-cli)");
-  const libCheck = new Deno.Command("deno", {
-    args: ["task", "check"],
-    cwd: "ai-ide-cli",
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  const { success: libOk } = await libCheck.output();
-  if (!libOk) {
-    console.error("FAILED: @korchasa/ai-ide-cli check");
     Deno.exit(1);
   }
 
