@@ -10,26 +10,26 @@
 ## Effective strategies
 
 - Parallel Read of spec + reflection memory as first action
-- Single Grep with glob pattern for cross-file checks
+- 3 parallel Explore sub-agents for prior-art / architecture / integration — good coverage with concrete file:line refs
 - Extract FR IDs from requirements immediately after Read — no re-Grep
 - Post progress comment early (with self-identification prefix)
 - For engine+sdlc scope: read all 4 docs in parallel (2nd batch after spec)
-- Use `output_mode: count` for quick tally of stale refs per file
-- Use `output_mode: files_with_matches` first, then targeted content checks
-- For cleanup tasks: inventory all occurrences before planning variants
-- For large SRS: use Grep with line numbers to find section offsets, then Read with offset/limit for targeted sections
-- For rename/renumber tasks: Grep `count` mode per old filename gives precise blast radius per variant
+- For budget/enforcement features: trace cost flow end-to-end (types → state → engine → loop → agent) before planning
+- Read SDS data-and-logic section (04) alongside module sections — contains cascade/algorithm specs needed for enforcement variants
 
 ## Environment quirks
 
 - Large SRS/SDS files get persisted to disk (>2KB preview only) — content still in context
 - FR-E30 ID is reused: JSDoc/why-comments task in SDS AND prepare_command in SRS
-- `.claude/skills/agent-*` symlinks still exist (per FR-S26) — both old and new paths resolve
 - `config_test.ts` does `Deno.readTextFileSync` on prompt paths — replacement must use valid path
 - Engine test files reference `01-spec.md` in fixtures — touching those = cross-scope contamination
+- `--max-turns` is Claude CLI-only flag — other runtimes silently ignore (document in risks)
+- `extraArgs` in agent.ts is the injection point for runtime CLI flags (line 180 initial, 290 resume)
+- `mergeDefaults()` handles loop body node recursion at config.ts:631-643 — budget cascade must follow same pattern
 
 ## Baseline metrics
 
+- Run 20260418T184929: ~8 tool calls, engine scope, budget enforcement FR-E47, 3 variants
 - Run 20260320T223114: ~8 tool calls, engine scope, binary distribution FR-E39, 3 variants
 - Run 20260319T182156: ~8 tool calls, sdlc scope, artifact renumber task, 3 variants
 - Run 20260315T215901: ~9 tool calls, sdlc scope, QA check suite extension, 3 variants
@@ -38,4 +38,3 @@
 - Run 20260315T183811: 9 tool calls, engine scope, new hook feature, 3 variants
 - Run 20260315T153825: 8 tool calls, engine scope, DRY extraction task, 3 variants
 - Run 20260315T152252: 7 tool calls, engine scope, test-fix task, 3 variants
-- Run 20260315T144221: ~8 tool calls, sdlc scope, evidence-only task
