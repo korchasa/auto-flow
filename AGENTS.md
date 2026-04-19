@@ -17,6 +17,13 @@
 - Do not use tables in chat output — use two-level lists instead. Tables render poorly in terminal and are harder to scan.
 - Be precise in your wording. Use a scientific approach. Accompany highly
   specialized terms and abbreviations with short hints in parentheses.
+- When a local phase of work completes (tests green, checks green, files
+  edited), report the result and STOP. Do not propose commit/push/PR/merge
+  as "next steps" and do not roll forward into those actions.
+  Authorization for one remote action (push, PR, merge) is scoped to that
+  action only; each subsequent remote action requires a fresh request from
+  the user. Scope resets between tasks — prior-session approvals do not
+  carry over.
 
 ---
 
@@ -106,6 +113,15 @@ Publish gotchas honored in `deno.json#publish`:
 - **`publish.include` cannot reference files outside the package
   directory.** `../README.md` / `../LICENSE` get rejected with
   `error[invalid-path]`.
+- **`.versionrc.json` is mandatory when CI invokes `npm:standard-version`.**
+  standard-version defaults to `package.json` for version reads/writes;
+  Deno projects have none. Omitting `.versionrc.json` makes it synthesize
+  versions from commit history alone, produce `CHANGELOG.md`-only "release"
+  commits without bumping `deno.json`, and leave the repo in a
+  semantic-mismatch state. `.versionrc.json` at repo root MUST declare
+  `packageFiles: [{ filename: "deno.json", type: "json" }]` and
+  `bumpFiles: [{ filename: "deno.json", type: "json" }]`. When cloning the
+  CI skeleton to a new repo, copy both files together.
 - Dev-only paths (`scripts/`, `documents/`, `.github/`, `.flowai-workflow/`,
   `.claude/`, `.devcontainer/`, `AGENTS.md`, `CLAUDE.md`, `CHANGELOG.md`,
   `.versionrc.json`) are listed in `publish.exclude` so the JSR tarball

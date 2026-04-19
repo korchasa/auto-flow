@@ -73,7 +73,21 @@ jobs:
           BUMP_ARGS=""
 
           if [ -z "$LATEST_TAG" ]; then
-            RELEASABLE=true
+            # Fresh repo with no prior tags — DO NOT auto-release on
+            # first push. Require at least one conventional-commit type
+            # that would normally trigger a release. Otherwise the
+            # initial push silently tags + publishes and often produces
+            # a spurious release (e.g. tag collides with a JSR version
+            # pre-existing from a prior repo move). Operators bootstrap
+            # by manually pushing v<X.Y.Z> that matches
+            # `deno.json#version` once the package is production-ready.
+            COMMITS_ALL=$(git log --format='%s' HEAD)
+            if echo "$COMMITS_ALL" | grep -qE '^feat'; then
+              RELEASABLE=true
+            elif echo "$COMMITS_ALL" | grep -qE '^(fix|perf|refactor|build|engine)'; then
+              RELEASABLE=true
+              BUMP_ARGS="--release-as patch"
+            fi
           else
             COMMITS_SINCE=$(git log --format='%s' ${LATEST_TAG}..HEAD)
             if echo "$COMMITS_SINCE" | grep -qE '^feat'; then
