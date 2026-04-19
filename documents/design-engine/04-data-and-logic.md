@@ -287,24 +287,35 @@
     all blocks (backward-compatible). Log file writes call without verbosity
     (full output preserved). `onOutput` callback path passes verbosity from
     `AgentRunOptions` so terminal output is filtered at source.
-  - **Run Budget Enforcement (FR-E47):** Inline checks at 4 sites:
+  - **Run Budget Enforcement (FR-E47):** Inline checks at 4 sites, all using
+    strict `>` (exact-equal to cap does NOT trigger):
     1. **Workflow-wide (engine.ts):** After `markNodeCompleted()` in
        `executeNode()`: `if (options.budget_usd && state.total_cost_usd >
-       options.budget_usd)` → throw `Error("Workflow budget exceeded:
-       $X.XX > $Y.YY")`. Aborts workflow — remaining nodes skipped.
+       options.budget_usd)` → throw `Error("Budget exceeded: $X.XX >
+       $Y.YY")`. Aborts workflow — remaining nodes skipped.
     2. **Per-node (engine.ts):** After `markNodeCompleted()`: `if
        (resolvedBudget.max_usd && node.cost_usd > resolvedBudget.max_usd)` →
-       fail node (not workflow). `resolvedBudget` = node.budget ?? defaults.budget.
+       fail node (not workflow). `resolvedBudget` = node.budget ??
+       defaults.budget. For loop body nodes, `node.cost_usd` is the single
+       iteration's cost → per-iteration semantics.
     3. **Loop workflow check (loop.ts):** After each body node
        `markNodeCompleted()`: same workflow-wide check as #1.
     4. **Loop pre-check (loop.ts):** Before iteration spawn (iteration > 1):
        `avgIterCost = totalLoopCost / iterationCount`. If
        `avgIterCost > (options.budget_usd - state.total_cost_usd)` → exit loop
        with `budget_preempt` reason. First iteration skips (no cost data).
+       Heuristic is advisory — may preempt loops whose variance would have
+       fit remaining budget.
     Budget cascade in `mergeDefaults()`: `node.budget → loopParent.budget →
     defaults.budget`. Same merge pattern as `model` field. `--max-turns`
     emission: `agent.ts` appends `--max-turns <N>` to `extraArgs` when
-    `resolvedBudget.max_turns` present (Claude CLI only).
+    `resolvedBudget.max_turns` present AND runtime is `claude`; non-Claude
+    runtimes get a one-time warning and the flag is omitted. USD checks
+    no-op silently if the runtime does not populate `cost_usd` (warning at
+    workflow start when `--budget` is set). **Resume (`--resume`):**
+    `state.total_cost_usd` is loaded from prior run's `state.json`; budget
+    applies to the cumulative total. Engine aborts before executing any node
+    if the loaded state already exceeds the cap.
   - **Binary Compile Flow (FR-E39):** `scripts/compile.ts` iterates
     `TARGETS` array. Per target: construct `deno compile --allow-all --target
     <denoTarget> --output dist/flowai-workflow-<os>-<arch> cli.ts`. If

@@ -159,9 +159,13 @@
     unchanged across runtimes. `runAgent()` wires `hitlMcpCommandBuilder`
     from `engine/hitl-mcp-command.ts` for OpenCode HITL.
     **Budget max_turns emission (FR-E47):** In `runAgent()`, if resolved
-    `budget.max_turns` is present, appends `--max-turns <N>` to `extraArgs`.
-    Same pattern as `--model` emission. Claude CLI only — other runtimes
-    silently ignore unknown flags.
+    `budget.max_turns` is present AND the active runtime identifier is
+    `claude`, appends `--max-turns <N>` to `extraArgs`. Same pattern as
+    `--model` emission. For non-Claude runtimes (`opencode`, `cursor`) the
+    flag is omitted — these CLIs are not guaranteed to ignore unknown flags
+    and may reject invocation. A one-line warning
+    `budget.max_turns ignored: runtime=<id>` is emitted once at workflow
+    start when the field is set on a non-Claude runtime.
     **Permission mode (FR-E40):** `PermissionMode` type in
     `@korchasa/ai-ide-cli/types`. Optional field on `WorkflowDefaults` and
     `NodeConfig`. Resolution cascade: node → defaults → omit. Config

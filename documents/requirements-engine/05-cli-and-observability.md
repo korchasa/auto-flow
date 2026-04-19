@@ -271,28 +271,45 @@
 - **Acceptance criteria:**
   - [ ] `--budget <USD>` CLI argument parsed in `cli.ts`; stored in
     `EngineOptions.budget_usd?: number`. Shown in `--help` output.
-  - [ ] Engine checks `total_cost_usd > budget_usd` after each node
+  - [ ] Engine checks `total_cost_usd > budget_usd` (strict) after each node
     completion; aborts workflow with clear error:
-    `Budget exceeded: $X.XX >= $Y.YY`.
+    `Budget exceeded: $X.XX > $Y.YY`. Runs exactly at the cap do not abort.
   - [ ] Loop body (`loop.ts`) checks workflow budget after each iteration
     node completes.
   - [ ] `budget.max_usd?: number` field on `NodeConfig` (and on `defaults`
     level); validated as positive number. Engine fails the node (not the
-    workflow) when per-node cost exceeds cap.
+    workflow) when per-node cost exceeds cap. For nodes inside a loop body,
+    the cap applies **per-iteration** (to each invocation's `cost_usd`), not
+    to cumulative cost across iterations.
   - [ ] `budget.max_turns?: number` field on `NodeConfig` (and on `defaults`
     level); validated as positive integer; emits `--max-turns <N>` in CLI
-    args on both initial and resume invocations.
+    args on both initial and resume invocations **only when runtime is
+    `claude`** (empirically verified; other runtimes may reject unknown
+    flags). Non-Claude runtimes ignore `budget.max_turns` with a one-line
+    warning at workflow start.
   - [ ] Resolution cascade: node → loop → `defaults` for both `budget.max_usd`
     and `budget.max_turns`; workflow-wide `--budget` and per-node cap checked
     independently — either can trigger.
   - [ ] Loop pre-check: before each iteration spawn, if
     `avg_iter_cost > remaining_budget`, loop exits cleanly with reason
     `budget_preempt` in iteration log. No pre-check on first iteration
-    (insufficient data).
+    (insufficient data). Pre-check is advisory (average-based) and MAY stop a
+    loop whose next iteration would have fit; MUST NOT stop a loop purely on
+    the first iteration's data.
   - [ ] Budget is optional; runs without `--budget` or `budget` YAML fields
     behave identically to current behavior (no-op).
+  - [ ] Runtimes that do not populate `node.cost_usd` (unknown/unsupported
+    cost reporting) cause USD-based checks (`--budget`, `budget.max_usd`) to
+    no-op silently; `budget.max_turns` still applies if runtime is `claude`.
+    A one-line warning is emitted at workflow start when `--budget` is set
+    but the runtime does not report cost.
+  - [ ] `--resume <run-id>` preserves accumulated `total_cost_usd` from the
+    prior run segment; `--budget` on resume applies to the cumulative total.
+    If the resumed run is already over budget at load time, engine aborts
+    before executing any node.
   - [ ] Unit tests: no budget (no-op), not exceeded, exceeded mid-run,
-    exceeded in loop body, per-node limit hit, cascade, loop pre-check with
-    `budget_preempt`.
+    exceeded exactly at cap (not triggered), exceeded in loop body, per-node
+    limit hit, cascade, loop pre-check with `budget_preempt`, resume over
+    budget, non-cost-reporting runtime no-op.
   - [ ] `deno task check` passes.
 
