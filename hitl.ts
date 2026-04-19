@@ -21,6 +21,7 @@ import { applyBudgetFlags } from "./agent.ts";
 import type { AgentResult } from "./agent.ts";
 import { getRuntimeAdapter } from "@korchasa/ai-ide-cli/runtime";
 import type {
+  ExtraArgsMap,
   RuntimeAdapter,
   RuntimeInvokeOptions,
 } from "@korchasa/ai-ide-cli/runtime/types";
@@ -70,8 +71,8 @@ export interface HitlRunOptions {
   settings: Required<NodeSettings>;
   /** Runtime used for HITL resume. Defaults to claude for backward compatibility. */
   runtime?: RuntimeId;
-  /** Extra CLI flags forwarded to the selected runtime on resume. */
-  runtimeArgs?: string[];
+  /** Extra CLI flags forwarded to the selected runtime on resume. Map-shape. */
+  runtimeArgs?: ExtraArgsMap;
   /** Permission mode forwarded to Claude on resume. */
   permissionMode?: string;
   /** Claude model override. Forwarded to invokeClaudeCli on resume. */

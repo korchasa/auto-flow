@@ -39,6 +39,10 @@ Deno.test("runAgent — continuation uses runtime adapter resume session", async
       hitl: false,
       transcript: false,
       interactive: false,
+      toolUseObservation: false,
+      session: false,
+      capabilityInventory: false,
+      toolFilter: false,
     },
     launchInteractive() {
       throw new Error("not implemented");
@@ -93,6 +97,10 @@ Deno.test("runAgent — forwards hitlConfig to runtime adapter", async () => {
       hitl: true,
       transcript: false,
       interactive: false,
+      toolUseObservation: false,
+      session: false,
+      capabilityInventory: false,
+      toolFilter: false,
     },
     launchInteractive() {
       throw new Error("not implemented");

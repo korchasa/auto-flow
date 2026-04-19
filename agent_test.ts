@@ -12,7 +12,11 @@ import {
   stampLines,
   tsPrefix,
 } from "@korchasa/ai-ide-cli/claude/stream";
-import type { StreamProcessorState } from "@korchasa/ai-ide-cli/claude/stream";
+import type {
+  ClaudeResultEvent,
+  ClaudeStreamEvent,
+  StreamProcessorState,
+} from "@korchasa/ai-ide-cli/claude/stream";
 import type {
   NodeConfig,
   NodeSettings,
@@ -138,7 +142,7 @@ function makeInvokeOpts(
 Deno.test("buildClaudeArgs — includes extra claudeArgs", () => {
   const args = buildClaudeArgs(
     makeInvokeOpts({
-      claudeArgs: ["--dangerously-skip-permissions"],
+      claudeArgs: { "--dangerously-skip-permissions": "" },
     }),
   );
   assertEquals(args.includes("--dangerously-skip-permissions"), true);
@@ -149,7 +153,10 @@ Deno.test("buildClaudeArgs — includes extra claudeArgs", () => {
 Deno.test("buildClaudeArgs — claudeArgs placed before -p", () => {
   const args = buildClaudeArgs(
     makeInvokeOpts({
-      claudeArgs: ["--dangerously-skip-permissions", "--verbose"],
+      claudeArgs: {
+        "--dangerously-skip-permissions": "",
+        "--add-dir": "/tmp",
+      },
     }),
   );
   const pIdx = args.indexOf("-p");
@@ -482,6 +489,7 @@ Deno.test("stampLines — empty lines pass through without timestamp", () => {
 
 Deno.test("formatFooter — normal case produces correct format", () => {
   const output = extractClaudeOutput({
+    type: "result",
     result: "done",
     session_id: "sess-1",
     is_error: false,
@@ -497,6 +505,7 @@ Deno.test("formatFooter — normal case produces correct format", () => {
 
 Deno.test("formatFooter — error case uses status=error", () => {
   const output = extractClaudeOutput({
+    type: "result",
     result: "failed",
     session_id: "sess-2",
     is_error: true,
@@ -512,6 +521,7 @@ Deno.test("formatFooter — error case uses status=error", () => {
 
 Deno.test("formatFooter — zero values produce valid footer", () => {
   const output = extractClaudeOutput({
+    type: "result",
     result: "",
     session_id: "",
     is_error: false,
@@ -636,16 +646,20 @@ Deno.test("turn separators + footer — stream log integration", async () => {
     let turnCount = 0;
     let resultEvent: ReturnType<typeof extractClaudeOutput> | undefined;
 
-    const events: Record<string, unknown>[] = [
-      { type: "system", subtype: "init", model: "test-model" },
+    const events: ClaudeStreamEvent[] = [
+      {
+        type: "system",
+        subtype: "init",
+        model: "test-model",
+      } as ClaudeStreamEvent,
       {
         type: "assistant",
         message: { content: [{ type: "text", text: "turn 1 response" }] },
-      },
+      } as ClaudeStreamEvent,
       {
         type: "assistant",
         message: { content: [{ type: "text", text: "turn 2 response" }] },
-      },
+      } as ClaudeStreamEvent,
       {
         type: "result",
         subtype: "success",
@@ -656,7 +670,7 @@ Deno.test("turn separators + footer — stream log integration", async () => {
         duration_ms: 3000,
         duration_api_ms: 2500,
         num_turns: 2,
-      },
+      } as ClaudeResultEvent,
     ];
 
     for (const event of events) {
@@ -667,7 +681,7 @@ Deno.test("turn separators + footer — stream log integration", async () => {
         );
       }
       if (event.type === "result") {
-        resultEvent = extractClaudeOutput(event);
+        resultEvent = extractClaudeOutput(event as ClaudeResultEvent);
       }
       const summary = formatEventForOutput(event);
       if (summary) {
@@ -724,7 +738,7 @@ Deno.test("turn separators + footer — append semantics: two invocations", asyn
   const tmpPath = await Deno.makeTempFile({ suffix: ".jsonl" });
   try {
     const encoder = new TextEncoder();
-    const resultEventData = {
+    const resultEventData: ClaudeResultEvent = {
       type: "result",
       subtype: "success",
       result: "done",
@@ -1143,11 +1157,11 @@ Deno.test("buildClaudeArgs — permissionMode + claudeArgs both present", () => 
   const args = buildClaudeArgs(
     makeInvokeOpts({
       permissionMode: "bypassPermissions",
-      claudeArgs: ["--verbose"],
+      claudeArgs: { "--add-dir": "/tmp" },
     }),
   );
   assertEquals(args.includes("--permission-mode"), true);
-  assertEquals(args.includes("--verbose"), true);
+  assertEquals(args.includes("--add-dir"), true);
 });
 
 // --- FR-E47: applyBudgetFlags ---
@@ -1155,24 +1169,28 @@ Deno.test("buildClaudeArgs — permissionMode + claudeArgs both present", () => 
 import { applyBudgetFlags } from "./agent.ts";
 
 Deno.test("applyBudgetFlags — undefined maxTurns → returns base unchanged", () => {
-  assertEquals(applyBudgetFlags(["--foo"], "claude", undefined), ["--foo"]);
+  assertEquals(
+    applyBudgetFlags({ "--foo": "" }, "claude", undefined),
+    { "--foo": "" },
+  );
   assertEquals(applyBudgetFlags(undefined, "claude", undefined), undefined);
 });
 
 Deno.test("applyBudgetFlags — claude + maxTurns → appends --max-turns N", () => {
-  assertEquals(applyBudgetFlags(undefined, "claude", 50), [
-    "--max-turns",
-    "50",
-  ]);
-  assertEquals(applyBudgetFlags(["--foo"], "claude", 10), [
-    "--foo",
-    "--max-turns",
-    "10",
-  ]);
+  assertEquals(applyBudgetFlags(undefined, "claude", 50), {
+    "--max-turns": "50",
+  });
+  assertEquals(applyBudgetFlags({ "--foo": "" }, "claude", 10), {
+    "--foo": "",
+    "--max-turns": "10",
+  });
 });
 
 Deno.test("applyBudgetFlags — opencode + maxTurns → returns base unchanged", () => {
-  assertEquals(applyBudgetFlags(["--foo"], "opencode", 50), ["--foo"]);
+  assertEquals(
+    applyBudgetFlags({ "--foo": "" }, "opencode", 50),
+    { "--foo": "" },
+  );
   assertEquals(applyBudgetFlags(undefined, "opencode", 50), undefined);
 });
 
@@ -1180,9 +1198,9 @@ Deno.test("applyBudgetFlags — cursor + maxTurns → returns base unchanged", (
   assertEquals(applyBudgetFlags(undefined, "cursor", 25), undefined);
 });
 
-Deno.test("applyBudgetFlags — does not mutate the input base array", () => {
-  const base = ["--foo"];
+Deno.test("applyBudgetFlags — does not mutate the input base map", () => {
+  const base = { "--foo": "" };
   const result = applyBudgetFlags(base, "claude", 5);
-  assertEquals(base, ["--foo"]);
-  assertEquals(result, ["--foo", "--max-turns", "5"]);
+  assertEquals(base, { "--foo": "" });
+  assertEquals(result, { "--foo": "", "--max-turns": "5" });
 });

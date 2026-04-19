@@ -55,6 +55,7 @@ export type { AgentResult, AgentRunOptions } from "./agent.ts";
 // public AgentRunOptions / HitlRunOptions / ClaudeRunner remain self-contained
 // from deno doc --lint's point of view.
 export type {
+  ExtraArgsMap,
   InteractiveOptions,
   InteractiveResult,
   RuntimeAdapter,

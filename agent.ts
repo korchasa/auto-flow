@@ -19,7 +19,10 @@ import type {
   ValidationRule,
   Verbosity,
 } from "./types.ts";
-import type { RuntimeAdapter } from "@korchasa/ai-ide-cli/runtime/types";
+import type {
+  ExtraArgsMap,
+  RuntimeAdapter,
+} from "@korchasa/ai-ide-cli/runtime/types";
 import { interpolate } from "./template.ts";
 import { getRuntimeAdapter } from "@korchasa/ai-ide-cli/runtime";
 import { buildEngineHitlMcpCommand } from "./hitl-mcp-command.ts";
@@ -87,8 +90,8 @@ export interface AgentRunOptions {
   settings: Required<NodeSettings>;
   /** Runtime used for this invocation. Defaults to claude for backward compatibility. */
   runtime?: RuntimeId;
-  /** Extra CLI arguments passed to the selected runtime. */
-  runtimeArgs?: string[];
+  /** Extra CLI arguments passed to the selected runtime. Map-shape per FR-L14. */
+  runtimeArgs?: ExtraArgsMap;
   /** Permission mode for this agent (maps to --permission-mode CLI flag). */
   permissionMode?: string;
   /** Claude model override (e.g. "claude-sonnet-4-6"). Omit = CLI default. */
@@ -115,16 +118,16 @@ export interface AgentRunOptions {
 /**
  * Append runtime-specific budget flags to `extraArgs`. Currently only Claude
  * gets `--max-turns <N>` (FR-E47). Other runtimes may reject unknown flags —
- * emit a warning and omit instead of relying on silent-ignore tolerance.
+ * omit instead of relying on silent-ignore tolerance.
  */
 export function applyBudgetFlags(
-  base: string[] | undefined,
+  base: ExtraArgsMap | undefined,
   runtime: RuntimeId,
   maxTurns: number | undefined,
-): string[] | undefined {
+): ExtraArgsMap | undefined {
   if (maxTurns === undefined) return base;
   if (runtime !== "claude") return base;
-  return [...(base ?? []), "--max-turns", String(maxTurns)];
+  return { ...(base ?? {}), "--max-turns": String(maxTurns) };
 }
 
 /**

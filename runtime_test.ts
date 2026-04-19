@@ -106,7 +106,7 @@ nodes:
 Deno.test("resolveRuntimeConfig — top-level claude runtime merges runtime_args", () => {
   const defaults: WorkflowDefaults = {
     runtime: "claude",
-    runtime_args: ["--allowedTools", "Bash", "--verbose"],
+    runtime_args: { "--allowedTools": "Bash", "--verbose": "" },
     model: "claude-sonnet-4-6",
     permission_mode: "bypassPermissions",
   };
@@ -119,11 +119,10 @@ Deno.test("resolveRuntimeConfig — top-level claude runtime merges runtime_args
   const resolved = resolveRuntimeConfig({ defaults, node });
 
   assertEquals(resolved.runtime, "claude");
-  assertEquals(resolved.args, [
-    "--allowedTools",
-    "Bash",
-    "--verbose",
-  ]);
+  assertEquals(resolved.args, {
+    "--allowedTools": "Bash",
+    "--verbose": "",
+  });
   assertEquals(resolved.model, "claude-sonnet-4-6");
   assertEquals(resolved.permissionMode, "bypassPermissions");
 });
@@ -131,21 +130,21 @@ Deno.test("resolveRuntimeConfig — top-level claude runtime merges runtime_args
 Deno.test("resolveRuntimeConfig — body node overrides loop and defaults", () => {
   const defaults: WorkflowDefaults = {
     runtime: "claude",
-    runtime_args: ["--thinking"],
+    runtime_args: { "--thinking": "" },
     model: "claude-sonnet-4-6",
   };
   const loopNode: NodeConfig = {
     type: "loop",
     label: "Loop",
     runtime: "opencode",
-    runtime_args: ["--variant", "high"],
+    runtime_args: { "--variant": "high" },
     model: "anthropic/claude-sonnet-4-5",
   };
   const bodyNode: NodeConfig = {
     type: "agent",
     label: "Build",
     prompt: "build",
-    runtime_args: ["--share"],
+    runtime_args: { "--share": "" },
   };
 
   const resolved = resolveRuntimeConfig({
@@ -155,7 +154,11 @@ Deno.test("resolveRuntimeConfig — body node overrides loop and defaults", () =
   });
 
   assertEquals(resolved.runtime, "opencode");
-  assertEquals(resolved.args, ["--thinking", "--variant", "high", "--share"]);
+  assertEquals(resolved.args, {
+    "--thinking": "",
+    "--variant": "high",
+    "--share": "",
+  });
   assertEquals(resolved.model, "anthropic/claude-sonnet-4-5");
   assertEquals(resolved.permissionMode, undefined);
 });

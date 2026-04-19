@@ -14,7 +14,10 @@ import type {
   RuntimeId,
   TemplateContext,
 } from "./types.ts";
-import type { RuntimeAdapter } from "@korchasa/ai-ide-cli/runtime/types";
+import type {
+  ExtraArgsMap,
+  RuntimeAdapter,
+} from "@korchasa/ai-ide-cli/runtime/types";
 import type { AgentResult } from "./agent.ts";
 import type { HitlQuestion } from "./hitl.ts";
 import { runHitlLoop } from "./hitl.ts";
@@ -32,7 +35,7 @@ interface HitlBaseParams {
   ctx: TemplateContext;
   settings: Required<NodeSettings>;
   runtime?: RuntimeId;
-  runtimeArgs?: string[];
+  runtimeArgs?: ExtraArgsMap;
   permissionMode?: string;
   model?: string;
   runtimeAdapter?: RuntimeAdapter;

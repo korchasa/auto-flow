@@ -35,7 +35,7 @@ export const DEFAULT_WORKFLOW_DEFAULTS: Required<
   worktree_disabled: false,
   max_parallel: 0,
   runtime: "claude",
-  runtime_args: [],
+  runtime_args: {},
   model: "",
   hitl: {
     ask_script: "",
@@ -622,13 +622,23 @@ function validateRuntimeArgs(
   context: string,
   runtimeArgs: unknown,
 ): void {
-  if (!Array.isArray(runtimeArgs)) {
-    throw new Error(`${context}.runtime_args must be an array of strings`);
+  if (
+    !runtimeArgs || typeof runtimeArgs !== "object" ||
+    Array.isArray(runtimeArgs)
+  ) {
+    throw new Error(
+      `${context}.runtime_args must be a map (Record<string, string | null>)`,
+    );
   }
-  for (const entry of runtimeArgs) {
-    if (typeof entry !== "string" || !entry) {
+  for (const [key, value] of Object.entries(runtimeArgs)) {
+    if (!key) {
       throw new Error(
-        `${context}.runtime_args entries must be non-empty strings`,
+        `${context}.runtime_args keys must be non-empty strings`,
+      );
+    }
+    if (value !== null && typeof value !== "string") {
+      throw new Error(
+        `${context}.runtime_args['${key}'] must be a string or null (null suppresses the flag)`,
       );
     }
   }

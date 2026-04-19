@@ -19,6 +19,7 @@ import type {
   RuntimeId,
   Verbosity,
 } from "@korchasa/ai-ide-cli/types";
+import type { ExtraArgsMap } from "@korchasa/ai-ide-cli/runtime/types";
 
 export type {
   CliRunOutput,
@@ -75,8 +76,10 @@ export interface WorkflowDefaults extends NodeSettings {
   max_parallel?: number;
   /** Runtime used for agent execution when not overridden (default: claude). */
   runtime?: RuntimeId;
-  /** Generic extra CLI args forwarded to the selected runtime. */
-  runtime_args?: string[];
+  /** Generic extra CLI args forwarded to the selected runtime.
+   * Map-shape: `{ "--flag": "value" }`, `{ "--bool": "" }` (boolean flag),
+   * `{ "--suppressed": null }` (suppress a parent-supplied flag). */
+  runtime_args?: ExtraArgsMap;
   /** Permission mode for all agent nodes (maps to --permission-mode CLI flag).
    * Overridable per-node via NodeConfig.permission_mode. */
   permission_mode?: PermissionMode;
@@ -117,8 +120,9 @@ export interface NodeConfig {
   model?: string;
   /** Runtime override for this node. */
   runtime?: RuntimeId;
-  /** Generic extra CLI args forwarded to this node's selected runtime. */
-  runtime_args?: string[];
+  /** Generic extra CLI args forwarded to this node's selected runtime.
+   * Map-shape: see {@link WorkflowDefaults.runtime_args}. */
+  runtime_args?: ExtraArgsMap;
   /** Permission mode override for this node (maps to --permission-mode CLI flag). */
   permission_mode?: PermissionMode;
 
