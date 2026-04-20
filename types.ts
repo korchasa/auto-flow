@@ -95,6 +95,13 @@ export interface WorkflowDefaults extends NodeSettings {
   prepare_command?: string;
   /** Workflow-level default budget cascade source (FR-E47). */
   budget?: NodeBudget;
+  /** Whitelist of tools available to agent nodes (FR-E48).
+   * Mutually exclusive with `disallowed_tools`. Claude emits
+   * `--allowedTools <comma-joined>`; other runtimes warn and ignore. */
+  allowed_tools?: string[];
+  /** Blacklist of tools forbidden to agent nodes (FR-E48).
+   * Mutually exclusive with `allowed_tools`. */
+  disallowed_tools?: string[];
 }
 
 /** Configuration for a single workflow node. */
@@ -187,6 +194,13 @@ export interface NodeConfig {
 
   /** Per-node budget limits (FR-E47). Cascades: node → enclosing loop → defaults. */
   budget?: NodeBudget;
+
+  /** Whitelist of tools (FR-E48). REPLACE-semantics cascade:
+   * node → enclosing loop → defaults. Mutex with `disallowed_tools`. */
+  allowed_tools?: string[];
+  /** Blacklist of tools (FR-E48). REPLACE-semantics cascade.
+   * Mutex with `allowed_tools`. */
+  disallowed_tools?: string[];
 }
 
 /** Per-node settings (merged with defaults). */

@@ -153,3 +153,53 @@
   - [x] AC6: `deno task check` green: 590 tests, 0 failures.
 
 
+
+### 3.48 FR-E48: Node Tool Filtering
+
+- **Description:** First-class `allowed_tools` (whitelist) and
+  `disallowed_tools` (blacklist) fields on `WorkflowDefaults` and
+  `NodeConfig`. Cascade resolution is **replace**-semantics:
+  node → enclosing loop → defaults — the first level that declares either
+  field wins entirely. Fields are mutually exclusive at the same level.
+  Conflict detection rejects coexistence with raw
+  `--allowedTools`/`--allowed-tools`/`--disallowedTools`/`--disallowed-tools`/`--tools`
+  in the same level's `runtime_args`. Resolved values flow as typed
+  `allowedTools`/`disallowedTools` fields on `RuntimeInvokeOptions`;
+  Claude adapter emits `--allowedTools` / `--disallowedTools` CLI flags,
+  other adapters warn once and no-op (per FR-L24 in `@korchasa/ai-ide-cli`).
+  Flags are sent on both initial and resume (continuation) invocations.
+- **Motivation:** Operators need declarative, type-safe control over the
+  tool surface each agent can touch, without hand-crafting raw CLI strings
+  in `runtime_args`. Typed fields enable config-time validation, stable
+  introspection, and uniform mapping across IDEs via the library adapter
+  layer.
+- **Acceptance criteria:**
+  - [x] AC1: `allowed_tools?: string[]` and `disallowed_tools?: string[]`
+    declared on `WorkflowDefaults` and `NodeConfig`. Evidence:
+    `types.ts:101-104`, `types.ts:200-203`.
+  - [x] AC2: Per-level validation — array of non-empty strings, mutex at
+    the same level, reserved-keys conflict with `runtime_args`. Evidence:
+    `config.ts:632-698` (`TOOL_FILTER_RESERVED_KEYS`,
+    `validateToolFilterLevel`, `validateToolFilterField`).
+  - [x] AC3: Cascade resolver `resolveToolFilter(node, defaults, loopParent)`
+    implements replace-semantics, node → loopParent → defaults. Evidence:
+    `config.ts:722-745`.
+  - [x] AC4: Engine wires resolved filter into `RuntimeInvokeOptions` on
+    both initial and resume invocations. Evidence:
+    `agent.ts:219-220,328-329`, `node-dispatch.ts:92-93,115-116,164-165`,
+    `loop.ts:195-196`, `hitl.ts:259-260`.
+  - [x] AC5: Runtime-specific emission of `--allowedTools` /
+    `--disallowedTools` handled by the library adapter (Claude), not by
+    engine. Non-Claude runtimes warn and ignore per FR-L24. Engine code
+    contains no runtime-specific tool-flag logic beyond the typed field
+    pass-through.
+  - [x] AC6: Unit tests — validation (array, mutex, reserved-keys ×3,
+    back-compat, cross-level mode switch), resolver (node/loop/defaults
+    priority, empty cascade, mode switch), wiring (mock adapter captures
+    fields on initial and resume, mutex guard). Evidence:
+    `config_test.ts` (tests `parseConfig — allowed_tools …`,
+    `resolveToolFilter — …`), `agent_tool_filter_test.ts`.
+  - [x] AC7: `deno task check` green (fmt + lint + type-check + tests +
+    doc-lint + publish dry-run).
+
+

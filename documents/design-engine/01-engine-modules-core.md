@@ -80,6 +80,19 @@
     Runtime-resolved (same spirit as `resolveRuntimeConfig` for the `model`
     field); NOT merged into `NodeConfig` at config time. Returns `undefined`
     when no budget is set at any level.
+    `resolveToolFilter(node, defaults, loopParent?)` (FR-E48): exported
+    helper — **replace**-semantics cascade `node → loopParent → defaults`.
+    The first level declaring either `allowed_tools` or `disallowed_tools`
+    wins entirely; downstream levels are ignored. Returns `ResolvedToolFilter`
+    with either `allowedTools`, `disallowedTools`, or neither (empty object).
+    Pre-validation (`validateToolFilterLevel`) ensures per-level mutex and
+    rejects coexistence with reserved `runtime_args` keys
+    (`--allowedTools`, `--allowed-tools`, `--disallowedTools`,
+    `--disallowed-tools`, `--tools`). Resolved values pass through
+    `AgentRunOptions.allowedTools`/`disallowedTools` into
+    `RuntimeInvokeOptions` on both initial and resume invocations — runtime-
+    specific CLI flag emission is delegated to the ai-ide-cli adapter layer
+    (FR-L24).
     `validateValidationRule()` (FR-E33, FR-E38): `"artifact"` added to
     `validTypes`. When `type === "artifact"`: at least one of `sections` or
     `fields` required (both optional individually). `sections` validated as

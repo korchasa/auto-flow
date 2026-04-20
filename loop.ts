@@ -23,7 +23,7 @@ import type { AgentResult } from "./agent.ts";
 import { markNodeCompleted, markNodeFailed, markNodeStarted } from "./state.ts";
 import type { OutputManager } from "./output.ts";
 import { resolveRuntimeConfig } from "@korchasa/ai-ide-cli/runtime";
-import { resolveBudget } from "./config.ts";
+import { resolveBudget, resolveToolFilter } from "./config.ts";
 
 /** Reason a loop exited. Undefined on failure. */
 export type LoopExitReason =
@@ -178,6 +178,11 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         config.defaults,
         loopNode,
       );
+      const toolFilter = resolveToolFilter(
+        bodyNode,
+        config.defaults,
+        loopNode,
+      );
 
       const result = await runAgent({
         node: bodyNode,
@@ -187,6 +192,8 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         runtimeArgs: runtimeConfig.args,
         permissionMode: runtimeConfig.permissionMode,
         model: runtimeConfig.model,
+        allowedTools: toolFilter.allowedTools,
+        disallowedTools: toolFilter.disallowedTools,
         hitlConfig: config.defaults?.hitl,
         output: opts.output,
         nodeId: bodyNodeId,

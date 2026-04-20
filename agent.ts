@@ -113,6 +113,11 @@ export interface AgentRunOptions {
   /** Resolved `budget.max_turns` (FR-E47). Claude-only: emits `--max-turns <N>`
    * to extraArgs; other runtimes silently omit to avoid unknown-flag rejection. */
   maxTurns?: number;
+  /** Resolved tool whitelist (FR-E48). Passed as typed `allowedTools` to the
+   * runtime adapter; Claude emits `--allowedTools`, other adapters may warn. */
+  allowedTools?: string[];
+  /** Resolved tool blacklist (FR-E48). See {@link allowedTools}. */
+  disallowedTools?: string[];
 }
 
 /**
@@ -170,6 +175,8 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     verbosity,
     cwd,
     maxTurns,
+    allowedTools,
+    disallowedTools,
   } = opts;
   const adapter = runtimeAdapter ?? getRuntimeAdapter(runtime);
   const extraArgs = applyBudgetFlags(runtimeArgs, runtime, maxTurns);
@@ -209,6 +216,8 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     extraArgs,
     permissionMode,
     model,
+    allowedTools,
+    disallowedTools,
     hitlConfig,
     hitlMcpCommandBuilder: buildEngineHitlMcpCommand,
     timeoutSeconds: settings.timeout_seconds,
@@ -316,6 +325,8 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       extraArgs,
       permissionMode,
       model,
+      allowedTools,
+      disallowedTools,
       hitlConfig,
       hitlMcpCommandBuilder: buildEngineHitlMcpCommand,
       timeoutSeconds: settings.timeout_seconds,

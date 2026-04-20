@@ -6,7 +6,7 @@
  */
 import type { AgentResult } from "./agent.ts";
 import { resolveInputArtifacts, runAgent } from "./agent.ts";
-import { resolveBudget } from "./config.ts";
+import { resolveBudget, resolveToolFilter } from "./config.ts";
 import { handleAgentHitl } from "./hitl-handler.ts";
 import { detectHitlRequest, isHitlConfigured } from "./hitl.ts";
 import { runHuman } from "./human.ts";
@@ -62,6 +62,7 @@ export async function executeAgentNode(
     defaults: eng.config.defaults,
     node,
   });
+  const toolFilter = resolveToolFilter(node, eng.config.defaults);
   const cwd = eng.workDir !== "." ? eng.workDir : undefined;
 
   // Resume path: node was waiting for human reply
@@ -88,6 +89,8 @@ export async function executeAgentNode(
       runtimeArgs: runtimeConfig.args,
       permissionMode: runtimeConfig.permissionMode,
       model: runtimeConfig.model,
+      allowedTools: toolFilter.allowedTools,
+      disallowedTools: toolFilter.disallowedTools,
       output: eng.output,
       cwd,
       maxTurns: resolveBudget(node, eng.config.defaults)?.max_turns,
@@ -109,6 +112,8 @@ export async function executeAgentNode(
     runtimeArgs: runtimeConfig.args,
     permissionMode: runtimeConfig.permissionMode,
     model: runtimeConfig.model,
+    allowedTools: toolFilter.allowedTools,
+    disallowedTools: toolFilter.disallowedTools,
     hitlConfig,
     output: eng.output,
     nodeId,
@@ -156,6 +161,8 @@ export async function executeAgentNode(
         runtimeArgs: runtimeConfig.args,
         permissionMode: runtimeConfig.permissionMode,
         model: runtimeConfig.model,
+        allowedTools: toolFilter.allowedTools,
+        disallowedTools: toolFilter.disallowedTools,
         output: eng.output,
         cwd,
         maxTurns: resolveBudget(node, eng.config.defaults)?.max_turns,

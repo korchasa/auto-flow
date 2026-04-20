@@ -27,9 +27,14 @@ export const DEFAULT_SETTINGS: Required<NodeSettings> = {
   retry_delay_seconds: 5,
 };
 
-/** Default workflow-level settings (permission_mode and budget intentionally excluded — undefined means "not set"). */
+/** Default workflow-level settings. Fields intentionally excluded from
+ * Required<> because undefined carries semantic meaning ("not set"):
+ * `permission_mode`, `budget`, `allowed_tools`, `disallowed_tools`. */
 export const DEFAULT_WORKFLOW_DEFAULTS: Required<
-  Omit<WorkflowDefaults, "permission_mode" | "budget">
+  Omit<
+    WorkflowDefaults,
+    "permission_mode" | "budget" | "allowed_tools" | "disallowed_tools"
+  >
 > = {
   ...DEFAULT_SETTINGS,
   worktree_disabled: false,
@@ -183,6 +188,7 @@ function validateSchema(config: Record<string, unknown>): void {
     if (defaults.budget !== undefined) {
       validateBudget("defaults", defaults.budget);
     }
+    validateToolFilterLevel("defaults", defaults);
   }
 
   // Validate mutual exclusivity: phases block and per-node phase field cannot coexist
@@ -456,6 +462,9 @@ function validateNode(
   if (node.budget !== undefined) {
     validateBudget(`Node '${id}'`, node.budget);
   }
+
+  // Validate tool filter fields if present (FR-E48)
+  validateToolFilterLevel(`Node '${id}'`, node);
 }
 
 function validateSettings(
@@ -616,6 +625,122 @@ export function resolveBudget(
   loopParent?: NodeConfig,
 ): NodeBudget | undefined {
   return node.budget ?? loopParent?.budget ?? defaults?.budget;
+}
+
+/** Reserved-keys in `runtime_args` that conflict with typed tool filter fields
+ * (FR-E48). Claude CLI and engine own these flags. */
+const TOOL_FILTER_RESERVED_KEYS = [
+  "--allowedTools",
+  "--allowed-tools",
+  "--disallowedTools",
+  "--disallowed-tools",
+  "--tools",
+] as const;
+
+/**
+ * Validate tool-filter fields at a single cascade level (FR-E48).
+ *
+ * Three checks:
+ * 1. Each field, if present, must be an array of non-empty strings.
+ * 2. Fields are mutually exclusive at the same level.
+ * 3. If any typed field is set at this level, `runtime_args` of the same
+ *    level must not contain any key from {@link TOOL_FILTER_RESERVED_KEYS}.
+ *
+ * Context string identifies the level in error messages (`defaults`,
+ * `Node 'foo'`, etc.).
+ */
+function validateToolFilterLevel(
+  context: string,
+  level: Record<string, unknown>,
+): void {
+  const allowed = level.allowed_tools;
+  const disallowed = level.disallowed_tools;
+
+  if (allowed !== undefined) {
+    validateToolFilterField(context, "allowed_tools", allowed);
+  }
+  if (disallowed !== undefined) {
+    validateToolFilterField(context, "disallowed_tools", disallowed);
+  }
+  if (allowed !== undefined && disallowed !== undefined) {
+    throw new Error(
+      `${context}: allowed_tools and disallowed_tools are mutually exclusive at the same level`,
+    );
+  }
+
+  const hasTypedField = allowed !== undefined || disallowed !== undefined;
+  if (hasTypedField && level.runtime_args !== undefined) {
+    const runtimeArgs = level.runtime_args as Record<string, unknown>;
+    for (const reserved of TOOL_FILTER_RESERVED_KEYS) {
+      if (reserved in runtimeArgs) {
+        throw new Error(
+          `${context}.runtime_args key '${reserved}' conflicts with typed allowed_tools/disallowed_tools fields — use the typed field exclusively`,
+        );
+      }
+    }
+  }
+}
+
+function validateToolFilterField(
+  context: string,
+  fieldName: "allowed_tools" | "disallowed_tools",
+  value: unknown,
+): void {
+  if (!Array.isArray(value)) {
+    throw new Error(`${context}.${fieldName} must be an array of strings`);
+  }
+  for (const entry of value) {
+    if (typeof entry !== "string" || !entry) {
+      throw new Error(
+        `${context}.${fieldName} entries must be non-empty strings`,
+      );
+    }
+  }
+}
+
+/** Resolved tool filter for a single node invocation (FR-E48).
+ * At most one of the two fields is set (mutex enforced at validation). */
+export interface ResolvedToolFilter {
+  allowedTools?: string[];
+  disallowedTools?: string[];
+}
+
+/**
+ * Resolve effective tool filter via REPLACE-semantics cascade:
+ * node → loopParent → defaults.
+ *
+ * Unlike {@link resolveRuntimeConfig} which merges `runtime_args` per-key,
+ * this resolver picks the FIRST level that declares either `allowed_tools`
+ * or `disallowed_tools` and returns only that level's values. Other levels
+ * are ignored entirely — this is the "replace" semantics demanded by
+ * FR-E48 to keep author intent unambiguous.
+ *
+ * Contract: caller has already passed the config through
+ * {@link validateSchema}, so mutex and reserved-keys constraints hold.
+ * The resolver never throws.
+ */
+export function resolveToolFilter(
+  node: NodeConfig,
+  defaults: WorkflowDefaults | undefined,
+  loopParent?: NodeConfig,
+): ResolvedToolFilter {
+  const sources: Array<NodeConfig | WorkflowDefaults | undefined> = [
+    node,
+    loopParent,
+    defaults,
+  ];
+  for (const src of sources) {
+    if (!src) continue;
+    if (
+      src.allowed_tools !== undefined || src.disallowed_tools !== undefined
+    ) {
+      return {
+        allowedTools: src.allowed_tools,
+        disallowedTools: src.disallowed_tools,
+      };
+    }
+  }
+  return {};
 }
 
 function validateRuntimeArgs(

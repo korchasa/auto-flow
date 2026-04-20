@@ -77,6 +77,10 @@ export interface HitlRunOptions {
   permissionMode?: string;
   /** Claude model override. Forwarded to invokeClaudeCli on resume. */
   model?: string;
+  /** Resolved tool whitelist (FR-E48); forwarded on resume. */
+  allowedTools?: string[];
+  /** Resolved tool blacklist (FR-E48); forwarded on resume. */
+  disallowedTools?: string[];
   /** Injected runtime adapter for unit testing. */
   runtimeAdapter?: RuntimeAdapter;
   /** Output manager for status/progress messages. */
@@ -252,6 +256,8 @@ export async function runHitlLoop(
         extraArgs: applyBudgetFlags(runtimeArgs, runtime, maxTurns),
         permissionMode: opts.permissionMode,
         model: opts.model,
+        allowedTools: opts.allowedTools,
+        disallowedTools: opts.disallowedTools,
         hitlConfig: config,
         hitlMcpCommandBuilder: buildEngineHitlMcpCommand,
         timeoutSeconds: settings.timeout_seconds,

@@ -44,6 +44,10 @@ interface HitlBaseParams {
   cwd?: string;
   /** Resolved `budget.max_turns` (FR-E47). */
   maxTurns?: number;
+  /** Resolved tool whitelist (FR-E48). */
+  allowedTools?: string[];
+  /** Resolved tool blacklist (FR-E48). */
+  disallowedTools?: string[];
 }
 
 /** Resume-from-waiting mode: node was previously set to waiting state. */
@@ -85,6 +89,8 @@ export async function handleAgentHitl(
     output,
     cwd,
     maxTurns,
+    allowedTools,
+    disallowedTools,
   } = params;
   // ctx.run_dir already includes workDir prefix from buildContext
   const runDir = ctx.run_dir;
@@ -122,6 +128,8 @@ export async function handleAgentHitl(
         output,
         cwd,
         maxTurns,
+        allowedTools,
+        disallowedTools,
       },
       true, /* skipAsk — question already delivered */
     );

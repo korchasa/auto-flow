@@ -4,6 +4,7 @@ import {
   extractWorktreeDisabled,
   parseConfig,
 } from "./config.ts";
+import type { NodeConfig } from "./types.ts";
 
 const MINIMAL_AGENT = `
 name: test-workflow
@@ -1628,4 +1629,255 @@ Deno.test("resolveBudget — undefined when no budget at any level", async () =>
   const node = { type: "agent", label: "n", prompt: "p" } as const;
   const resolved = resolveBudget(node, undefined);
   assertEquals(resolved, undefined);
+});
+
+// --- FR-E48: Tool filter validation ---
+
+Deno.test("parseConfig — allowed_tools accepted at defaults level", () => {
+  const yaml = `
+name: w
+version: "1"
+defaults:
+  allowed_tools: ["Read", "Grep"]
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.defaults?.allowed_tools, ["Read", "Grep"]);
+});
+
+Deno.test("parseConfig — disallowed_tools accepted per node", () => {
+  const yaml = `
+name: w
+version: "1"
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+    disallowed_tools: ["Write", "Edit"]
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.nodes.n.disallowed_tools, ["Write", "Edit"]);
+});
+
+Deno.test("parseConfig — both allowed_tools and disallowed_tools at same level throws", () => {
+  const yaml = `
+name: w
+version: "1"
+defaults:
+  allowed_tools: ["Read"]
+  disallowed_tools: ["Write"]
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "mutually exclusive",
+  );
+});
+
+Deno.test("parseConfig — allowed_tools not-array throws", () => {
+  const yaml = `
+name: w
+version: "1"
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+    allowed_tools: "Read"
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "must be an array",
+  );
+});
+
+Deno.test("parseConfig — allowed_tools with empty string throws", () => {
+  const yaml = `
+name: w
+version: "1"
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+    allowed_tools: ["Read", ""]
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "non-empty strings",
+  );
+});
+
+Deno.test("parseConfig — runtime_args with --allowedTools + typed allowed_tools throws", () => {
+  const yaml = `
+name: w
+version: "1"
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+    allowed_tools: ["Read"]
+    runtime_args:
+      "--allowedTools": "Bash"
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "conflicts with typed",
+  );
+});
+
+Deno.test("parseConfig — runtime_args with --disallowedTools + typed disallowed_tools throws", () => {
+  const yaml = `
+name: w
+version: "1"
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+    disallowed_tools: ["Write"]
+    runtime_args:
+      "--disallowedTools": "Edit"
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "conflicts with typed",
+  );
+});
+
+Deno.test("parseConfig — runtime_args with --tools + typed allowed_tools throws", () => {
+  const yaml = `
+name: w
+version: "1"
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+    allowed_tools: ["Read"]
+    runtime_args:
+      "--tools": "Bash"
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "conflicts with typed",
+  );
+});
+
+Deno.test("parseConfig — back-compat: runtime_args with --allowedTools alone is valid", () => {
+  const yaml = `
+name: w
+version: "1"
+defaults:
+  runtime_args:
+    "--allowedTools": "Read,Grep"
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+`;
+  const config = parseConfig(yaml);
+  assertEquals(
+    (config.defaults?.runtime_args as Record<string, unknown>)[
+      "--allowedTools"
+    ],
+    "Read,Grep",
+  );
+});
+
+Deno.test("parseConfig — cross-level mode switch: defaults.allowed + node.disallowed is valid", () => {
+  const yaml = `
+name: w
+version: "1"
+defaults:
+  allowed_tools: ["Read"]
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+    disallowed_tools: ["Write"]
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.defaults?.allowed_tools, ["Read"]);
+  assertEquals(config.nodes.n.disallowed_tools, ["Write"]);
+});
+
+Deno.test("resolveToolFilter — node wins over loop parent and defaults", async () => {
+  const { resolveToolFilter } = await import("./config.ts");
+  const node: NodeConfig = {
+    type: "agent",
+    label: "n",
+    prompt: "p",
+    allowed_tools: ["Read"],
+  };
+  const loopParent: NodeConfig = {
+    type: "loop",
+    label: "l",
+    disallowed_tools: ["Edit"],
+  };
+  const defaults = { allowed_tools: ["Grep"] };
+  const r = resolveToolFilter(node, defaults, loopParent);
+  assertEquals(r.allowedTools, ["Read"]);
+  assertEquals(r.disallowedTools, undefined);
+});
+
+Deno.test("resolveToolFilter — loop parent wins over defaults when node has none", async () => {
+  const { resolveToolFilter } = await import("./config.ts");
+  const node: NodeConfig = { type: "agent", label: "n", prompt: "p" };
+  const loopParent: NodeConfig = {
+    type: "loop",
+    label: "l",
+    disallowed_tools: ["Edit"],
+  };
+  const defaults = { allowed_tools: ["Grep"] };
+  const r = resolveToolFilter(node, defaults, loopParent);
+  assertEquals(r.disallowedTools, ["Edit"]);
+  assertEquals(r.allowedTools, undefined);
+});
+
+Deno.test("resolveToolFilter — defaults used when neither node nor loop has fields", async () => {
+  const { resolveToolFilter } = await import("./config.ts");
+  const node: NodeConfig = { type: "agent", label: "n", prompt: "p" };
+  const defaults = { allowed_tools: ["Grep"] };
+  const r = resolveToolFilter(node, defaults);
+  assertEquals(r.allowedTools, ["Grep"]);
+});
+
+Deno.test("resolveToolFilter — empty result when no level declares fields", async () => {
+  const { resolveToolFilter } = await import("./config.ts");
+  const node = { type: "agent", label: "n", prompt: "p" } as const;
+  const r = resolveToolFilter(node, undefined);
+  assertEquals(r, {});
+});
+
+Deno.test("resolveToolFilter — cross-level mode switch: node.disallowed replaces defaults.allowed", async () => {
+  const { resolveToolFilter } = await import("./config.ts");
+  const node: NodeConfig = {
+    type: "agent",
+    label: "n",
+    prompt: "p",
+    disallowed_tools: ["Write"],
+  };
+  const defaults = { allowed_tools: ["Read"] };
+  const r = resolveToolFilter(node, defaults);
+  assertEquals(r.disallowedTools, ["Write"]);
+  assertEquals(r.allowedTools, undefined);
 });

@@ -77,3 +77,4 @@ FR-IDs are stable — never renumber them on move.
 - FR-E45 (Subcommand Routing)        → 05-cli-and-observability
 - FR-E46 (Interactive REPL)           → 05-cli-and-observability
 - FR-E47 (Run Budget Enforcement)    → 05-cli-and-observability
+- FR-E48 (Node Tool Filtering)       → 04-runtime-and-hooks
