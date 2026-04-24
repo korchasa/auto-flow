@@ -145,11 +145,12 @@
     `repl/skills/` (uses `import.meta.url` for compiled binary compat).
     `launchRepl()` — orchestrates: resolve runtime, check `interactive`
     capability, load skills, build system prompt, call
-    `adapter.launchInteractive()`. MVP skills: `init`, `adapt-agents`.
-  - `repl/skills/init/SKILL.md` — guided project initialization skill
-    (replaces removed `flowai-workflow init` subcommand).
-  - `repl/skills/adapt-agents/SKILL.md` — agent adaptation after framework
-    update.
+    `adapter.launchInteractive()`. MVP skills: `flowai-workflow-init`,
+    `flowai-workflow-adapt-agents`.
+  - `repl/skills/flowai-workflow-init/SKILL.md` — guided project initialization
+    skill (replaces removed `flowai-workflow init` subcommand).
+  - `repl/skills/flowai-workflow-adapt-agents/SKILL.md` — agent adaptation
+    after framework update.
   - `mod.ts` — barrel re-export serving as `deno doc --lint` entry point
     (not a runtime public API; sole non-redundant consumer is
     `scripts/check.ts` JSDoc validation)

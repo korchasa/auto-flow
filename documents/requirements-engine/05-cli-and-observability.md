@@ -243,8 +243,8 @@
     Evidence: `repl/mod.ts:82-94`.
   - [x] `loadBundledSkills()` loads skills via `parseSkill()`.
     Evidence: `repl/mod.ts:107-125`.
-  - [x] MVP skills: `init`, `adapt-agents`.
-    Evidence: `repl/skills/init/SKILL.md`, `repl/skills/adapt-agents/SKILL.md`.
+  - [x] MVP skills: `flowai-workflow-init`, `flowai-workflow-adapt-agents`.
+    Evidence: `repl/skills/flowai-workflow-init/SKILL.md`, `repl/skills/flowai-workflow-adapt-agents/SKILL.md`.
   - [x] `launchRepl()` orchestrates runtime + skills + launch.
     Evidence: `repl/mod.ts:145-172`.
   - [x] Tests: skill loading, metadata verification.
