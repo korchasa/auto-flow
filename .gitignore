@@ -2,6 +2,7 @@
 .env
 .flowai-workflow/runs/
 .flowai-workflow/worktrees/
+.claude/worktrees/
 documents/tasks/
 tmp/
 documents/visualization/
