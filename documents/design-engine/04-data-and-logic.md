@@ -31,9 +31,11 @@
     inline excerpt logic (filter empty → take 3 → join ` | ` → truncate 400),
     both set at completion via `markNodeCompleted()` optional params (FR-E17,
     FR-E22)
-  - RunState: `{ ..., total_cost_usd?: number }` — sum of all
-    `nodes[*].cost_usd`, recomputed by `updateRunCost()` on each node
-    completion (FR-E17)
+  - RunState: `{ ..., total_cost_usd?: number, claude_cli_version?: string }`
+    — `total_cost_usd`: sum of all `nodes[*].cost_usd`, recomputed by
+    `updateRunCost()` on each node completion (FR-E17).
+    `claude_cli_version` (FR-E49): CLI version string captured once at run
+    start via `claude --version`; undefined when CLI absent or capture fails
   - EngineOptions: `{ ..., budget_usd?: number }` — workflow-wide USD cap
     from `--budget` CLI flag (FR-E47). When set, engine aborts after any node
     completion if `state.total_cost_usd > budget_usd`
@@ -192,6 +194,15 @@
     `findViolations()` algorithm: `newMods = after − before` (set difference),
     for each path in `newMods`: match against `allowedPaths` globs; if no
     match → violation. Pure function — unit-testable without I/O.
+  - **Spawn-time CLI Version Pinning (FR-E49):** `buildSpawnEnv(nodeEnv?)`
+    in `agent.ts` merges node-level env with `{ DISABLE_AUTOUPDATER: "1" }`.
+    Engine key wins on conflict. Called at 4 spawn sites: (1) initial
+    `adapter.invoke()` in `runAgent()`, (2) continuation invoke in
+    `runAgent()`, (3) HITL resume in `hitl.ts`, (4) loop body agents via
+    `LoopRunOptions.env` in `loop.ts`. Version capture: in `engine.ts`,
+    after `setPhaseRegistry()` and before first node,
+    `Deno.Command("claude", ["--version"])` → stdout → `state.claude_cli_version`
+    → `saveState()`. Subprocess failure → `console.warn()` + leave undefined.
   - **Post-Workflow Node Collection & Ordering**: `collectPostWorkflowNodes()`
     collects nodes where `run_on !== undefined` (replaces `run_always`-based
     collection). `sortPostWorkflowNodes()` sorts them topologically using

@@ -21,7 +21,11 @@
     loop exits cleanly (`success=true`) with `exit_reason: "budget_preempt"`;
     a `BUDGET_PREEMPT` status line is emitted via `OutputManager`. First
     iteration always runs (skipped check, no cost data). `budgetUsd` is
-    threaded in via `LoopRunOptions.budgetUsd` by `executeLoopNode`. Accepts `streamLogPath` pattern from engine; computes
+    threaded in via `LoopRunOptions.budgetUsd` by `executeLoopNode`.
+    **Spawn env threading (FR-E49):** `LoopRunOptions.env?:
+    Record<string,string>` — forwarded to inner `runAgent()` calls so loop
+    body agents inherit `DISABLE_AUTOUPDATER=1` from `buildSpawnEnv()`.
+    Accepts `streamLogPath` pattern from engine; computes
     iteration-qualified path `${nodeId}-iter-${i}.jsonl` per body node
     invocation; forwards to inner `runAgent()` calls.
     **Runtime condition_field presence check (FR-E36):**
@@ -31,7 +35,11 @@
     node '<condId>' output at '<nodeDir>'")`. Requires `loopId` threaded
     through call (closure capture or param addition). Prevents silent undefined
     behavior on missing field — fail-fast at first loop iteration
-  - `hitl.ts` — HITL detection (`detectHitlRequest`) and poll loop
+  - `hitl.ts` — HITL detection (`detectHitlRequest`) and poll loop.
+    **Spawn env (FR-E49):** Imports `buildSpawnEnv` from `agent.ts`; passes
+    result as `env` to `runtimeRun()` in HITL resume path (same pattern as
+    existing `applyBudgetFlags` import).
+    HITL detection (`detectHitlRequest`) and poll loop
     (`runHitlLoop`); injectable `scriptRunner`/runtime runner for testing.
     The engine normalizes runtime-native HITL requests into one
     `HumanInputRequest` shape. Claude uses `permission_denials`; OpenCode uses
@@ -88,7 +96,12 @@
   - `engine.ts` — main orchestrator: config loading, state management,
     level iteration, delegation to `node-dispatch.ts` executors (FR-E30),
     node result summary display (FR-E15/E22),
-    phase registry init via `setPhaseRegistry(config)` at engine startup,
+    **CLI version capture (FR-E49):** After phase registry init, before first
+    node: `Deno.Command("claude", ["--version"])` → parse stdout → store in
+    `state.claude_cli_version` → re-save state. Graceful failure: catch
+    subprocess error → `console.warn()` → leave field `undefined`. Ensures
+    operator-auditable record of which CLI version ran.
+    Phase registry init via `setPhaseRegistry(config)` at engine startup,
     pre-post-workflow `on_failure_script` execution.
     **Budget enforcement (FR-E47):**
     Per-node check inside `executeNode()` after `markNodeCompleted()`: when

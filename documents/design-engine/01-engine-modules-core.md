@@ -25,6 +25,8 @@
     `LoopResult.bodyResults`, `ErrorCategory` (structured failure enum),
     `NodeState.error_category`, `NodeState.cost_usd` (FR-E17 per-node cost),
     `RunState.total_cost_usd` (FR-E17 aggregated run cost),
+    `RunState.claude_cli_version` (FR-E49: CLI version string captured at run
+    start via `claude --version`; optional — undefined when CLI absent),
     `WorkflowDefaults.on_failure_script` (FR-E19 configurable failure hook),
     `WorkflowDefaults.prepare_command` (FR-E30 post-config/pre-node shell hook),
     `WorkflowDefaults.budget` (FR-E47: `{ max_usd?: number; max_turns?: number }`,
@@ -167,6 +169,13 @@
     `links` field in the root `deno.json`. See the sibling repo's
     `documents/design.md` for full module descriptions.
   - `agent.ts` — runtime-agnostic agent invocation, continuation loop, retry.
+    **Spawn env builder (FR-E49):** Exported `buildSpawnEnv(nodeEnv?:
+    Record<string,string>): Record<string,string>`. Merges node-level `env`
+    with engine-enforced `DISABLE_AUTOUPDATER=1` (engine wins on conflict).
+    Co-located with `applyBudgetFlags()` — same spawn-parameter helper
+    pattern. Called at both initial and continuation `adapter.invoke()` paths.
+    Also imported by `hitl.ts` (HITL resume) and threaded through `loop.ts`
+    (`LoopRunOptions.env`) for loop body agents.
     Agent context injected via `--agent` + `--append-system-prompt` (native
     Claude Code subagents in `.claude/agents/*.md`). Pipeline-specific context
     via `task_template` `{{file(...)}}` (FR-S38). Base system prompt preserved.

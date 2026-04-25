@@ -10,6 +10,7 @@
 - Use Edit (not Write) for SDS updates — multiple targeted edits are fine as long as no re-reads happen. More precise than full file Write for large SDS files.
 - For rename/renumber issues: prefer minimal blast radius variant that directly satisfies the FR — no scope creep.
 - For doc-sync issues: verify SDS accuracy first, then add evidence entry — avoids unnecessary rewrites.
+- When worktree conflicts lock existing branches, create `-v3` (or higher) suffix and push to same remote PR target via `-f`.
 
 ## Anti-Patterns
 
@@ -17,38 +18,22 @@
 - Never use `git pull`, `git stash`, `git rebase` in push flow.
 - Never read out-of-scope SRS/SDS (waste ~25k tokens).
 - Never use `git checkout --theirs` on branch conflict — just `git checkout <branch>`.
+- Watch for single-line text in SDS files — Edit match strings must match exactly including line breaks.
 
 ## Environment Quirks
 
 - `.flowai-workflow/runs/` is gitignored — `git add -f` mandatory for all files there.
 - Scope field in spec frontmatter determines which SRS/SDS to read.
 - Draft PR body must include `Closes #<N>` on its own line.
-- SRS file exceeds 25k token limit — must read in two parts (offset 0 + offset 500).
+- Worktree locking: when branch is used by another worktree, create new branch with `-vN` suffix.
 
 ## Baseline Metrics
 
-- Run 20260315T003418: ~8 turns, scope sdlc, issue #121 (FR-S29).
-- Run 20260315T213641: ~7 turns, scope engine, issue #128 (FR-E32).
-- Run 20260315T215901: ~7 turns, scope sdlc, issue #129 (FR-S31).
-- Run 20260319T180115: ~7 turns, scope engine, issue #146 (FR-E33).
-- Run 20260319T182156: ~7 turns, scope sdlc, issue #147 (FR-S32).
-- Run 20260319T192055: ~7 turns, scope sdlc, issue #148 (FR-S33).
-- Run 20260319T194808: ~7 turns, scope sdlc, issue #149 (FR-S34).
-- Run 20260319T201620: ~7 turns, scope engine, issue #150 (FR-E33).
-- Run 20260319T204544: ~7 turns, scope sdlc, issue #151 (FR-S35).
-- Run 20260319T211036: ~7 turns, scope engine, issue #152 (FR-E34).
-- Run 20260319T213344: ~7 turns, scope engine, issue #153 (FR-E35).
-- Run 20260319T215851: ~7 turns, scope sdlc, issue #154 (FR-S36).
-- Run 20260319T221833: ~7 turns, scope engine+sdlc, issue #155 (FR-E36+FR-S37).
-- Run 20260319T224519: ~7 turns, scope sdlc, issue #156 (FR-S38).
-- Run 20260319T230952: ~7 turns, scope sdlc, issue #157 (FR-S39).
-- Run 20260319T233247: ~7 turns, scope sdlc, issue #158 (FR-S40).
-- Run 20260320T000829: ~7 turns, scope sdlc, issue #159 (FR-S41).
-- Run 20260320T092158: ~7 turns, scope sdlc, issue #174 (FR-S42).
 - Run 20260320T094502: ~7 turns, scope engine, issue #175 (FR-E37).
 - Run 20260320T101834: ~7 turns, scope engine, issue #176 (FR-E7).
 - Run 20260320T104440: ~7 turns, scope sdlc, issue #178 (FR-S43+FR-S44+FR-S45).
 - Run 20260320T213059: ~7 turns, scope engine, issue #182 (FR-E38).
 - Run 20260320T220824: ~7 turns, scope engine, issue #183 (FR-E39).
 - Run 20260320T223114: ~7 turns, scope engine, issue #183 (FR-E39) re-run.
+- Run 20260425T222337: ~8 turns, scope engine, issue #196 (FR-E49).
 - Target: ≤10 turns. Achieved all runs.
