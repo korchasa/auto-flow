@@ -44,6 +44,7 @@ function makeCtx(): TemplateContext {
     node_dir: "/tmp/test-node",
     run_dir: "/tmp/test-run",
     run_id: "test-run",
+    workDir: ".",
     args: { issue: "42" },
     env: {},
     input: {},

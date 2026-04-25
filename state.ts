@@ -127,6 +127,38 @@ export function workPath(workDir: string, relativePath: string): string {
   return workDir === "." ? relativePath : `${workDir}/${relativePath}`;
 }
 
+/**
+ * Build the workDir-relative path bundle for a task's TemplateContext.
+ *
+ * Returned paths are relative to the agent's cwd (= workDir) so that an
+ * agent launched with cwd = workDir resolves them to artifact directories
+ * on disk. Engine internal code that reads/writes those artifacts (and
+ * whose own cwd may differ from workDir) must wrap the returned paths
+ * with `workPath(workDir, …)` before any FS call.
+ *
+ * @param runId — run ID used to compose `<runDir>/<nodeId>` paths.
+ * @param nodeId — current node whose `node_dir` is emitted.
+ * @param inputs — predecessor node IDs; each gets a `node_dir` entry under
+ *   the returned `input` map.
+ */
+export function buildTaskPaths(
+  runId: string,
+  nodeId: string,
+  inputs: readonly string[] = [],
+): {
+  node_dir: string;
+  run_dir: string;
+  input: Record<string, string>;
+} {
+  const input: Record<string, string> = {};
+  for (const id of inputs) input[id] = getNodeDir(runId, id);
+  return {
+    node_dir: getNodeDir(runId, nodeId),
+    run_dir: getRunDir(runId),
+    input,
+  };
+}
+
 /** Save RunState to state.json.
  * @param workDir — base directory prefix for file I/O. Defaults to "." (CWD). */
 export async function saveState(

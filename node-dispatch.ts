@@ -102,7 +102,7 @@ export async function executeAgentNode(
   const inputArtifacts = await resolveInputArtifacts(ctx.input);
   eng.output.verboseInputs(nodeId, inputArtifacts);
 
-  const streamLogPath = `${ctx.node_dir}/stream.log`;
+  const streamLogPath = `${workPath(ctx.workDir, ctx.node_dir)}/stream.log`;
 
   const result = await runAgent({
     node,

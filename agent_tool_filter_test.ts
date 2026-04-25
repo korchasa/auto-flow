@@ -30,6 +30,7 @@ function makeCtx(nodeDir: string): TemplateContext {
     node_dir: nodeDir,
     run_dir: nodeDir,
     run_id: "test",
+    workDir: ".",
     args: {},
     env: {},
     input: {},

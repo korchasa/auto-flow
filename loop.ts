@@ -20,7 +20,12 @@ import type {
 import { buildLoopBodyOrder } from "./dag.ts";
 import { runAgent } from "./agent.ts";
 import type { AgentResult } from "./agent.ts";
-import { markNodeCompleted, markNodeFailed, markNodeStarted } from "./state.ts";
+import {
+  markNodeCompleted,
+  markNodeFailed,
+  markNodeStarted,
+  workPath,
+} from "./state.ts";
 import type { OutputManager } from "./output.ts";
 import { resolveRuntimeConfig } from "@korchasa/ai-ide-cli/runtime";
 import { resolveBudget, resolveToolFilter } from "./config.ts";
@@ -171,7 +176,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
       opts.onNodeStart?.(bodyNodeId, iteration);
       markNodeStarted(state, bodyNodeId);
 
-      const streamLogPath = `${ctx.node_dir}/stream.log`;
+      const streamLogPath = `${workPath(ctx.workDir, ctx.node_dir)}/stream.log`;
 
       const resolvedBudget = resolveBudget(
         bodyNode,
@@ -336,8 +341,9 @@ export async function extractConditionValue(
   condNodeId: string,
 ): Promise<string> {
   // Strategy: look for the field in YAML frontmatter of any .md file
-  // in the node's output directory
-  const nodeDir = ctx.node_dir;
+  // in the node's output directory. ctx.node_dir is workDir-relative —
+  // reconstruct cwd-correct path for FS access.
+  const nodeDir = workPath(ctx.workDir, ctx.node_dir);
 
   try {
     for await (const entry of Deno.readDir(nodeDir)) {

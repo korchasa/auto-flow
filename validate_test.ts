@@ -7,6 +7,7 @@ function makeCtx(nodeDir: string): TemplateContext {
     node_dir: nodeDir,
     run_dir: "/tmp/test-run",
     run_id: "test-run",
+    workDir: ".",
     args: {},
     env: {},
     input: {},

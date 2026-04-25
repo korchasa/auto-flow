@@ -35,6 +35,7 @@ import {
   sortPostWorkflowNodes,
 } from "./post-workflow.ts";
 import {
+  buildTaskPaths,
   createRunState,
   generateRunId,
   getNodeDir,
@@ -517,26 +518,24 @@ export class Engine {
     if (!node) {
       throw new Error(`Node '${nodeId}' not found in workflow config`);
     }
-    const input: Record<string, string> = {};
 
-    // Map input node IDs to their output directories
-    for (const inputId of node.inputs ?? []) {
-      input[inputId] = workPath(
-        this.workDir,
-        getNodeDir(this.state.run_id, inputId),
-      );
-    }
+    // Path fields are workDir-relative — see TemplateContext JSDoc.
+    // Engine internal FS callers wrap them with workPath(ctx.workDir, …).
+    const paths = buildTaskPaths(
+      this.state.run_id,
+      nodeId,
+      node.inputs ?? [],
+    );
 
     // Merge node-level env with global env (node overrides global)
     const env = node.env ? { ...this.state.env, ...node.env } : this.state.env;
 
     return {
-      node_dir: workPath(this.workDir, getNodeDir(this.state.run_id, nodeId)),
-      run_dir: workPath(this.workDir, getRunDir(this.state.run_id)),
+      ...paths,
       run_id: this.state.run_id,
+      workDir: this.workDir,
       args: this.state.args,
       env,
-      input,
       loop: loopIteration !== undefined
         ? { iteration: loopIteration }
         : undefined,
@@ -695,6 +694,7 @@ export async function runPrepareCommand(
     node_dir: "",
     run_dir: runDir,
     run_id: runId,
+    workDir: cwd ?? ".",
     args,
     env,
     input: {},

@@ -21,7 +21,7 @@ import type {
 import type { AgentResult } from "./agent.ts";
 import type { HitlQuestion } from "./hitl.ts";
 import { runHitlLoop } from "./hitl.ts";
-import { markNodeFailed, markNodeWaiting } from "./state.ts";
+import { markNodeFailed, markNodeWaiting, workPath } from "./state.ts";
 import { saveAgentLog } from "./log.ts";
 import type { OutputManager } from "./output.ts";
 
@@ -92,8 +92,9 @@ export async function handleAgentHitl(
     allowedTools,
     disallowedTools,
   } = params;
-  // ctx.run_dir already includes workDir prefix from buildContext
-  const runDir = ctx.run_dir;
+  // ctx.run_dir is workDir-relative (see TemplateContext); reconstruct
+  // the cwd-correct path for FS access.
+  const runDir = workPath(ctx.workDir, ctx.run_dir);
 
   if (params.mode === "resume") {
     const nodeState = state.nodes[nodeId];

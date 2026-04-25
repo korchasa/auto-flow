@@ -11,6 +11,7 @@ function makeCtx(overrides?: Partial<TemplateContext>): TemplateContext {
     node_dir: "/runs/20260308/spec",
     run_dir: "/runs/20260308",
     run_id: "20260308T143022",
+    workDir: ".",
     args: { issue: "42" },
     env: { ANTHROPIC_API_KEY: "sk-test" },
     input: { pm: "/runs/20260308/pm" },

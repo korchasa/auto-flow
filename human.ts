@@ -7,6 +7,7 @@
 
 import type { NodeConfig, TemplateContext } from "./types.ts";
 import { interpolate } from "./template.ts";
+import { workPath } from "./state.ts";
 
 /** Result of a human node interaction. */
 export interface HumanResult {
@@ -82,8 +83,9 @@ export async function runHuman(
     }
   }
 
-  // Save response to artifact file
-  const nodeDir = ctx.node_dir;
+  // Save response to artifact file. ctx.node_dir is workDir-relative
+  // (see TemplateContext) — reconstruct cwd-correct path for FS access.
+  const nodeDir = workPath(ctx.workDir, ctx.node_dir);
   try {
     await Deno.mkdir(nodeDir, { recursive: true });
     await Deno.writeTextFile(`${nodeDir}/response.txt`, response + "\n");

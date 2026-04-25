@@ -317,19 +317,33 @@ export interface RunState {
 
 // --- Template Context ---
 
-/** Variables available for template interpolation. */
+/** Variables available for template interpolation.
+ *
+ * Path fields (`node_dir`, `run_dir`, `input.<id>`) are workDir-relative —
+ * valid when resolved from cwd = workDir. Agents launched with
+ * cwd = workDir read them as-is. Engine internal code (whose cwd may
+ * differ from workDir) must wrap them with `workPath(workDir, …)` before
+ * any FS call.
+ */
 export interface TemplateContext {
-  /** Absolute path to the current node's artifact directory. */
+  /** workDir-relative path to the current node's artifact directory.
+   * Engine FS code must wrap with `workPath(workDir, node_dir)`. */
   node_dir: string;
-  /** Absolute path to the run's root directory. */
+  /** workDir-relative path to the run's root directory.
+   * Engine FS code must wrap with `workPath(workDir, run_dir)`. */
   run_dir: string;
   /** Unique identifier of the current run. */
   run_id: string;
+  /** Working directory of the engine (worktree path or "."). Engine code
+   * uses it to recompose cwd-correct paths from `node_dir`/`run_dir`/
+   * `input.<id>`. Not template-rendered — no `{{workDir}}` placeholder. */
+  workDir: string;
   /** CLI --arg key-value pairs available as `{{args.<key>}}`. */
   args: Record<string, string>;
   /** Resolved environment variables available as `{{env.<key>}}`. */
   env: Record<string, string>;
-  /** Maps dependency node IDs to their artifact directory paths. */
+  /** Maps dependency node IDs to their workDir-relative artifact directory
+   * paths. Engine FS code must wrap each value with `workPath(workDir, …)`. */
   input: Record<string, string>;
   /** Loop context; only present for nodes executing inside a loop body. */
   loop?: {

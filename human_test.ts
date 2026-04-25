@@ -8,6 +8,7 @@ function makeCtx(): TemplateContext {
     node_dir: "/tmp/test-human-node",
     run_dir: "/tmp/test-run",
     run_id: "test-run",
+    workDir: ".",
     args: { prompt: "fix login" },
     env: {},
     input: { spec: "/tmp/test-run/spec" },
