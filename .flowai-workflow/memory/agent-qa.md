@@ -6,33 +6,32 @@ type: feedback
 
 ## Anti-Patterns
 
-- `deno task check` output is often too large for inline display — saved to temp file. Reading that temp file also produces a nested temp file. Use `tail -40 <first-temp-file>` to get the final summary instead of re-reading recursively.
+- `deno task check` output is often too large for inline display — saved to temp file. Use `tail -40 <first-temp-file>` to get the final summary.
 - Memory/history files start empty on first session — normal, no content to read.
 - Self-approval via `gh pr review --approve` fails when QA runs as the PR author. Fall back to `gh issue comment` immediately, do not retry.
-- When developer uses a Write (full rewrite) for a large SRS file, PM-stage additions (like FR-S32, FR-S33) can be silently dropped. Check for new sections promised in spec's "SRS Changes" section even if `deno task check` passes.
-- When `requirements-engine.md` or `requirements-sdlc.md` is NOT in `git diff main...HEAD --name-only`, it means the PM agent never added the promised FR section. Grep for the FR number to confirm before writing verdict.
-- Stale ACs in existing FRs can become contradictory after a new FR removes a feature (e.g., FR-S13 AC claiming standalone invocability after FR-S33 removes interactive skill discovery). Check for contradictions in related FRs.
-- PM-stage SRS persistence failure is a recurring pattern (issues #147–#183). Always check if SRS file is in diff immediately. This pattern extends to engine scope (requirements-engine.md) too. 25 consecutive failures; resolved in iter 2 for most issues; issue #183 required iter 3 (iter 2 had 3 additional blocking issues beyond SRS: missing compile_test.ts, platform naming deviation, double-v bug).
-- Decision deliverables (e.g., compile_test.ts from Task 2) can be missing even when other tasks pass. Always verify ALL decision tasks are present in diff, not just implementation files.
-- Double-v version string bug pattern: when CI passes `github.ref_name` (e.g., "v1.2.3") as VERSION env and getVersionString() prepends "v", the result is "flowai-workflow vv1.2.3". Check for leading-v stripping in compile scripts.
-- For documentation-only issues: even when SRS file IS in the diff (developer made doc fixes), the PM-stage FR section may still be missing. The file being in diff does NOT guarantee FR-S<N> section was added. Always grep for FR number explicitly.
-- Issue #155 (engine+sdlc scope): both requirements-engine.md AND requirements-sdlc.md can be absent from diff simultaneously when two new FRs span both scopes in same issue.
+- When developer uses a Write (full rewrite) for a large SRS file, PM-stage additions can be silently dropped. Check for new sections promised in spec's "SRS Changes" section even if `deno task check` passes.
+- When `requirements-engine.md` or `requirements-sdlc.md` is NOT in `git diff main...HEAD --name-only`, grep for FR number to confirm before writing verdict.
+- Stale ACs in existing FRs can become contradictory after a new FR removes a feature. Check for contradictions in related FRs.
+- PM-stage SRS persistence failure is a recurring pattern. Always check if SRS file is in diff immediately.
+- Decision deliverables can be missing even when other tasks pass. Always verify ALL decision tasks are present in diff.
+- Double-v version string bug: when CI passes `github.ref_name` (e.g., "v1.2.3") as VERSION env and `getVersionString()` prepends "v", the result is "flowai-workflow vv1.2.3".
+- For documentation-only issues: the file being in diff does NOT guarantee FR-S<N> section was added. Always grep for FR number explicitly.
 - Write tool requires reading a file before overwriting it, even in QA report path — always Read existing QA report before Write on iteration > 1.
+- **NEW**: `01-spec.md` can be absent from the run directory even when `03-decision.md` exists — PM/Architect stage ran (stream.log present) but produced no artifact. Check specification directory at session start.
+- **NEW**: `LoopRunOptions.env` dead-field pattern — field declared with JSDoc "forwarded to inner runAgent() calls" but not wired in runLoop(). DISABLE_AUTOUPDATER=1 still works via buildSpawnEnv inside runAgent, so FR requirement is met; the loop-level env forwarding channel is non-functional.
 
 ## Effective Strategies
 
-- Read spec + decision in parallel as first action (already done before running checks).
+- Read spec + decision in parallel as first action.
 - Run `deno task check` and `git diff main...HEAD --name-only` and `gh issue view` all in one parallel turn; add `grep -n "FR-EXX\|FR-SXX" requirements-*.md` to the same turn.
 - Read all key changed source files in one parallel response after getting the diff.
 - `tail -40 <temp-file>` gets the final summary/pass-fail lines without recursive nesting.
 - Grep for old artifact names across agents/ and documents/ to verify rename sweep completeness.
-- Cross-check spec's "SRS Changes" section against actual SRS content — new FR sections can be lost if PM agent failed to persist changes.
-- For fix iterations (iteration > 1): grep for specific content (e.g., `grep -n "FR-E33" file`) to confirm presence before reading the whole file — saves a turn.
-- When spec lists SRS changes, grep for the FR number in the SRS immediately after getting the diff. If not in diff AND not in file → blocking.
-- On fix iteration, once FR is confirmed present in grep, check all spec-promised SRS sub-sections in the same grep output.
+- Cross-check spec's "SRS Changes" section against actual SRS content.
+- When spec lists SRS changes, grep for the FR number in the SRS immediately after getting the diff.
 - `workflow.yaml` modification is expected and necessary when engine enforcement would break it — do not treat as out-of-scope.
-- For SKILL.md-only changes: verify each file individually by reading in parallel; the entire implementation IS the SKILL.md content changes.
-- Shell test files (`.sh`) are NOT part of Deno test suite — count stays the same. Behavioral ACs still verified by reading the script directly.
+- Shell test files (`.sh`) are NOT part of Deno test suite — count stays the same.
+- **NEW**: Check for existence of `01-spec.md` immediately after reading the spec path; if only `stream.log` present, record as blocking issue and proceed with verification against decision + issue DoD.
 
 ## Environment Quirks
 
@@ -44,41 +43,9 @@ type: feedback
 ## Baseline Metrics
 
 - Target: ≤15 turns
-- First session (issue #129): ~10 turns, PASS verdict
-- Thirty-fifth session (issue #178, iteration 2): ~10 turns, PASS verdict (FR-S43/S44/S45 present in requirements-sdlc.md §3.43/3.44/3.45 + Appendix C; SKILL.md implementations correct; 569 tests; 22nd consecutive PM failure resolved in iter 2)
-- Thirty-fourth session (issue #178, iteration 1): ~9 turns, FAIL verdict (FR-S43/FR-S44/FR-S45 absent from requirements-sdlc.md; 21st consecutive PM failure; all SKILL.md behavioral implementations correct; 569 tests)
-- Twenty-eighth session (issue #174, iteration 1): ~5 turns, FAIL verdict (FR-S42 absent; 16th consecutive PM failure; workflow.yaml implementation correct)
-- Twenty-ninth session (issue #174, iteration 2): ~8 turns, PASS verdict (FR-S42 at line 972 §3.42 + Appendix C line 1128; 533 tests, 8/8 ACs)
-- Second session (issue #146): ~8 turns, PASS verdict
-- Third session (issue #147, iteration 1): ~11 turns, FAIL verdict (FR-S32 missing from SRS)
-- Fourth session (issue #147, iteration 2): ~9 turns, PASS verdict (FR-S32 restored)
-- Fifth session (issue #148, iteration 1): ~8 turns, FAIL verdict (FR-S33 missing from SRS)
-- Sixth session (issue #148, iteration 2): ~7 turns, PASS verdict (FR-S33 restored + FR-S13 conflict resolved)
-- Seventh session (issue #149, iteration 1): ~7 turns, FAIL verdict (FR-S34 missing from SRS)
-- Eighth session (issue #149, iteration 2): ~6 turns, PASS verdict (FR-S34 restored; 509 tests, 28/28 ACs)
-- Ninth session (issue #150, iteration 1): ~6 turns, FAIL verdict (FR-E33 missing from requirements-engine.md)
-- Tenth session (issue #150, iteration 2): ~6 turns, PASS verdict (FR-E33 restored; 514 tests, 10/10 ACs)
-- Eleventh session (issue #151, iteration 1): ~5 turns, FAIL verdict (FR-S35 missing from requirements-sdlc.md)
-- Twelfth session (issue #151, iteration 2): ~6 turns, PASS verdict (FR-S35 at line 788; 519 tests, 9/9 ACs)
-- Thirteenth session (issue #152, iteration 1): ~5 turns, PASS verdict (FR-E34 present; 524 tests, 5/5 ACs)
-- Fourteenth session (issue #153, iteration 1): ~5 turns, FAIL verdict (FR-E35 absent from requirements-engine.md)
-- Fifteenth session (issue #153, iteration 2): ~5 turns, PASS verdict (FR-E35 at line 727; 528 tests, 5/5 ACs)
-- Sixteenth session (issue #154, iteration 1): ~5 turns, FAIL verdict (FR-S36 absent from requirements-sdlc.md)
-- Seventeenth session (issue #154, iteration 2): ~5 turns, PASS verdict (FR-S36 at line 821; 528 tests)
-- Eighteenth session (issue #155, iteration 1): ~5 turns, FAIL verdict (FR-E36 + FR-S37 both absent; both SRS files not in diff)
-- Nineteenth session (issue #155, iteration 2): ~5 turns, PASS verdict (both FRs present; 533 tests, 10/10 ACs)
-- Twentieth session (issue #156, iteration 1): ~5 turns, FAIL verdict (FR-S38 absent; 10th consecutive PM failure)
-- Twenty-first session (issue #156, iteration 2): ~5 turns, PASS verdict (FR-S38 at line 864; 533 tests, 4/4 ACs)
-- Twenty-second session (issue #157, iteration 1): ~5 turns, FAIL verdict (FR-S39 absent; 12th consecutive PM failure; SKILL.md changes correct)
-- Twenty-third session (issue #157, iteration 2): ~5 turns, PASS verdict (FR-S39 at line 881 §3.39 + Appendix C line 1028; requirements-sdlc.md in diff; all 6 SKILL.md files correct; 533 tests, 4/4 ACs)
-- Twenty-fourth session (issue #158, iteration 1): ~7 turns, FAIL verdict (FR-S40 absent; 13th consecutive PM failure; requirements-sdlc.md in diff but developer edits only)
-- Twenty-fifth session (issue #158, iteration 2): ~6 turns, PASS verdict (FR-S40 at line 904 §3.40 + Appendix C line 1064; requirements-sdlc.md in diff; all 4 required files in diff; 533 tests, 9/9 ACs)
-- Twenty-sixth session (issue #159, iteration 1): ~5 turns, FAIL verdict (FR-S41 absent; 14th consecutive PM failure; implementation correct)
-- Twenty-seventh session (issue #159, iteration 2): ~5 turns, PASS verdict (FR-S41 at line 945 §3.41 + Appendix C line 1092; 533 tests, 5/5 ACs)
-- Thirtieth session (issue #175, iteration 1): ~7 turns, FAIL verdict (FR-E37 absent from requirements-engine.md; 17th consecutive PM failure; all 7 behavioral ACs correct: scope-check.ts module, types.ts, config.ts validation, agent.ts integration, 549 tests)
-- Thirty-first session (issue #175, iteration 2): ~8 turns, PASS verdict (FR-E37 at line 793 §3.37 + FR-E1 §3.1 cross-ref at line 54 + Appendix at line 893; requirements-engine.md in diff; 549 tests, 15/15 ACs)
-- Thirty-second session (issue #176, iteration 1): ~7 turns, FAIL verdict (FR-E7 old single criterion at line 137; 4 detailed criteria absent; requirements-engine.md not in diff; 19th consecutive PM failure; all behavioral ACs correct: validateTemplateVars() in template.ts, hook validation in config.ts, 569 tests)
-- Thirty-third session (issue #176, iteration 2): ~6 turns, PASS verdict (FR-E7 4 detailed criteria at lines 137-140 all marked [x]; requirements-engine.md in diff; 569 tests, 5/5 ACs; 20th consecutive PM failure resolved in iter 2)
-- Thirty-sixth session (issue #182, iteration 1): ~8 turns, FAIL verdict (FR-E38 absent from requirements-engine.md; 23rd consecutive PM failure; all 6 behavioral ACs correct: fields? in types.ts, checkArtifact() with fail-fast + aggregate error in validate.ts, fields validation in config.ts, 576 tests; duplicate FR-E36 row in Appendix not removed)
-- Thirty-seventh session (issue #182, iteration 2): ~9 turns, PASS verdict (FR-E38 at line 834 §3.38 with 7 ACs [x]; Appendix row at line 924; duplicate FR-E36 removed; requirements-engine.md in diff; 576 tests, 8/8 ACs; 23rd consecutive PM failure resolved in iter 2)
-- Thirty-eighth session (issue #183, iteration 3): ~10 turns, PASS verdict (FR-E39 at line 861 §3.39 + Appendix line 954; compile_test.ts exists (9 tests); platform naming correct x86_64/darwin; double-v fixed via stripVersionPrefix(); requirements-engine.md in diff; 587 tests, 7/7 ACs)
+- Thirty-ninth session (issue #196, iteration 1): ~8 turns, FAIL verdict (01-spec.md missing — PM/Architect stage ran but produced no artifact; LoopRunOptions.env dead field non-blocking; all behavioral FR-E49 ACs correct: buildSpawnEnv in agent.ts, HITL+continuation wired, captureClaudeVersion in engine.ts, 5 unit tests + 3 state tests; deno task check PASS)
+- Thirty-eighth session (issue #183, iteration 3): ~10 turns, PASS verdict
+- Thirty-seventh session (issue #182, iteration 2): ~9 turns, PASS verdict
+- Thirty-sixth session (issue #182, iteration 1): ~8 turns, FAIL verdict
+- Thirty-fifth session (issue #178, iteration 2): ~10 turns, PASS verdict
+- Thirty-fourth session (issue #178, iteration 1): ~9 turns, FAIL verdict
