@@ -14,7 +14,7 @@
   },
   "tasks": {
     "check": "deno run -A scripts/check.ts",
-    "test": "deno test -A --no-check --ignore=.claude/",
+    "test": "deno test -A --no-check --ignore=.claude/,.flowai-workflow/worktrees/",
     "test:lib": "deno test -A --no-check .flowai-workflow/scripts/lib_test.ts",
     "run": "deno run -A --no-check cli.ts run --config .flowai-workflow/workflow.yaml",
     "loop": "deno run -A --no-check scripts/self-runner.ts",

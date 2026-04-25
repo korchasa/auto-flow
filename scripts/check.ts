@@ -364,8 +364,20 @@ if (import.meta.main) {
   // "." recursively finds every *_test.ts in the repo (root engine
   // modules, scripts/, .flowai-workflow/, init/, repl/, …). Passing
   // overlapping paths would double-test the same files.
+  // Ignore live git-worktree dirs (engine creates them per run; they
+  // hold frozen copies of older test files that no longer reflect HEAD).
   if (await hasTestFiles(".")) {
-    await run("deno", ["test", "-A", "--no-check", "."], "Tests");
+    await run(
+      "deno",
+      [
+        "test",
+        "-A",
+        "--no-check",
+        "--ignore=.flowai-workflow/worktrees,.claude/worktrees",
+        ".",
+      ],
+      "Tests",
+    );
   } else {
     console.log("\n--- Tests ---");
     console.log("No test files found, skipping.");
