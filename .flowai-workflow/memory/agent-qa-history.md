@@ -225,6 +225,17 @@
   - 16th consecutive pattern: PM stage fails on iter 1, dev restores on iter 2. Pattern continues unchanged.
   - Parallel strategy (deno task check + git diff + gh issue view + grep FR-S42) confirmed PASS in one turn.
 
+## 2026-04-25T22:XX — Issue #196 (iteration 2)
+
+- **Turns:** ~7
+- **Cost:** ~$0.18 (est)
+- **Verdict:** FAIL
+- **Outcome:** `01-spec.md` still absent (blocking). All FR-E49 behavioral criteria met. `deno task check` PASS, 741 tests. Iteration 2 fixed: `LoopRunOptions.env` now forwarded to `runAgent()` at `loop.ts:206`; `AgentRunOptions.env` field added to interface and wired in `buildSpawnEnv` merge. New loop_test.ts type tests added (type-structure only, not behavioral forwarding tests).
+- **Key learnings:**
+  - `01-spec.md` can persist as missing across multiple iterations if PM/Architect stage is never re-run.
+  - `loop_test.ts` env tests verify interface acceptance, not actual subprocess env forwarding — important distinction for confidence scoring.
+  - Reading check output at offset ~400 efficiently reaches the summary section (741 tests + "All checks passed!") without reading 93KB.
+
 ## 2026-04-25T22:XX — Issue #196 (iteration 1)
 
 - **Turns:** ~8
