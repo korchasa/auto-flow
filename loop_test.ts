@@ -114,6 +114,21 @@ Deno.test("LoopRunOptions — output is optional", () => {
   assertEquals(opts.output, undefined);
 });
 
+Deno.test("LoopRunOptions — env field accepted and forwarded", () => {
+  const opts: Partial<LoopRunOptions> = {
+    loopNodeId: "exec-qa-loop",
+    env: { MY_VAR: "hello" },
+  };
+  assertEquals(opts.env?.["MY_VAR"], "hello");
+});
+
+Deno.test("LoopRunOptions — env is optional", () => {
+  const opts: Partial<LoopRunOptions> = {
+    loopNodeId: "exec-qa-loop",
+  };
+  assertEquals(opts.env, undefined);
+});
+
 // --- bodyResults / inline nodes tests ---
 
 Deno.test("LoopResult — bodyResults is array even when loop node has no runnable agents", () => {

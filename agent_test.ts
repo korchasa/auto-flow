@@ -1234,3 +1234,12 @@ Deno.test("buildSpawnEnv — handles empty nodeEnv", () => {
   assertEquals(env["DISABLE_AUTOUPDATER"], "1");
   assertEquals(Object.keys(env).length, 1);
 });
+
+Deno.test("buildSpawnEnv — merges node.env and caller env, engine wins", () => {
+  const nodeEnv = { NODE_VAR: "node" };
+  const callerEnv = { CALLER_VAR: "caller", NODE_VAR: "overridden" };
+  const env = buildSpawnEnv({ ...nodeEnv, ...callerEnv });
+  assertEquals(env["NODE_VAR"], "overridden");
+  assertEquals(env["CALLER_VAR"], "caller");
+  assertEquals(env["DISABLE_AUTOUPDATER"], "1");
+});

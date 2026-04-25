@@ -203,6 +203,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         verbosity: opts.verbosity,
         cwd: opts.cwd,
         maxTurns: resolvedBudget?.max_turns,
+        env: opts.env,
       });
 
       bodyResults.push(result);

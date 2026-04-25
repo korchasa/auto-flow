@@ -108,10 +108,11 @@ type: feedback
 - `buildSpawnEnv(nodeEnv?)` merges nodeEnv with `{ DISABLE_AUTOUPDATER: "1" }` using spread; engine key placed last to win on conflict.
 - Wire `buildSpawnEnv(node.env)` once before both `adapter.invoke()` calls in `runAgent()` — assign to `spawnEnv` const, pass as `env:` param.
 - `hitl.ts` uses `buildSpawnEnv(opts.node.env)` inline in the `runtimeRun()` call.
-- `loop.ts` `LoopRunOptions.env?` field: added for API completeness; loop body nodes get DISABLE_AUTOUPDATER via `runAgent()` internal call, not via LoopRunOptions forwarding.
+- `loop.ts` `LoopRunOptions.env?` + `AgentRunOptions.env?`: both declared. `LoopRunOptions.env` forwarded to `runAgent({env: opts.env})`; inside `runAgent`, merged as `buildSpawnEnv({ ...(node.env ?? {}), ...(env ?? {}) })`.
 - `captureClaudeVersion()` in engine.ts: tries stdout then stderr, matches `/\d+\.\d+\.\d+/`; graceful catch logs warn and returns undefined.
 - Version capture placed after first `saveState()` in `runWithLock()`; second `saveState()` only when version is captured (undefined skips re-save).
 - Test strategy: type-level + JSON roundtrip tests for `claude_cli_version`; no subprocess mock needed.
+- **QA iter 2 lesson**: `LoopRunOptions.env` "dead field" — always check that new options are actually forwarded in the call site, not just declared in the interface.
 
 ## Baseline Metrics
 
@@ -120,4 +121,5 @@ type: feedback
 - Run 20260320T220824: ~7 turns, scope engine, issue #183 (FR-E39) — PASS
 - Run 20260320T223114: ~12 turns, scope engine, issue #183 iter2 — PASS
 - Run 20260425T222337: ~10 turns, scope engine, issue #196 (FR-E49) — PASS (env field confirmed in v0.5.4; split Edit calls on agent_test.ts)
+- Run 20260425T222337 iter2: ~8 turns, scope engine, issue #196 iter2 — PASS (LoopRunOptions.env forwarding fix + AgentRunOptions.env field)
 - Target: ≤35 turns.
