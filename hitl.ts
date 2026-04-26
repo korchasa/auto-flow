@@ -13,6 +13,7 @@ import type {
   HumanInputRequest,
   NodeConfig,
   NodeSettings,
+  ReasoningEffort,
   RuntimeId,
   TemplateContext,
 } from "./types.ts";
@@ -77,6 +78,9 @@ export interface HitlRunOptions {
   permissionMode?: string;
   /** Claude model override. Forwarded to invokeClaudeCli on resume. */
   model?: string;
+  /** Resolved reasoning-effort dial (FR-E42); forwarded on resume. The
+   * library skips emission when `resumeSessionId` is set (Claude). */
+  reasoningEffort?: ReasoningEffort;
   /** Resolved tool whitelist (FR-E48); forwarded on resume. */
   allowedTools?: string[];
   /** Resolved tool blacklist (FR-E48); forwarded on resume. */
@@ -256,6 +260,8 @@ export async function runHitlLoop(
         extraArgs: applyBudgetFlags(runtimeArgs, runtime, maxTurns),
         permissionMode: opts.permissionMode,
         model: opts.model,
+        // FR-E42: forward effort; library filters --effort on resume.
+        reasoningEffort: opts.reasoningEffort,
         allowedTools: opts.allowedTools,
         disallowedTools: opts.disallowedTools,
         hitlConfig: config,

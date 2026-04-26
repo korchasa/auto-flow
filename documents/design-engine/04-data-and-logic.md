@@ -365,10 +365,12 @@
   binary target (FR-E39). Package manager distribution (brew, npm). Auto-update
   mechanism. SHA256 checksums for release assets.
 - **Deferred CLI flags per node (ex ADR-001 C5):** Candidates for
-  `-p --output-format stream-json` validation: `--effort` (thinking depth),
-  `--max-budget-usd` (spend cap), `--allowedTools`/`--disallowedTools` (tool
-  restrictions), `--json-schema` (structured output), `--fallback-model`
-  (overload resilience), `--permission-mode` (granular permissions). Also:
+  `-p --output-format stream-json` validation:
+  `--max-budget-usd` (spend cap),
+  `--json-schema` (structured output), `--fallback-model`
+  (overload resilience). Also:
   `--name`, `--no-session-persistence`, `--settings`, `--mcp-config`,
-  `--worktree`. Create FR per validated candidate.
+  `--worktree`. Create FR per validated candidate. Already shipped:
+  `--effort` (FR-E42), `--allowedTools`/`--disallowedTools` (FR-E48),
+  `--permission-mode` (FR-E29).
 

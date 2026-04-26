@@ -13,6 +13,9 @@ defaults:
   max_retries: 3
   retry_delay_seconds: 5
   model: claude-sonnet-4-6
+  # FR-E42: workflow-wide reasoning-effort default; node-level overrides
+  # below dial complex stages up and trivial ones down.
+  effort: medium
   permission_mode: bypassPermissions
   on_failure_script: .flowai-workflow/scripts/rollback-uncommitted.sh
   # FR-S28: agents must commit reflection-memory files at session end (the
@@ -36,6 +39,8 @@ nodes:
   specification:
     type: agent
     label: "Project Manager — Specification"
+    # FR-E42: triage is shallow — minimal reasoning depth.
+    effort: low
     system_prompt: |
       {{file(".claude/agents/agent-pm.md")}}
     prompt: |
@@ -64,6 +69,8 @@ nodes:
     type: agent
     label: "Architect — Design-Solution Plan"
     model: claude-opus-4-6
+    # FR-E42: variant analysis benefits from deep reasoning.
+    effort: high
     inputs: [specification]
     system_prompt: |
       {{file(".claude/agents/agent-architect.md")}}
@@ -115,6 +122,9 @@ nodes:
     condition_field: verdict
     exit_value: PASS
     max_iterations: 3
+    # FR-E42: implementation loop body inherits high effort unless the
+    # body node opts out — developer needs deep reasoning, QA inherits.
+    effort: high
     nodes:
       build:
         type: agent

@@ -9,7 +9,11 @@
 import { parse as parseYaml } from "@std/yaml";
 import { resolveRuntimeConfig } from "@korchasa/ai-ide-cli/runtime";
 import { validateTemplateVars } from "./template.ts";
-import { VALID_PERMISSION_MODES, VALID_RUNTIME_IDS } from "./types.ts";
+import {
+  REASONING_EFFORT_VALUES,
+  VALID_PERMISSION_MODES,
+  VALID_RUNTIME_IDS,
+} from "./types.ts";
 import type {
   NodeBudget,
   NodeConfig,
@@ -29,12 +33,13 @@ export const DEFAULT_SETTINGS: Required<NodeSettings> = {
 
 /** Default workflow-level settings. Fields intentionally excluded from
  * Required<> because undefined carries semantic meaning ("not set"):
- * `permission_mode`, `budget`, `allowed_tools`, `disallowed_tools`,
- * `memory_paths`. */
+ * `permission_mode`, `effort`, `budget`, `allowed_tools`,
+ * `disallowed_tools`, `memory_paths`. */
 export const DEFAULT_WORKFLOW_DEFAULTS: Required<
   Omit<
     WorkflowDefaults,
     | "permission_mode"
+    | "effort"
     | "budget"
     | "allowed_tools"
     | "disallowed_tools"
@@ -186,6 +191,20 @@ function validateSchema(config: Record<string, unknown>): void {
         throw new Error(
           `defaults.permission_mode has invalid value '${defaults.permission_mode}'. Must be one of: ${
             VALID_PERMISSION_MODES.join(", ")
+          }`,
+        );
+      }
+    }
+    // FR-E42: validate defaults.effort enum
+    if (defaults.effort !== undefined) {
+      if (
+        !REASONING_EFFORT_VALUES.includes(
+          defaults.effort as typeof REASONING_EFFORT_VALUES[number],
+        )
+      ) {
+        throw new Error(
+          `defaults.effort has invalid value '${defaults.effort}'. Must be one of: ${
+            REASONING_EFFORT_VALUES.join(", ")
           }`,
         );
       }
@@ -455,6 +474,21 @@ function validateNode(
       throw new Error(
         `Node '${id}' has invalid permission_mode '${node.permission_mode}'. Must be one of: ${
           VALID_PERMISSION_MODES.join(", ")
+        }`,
+      );
+    }
+  }
+
+  // FR-E42: validate node.effort enum
+  if (node.effort !== undefined) {
+    if (
+      !REASONING_EFFORT_VALUES.includes(
+        node.effort as typeof REASONING_EFFORT_VALUES[number],
+      )
+    ) {
+      throw new Error(
+        `Node '${id}' has invalid effort '${node.effort}'. Must be one of: ${
+          REASONING_EFFORT_VALUES.join(", ")
         }`,
       );
     }
@@ -1015,6 +1049,7 @@ function extractNodeSettings(defaults: WorkflowDefaults): NodeSettings {
     runtime_args: _ra,
     hitl: _hitl,
     model: _model,
+    effort: _effort,
     permission_mode: _pm,
     worktree_disabled: _wd,
     ...settings

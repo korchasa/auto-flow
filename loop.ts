@@ -197,6 +197,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         runtimeArgs: runtimeConfig.args,
         permissionMode: runtimeConfig.permissionMode,
         model: runtimeConfig.model,
+        reasoningEffort: runtimeConfig.reasoningEffort,
         allowedTools: toolFilter.allowedTools,
         disallowedTools: toolFilter.disallowedTools,
         hitlConfig: config.defaults?.hitl,

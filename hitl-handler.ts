@@ -10,6 +10,7 @@ import type {
   HitlConfig,
   NodeConfig,
   NodeSettings,
+  ReasoningEffort,
   RunState,
   RuntimeId,
   TemplateContext,
@@ -38,6 +39,8 @@ interface HitlBaseParams {
   runtimeArgs?: ExtraArgsMap;
   permissionMode?: string;
   model?: string;
+  /** Resolved reasoning-effort dial (FR-E42); forwarded to runtime on resume. */
+  reasoningEffort?: ReasoningEffort;
   runtimeAdapter?: RuntimeAdapter;
   output: OutputManager;
   /** Working directory for subprocesses (worktree path or undefined for CWD). */
@@ -85,6 +88,7 @@ export async function handleAgentHitl(
     runtimeArgs,
     permissionMode,
     model,
+    reasoningEffort,
     runtimeAdapter,
     output,
     cwd,
@@ -125,6 +129,7 @@ export async function handleAgentHitl(
         runtimeArgs,
         permissionMode,
         model,
+        reasoningEffort,
         runtimeAdapter,
         output,
         cwd,
@@ -177,6 +182,7 @@ export async function handleAgentHitl(
       runtimeArgs,
       permissionMode,
       model,
+      reasoningEffort,
       runtimeAdapter,
       output,
       cwd,

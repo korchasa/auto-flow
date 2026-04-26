@@ -205,10 +205,15 @@
 ### 3.42 FR-E42: Per-Node Effort Level (`effort`)
 
 - **Description:** Optional `effort` field on `WorkflowDefaults` and `NodeConfig`
-  that maps to Claude Code's `--effort` CLI flag. Controls reasoning depth per
-  invocation. Supported values: `low`, `medium`, `high`, `max`. Per-node
-  override cascades: node → defaults → omit (CLI default). Skipped on
-  `--resume` (session inherits original effort level).
+  that maps to a runtime-neutral reasoning-effort dial (Claude `--effort`,
+  Codex `--config model_reasoning_effort=…`, OpenCode `--variant`; Cursor
+  warns and ignores). Supported values: `minimal`, `low`, `medium`, `high`
+  (mirrors `ReasoningEffort` enum from `@korchasa/ai-ide-cli`). Per-node
+  override cascades: node → enclosing loop → defaults → omit (CLI default).
+  Skipped on `--resume` for Claude (session inherits the original effort
+  level, symmetric with `--model`). The `max` level was rejected during
+  implementation — it does not exist in the Claude CLI nor in the library
+  enum.
 - **Motivation:** Simple nodes (PM triage, merge) don't benefit from deep
   reasoning. Complex nodes (architect, developer) do. `--effort low` reduces
   thinking tokens and latency on simple tasks; `--effort high` improves quality
@@ -225,27 +230,44 @@
       effort: low           # override for simple stages
   ```
 - **Engine behavior:**
-  - On fresh invocation: if `effort` resolved (node-level or default), append
-    `--effort <value>` to Claude CLI args.
-  - On `--resume`: do NOT emit `--effort`. Session inherits from original
-    invocation (same pattern as `--model`, FR-E12).
+  - On fresh invocation: if `effort` resolved (node-level or default), the
+    engine forwards the typed `reasoningEffort` field to the runtime adapter,
+    which appends `--effort <value>` (Claude) or the equivalent native control
+    on other runtimes.
+  - On `--resume`: engine still forwards the typed field; the library skips
+    `--effort` emission when `resumeSessionId` is set (Claude). Same pattern
+    as `--model`, FR-E12.
   - Loop body nodes: inherit loop node's `effort` unless overridden in inline
-    `nodes` config.
+    `nodes` config (handled by library `resolveRuntimeConfig`'s
+    node → parent → defaults cascade).
 - **Acceptance criteria:**
-  - [ ] AC1: `WorkflowDefaults` in `types.ts` has `effort?: string` field.
-  - [ ] AC2: `NodeConfig` in `types.ts` has `effort?: string` field.
-  - [ ] AC3: Config validation rejects invalid values (must be one of `low`,
-    `medium`, `high`, `max`). Error message identifies node ID and invalid
-    value.
-  - [ ] AC4: `buildClaudeArgs()` emits `--effort <value>` when set AND
-    `resumeSessionId` is NOT set.
-  - [ ] AC5: Per-node override resolution (node → defaults → omit) in
-    `node-dispatch.ts` and `loop.ts`. Same pattern as `model` (FR-E12).
-  - [ ] AC6: Loop body nodes inherit effort from enclosing loop node unless
-    overridden.
-  - [ ] AC7: Unit tests: flag emission, skip on resume, invalid value
-    rejection, cascade resolution.
-  - [ ] AC8: `deno task check` passes.
+  - [x] AC1: `WorkflowDefaults` in `types.ts` has `effort?: ReasoningEffort`
+    field. Evidence: `types.ts:91-95`.
+  - [x] AC2: `NodeConfig` in `types.ts` has `effort?: ReasoningEffort` field.
+    Evidence: `types.ts:139-141`.
+  - [x] AC3: Config validation rejects invalid values (must be one of
+    `minimal`, `low`, `medium`, `high`). Error message identifies node ID and
+    invalid value. Evidence: `config.ts:198-211` (defaults),
+    `config.ts:472-485` (per-node), `config_test.ts:1421-1488`.
+  - [x] AC4: Library `buildClaudeArgs()` emits `--effort <value>` when set
+    AND `resumeSessionId` is NOT set. Evidence:
+    `../ai-ide-cli/claude/process.ts:269-275`,
+    `../ai-ide-cli/claude/process_test.ts` (FR-L25 tests).
+  - [x] AC5: Per-node override resolution (node → parent → defaults) via
+    library `resolveRuntimeConfig`. Engine forwards
+    `runtimeConfig.reasoningEffort` from `node-dispatch.ts` and `loop.ts`.
+    Evidence: `node-dispatch.ts:93,129,213`, `loop.ts:200`,
+    `agent_effort_test.ts:131-178`.
+  - [x] AC6: Loop body nodes inherit effort from enclosing loop node unless
+    overridden. Evidence: `agent_effort_test.ts:152-167` (parent inherit +
+    node override beats parent).
+  - [x] AC7: Unit tests: flag emission, skip on resume (library), invalid
+    value rejection, cascade resolution. Evidence:
+    `agent_effort_test.ts:97-128` (forwarding on initial + continuation),
+    `agent_effort_test.ts:130-178` (cascade), `config_test.ts:1421-1488`
+    (validation), library tests in `../ai-ide-cli/claude/process_test.ts`.
+  - [x] AC8: `deno task check` passes. Evidence: green run with
+    `agent_effort_test.ts` (7/7) and updated `config_test.ts` (111/111).
 
 
 

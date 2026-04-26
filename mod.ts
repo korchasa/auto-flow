@@ -17,6 +17,7 @@ export type {
   NodeStatus,
   PermissionDenial,
   PermissionMode,
+  ReasoningEffort,
   RunState,
   RuntimeId,
   TemplateContext,
@@ -25,6 +26,7 @@ export type {
   WorkflowConfig,
   WorkflowDefaults,
 } from "./types.ts";
+export { REASONING_EFFORT_VALUES } from "./types.ts";
 
 export { interpolate } from "./template.ts";
 export {
@@ -58,11 +60,26 @@ export type {
   ExtraArgsMap,
   InteractiveOptions,
   InteractiveResult,
+  OnRuntimeToolUseObservedCallback,
   RuntimeAdapter,
   RuntimeCapabilities,
+  RuntimeInitInfo,
   RuntimeInvokeOptions,
   RuntimeInvokeResult,
+  RuntimeLifecycleHooks,
+  RuntimeSession,
+  RuntimeSessionEvent,
+  RuntimeSessionOptions,
+  RuntimeSessionStatus,
+  RuntimeToolUseDecision,
+  RuntimeToolUseInfo,
 } from "@korchasa/ai-ide-cli/runtime/types";
+export type { SettingSource } from "@korchasa/ai-ide-cli/runtime/setting-sources";
+export type {
+  CapabilityInventory,
+  CapabilityRef,
+  FetchCapabilitiesOptions,
+} from "@korchasa/ai-ide-cli/runtime/capabilities";
 export type { SkillDef, SkillFrontmatter } from "@korchasa/ai-ide-cli/skill";
 export { detectHitlRequest, runHitlLoop } from "./hitl.ts";
 export type {

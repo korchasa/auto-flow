@@ -14,6 +14,7 @@ import type {
   NodeConfig,
   NodeSettings,
   PermissionDenial,
+  ReasoningEffort,
   RuntimeId,
   TemplateContext,
   ValidationRule,
@@ -100,6 +101,10 @@ export interface AgentRunOptions {
   permissionMode?: string;
   /** Claude model override (e.g. "claude-sonnet-4-6"). Omit = CLI default. */
   model?: string;
+  /** Resolved reasoning-effort dial (FR-E42). Forwarded to the runtime adapter
+   * on initial AND continuation invocations; the library itself filters
+   * `--effort` from the resume argv (Claude only). */
+  reasoningEffort?: ReasoningEffort;
   /** Workflow HITL config forwarded to runtimes that need explicit tool wiring. */
   hitlConfig?: HitlConfig;
   /** Injected runtime adapter for unit testing. */
@@ -171,6 +176,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     runtimeArgs,
     permissionMode,
     model,
+    reasoningEffort,
     hitlConfig,
     runtimeAdapter,
     output,
@@ -220,6 +226,8 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     extraArgs,
     permissionMode,
     model,
+    // FR-E42: forward to adapter; library filters --effort on resume.
+    reasoningEffort,
     allowedTools,
     disallowedTools,
     hitlConfig,
@@ -329,6 +337,8 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       extraArgs,
       permissionMode,
       model,
+      // FR-E42: still forward — library skips emission on resume.
+      reasoningEffort,
       allowedTools,
       disallowedTools,
       hitlConfig,

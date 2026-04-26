@@ -52,6 +52,7 @@ function makeCapturingAdapter(
       session: false,
       capabilityInventory: false,
       toolFilter: false,
+      reasoningEffort: false,
     },
     launchInteractive() {
       throw new Error("not implemented");

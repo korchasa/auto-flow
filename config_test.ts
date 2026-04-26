@@ -1416,6 +1416,76 @@ nodes:
   );
 });
 
+// --- FR-E42: effort validation ---
+
+Deno.test("parseConfig — valid effort in defaults", () => {
+  const yaml = `
+name: test
+version: "1"
+defaults:
+  effort: high
+nodes:
+  spec:
+    type: agent
+    label: Spec
+    prompt: do it
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.defaults?.effort, "high");
+});
+
+Deno.test("parseConfig — valid effort per node", () => {
+  const yaml = `
+name: test
+version: "1"
+nodes:
+  spec:
+    type: agent
+    label: Spec
+    prompt: do it
+    effort: low
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.nodes.spec.effort, "low");
+});
+
+Deno.test("parseConfig — invalid effort in defaults throws", () => {
+  const yaml = `
+name: test
+version: "1"
+defaults:
+  effort: max
+nodes:
+  spec:
+    type: agent
+    label: Spec
+    prompt: do it
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "defaults.effort has invalid value 'max'. Must be one of: minimal, low, medium, high",
+  );
+});
+
+Deno.test("parseConfig — invalid effort per node throws", () => {
+  const yaml = `
+name: test
+version: "1"
+nodes:
+  spec:
+    type: agent
+    label: Spec
+    prompt: do it
+    effort: extreme
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "Node 'spec' has invalid effort 'extreme'. Must be one of: minimal, low, medium, high",
+  );
+});
+
 // --- FR-E47: Budget validation + cascade ---
 
 Deno.test("parseConfig — node budget with valid max_usd accepted", () => {

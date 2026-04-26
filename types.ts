@@ -20,6 +20,7 @@ import type {
   Verbosity,
 } from "@korchasa/ai-ide-cli/types";
 import type { ExtraArgsMap } from "@korchasa/ai-ide-cli/runtime/types";
+import type { ReasoningEffort } from "@korchasa/ai-ide-cli/runtime/reasoning-effort";
 
 export type {
   CliRunOutput,
@@ -28,6 +29,7 @@ export type {
   HumanInputRequest,
   PermissionDenial,
   PermissionMode,
+  ReasoningEffort,
   RuntimeId,
   Verbosity,
 };
@@ -35,6 +37,7 @@ export {
   VALID_PERMISSION_MODES,
   VALID_RUNTIME_IDS,
 } from "@korchasa/ai-ide-cli/types";
+export { REASONING_EFFORT_VALUES } from "@korchasa/ai-ide-cli/runtime/reasoning-effort";
 
 // --- Workflow Configuration (parsed from YAML) ---
 
@@ -85,6 +88,11 @@ export interface WorkflowDefaults extends NodeSettings {
   permission_mode?: PermissionMode;
   /** Default Claude model for all agent nodes (e.g. "claude-sonnet-4-6"). */
   model?: string;
+  /** Default reasoning effort for all agent nodes (FR-E42).
+   * Values: minimal | low | medium | high. Maps to Claude's `--effort`,
+   * Codex's `--config model_reasoning_effort=…`, OpenCode's `--variant`;
+   * Cursor warns and ignores. Skipped on `--resume` (session inherits). */
+  effort?: ReasoningEffort;
   /** Human-in-the-loop config: ask/check scripts, poll interval, timeout. */
   hitl?: HitlConfig;
   /** Path to script executed when the workflow fails (FR-E19). */
@@ -133,6 +141,9 @@ export interface NodeConfig {
   system_prompt?: string;
   /** Claude model override for this node (e.g. "claude-opus-4-6"). */
   model?: string;
+  /** Reasoning-effort override for this node (FR-E42). Cascade:
+   * node → enclosing loop → defaults. See {@link WorkflowDefaults.effort}. */
+  effort?: ReasoningEffort;
   /** Runtime override for this node. */
   runtime?: RuntimeId;
   /** Generic extra CLI args forwarded to this node's selected runtime.
