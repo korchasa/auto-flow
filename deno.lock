@@ -1,19 +1,17 @@
 {
   "version": "5",
   "specifiers": {
-    "jsr:@korchasa/ai-ide-cli@~0.5.4": "0.5.4",
+    "jsr:@korchasa/ai-ide-cli@~0.5.6": "0.5.6",
     "jsr:@std/assert@^1.0.19": "1.0.19",
-    "jsr:@std/cli@1": "1.0.28",
-    "jsr:@std/fmt@^1.0.9": "1.0.9",
     "jsr:@std/fs@1": "1.0.23",
-    "jsr:@std/internal@^1.0.12": "1.0.12",
+    "jsr:@std/internal@^1.0.12": "1.0.13",
     "jsr:@std/path@^1.1.4": "1.1.4",
     "jsr:@std/semver@1": "1.0.8",
-    "jsr:@std/yaml@^1.0.12": "1.0.12"
+    "jsr:@std/yaml@^1.0.12": "1.1.0"
   },
   "jsr": {
-    "@korchasa/ai-ide-cli@0.5.4": {
-      "integrity": "8eb3cbcf70dcd587eea7241d2e1ad11eff2d13ffcf415f995b5c0d32fb93eddb",
+    "@korchasa/ai-ide-cli@0.5.6": {
+      "integrity": "a4a75bcbb8b90a92f4b2f2dddeeb6f089aa6fde02459c3bb54fb7fc4661c94a5",
       "dependencies": [
         "jsr:@std/fs",
         "jsr:@std/path",
@@ -26,16 +24,6 @@
         "jsr:@std/internal"
       ]
     },
-    "@std/cli@1.0.28": {
-      "integrity": "74ef9b976db59ca6b23a5283469c9072be6276853807a83ec6c7ce412135c70a",
-      "dependencies": [
-        "jsr:@std/fmt",
-        "jsr:@std/internal"
-      ]
-    },
-    "@std/fmt@1.0.9": {
-      "integrity": "2487343e8899fb2be5d0e3d35013e54477ada198854e52dd05ed0422eddcabe0"
-    },
     "@std/fs@1.0.23": {
       "integrity": "3ecbae4ce4fee03b180fa710caff36bb5adb66631c46a6460aaad49515565a37",
       "dependencies": [
@@ -43,8 +31,8 @@
         "jsr:@std/path"
       ]
     },
-    "@std/internal@1.0.12": {
-      "integrity": "972a634fd5bc34b242024402972cd5143eac68d8dffaca5eaa4dba30ce17b027"
+    "@std/internal@1.0.13": {
+      "integrity": "2f9546691d4ac2d32859c82dff284aaeac980ddeca38430d07941e7e288725c0"
     },
     "@std/path@1.1.4": {
       "integrity": "1d2d43f39efb1b42f0b1882a25486647cb851481862dc7313390b2bb044314b5",
@@ -55,13 +43,13 @@
     "@std/semver@1.0.8": {
       "integrity": "dc830e8b8b6a380c895d53fbfd1258dc253704ca57bbe1629ac65fd7830179b7"
     },
-    "@std/yaml@1.0.12": {
-      "integrity": "7deabca4545bcedd07c5f69ea53acea71b8b4c67562f224e17b90d75944cb20c"
+    "@std/yaml@1.1.0": {
+      "integrity": "fc1c5c63e05c4c5eb6118355f557958035d41940d6c29d35b306ef7155d6edb0"
     }
   },
   "workspace": {
     "dependencies": [
-      "jsr:@korchasa/ai-ide-cli@~0.5.4",
+      "jsr:@korchasa/ai-ide-cli@~0.5.6",
       "jsr:@std/assert@^1.0.19",
       "jsr:@std/cli@1",
       "jsr:@std/fs@1",
