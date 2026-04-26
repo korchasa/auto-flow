@@ -7,6 +7,7 @@
 import type { AgentResult } from "./agent.ts";
 import { resolveInputArtifacts, runAgent } from "./agent.ts";
 import { resolveBudget, resolveToolFilter } from "./config.ts";
+import { runWithGuardrail } from "./guardrail.ts";
 import { handleAgentHitl } from "./hitl-handler.ts";
 import { detectHitlRequest, isHitlConfigured } from "./hitl.ts";
 import { runHuman } from "./human.ts";
@@ -104,24 +105,47 @@ export async function executeAgentNode(
 
   const streamLogPath = `${workPath(ctx.workDir, ctx.node_dir)}/stream.log`;
 
-  const result = await runAgent({
-    node,
-    ctx,
-    settings,
-    runtime: runtimeConfig.runtime,
-    runtimeArgs: runtimeConfig.args,
-    permissionMode: runtimeConfig.permissionMode,
-    model: runtimeConfig.model,
-    allowedTools: toolFilter.allowedTools,
-    disallowedTools: toolFilter.disallowedTools,
-    hitlConfig,
-    output: eng.output,
-    nodeId,
-    streamLogPath,
-    verbosity: eng.options.verbosity,
-    cwd,
-    maxTurns: resolveBudget(node, eng.config.defaults)?.max_turns,
-  });
+  // FR-E50: wrap runAgent in worktree-isolation guardrail. Snapshots main
+  // tree before/after; if the agent wrote files outside workDir and outside
+  // node.allowed_paths, roll them back and fail the node.
+  const { result, leak } = await runWithGuardrail(
+    {
+      repoRoot: Deno.cwd(),
+      workDir: eng.workDir,
+      allowedPaths: node.allowed_paths ?? [],
+      nodeId,
+      log: (m) => eng.output.warn(m),
+    },
+    () =>
+      runAgent({
+        node,
+        ctx,
+        settings,
+        runtime: runtimeConfig.runtime,
+        runtimeArgs: runtimeConfig.args,
+        permissionMode: runtimeConfig.permissionMode,
+        model: runtimeConfig.model,
+        allowedTools: toolFilter.allowedTools,
+        disallowedTools: toolFilter.disallowedTools,
+        hitlConfig,
+        output: eng.output,
+        nodeId,
+        streamLogPath,
+        verbosity: eng.options.verbosity,
+        cwd,
+        maxTurns: resolveBudget(node, eng.config.defaults)?.max_turns,
+      }),
+  );
+
+  if (leak !== undefined) {
+    markNodeFailed(eng.state, nodeId, leak.message, "scope_violation");
+    return {
+      ...result,
+      success: false,
+      error: leak.message,
+      error_category: "scope_violation",
+    };
+  }
 
   if (!result.success) {
     markNodeFailed(

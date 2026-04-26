@@ -254,6 +254,7 @@ export type ErrorCategory =
   | "hook_failure"
   | "hitl_timeout"
   | "aborted"
+  | "scope_violation"
   | "unknown";
 
 /** Status of a single node during execution. */
