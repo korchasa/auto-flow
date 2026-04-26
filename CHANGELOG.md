@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.1](https://github.com/korchasa/flowai-workflow/compare/v0.3.0...v0.3.1) (2026-04-25)
+
+
+### Bug Fixes
+
+* **engine:** emit cwd-relative template paths under worktree ([b0db7e6](https://github.com/korchasa/flowai-workflow/commit/b0db7e6eada402c320e4c25f298dc4914643d6d1)), closes [#196](https://github.com/korchasa/flowai-workflow/issues/196)
+
+
+### Documentation
+
+* **repl:** narrate each action in REPL skills before running it ([ec3d090](https://github.com/korchasa/flowai-workflow/commit/ec3d0901130c18b4e0e4a507df8ab910f6d8618d))
+* **srs:** add FR-E49 — CLI auto-update prevention for spawned processes ([0c2b7a5](https://github.com/korchasa/flowai-workflow/commit/0c2b7a5c7a93fb822fa71b7a19a30a43fdbdb611)), closes [#196](https://github.com/korchasa/flowai-workflow/issues/196) [#196](https://github.com/korchasa/flowai-workflow/issues/196)
+
+
+### Chores
+
+* **check:** exclude live worktree dirs from deno test ([5b47a9e](https://github.com/korchasa/flowai-workflow/commit/5b47a9e93d30cae4e0d4a5a857b480726d20534f))
+* **claude:** drop stale permission patterns from settings.json ([9bcf68b](https://github.com/korchasa/flowai-workflow/commit/9bcf68b5ba839dab1bc1dd25d35a5805343b5cbd))
+* **gitignore:** exclude worktree dirs in repo and scaffold template ([0172ced](https://github.com/korchasa/flowai-workflow/commit/0172cede436e1ecfa94fda518cba0d2c8c4a8794))
+* **repl:** align skill folder names with frontmatter names ([c7d98ca](https://github.com/korchasa/flowai-workflow/commit/c7d98cae81f2038ba09daab30f288101eada3189))
+* **sdlc:** remove loop-in-claude wrapper and references ([35b4638](https://github.com/korchasa/flowai-workflow/commit/35b4638d1c6798734f7e5c7b256c199ab91c64da))
+
 ## [0.3.0](https://github.com/korchasa/flowai-workflow/compare/v0.2.2...v0.3.0) (2026-04-20)
 
 
