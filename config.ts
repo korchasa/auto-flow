@@ -7,6 +7,7 @@
  */
 
 import { parse as parseYaml } from "@std/yaml";
+import { dirname } from "@std/path";
 import { resolveRuntimeConfig } from "@korchasa/ai-ide-cli/runtime";
 import { validateTemplateVars } from "./template.ts";
 import {
@@ -76,25 +77,53 @@ export function extractWorktreeDisabled(yaml: string): boolean {
 }
 
 /** Parse YAML string into WorkflowConfig, validate schema, merge defaults.
- * @param workDir — base directory for resolving {{file()}} references. */
-export function parseConfig(yaml: string, workDir?: string): WorkflowConfig {
+ * @param workDir — base directory for resolving {{file()}} references.
+ * @param workflowDir — workDir-relative directory containing the workflow.yaml,
+ *   used for resolving {{flow_file()}} references. Defaults to "" (workDir root). */
+export function parseConfig(
+  yaml: string,
+  workDir?: string,
+  workflowDir?: string,
+): WorkflowConfig {
   const raw = parseYaml(yaml);
   if (!raw || typeof raw !== "object") {
     throw new Error("Workflow config must be a YAML object");
   }
   const config = raw as Record<string, unknown>;
   validateSchema(config);
-  return mergeDefaults(config as unknown as WorkflowConfig, workDir);
+  return mergeDefaults(
+    config as unknown as WorkflowConfig,
+    workDir,
+    workflowDir,
+  );
 }
 
 /** Load and parse workflow config from a file path.
- * @param workDir — base directory for resolving {{file()}} references. */
+ * @param workDir — base directory for resolving {{file()}} references.
+ *   `{{flow_file()}}` references resolve against `workDir/dirname(path)`. */
 export async function loadConfig(
   path: string,
   workDir?: string,
 ): Promise<WorkflowConfig> {
   const yaml = await Deno.readTextFile(path);
-  return parseConfig(yaml, workDir);
+  const wfDir = workflowDirFromConfigPath(path, workDir);
+  return parseConfig(yaml, workDir, wfDir);
+}
+
+/** Compute the workDir-relative workflow directory from a (possibly
+ * workDir-prefixed) config path. Returns "" when the config sits at workDir
+ * root. Strips the leading workDir prefix when present so the result is
+ * always workDir-relative — matching the contract on TemplateContext. */
+function workflowDirFromConfigPath(
+  configPath: string,
+  workDir?: string,
+): string {
+  let p = configPath;
+  if (workDir && workDir !== "." && p.startsWith(`${workDir}/`)) {
+    p = p.slice(workDir.length + 1);
+  }
+  const d = dirname(p);
+  return d === "." || d === "/" ? "" : d;
 }
 
 /** Validate required fields and node type constraints. */
@@ -867,6 +896,7 @@ function validateHitlConfig(hitl: unknown): void {
 function mergeDefaults(
   config: WorkflowConfig,
   workDir?: string,
+  workflowDir?: string,
 ): WorkflowConfig {
   const workflowDefaults: WorkflowDefaults = {
     ...DEFAULT_WORKFLOW_DEFAULTS,
@@ -920,7 +950,7 @@ function mergeDefaults(
     nodes: mergedNodes,
   };
   validateRuntimeCompatibility(result);
-  validateFileReferences(result, workDir);
+  validateFileReferences(result, workDir, workflowDir);
   return result;
 }
 
@@ -960,20 +990,30 @@ function validateRuntimeCompatibility(config: WorkflowConfig): void {
 }
 
 /**
- * Validate all `{{file("path")}}` references in prompt and system_prompt fields.
+ * Validate all `{{file("path")}}` and `{{flow_file("path")}}` references in
+ * prompt and system_prompt fields.
  *
  * Scans top-level and loop body nodes. Paths containing `{{` are skipped
  * (unresolvable template variables at load time). Throws immediately on the
  * first missing file, including the node ID for context.
  *
- * @param workDir — base directory for resolving relative paths. Defaults to CWD.
+ * `file()` paths resolve against `workDir`. `flow_file()` paths resolve against
+ * `workDir/workflowDir` — i.e. the directory containing the workflow.yaml.
+ *
+ * @param workDir — base directory for resolving `{{file()}}` paths. Defaults
+ *   to CWD.
+ * @param workflowDir — workDir-relative directory containing the workflow.yaml,
+ *   used as the base for `{{flow_file()}}` paths. "" or undefined means
+ *   `flow_file()` resolves identically to `file()`.
  */
 export function validateFileReferences(
   config: WorkflowConfig,
   workDir?: string,
+  workflowDir?: string,
 ): void {
-  const FILE_REF_RE = /\{\{file\("([^"]+)"\)\}\}/g;
+  const FILE_REF_RE = /\{\{(flow_file|file)\("([^"]+)"\)\}\}/g;
   const base = workDir ?? Deno.cwd();
+  const wfDir = workflowDir ?? "";
 
   function scanNode(nodeId: string, node: NodeConfig): void {
     const fields = [node.prompt, node.system_prompt].filter(
@@ -983,14 +1023,22 @@ export function validateFileReferences(
       FILE_REF_RE.lastIndex = 0;
       let match;
       while ((match = FILE_REF_RE.exec(field)) !== null) {
-        const path = match[1];
+        const fnName = match[1] as "file" | "flow_file";
+        const path = match[2];
         if (path.includes("{{")) continue;
-        const resolved = path.startsWith("/") ? path : `${base}/${path}`;
+        let resolved: string;
+        if (path.startsWith("/")) {
+          resolved = path;
+        } else if (fnName === "flow_file" && wfDir !== "") {
+          resolved = `${base}/${wfDir}/${path}`;
+        } else {
+          resolved = `${base}/${path}`;
+        }
         try {
           Deno.statSync(resolved);
         } catch {
           throw new Error(
-            `Node '${nodeId}': {{file("${path}")}} — file not found: ${resolved}`,
+            `Node '${nodeId}': {{${fnName}("${path}")}} — file not found: ${resolved}`,
           );
         }
       }

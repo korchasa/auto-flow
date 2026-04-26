@@ -223,3 +223,22 @@
 ### 3.52 FR-E52: Cwd-Relative Path Contract for TemplateContext — see [04b-worktree-isolation.md](04b-worktree-isolation.md).
 
 ### 3.54 FR-E54: Per-Workflow Run Lock — see [04b-worktree-isolation.md](04b-worktree-isolation.md).
+
+### 3.55 FR-E55: `{{flow_file()}}` Template Function
+
+- **Desc:** `template.ts` supports `{{flow_file("path")}}` like `{{file()}}`
+  but resolves paths relative to the workflow directory
+  (`workDir/dirname(config_path)`). Single-pass; fail-fast on miss.
+  `validateFileReferences` covers both patterns at load time.
+- **Motiv:** Workflow folders co-exist under `.flowai-workflow/<wf>/`; assets
+  (agents, partials) live inside. `file()` forces hardcoded folder prefix —
+  rename breaks all prompts. `flow_file()` decouples prompts from folder name.
+- **Acceptance:**
+  - [x] Resolves against `workDir/workflow_dir`. Evidence: `template.ts:81-100`,
+    `engine.ts:564-571`, `template_test.ts`.
+  - [x] No re-interpolation; absolute path bypasses `workflow_dir`. Evidence:
+    `template_test.ts`.
+  - [x] Missing file throws naming `flow_file("path")`. Evidence: `template.ts`.
+  - [x] `validateFileReferences` + `validateTemplateVars` accept `flow_file()`.
+    Evidence: `config.ts`, `template.ts`, `config_test.ts`, `template_test.ts`.
+  - [x] `deno task check` passes.

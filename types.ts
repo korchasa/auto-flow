@@ -366,6 +366,14 @@ export interface TemplateContext {
    * uses it to recompose cwd-correct paths from `node_dir`/`run_dir`/
    * `input.<id>`. Not template-rendered — no `{{workDir}}` placeholder. */
   workDir: string;
+  /** workDir-relative path to the directory containing the workflow.yaml
+   * config file. Used by `{{flow_file("path")}}` to resolve paths against
+   * the workflow folder rather than `workDir`. Empty string or undefined
+   * when config sits at the workDir root (or in non-workflow contexts like
+   * unit tests); `flow_file()` then degenerates to `file()`-equivalent
+   * resolution against `workDir`. Not template-rendered — no
+   * `{{workflow_dir}}` placeholder. */
+  workflow_dir?: string;
   /** CLI --arg key-value pairs available as `{{args.<key>}}`. */
   args: Record<string, string>;
   /** Resolved environment variables available as `{{env.<key>}}`. */

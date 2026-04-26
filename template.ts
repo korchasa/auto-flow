@@ -22,12 +22,16 @@ export const FILE_INCLUSION_SIZE_WARN_BYTES = 102400;
  * - `{{args.<key>}}` — CLI arguments
  * - `{{env.<key>}}` — environment variables
  * - `{{loop.iteration}}` — current loop iteration
- * - `{{file("path")}}` — inline file content (single-pass, no re-interpolation)
+ * - `{{file("path")}}` — inline file content (single-pass, no re-interpolation),
+ *   path resolved against `workDir`
+ * - `{{flow_file("path")}}` — same as `file()` but path resolved against the
+ *   current workflow directory (`workDir/workflow_dir`)
  *
  * Unresolved placeholders throw an error (fail fast).
  *
  * @param workDir — base directory for resolving relative `{{file()}}` paths.
  *   Defaults to `Deno.cwd()`. When running in a worktree, pass the worktree path.
+ *   `{{flow_file()}}` paths resolve against `workDir/ctx.workflow_dir`.
  */
 export function interpolate(
   template: string,
@@ -38,6 +42,25 @@ export function interpolate(
     const key = expr.trim();
     return resolve(key, ctx, workDir);
   });
+}
+
+function readIncludedFile(
+  fnName: "file" | "flow_file",
+  path: string,
+  resolved: string,
+): string {
+  let content: string;
+  try {
+    content = Deno.readTextFileSync(resolved);
+  } catch {
+    throw new Error(`{{${fnName}("${path}")}} — file not found: ${resolved}`);
+  }
+  if (content.length > FILE_INCLUSION_SIZE_WARN_BYTES) {
+    console.warn(
+      `{{${fnName}("${path}")}}: large file included (${content.length} bytes, threshold ${FILE_INCLUSION_SIZE_WARN_BYTES}): ${resolved}`,
+    );
+  }
+  return content;
 }
 
 function resolve(
@@ -56,18 +79,23 @@ function resolve(
     const path = fileMatch[1];
     const base = workDir ?? Deno.cwd();
     const resolved = path.startsWith("/") ? path : `${base}/${path}`;
-    let content: string;
-    try {
-      content = Deno.readTextFileSync(resolved);
-    } catch {
-      throw new Error(`{{file("${path}")}} — file not found: ${resolved}`);
-    }
-    if (content.length > FILE_INCLUSION_SIZE_WARN_BYTES) {
-      console.warn(
-        `{{file("${path}")}}: large file included (${content.length} bytes, threshold ${FILE_INCLUSION_SIZE_WARN_BYTES}): ${resolved}`,
-      );
-    }
-    return content;
+    return readIncludedFile("file", path, resolved);
+  }
+
+  // flow_file() function: {{flow_file("path")}}
+  // Resolves path relative to the current workflow directory
+  // (workDir/ctx.workflow_dir). Absolute paths used as-is.
+  const flowFileMatch = key.match(/^flow_file\("(.+)"\)$/);
+  if (flowFileMatch) {
+    const path = flowFileMatch[1];
+    const base = workDir ?? Deno.cwd();
+    const wfDir = ctx.workflow_dir ?? "";
+    const resolved = path.startsWith("/")
+      ? path
+      : wfDir === ""
+      ? `${base}/${path}`
+      : `${base}/${wfDir}/${path}`;
+    return readIncludedFile("flow_file", path, resolved);
   }
 
   // Dotted paths
@@ -138,7 +166,7 @@ function resolve(
  * Pure function — no I/O. Returns an array of error descriptions; empty = valid.
  * Known prefixes: `input` (suffix must be in knownInputs), `env`, `args`,
  * `loop` (only `loop.iteration`). Known direct keys: `run_dir`, `run_id`,
- * `node_dir`. `file("...")` pattern is always accepted.
+ * `node_dir`. `file("...")` and `flow_file("...")` patterns are always accepted.
  */
 export function validateTemplateVars(
   template: string,
@@ -152,8 +180,9 @@ export function validateTemplateVars(
     // Direct fields
     if (key === "node_dir" || key === "run_dir" || key === "run_id") continue;
 
-    // file() function: {{file("path")}}
+    // file() / flow_file() functions: {{file("path")}}, {{flow_file("path")}}
     if (/^file\(".*"\)$/.test(key)) continue;
+    if (/^flow_file\(".*"\)$/.test(key)) continue;
 
     // Dotted paths
     const dotIdx = key.indexOf(".");

@@ -211,6 +211,64 @@ Deno.test("interpolate — file() emits console.warn for large file", () => {
   assertEquals(warns[0].includes("large file"), true);
 });
 
+// --- flow_file() function tests ---
+
+Deno.test("interpolate — flow_file() resolves path relative to workflow_dir", () => {
+  const tmpDir = Deno.makeTempDirSync();
+  Deno.mkdirSync(`${tmpDir}/.flowai-workflow/wf/agents`, { recursive: true });
+  Deno.writeTextFileSync(
+    `${tmpDir}/.flowai-workflow/wf/agents/spec.md`,
+    "spec body",
+  );
+
+  const ctx = makeCtx({ workflow_dir: ".flowai-workflow/wf" });
+  assertEquals(
+    interpolate(`{{flow_file("agents/spec.md")}}`, ctx, tmpDir),
+    "spec body",
+  );
+});
+
+Deno.test("interpolate — flow_file() with empty workflow_dir falls back to workDir", () => {
+  const tmpDir = Deno.makeTempDirSync();
+  Deno.writeTextFileSync(`${tmpDir}/root.md`, "root content");
+  const ctx = makeCtx(); // workflow_dir undefined
+  assertEquals(
+    interpolate(`{{flow_file("root.md")}}`, ctx, tmpDir),
+    "root content",
+  );
+});
+
+Deno.test("interpolate — flow_file() absolute path bypasses workflow_dir", () => {
+  const tmpDir = Deno.makeTempDirSync();
+  const filePath = `${tmpDir}/abs.md`;
+  Deno.writeTextFileSync(filePath, "abs content");
+  const ctx = makeCtx({ workflow_dir: ".flowai-workflow/wf" });
+  assertEquals(
+    interpolate(`{{flow_file("${filePath}")}}`, ctx, "/some/other/dir"),
+    "abs content",
+  );
+});
+
+Deno.test("interpolate — flow_file() missing file throws descriptive error", () => {
+  const ctx = makeCtx({ workflow_dir: ".flowai-workflow/wf" });
+  assertThrows(
+    () => interpolate(`{{flow_file("missing.md")}}`, ctx, "/tmp/nope"),
+    Error,
+    `flow_file("missing.md")`,
+  );
+});
+
+Deno.test("interpolate — flow_file() content with {{var}} is NOT re-interpolated", () => {
+  const tmpDir = Deno.makeTempDirSync();
+  Deno.mkdirSync(`${tmpDir}/wf`, { recursive: true });
+  Deno.writeTextFileSync(`${tmpDir}/wf/raw.md`, "literal {{node_dir}}");
+  const ctx = makeCtx({ workflow_dir: "wf" });
+  assertEquals(
+    interpolate(`{{flow_file("raw.md")}}`, ctx, tmpDir),
+    "literal {{node_dir}}",
+  );
+});
+
 // --- validateTemplateVars tests (FR-E7) ---
 
 Deno.test("validateTemplateVars — empty string returns no errors", () => {
@@ -258,6 +316,13 @@ Deno.test("validateTemplateVars — unknown loop property returns error", () => 
 Deno.test("validateTemplateVars — file() pattern is valid", () => {
   assertEquals(
     validateTemplateVars('{{file("/path/to/file.md")}}', []),
+    [],
+  );
+});
+
+Deno.test("validateTemplateVars — flow_file() pattern is valid", () => {
+  assertEquals(
+    validateTemplateVars('{{flow_file("agents/spec.md")}}', []),
     [],
   );
 });
