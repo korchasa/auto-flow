@@ -402,7 +402,8 @@ export interface EngineOptions {
   skip_nodes?: string[];
   /** When set, only these node IDs execute; all others are skipped. */
   only_nodes?: string[];
-  /** Override lock file path (default: .flowai-workflow/runs/.lock). Used in tests. */
+  /** Override lock file path (default: `<workflowDir>/runs/.lock`, FR-E54).
+   * Used in tests. */
   lock_path?: string;
   /** Workflow-wide USD cost cap (FR-E47). Strict: exact-equal does not trigger. */
   budget_usd?: number;

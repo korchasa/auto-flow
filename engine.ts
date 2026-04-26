@@ -187,8 +187,10 @@ export class Engine {
       );
     }
 
-    // Acquire workflow lock (prevents parallel runs)
-    const lockPath = this.options.lock_path ?? defaultLockPath();
+    // Acquire per-workflow lock (FR-E54) — serializes runs against the same
+    // workflow folder; distinct workflow folders run in parallel.
+    const lockPath = this.options.lock_path ??
+      defaultLockPath(this.workflowDir);
     await acquireLock(lockPath, this.state.run_id);
 
     // Register shutdown callbacks for signal-initiated cleanup;

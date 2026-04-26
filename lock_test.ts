@@ -1,6 +1,7 @@
 import { assertEquals } from "@std/assert";
 import {
   acquireLock,
+  defaultLockPath,
   type LockInfo,
   readLockInfo,
   releaseLock,
@@ -163,4 +164,73 @@ Deno.test("readLockInfo — throws if lock file missing", async () => {
     caught = true;
   }
   assertEquals(caught, true);
+});
+
+Deno.test("defaultLockPath — derives <workflowDir>/runs/.lock (FR-E54)", () => {
+  assertEquals(
+    defaultLockPath(".flowai-workflow/github-inbox"),
+    ".flowai-workflow/github-inbox/runs/.lock",
+  );
+  assertEquals(
+    defaultLockPath(".flowai-workflow/github-inbox-opencode"),
+    ".flowai-workflow/github-inbox-opencode/runs/.lock",
+  );
+  assertEquals(defaultLockPath("."), "./runs/.lock");
+});
+
+Deno.test("acquireLock — distinct workflow dirs hold independent locks (FR-E54)", async () => {
+  // Two sibling workflow folders under one repo simulate the multi-workflow
+  // layout (`.flowai-workflow/<a>` and `.flowai-workflow/<b>`).
+  const tmpRoot = await Deno.makeTempDir();
+  const wfA = `${tmpRoot}/wf-a`;
+  const wfB = `${tmpRoot}/wf-b`;
+  const lockA = defaultLockPath(wfA);
+  const lockB = defaultLockPath(wfB);
+
+  // Both acquire concurrently — must succeed even though the current PID is
+  // the holder of lockA when lockB is acquired.
+  await acquireLock(lockA, "run-a");
+  await acquireLock(lockB, "run-b");
+
+  const infoA = await readLockInfo(lockA);
+  const infoB = await readLockInfo(lockB);
+  assertEquals(infoA.run_id, "run-a");
+  assertEquals(infoB.run_id, "run-b");
+  assertEquals(infoA.pid, Deno.pid);
+  assertEquals(infoB.pid, Deno.pid);
+
+  await releaseLock(lockA);
+  await releaseLock(lockB);
+  await Deno.remove(tmpRoot, { recursive: true });
+});
+
+Deno.test("acquireLock — same workflow dir still serializes (FR-E54 carry-over of FR-E25)", async () => {
+  // Per-workflow scope must NOT relax same-folder serialization: a live
+  // PID holding `<workflowDir>/runs/.lock` still blocks a second acquire
+  // against the same path.
+  const tmpRoot = await Deno.makeTempDir();
+  const wf = `${tmpRoot}/wf`;
+  const lockPath = defaultLockPath(wf);
+
+  // Simulate another live process holding the lock: write current PID
+  // (alive by definition) and current hostname.
+  await Deno.mkdir(`${wf}/runs`, { recursive: true });
+  const held: LockInfo = {
+    pid: Deno.pid,
+    hostname: Deno.hostname(),
+    run_id: "run-first",
+    started_at: new Date().toISOString(),
+  };
+  await Deno.writeTextFile(lockPath, JSON.stringify(held));
+
+  let caught = false;
+  try {
+    await acquireLock(lockPath, "run-second");
+  } catch (err) {
+    caught = true;
+    assertEquals((err as Error).message.includes("run-first"), true);
+  }
+  assertEquals(caught, true);
+
+  await Deno.remove(tmpRoot, { recursive: true });
 });

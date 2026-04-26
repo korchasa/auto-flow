@@ -56,6 +56,40 @@
   isolation. `onShutdown` disposer pattern prevents callback accumulation
   when `Engine.run()` called in a loop (`self-runner.ts`).
 
+### 3.3a Workflow Lock (`lock.ts`) — FR-E25, FR-E54
+
+- **Status:** Implemented.
+- **Purpose:** Serialize concurrent runs **per workflow folder** (`<workflowDir>` =
+  directory containing `workflow.yaml`). Distinct workflow folders own
+  independent lock files and run in parallel.
+- **Path contract:** `defaultLockPath(workflowDir) = "<workflowDir>/runs/.lock"`.
+  The engine derives `workflowDir` once via `deriveWorkflowDir(options.config_path)`
+  in the `Engine` constructor and passes it to `defaultLockPath` at acquisition
+  time. `EngineOptions.lock_path` override (tests only) bypasses the derivation.
+- **Lock content (`LockInfo`):** `{ pid, hostname, run_id, started_at }`.
+  Hostname stored for diagnostics only — local FS implies a shared PID
+  namespace, so `Deno.kill(pid, "SIGCONT")` is the authoritative liveness
+  check (FR-E25). Stale-on-dead-PID lock is reclaimed transparently.
+- **Interfaces:**
+  - `defaultLockPath(workflowDir: string): string` — pure helper, returns
+    `<workflowDir>/runs/.lock`.
+  - `acquireLock(lockPath, runId)` — throws when a live PID holds the file;
+    reclaims on dead PID; rewrites on `SyntaxError` (corrupted file).
+  - `releaseLock(lockPath)` — idempotent unlink.
+  - `readLockInfo(lockPath)` — debug helper.
+- **Integration points:**
+  - `engine.ts::Engine.run()` — `defaultLockPath(this.workflowDir)`,
+    `acquireLock` before any side-effecting work, `releaseLock` in `finally`,
+    `onShutdown(() => releaseLock(...))` for SIGINT/SIGTERM cleanup.
+- **Cross-workflow parallelism:** Each workflow folder also owns
+  `<workflowDir>/runs/` (FR-E9) and `<workflowDir>/worktrees/` (FR-E24
+  via state conventions); per-folder locking aligns the concurrency unit
+  with the existing artifact-namespace boundary. No global serialization
+  point remains.
+- **Legacy:** Pre-FR-E54 binaries used a fixed `.flowai-workflow/runs/.lock`
+  path. After upgrade, that file is orphaned (never consulted) and may be
+  deleted manually. No automatic migration.
+
 ### 3.4 Binary Distribution (`scripts/compile.ts`) — FR-E39
 
 - **Status:** Pending.

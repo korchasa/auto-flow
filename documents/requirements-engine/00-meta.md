@@ -11,7 +11,7 @@
 - **Rollback:** Manual operation (no automated rollback).
 - **Retry logic:** 3 attempts with exponential backoff for external API calls (`claude`, `gh`) in `lib.sh`.
 - **Target project:** Engine is domain-agnostic; no project-specific logic. Workflow configs define domain workflows.
-- **Concurrent workflows:** Single local execution assumed. No concurrent locking.
+- **Concurrent workflows:** Per-workflow-folder lock (FR-E54). One concurrent run per `<workflowDir>` (the folder containing `workflow.yaml`); distinct workflow folders run independently in parallel. Within one folder, runs serialize via `<workflowDir>/runs/.lock`.
 
 ## 1. Introduction
 
@@ -40,7 +40,7 @@
 
 ## 4. Non-Functional Requirements
 
-- **Isolation:** Each agent runs in its own runtime process with no shared state except file artifacts. Single local execution assumed (one workflow at a time). Concurrent execution is not supported.
+- **Isolation:** Each agent runs in its own runtime process with no shared state except file artifacts. Concurrency unit = workflow folder: at most one run per `<workflowDir>` at a time, enforced by the per-workflow PID lock (FR-E54). Distinct workflow folders in the same repo run independently in parallel — each owns its `runs/`, `worktrees/`, and `state.json` namespace.
 - **Fault tolerance:** If a node fails (agent error, timeout, continuation limit exhausted), the workflow stops. Post-workflow nodes with `run_on` config execute based on outcome. Manual restart via `--resume <run-id>`.
 - **Timeouts:** Each node has a configurable timeout (default: 30 min). Engine enforces timeout per node. On timeout, node is treated as failed.
 - **Observability:** 3 verbosity levels (`-q`/default/`-v`/`-s`); status lines with timestamps; per-node result summaries; full logs stored per node in `<run-dir>/logs/`.

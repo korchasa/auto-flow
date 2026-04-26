@@ -1,8 +1,10 @@
 /**
  * @module
- * Workflow lock to prevent parallel runs.
- * Lock file contains JSON with PID, hostname, run_id, and timestamp.
- * Stale detection: always PID check. Hostname is stored for diagnostics only.
+ * Per-workflow run lock (FR-E54). Serializes concurrent runs against the
+ * same workflow folder; distinct workflow folders run in parallel.
+ * Lock file lives at `<workflowDir>/runs/.lock` and contains JSON with
+ * PID, hostname, run_id, and timestamp.
+ * Stale detection: always PID check. Hostname stored for diagnostics only.
  * Rationale: lock file lives on local FS, so if readable — PID is checkable.
  */
 
@@ -14,11 +16,12 @@ export interface LockInfo {
   started_at: string;
 }
 
-const LOCK_PATH = ".flowai-workflow/runs/.lock";
-
-/** Default lock file path. */
-export function defaultLockPath(): string {
-  return LOCK_PATH;
+/** Default lock file path for the given workflow folder (FR-E54).
+ * `workflowDir` is the directory containing `workflow.yaml`
+ * (typically `.flowai-workflow/<name>` under the multi-workflow layout, or
+ * `.` for a bare top-level config). */
+export function defaultLockPath(workflowDir: string): string {
+  return `${workflowDir}/runs/.lock`;
 }
 
 /** Check if a process with given PID is alive on this host. */

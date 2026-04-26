@@ -19,8 +19,12 @@ FR-IDs are stable — never renumber them on move.
   — Configuration schema, drift detection, dry-run, prompt-path validation,
   `prepare_command`, scope-based modification detection, frontmatter fields.
 - [04-runtime-and-hooks.md](requirements-engine/04-runtime-and-hooks.md) —
-  Agent log storage, HITL, failure hook, worktree isolation, stale-path
-  cleanup, `{{file()}}` template, permission mode.
+  Agent log storage, HITL, failure hook, stale-path cleanup, `{{file()}}`
+  template, permission mode, tool filtering, CLI auto-update prevention.
+- [04b-worktree-isolation.md](requirements-engine/04b-worktree-isolation.md)
+  — Worktree isolation (FR-E24), main-tree leak guardrail (FR-E50),
+  detached-HEAD rescue branch (FR-E51), cwd-relative template path
+  contract (FR-E52), per-workflow run lock (FR-E54).
 - [05-cli-and-observability.md](requirements-engine/05-cli-and-observability.md)
   — Verbose/semi-verbose/final-summary output, cost aggregation, stream-log
   timestamps, repeated-read warning, node result summary, CLI help.
@@ -53,7 +57,7 @@ FR-IDs are stable — never renumber them on move.
 - FR-E21 (Semi-Verbose `-s`)         → 05-cli-and-observability
 - FR-E22 (Final Summary w/ Results)  → 05-cli-and-observability
 - FR-E23 (CLI Help for `check`)      → 05-cli-and-observability
-- FR-E24 (Worktree Isolation)        → 04-runtime-and-hooks
+- FR-E24 (Worktree Isolation)        → 04b-worktree-isolation
 - FR-E25 (Graceful Shutdown)         → 01-execution-model
 - FR-E26 (Codebase Housekeeping)     → 06-distribution-and-housekeeping
 - FR-E27 (Test Suite Integrity)      → 06-distribution-and-housekeeping
@@ -79,7 +83,8 @@ FR-IDs are stable — never renumber them on move.
 - FR-E47 (Run Budget Enforcement)    → 05-cli-and-observability
 - FR-E48 (Node Tool Filtering)       → 04-runtime-and-hooks
 - FR-E49 (CLI Auto-Update Prevention) → 04-runtime-and-hooks
-- FR-E50 (Worktree Isolation Guardrail) → 04-runtime-and-hooks
-- FR-E51 (Post-Run Branch-Pin)         → 04-runtime-and-hooks
-- FR-E52 (Cwd-Relative Path Contract)  → 04-runtime-and-hooks
+- FR-E50 (Worktree Isolation Guardrail) → 04b-worktree-isolation
+- FR-E51 (Post-Run Branch-Pin)         → 04b-worktree-isolation
+- FR-E52 (Cwd-Relative Path Contract)  → 04b-worktree-isolation
 - FR-E53 (`--workflow` Sole CLI Selector) → 05-cli-and-observability
+- FR-E54 (Per-Workflow Run Lock)        → 04b-worktree-isolation
