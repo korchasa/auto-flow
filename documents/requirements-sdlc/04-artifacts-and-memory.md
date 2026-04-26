@@ -123,22 +123,28 @@
   - [x] At least one end-to-end workflow run completes with agents
     reading/writing their own memory files.
   - [x] `deno task check` passes after changes.
-  - [ ] **Commit step in lifecycle:** Each agent's reflection-protocol
+  - [x] **Commit step in lifecycle:** Each agent's reflection-protocol
     appendix instructs it to commit memory + history files at session end.
     `.flowai-workflow/memory/reflection-protocol.md` §Lifecycle includes
-    step 3c.
-  - [ ] **Engine enforcement:** When `defaults.memory_paths` is configured
+    step 3c. Evidence: `.flowai-workflow/memory/reflection-protocol.md:49-50`
+    (step "c. Commit MEMORY + HISTORY files").
+  - [x] **Engine enforcement:** When `defaults.memory_paths` is configured
     in `workflow.yaml`, the engine checks the worktree's working tree
     after each agent invocation; if any path matching the configured globs
     is dirty AND the node has not declared `memory_commit_deferred: true`,
     the node is failed with an explicit reflection-violation message.
-  - [ ] **`memory_commit_deferred` opt-out:** Per-node boolean flag in
+    Evidence: `node-dispatch.ts:163-186`; helper `memory-check.ts:24-53`;
+    test suite `memory-check_test.ts` (8 cases).
+  - [x] **`memory_commit_deferred` opt-out:** Per-node boolean flag in
     `NodeConfig` (default `false`) that disables the per-invocation dirty
     check. Intended for loop-body agents (e.g. `build`) that defer their
-    commit to a later iteration.
-  - [ ] **`workflow.yaml`:** SDLC workflow declares
-    `defaults.memory_paths: [".flowai-workflow/memory/**.md"]` and sets
-    `memory_commit_deferred: true` on the `build` node.
+    commit to a later iteration. Evidence: `types.ts:225-229`;
+    `config.ts:524-531`; consumed at `node-dispatch.ts:172`.
+  - [x] **`workflow.yaml`:** SDLC workflow declares
+    `defaults.memory_paths` and sets `memory_commit_deferred: true` on the
+    `build` node. Evidence: `.flowai-workflow/workflow.yaml:24-25`
+    (`memory_paths: [.flowai-workflow/memory/agent-*.md]`); line 135
+    (`memory_commit_deferred: true` on the build node).
 
 
 

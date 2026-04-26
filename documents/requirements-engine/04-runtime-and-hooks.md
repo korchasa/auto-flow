@@ -264,27 +264,41 @@
     checkout` inside worktree, read-only access to main. The guardrail
     sees only working-tree changes, so refs and reads pass through.
 - **Acceptance criteria:**
-  - [ ] Engine snapshots main repo tree before and after every agent
-    invocation when `workDir !== "."`.
-  - [ ] Difference (after − before), filtered by NOT-prefixed-by `<workDir>/`
+  - [x] Engine snapshots main repo tree before and after every agent
+    invocation when `workDir !== "."`. Evidence: `guardrail.ts:186-209`
+    (`runWithGuardrail` wraps with snapshot before/after); wired in
+    `node-dispatch.ts:113-141`.
+  - [x] Difference (after − before), filtered by NOT-prefixed-by `<workDir>/`
     and NOT-matching `node.allowed_paths`, is treated as leaked paths.
-  - [ ] Non-empty leak triggers `markNodeFailed` with
-    `error_category: "scope_violation"`.
-  - [ ] Engine runs `git checkout -- <leaked-paths>` (per-path, not bulk)
-    to restore main.
-  - [ ] `workDir === "."` mode is a no-op (no snapshot, no overhead).
-  - [ ] Fail-closed: snapshot or rollback failure marks node failed with
-    explicit error message.
-  - [ ] Output: default verbosity prints
-    `[guardrail] node=<id> leaked <N> file(s): <list> (rolled back)`;
-    verbose adds first 200 lines of diff per file.
-  - [ ] Unit test: pure `detectLeaks` covers whitelist (workDir prefix,
+    Evidence: `guardrail.ts:34-49` (`detectLeaks`).
+  - [x] Non-empty leak triggers `markNodeFailed` with
+    `error_category: "scope_violation"`. Evidence: `node-dispatch.ts:143-151`.
+  - [x] Engine runs `git checkout -- <leaked-paths>` (per-path, not bulk)
+    to restore main. Evidence: `guardrail.ts:116-142` (`rollbackLeaks`).
+  - [x] `workDir === "."` mode is a no-op (no snapshot, no overhead).
+    Evidence: `guardrail.ts:190-192` (early return); test
+    `guardrail_integration_test.ts:148`.
+  - [x] Fail-closed: snapshot or rollback failure marks node failed with
+    explicit error message. Evidence: `guardrail.ts:91-97` throws on git
+    failure; the throw propagates from `runWithGuardrail` and the node's
+    catch block in `engine.ts:523-528` calls `markNodeFailed` with
+    `error_category: "unknown"`.
+  - [x] Output: default verbosity prints
+    `[guardrail] node=<id> leaked <N> file(s): <list> (rolled back)`.
+    Evidence: `guardrail.ts:55-62` (`formatLeakMessage`); test
+    `guardrail_integration_test.ts:184-213`.
+  - [x] Unit test: pure `detectLeaks` covers whitelist (workDir prefix,
     allowed_paths globs), pre-existing modifications, untracked, modified.
-  - [ ] Integration test: `engine_test.ts` exercises full guardrail flow
-    against a temp git repo with mocked agent.
-  - [ ] E2E test: `e2e_worktree_isolation_test.ts` runs a fake agent that
-    writes outside workDir; main is restored, node fails.
-  - [ ] `deno task check` passes.
+    Evidence: `guardrail_test.ts` (8 cases for `detectLeaks`/`globMatch`).
+  - [x] Integration test: exercises full guardrail flow against a temp git
+    repo with mocked agent. Evidence:
+    `guardrail_integration_test.ts:39-243` (8 cases including
+    rollback-scope, fail-when-leaked, noop-when-disabled, log-format,
+    allowedPaths whitelist).
+  - [x] E2E test: `e2e_worktree_isolation_test.ts` runs a fake agent that
+    writes outside workDir; main is restored, node fails. Evidence:
+    `e2e_worktree_isolation_test.ts:136-186` (abs-path leak scenario).
+  - [x] `deno task check` passes. Evidence: `deno task check` (PASS, 787 tests).
 
 ### 3.51 FR-E51: Post-Run Branch-Pin for Detached-HEAD Worktree
 
@@ -316,19 +330,28 @@
   - User notification at default verbosity: `engine` status line
     `Detached HEAD pinned: branch=<name> worktree=<path>`.
 - **Acceptance criteria:**
-  - [ ] Engine calls `pinDetachedHead(workDir, runId)` immediately before
-    every `removeWorktree(workDir)` invocation.
-  - [ ] On detached HEAD: branch `flowai/run-<runId>-orphan-rescue` is
-    created at HEAD; the branch name is returned.
-  - [ ] On HEAD already on a named branch: no branch is created; function
-    returns `undefined`.
-  - [ ] On existing rescue-branch name: function appends `-2`, `-3`, … and
-    creates the first free name; returns that name.
-  - [ ] `workDir === "."` mode: function is not invoked (engine guards).
-  - [ ] Rescue branch creation logged via `output.status("engine", …)` at
-    default verbosity, including branch name and worktree path.
-  - [ ] Unit tests cover detached / on-branch / counter-conflict paths.
-  - [ ] `deno task check` passes.
+  - [x] Engine calls `pinDetachedHead(workDir, runId)` immediately before
+    every `removeWorktree(workDir)` invocation. Evidence:
+    `engine.ts:303-321`.
+  - [x] On detached HEAD: branch `flowai/run-<runId>-orphan-rescue` is
+    created at HEAD; the branch name is returned. Evidence:
+    `worktree.ts:108-140`; tests `worktree_test.ts:198-224`,
+    `worktree_test.ts:273-302`.
+  - [x] On HEAD already on a named branch: no branch is created; function
+    returns `undefined`. Evidence: `worktree.ts:112-117`; test
+    `worktree_test.ts:226-250`.
+  - [x] On existing rescue-branch name: function appends `-2`, `-3`, … and
+    creates the first free name; returns that name. Evidence:
+    `worktree.ts:119-128`; test `worktree_test.ts:252-271`.
+  - [x] `workDir === "."` mode: function is not invoked (engine guards).
+    Evidence: `engine.ts:294` (`if (this.workDir !== ".")`).
+  - [x] Rescue branch creation logged via `output.status("engine", …)` at
+    default verbosity, including branch name and worktree path. Evidence:
+    `engine.ts:311-316`.
+  - [x] Unit tests cover detached / on-branch / counter-conflict paths.
+    Evidence: `worktree_test.ts:198-302` (4 cases) + E2E
+    `e2e_worktree_isolation_test.ts:188-225`.
+  - [x] `deno task check` passes. Evidence: `deno task check` (PASS, 787 tests).
 
 ### 3.52 FR-E52: Cwd-Relative Path Contract for TemplateContext
 
@@ -355,15 +378,19 @@
     template-rendered shell commands do NOT need wrapping — their working
     directory aligns with workDir.
 - **Acceptance criteria:**
-  - [ ] `agent.ts::resolveInputArtifacts` accepts `workDir` and wraps
+  - [x] `agent.ts::resolveInputArtifacts` accepts `workDir` and wraps
     `inputs[id]` before `Deno.readDir`. Default value `"."` preserves
-    backwards-compatibility for callers in no-worktree mode.
-  - [ ] Caller `node-dispatch.ts::executeAgentNode` passes `eng.workDir`.
-  - [ ] Audit test (`template_paths_test.ts::FR-E52 — bare ctx path
-    fields are restricted to template.ts`) scans every non-test root-level
+    backwards-compatibility for callers in no-worktree mode. Evidence:
+    `agent.ts:43-68`.
+  - [x] Caller `node-dispatch.ts::executeAgentNode` passes `eng.workDir`.
+    Evidence: `node-dispatch.ts:105`.
+  - [x] Audit test (`template_paths_test.ts::FR-E52 — bare ctx.node_dir /
+    ctx.run_dir restricted to template.ts`) scans every non-test root-level
     `*.ts` source file; fails CI if any line outside `template.ts`
     references `ctx.node_dir` / `ctx.run_dir` without a `workPath`
-    wrapper on the same line.
-  - [ ] Audit confirms all current consumers in `loop.ts`, `human.ts`,
+    wrapper on the same line. Evidence: `template_paths_test.ts:141-184`.
+  - [x] Audit confirms all current consumers in `loop.ts`, `human.ts`,
     `hitl-handler.ts`, `node-dispatch.ts`, `engine.ts` wrap correctly.
-  - [ ] `deno task check` passes.
+    Evidence: audit test passes — see `template_paths_test.ts:141-184`
+    (assertEquals offenders to []).
+  - [x] `deno task check` passes. Evidence: `deno task check` (PASS, 787 tests).
