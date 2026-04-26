@@ -52,7 +52,7 @@ Deno.test("buildTaskPaths — empty inputs yields empty input map", () => {
 
 Deno.test("interpolate — rendered {{node_dir}} contains no worktree prefix even when workDir is a worktree", () => {
   // Simulate the issue #196 v3 scenario.
-  const workDir = ".flowai-workflow/worktrees/20260425T222337";
+  const workDir = ".flowai-workflow/example/runs/20260425T222337/worktree";
   const paths = buildTaskPaths("20260425T222337", "verify");
   const ctx: TemplateContext = {
     ...paths,
@@ -75,7 +75,7 @@ Deno.test("interpolate — rendered {{node_dir}} contains no worktree prefix eve
 });
 
 Deno.test("interpolate — rendered {{input.X}} contains no worktree prefix", () => {
-  const workDir = ".flowai-workflow/worktrees/20260425T222337";
+  const workDir = ".flowai-workflow/example/runs/20260425T222337/worktree";
   const paths = buildTaskPaths("20260425T222337", "verify", [
     "specification",
   ]);
@@ -104,7 +104,7 @@ Deno.test("workPath(ctx.workDir, ctx.node_dir) reconstructs the FS path the engi
   // Engine internal code (cwd = main repo) must wrap ctx.node_dir with
   // workPath(ctx.workDir, …) to land on the actual file. This invariant
   // pins that contract.
-  const workDir = ".flowai-workflow/worktrees/20260425T222337";
+  const workDir = ".flowai-workflow/example/runs/20260425T222337/worktree";
   const paths = buildTaskPaths("20260425T222337", "verify");
   const ctx: TemplateContext = {
     ...paths,

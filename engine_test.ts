@@ -103,6 +103,86 @@ Deno.test("Engine — verbose mode accepted", () => {
   assertEquals(typeof engine.run, "function");
 });
 
+// FR-E57: a workflow.yaml passed without a directory prefix would collapse
+// `workflowDir` to "." and place the worktree at repo-root `./runs/<id>/worktree`,
+// which `.gitignore` does not cover. Engine must refuse this combination
+// before the worktree is created. Setting `worktree_disabled: true` keeps the
+// legacy direct-cwd mode working.
+Deno.test("Engine.run() — rejects worktree mode when workflow.yaml is at repo root (FR-E57)", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  try {
+    // Minimal workflow.yaml at the repo root — no directory prefix in the
+    // path passed to the engine, so deriveWorkflowDir returns ".".
+    await Deno.writeTextFile(`${tmpDir}/workflow.yaml`, "name: rootless\n");
+    Deno.chdir(tmpDir);
+
+    const engine = new Engine(makeOptions({ config_path: "workflow.yaml" }));
+
+    let thrown: Error | undefined;
+    try {
+      await engine.run();
+    } catch (e) {
+      thrown = e as Error;
+    }
+    assertEquals(thrown !== undefined, true);
+    assertEquals(
+      thrown!.message.includes("workflow folder"),
+      true,
+      `error should mention "workflow folder", got: ${thrown!.message}`,
+    );
+    assertEquals(
+      thrown!.message.includes("FR-S47") || thrown!.message.includes("FR-E53"),
+      true,
+      `error should reference FR-S47/FR-E53, got: ${thrown!.message}`,
+    );
+  } finally {
+    Deno.chdir(origCwd);
+    await Deno.remove(tmpDir, { recursive: true });
+  }
+});
+
+Deno.test("Engine.run() — accepts root workflow.yaml when worktree_disabled (FR-E57)", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  try {
+    // worktree_disabled: true bypasses the FR-E57 guard. The flag lives
+    // under `defaults:` per the workflow schema (see extractWorktreeDisabled).
+    await Deno.writeTextFile(
+      `${tmpDir}/workflow.yaml`,
+      "name: rootless\ndefaults:\n  worktree_disabled: true\n",
+    );
+    Deno.chdir(tmpDir);
+
+    const engine = new Engine(makeOptions({
+      config_path: "workflow.yaml",
+      // Lock path forced to a temp file so we don't fight the global lock dir.
+      lock_path: `${tmpDir}/test.lock`,
+    }));
+
+    // run() will still fail on later phases (no real config nodes etc.), but
+    // it must NOT fail with the FR-E57 guard message — that's the point.
+    let thrown: Error | undefined;
+    try {
+      await engine.run();
+    } catch (e) {
+      thrown = e as Error;
+    }
+    if (thrown !== undefined) {
+      assertEquals(
+        thrown.message.includes("workflow folder") &&
+          (thrown.message.includes("FR-S47") ||
+            thrown.message.includes("FR-E53")),
+        false,
+        `should not be FR-E57 guard error, got: ${thrown.message}`,
+      );
+    }
+  } finally {
+    Deno.chdir(origCwd);
+    await Deno.remove(tmpDir, { recursive: true });
+  }
+});
+
 // --- resolveInputArtifacts tests ---
 
 Deno.test("resolveInputArtifacts — returns files with sizes from real directory", async () => {

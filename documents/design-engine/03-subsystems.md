@@ -81,11 +81,12 @@
   - `engine.ts::Engine.run()` — `defaultLockPath(this.workflowDir)`,
     `acquireLock` before any side-effecting work, `releaseLock` in `finally`,
     `onShutdown(() => releaseLock(...))` for SIGINT/SIGTERM cleanup.
-- **Cross-workflow parallelism:** Each workflow folder also owns
-  `<workflowDir>/runs/` (FR-E9) and `<workflowDir>/worktrees/` (FR-E24
-  via state conventions); per-folder locking aligns the concurrency unit
-  with the existing artifact-namespace boundary. No global serialization
-  point remains.
+- **Cross-workflow parallelism:** Each workflow folder owns its
+  `<workflowDir>/runs/<run-id>/` umbrella, which holds both per-run state
+  (FR-E9) and the per-run git worktree (FR-E57: `runs/<run-id>/worktree/`,
+  superseding the pre-FR-E57 repo-global `.flowai-workflow/worktrees/`
+  namespace). Per-folder locking aligns the concurrency unit with the
+  artifact-namespace boundary. No global serialization point remains.
 - **Legacy:** Pre-FR-E54 binaries used a fixed `.flowai-workflow/runs/.lock`
   path. After upgrade, that file is orphaned (never consulted) and may be
   deleted manually. No automatic migration.

@@ -99,12 +99,14 @@ Every workflow lives in its own self-contained directory:
 
 ```
 .flowai-workflow/<name>/
-    workflow.yaml          # required
-    agents/agent-*.md      # required iff workflow.yaml references agent files
-    memory/                # optional; agent-*.md gitignored (runtime state)
-    scripts/               # optional
-    runs/                  # generated, gitignored
-    worktrees/             # generated, gitignored
+    workflow.yaml                  # required
+    agents/agent-*.md              # required iff workflow.yaml references agent files
+    memory/                        # optional; agent-*.md gitignored (runtime state)
+    scripts/                       # optional
+    runs/<run-id>/                 # generated, gitignored
+        state.json                 # run state (persists across resume)
+        <node-id>/...              # per-node artifact dirs
+        worktree/                  # FR-E57: per-run git worktree
 ```
 
 Multiple workflows in one project: keep them as siblings under
@@ -277,9 +279,13 @@ scripts/                         # Dev tooling (check, compile, dashboard, relea
     workflow.yaml
     agents/agent-*.md            # Agent prompts (per-workflow copy)
     memory/                      # reflection-protocol.md tracked; agent-*.md gitignored
+    runs/<run-id>/               # Per-run umbrella (gitignored). FR-E57: state,
+                                 # node artifacts, and the run's git worktree
+                                 # all live side-by-side here.
+      state.json
+      <node-id>/...
+      worktree/                  # Isolated git worktree (FR-E57)
     scripts/                     # HITL & hook scripts
-    runs/                        # Per-run artifacts and state (gitignored)
-    worktrees/                   # Isolated git worktrees (gitignored)
   github-inbox-opencode/         # Sibling workflow with different runtime
     …
 documents/

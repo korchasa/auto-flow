@@ -90,8 +90,11 @@ example of engine usage.
     Imported from `kazar-fairy-taler` as a reusable template; retains
     LumaTale-specific `direction` taxonomy as an example)
   Each is self-contained: `workflow.yaml`, `agents/agent-*.md`, `memory/`,
-  `scripts/`, `runs/`, `worktrees/`. Select one by passing it as the
-  mandatory positional argument: `flowai-workflow run <workflow>`.
+  `scripts/`, `runs/<run-id>/{state.json, <node-id>/, worktree/}` (FR-E57:
+  the per-run git worktree lives alongside the run's state and artifacts
+  under one `runs/<run-id>/` umbrella; the legacy top-level `worktrees/`
+  directory is gone). Select one by passing it as the mandatory
+  positional argument: `flowai-workflow run <workflow>`.
   **`deno task run` is hardcoded to `github-inbox`.** To run a different
   variant: `deno run -A --no-check cli.ts run .flowai-workflow/<variant>` —
   or add a per-variant task to `deno.json`.
