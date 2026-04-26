@@ -329,3 +329,41 @@
     default verbosity, including branch name and worktree path.
   - [ ] Unit tests cover detached / on-branch / counter-conflict paths.
   - [ ] `deno task check` passes.
+
+### 3.52 FR-E52: Cwd-Relative Path Contract for TemplateContext
+
+- **Description:** All path fields in `TemplateContext` (`node_dir`,
+  `run_dir`, `input.<id>`) are emitted **workDir-relative** by the engine
+  (FR-E7 / fix `b0db7e6`). Engine-internal consumers that perform FS I/O
+  from the engine process (whose cwd is the main repo root) MUST wrap
+  these paths via `workPath(ctx.workDir, …)` before access. Template
+  rendering (`template.ts`) is the sole legitimate raw consumer — emitted
+  values reach subprocess prompts whose cwd is `workDir`, where the
+  workDir-relative form is correctly resolved.
+- **Motivation:** Cross-references FR-E7. The Variant A fix (`b0db7e6`)
+  established the contract; FR-E52 enumerates ALL consumers, fixes the
+  remaining bug (`resolveInputArtifacts` read via raw paths from engine
+  cwd → silent empty verbose-input listings under worktree mode), and
+  installs a regression-guard test so the next consumer added cannot
+  silently violate the contract.
+- **Constraints:**
+  - Engine cwd is repo root for the entire run; never `chdir`.
+  - `template.ts` is the only allowed bare-emission site — anywhere else
+    that touches `ctx.node_dir` / `ctx.run_dir` outside `workPath(…)`
+    fails the audit test.
+  - Subprocess invocations (`Deno.Command(..., { cwd: workDir })`) and
+    template-rendered shell commands do NOT need wrapping — their working
+    directory aligns with workDir.
+- **Acceptance criteria:**
+  - [ ] `agent.ts::resolveInputArtifacts` accepts `workDir` and wraps
+    `inputs[id]` before `Deno.readDir`. Default value `"."` preserves
+    backwards-compatibility for callers in no-worktree mode.
+  - [ ] Caller `node-dispatch.ts::executeAgentNode` passes `eng.workDir`.
+  - [ ] Audit test (`template_paths_test.ts::FR-E52 — bare ctx path
+    fields are restricted to template.ts`) scans every non-test root-level
+    `*.ts` source file; fails CI if any line outside `template.ts`
+    references `ctx.node_dir` / `ctx.run_dir` without a `workPath`
+    wrapper on the same line.
+  - [ ] Audit confirms all current consumers in `loop.ts`, `human.ts`,
+    `hitl-handler.ts`, `node-dispatch.ts`, `engine.ts` wrap correctly.
+  - [ ] `deno task check` passes.

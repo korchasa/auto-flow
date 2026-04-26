@@ -41,13 +41,17 @@ import { findViolations, snapshotModifiedFiles } from "./scope-check.ts";
  */
 export async function resolveInputArtifacts(
   inputs: Record<string, string>,
+  workDir: string = ".",
 ): Promise<VerboseInput[]> {
   const result: VerboseInput[] = [];
   for (const [_nodeId, dir] of Object.entries(inputs)) {
+    // FR-E52: input dirs are workDir-relative — wrap before FS access from
+    // engine cwd, otherwise readDir fails silently under worktree isolation.
+    const fullDir = workDir === "." ? dir : `${workDir}/${dir}`;
     try {
-      for await (const entry of Deno.readDir(dir)) {
+      for await (const entry of Deno.readDir(fullDir)) {
         if (!entry.isFile) continue;
-        const filePath = `${dir}/${entry.name}`;
+        const filePath = `${fullDir}/${entry.name}`;
         try {
           const stat = await Deno.stat(filePath);
           result.push({ path: filePath, sizeBytes: stat.size });

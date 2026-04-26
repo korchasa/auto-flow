@@ -101,7 +101,7 @@ export async function executeAgentNode(
 
   // Normal path: run agent
   // Verbose: resolve and show input artifacts
-  const inputArtifacts = await resolveInputArtifacts(ctx.input);
+  const inputArtifacts = await resolveInputArtifacts(ctx.input, eng.workDir);
   eng.output.verboseInputs(nodeId, inputArtifacts);
 
   const streamLogPath = `${workPath(ctx.workDir, ctx.node_dir)}/stream.log`;

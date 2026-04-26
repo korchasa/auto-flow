@@ -132,3 +132,53 @@ Deno.test("TemplateContext — workDir defaults to '.' is no-op for workPath", (
   // Sanity: with workDir=".", workPath is identity; legacy semantics preserved.
   assertEquals(workPath(ctx.workDir, ctx.node_dir), ctx.node_dir);
 });
+
+// FR-E52: regression-guard against future consumers that introduce a bare
+// `ctx.node_dir` / `ctx.run_dir` reference in engine-runtime code without
+// wrapping it via `workPath(ctx.workDir, …)`. `template.ts` is the sole
+// allowed raw-emission site (its outputs reach subprocess prompts whose cwd
+// IS workDir, where the workDir-relative form correctly resolves).
+Deno.test(
+  "FR-E52 — bare ctx.node_dir / ctx.run_dir restricted to template.ts",
+  async () => {
+    const allowedRaw = new Set([
+      "template.ts", // intentional raw emission for prompt interpolation
+    ]);
+    const sourceDir = new URL(".", import.meta.url).pathname.replace(/\/$/, "");
+    const offenders: string[] = [];
+
+    for await (const entry of Deno.readDir(sourceDir)) {
+      if (!entry.isFile) continue;
+      if (!entry.name.endsWith(".ts")) continue;
+      if (entry.name.endsWith("_test.ts")) continue;
+      if (allowedRaw.has(entry.name)) continue;
+
+      const content = await Deno.readTextFile(`${sourceDir}/${entry.name}`);
+      const lines = content.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        // Skip comments and JSDoc — they may legitimately mention the field.
+        const trimmed = line.trim();
+        if (
+          trimmed.startsWith("//") ||
+          trimmed.startsWith("*") ||
+          trimmed.startsWith("/*")
+        ) continue;
+
+        if (/ctx\.(node_dir|run_dir)\b/.test(line)) {
+          // Allowed when the same line wraps via workPath(ctx.workDir, …).
+          if (line.includes("workPath(ctx.workDir,")) continue;
+          offenders.push(`${entry.name}:${i + 1}: ${trimmed}`);
+        }
+      }
+    }
+
+    assertEquals(
+      offenders,
+      [],
+      `FR-E52 violation — bare ctx.node_dir/run_dir found outside template.ts:\n${
+        offenders.join("\n")
+      }`,
+    );
+  },
+);
