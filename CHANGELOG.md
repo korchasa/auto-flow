@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.5.1](https://github.com/korchasa/flowai-workflow/compare/v0.5.0...v0.5.1) (2026-04-26)
+
+
+### Features
+
+* **engine:** copy gitignored files into worktree (FR-E58) ([#214](https://github.com/korchasa/flowai-workflow/issues/214)) ([46baede](https://github.com/korchasa/flowai-workflow/commit/46baede72ba2310c4919a79419a8ae1bb496cd0f))
+
 ## [0.5.0](https://github.com/korchasa/flowai-workflow/compare/v0.4.0...v0.5.0) (2026-04-26)
 
 
