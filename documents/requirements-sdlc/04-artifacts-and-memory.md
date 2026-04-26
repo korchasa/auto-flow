@@ -224,8 +224,9 @@
   - `workflow.yaml` — engine config; `name:` matches `<name>`.
   - `agents/agent-*.md` — REQUIRED iff `workflow.yaml` references any
     `{{file("…/agents/agent-*.md")}}` prompt. Optional otherwise.
-- **Optional entries:** `memory/`, `scripts/`, `runs/`, `worktrees/`,
-  `tasks/`, `.gitignore`, `.template.json`.
+- **Optional entries:** `memory/`, `scripts/`, `runs/`, `tasks/`,
+  `.gitignore`, `.template.json`. (FR-E57: per-run worktrees live under
+  `runs/<run-id>/worktree/` — there is no top-level `worktrees/` folder.)
 - **Cross-workflow drift:** Agent prompt copies between workflow
   folders are intentional duplicates. Edits to a shared agent must be
   applied to every copy or a deliberate divergence must be recorded

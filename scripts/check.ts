@@ -130,7 +130,9 @@ async function listWorkflowFolders(root: string): Promise<string[]> {
 /** FR-S47/DoD-1: enforce that a workflow folder has the required shape.
  * `workflow.yaml` is required. `agents/` is required IFF the workflow uses
  * agent prompt files (i.e. `workflow.yaml` references `agents/agent-*.md`).
- * `memory/`, `scripts/`, `runs/`, `worktrees/` are always optional.
+ * `memory/`, `scripts/`, `runs/` are always optional. (FR-E57: per-run git
+ * worktrees live under `runs/<run-id>/worktree/`, not at a top-level
+ * `worktrees/` folder; the latter never appears in fresh layouts.)
  * Returns offender messages; empty = OK. */
 export async function assertWorkflowFolderShape(
   dir: string,
@@ -524,6 +526,9 @@ if (import.meta.main) {
   // overlapping paths would double-test the same files.
   // Ignore live git-worktree dirs (engine creates them per run; they
   // hold frozen copies of older test files that no longer reflect HEAD).
+  // FR-E57 layout: `.flowai-workflow/<wf>/runs/<run-id>/worktree/`. Pre-FR-E57
+  // legacy path `.flowai-workflow/worktrees/` retained while a one-release
+  // resume fallback is in flight.
   if (await hasTestFiles(".")) {
     await run(
       "deno",
@@ -531,7 +536,7 @@ if (import.meta.main) {
         "test",
         "-A",
         "--no-check",
-        "--ignore=.flowai-workflow/worktrees,.claude/worktrees",
+        "--ignore=.flowai-workflow/worktrees,.flowai-workflow/*/runs,.claude/worktrees",
         ".",
       ],
       "Tests",

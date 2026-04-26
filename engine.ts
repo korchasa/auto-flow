@@ -64,10 +64,9 @@ import {
 import {
   copyToOriginalRepo,
   createWorktree,
-  getWorktreePath,
   pinDetachedHead,
   removeWorktree,
-  worktreeExists,
+  resolveExistingWorktreePath,
 } from "./worktree.ts";
 
 /** Main workflow engine. Orchestrates node execution across DAG levels. */
@@ -137,10 +136,34 @@ export class Engine {
     const runLabel = this.options.args.prompt?.slice(0, 20) ?? undefined;
     const runId = this.options.run_id ?? generateRunId(runLabel);
 
+    // FR-E57: a workflow.yaml passed without a directory prefix collapses
+    // workflowDir to "." and would put the worktree at repo-root
+    // ./runs/<id>/worktree, not covered by .gitignore. The mandatory
+    // positional <workflow> argument introduced by FR-S47/FR-E53 makes
+    // this combination obsolete in normal use; refuse it explicitly.
+    if (!worktreeDisabled && this.workflowDir === ".") {
+      throw new Error(
+        "worktree mode requires workflow.yaml to live inside a workflow folder " +
+          "(FR-S47/FR-E53); pass `<workflow>` positional argument or set " +
+          "worktree_disabled: true",
+      );
+    }
+
     if (this.options.resume && this.options.run_id) {
-      // Resume: reuse existing worktree if it exists
-      if (!worktreeDisabled && worktreeExists(this.options.run_id)) {
-        this.workDir = getWorktreePath(this.options.run_id);
+      // Resume: reuse existing worktree if it exists. Honours the FR-E57
+      // legacy-resume fallback so an in-flight run on the old layout
+      // survives a binary upgrade.
+      const existing = !worktreeDisabled
+        ? resolveExistingWorktreePath(this.options.run_id, this.workflowDir)
+        : undefined;
+      if (existing) {
+        this.workDir = existing.path;
+        if (existing.legacy) {
+          this.output.warn(
+            `legacy worktree layout at ${existing.path}; new runs use ` +
+              `${this.workflowDir}/runs/<id>/worktree (FR-E57)`,
+          );
+        }
         this.output.status("engine", `RESUME worktree: ${this.workDir}`);
       } else {
         this.workDir = ".";
@@ -148,7 +171,7 @@ export class Engine {
     } else if (!worktreeDisabled) {
       // New run: create worktree
       this.output.status("engine", "Creating worktree...");
-      this.workDir = await createWorktree(runId);
+      this.workDir = await createWorktree(runId, this.workflowDir);
       this.output.status("engine", `Worktree: ${this.workDir}`);
     } else {
       this.workDir = ".";

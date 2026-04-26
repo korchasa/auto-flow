@@ -89,3 +89,4 @@ FR-IDs are stable — never renumber them on move.
 - FR-E53 (`--workflow` Sole CLI Selector) → 05-cli-and-observability
 - FR-E54 (Per-Workflow Run Lock)        → 04b-worktree-isolation
 - FR-E55 (`{{flow_file()}}` Template)   → 04-runtime-and-hooks
+- FR-E57 (Per-Run Worktree Co-Location) → 04b-worktree-isolation

@@ -63,18 +63,22 @@ async function setupRepoPair(): Promise<{ origin: string; clone: string }> {
   await git(clone, "config", "user.name", "Test");
   await git(clone, "checkout", "-b", "main");
   await Deno.writeTextFile(`${clone}/README.md`, "init\n");
-  // Ignore the worktrees dir so its presence doesn't pollute `git status`
-  // on main — same convention as the real repo's root `.gitignore`.
+  // Ignore the runs dir so worktrees co-located under
+  // <workflowDir>/runs/<id>/worktree/ (FR-E57) don't pollute `git status`
+  // on main — mirrors the real repo's root `.gitignore`.
   await Deno.writeTextFile(
     `${clone}/.gitignore`,
-    ".flowai-workflow/worktrees/\n",
+    ".flowai-workflow/*/runs/\n",
   );
   await git(clone, "add", "README.md", ".gitignore");
   await git(clone, "commit", "-m", "init");
   await git(clone, "push", "-u", "origin", "main");
-  await Deno.mkdir(`${clone}/.flowai-workflow/worktrees`, { recursive: true });
   return { origin, clone };
 }
+
+/** Workflow folder used by the e2e suite. Mirrors the FR-E57 contract:
+ * `<workflowDir>/runs/<run-id>/worktree/`. */
+const WF_DIR = ".flowai-workflow/e2e";
 
 /**
  * Run `body` with `Deno.cwd()` switched to `cwd`. Restores the original cwd
@@ -96,7 +100,7 @@ Deno.test("e2e — happy path leaves main clean (FR-E50, FR-E51)", async () => {
   try {
     await withCwd(clone, async () => {
       const runId = "e2e-happy-001";
-      const workDir = await createWorktree(runId);
+      const workDir = await createWorktree(runId, WF_DIR);
 
       // Simulate an agent that writes only inside its assigned workDir —
       // exactly the contract the guardrail must accept.
@@ -144,7 +148,7 @@ Deno.test("e2e — abs-path leak triggers guardrail (FR-E50)", async () => {
   try {
     await withCwd(clone, async () => {
       const runId = "e2e-leak-001";
-      const workDir = await createWorktree(runId);
+      const workDir = await createWorktree(runId, WF_DIR);
       const messages: string[] = [];
 
       // Simulate an agent that misroutes a write to the main repo via
@@ -196,7 +200,7 @@ Deno.test("e2e — detached HEAD pins to rescue branch (FR-E51)", async () => {
   try {
     await withCwd(clone, async () => {
       const runId = "e2e-detached-001";
-      const workDir = await createWorktree(runId);
+      const workDir = await createWorktree(runId, WF_DIR);
       const absWorkDir = `${clone}/${workDir}`;
 
       // Simulate an in-worktree commit that lives only on detached HEAD.
@@ -235,6 +239,47 @@ Deno.test("e2e — detached HEAD pins to rescue branch (FR-E51)", async () => {
       // And the commit itself is reachable via the branch.
       const reach = await git(clone, "cat-file", "-t", branchSha);
       assertEquals(reach, "commit");
+    });
+  } finally {
+    await Deno.remove(origin, { recursive: true });
+    await Deno.remove(clone, { recursive: true });
+  }
+});
+
+Deno.test("e2e — distinct workflow dirs hold independent worktrees (FR-E57)", async () => {
+  const { origin, clone } = await setupRepoPair();
+  try {
+    await withCwd(clone, async () => {
+      const runId = "shared-run-id";
+      const wfA = ".flowai-workflow/wf-a";
+      const wfB = ".flowai-workflow/wf-b";
+
+      const pathA = await createWorktree(runId, wfA);
+      const pathB = await createWorktree(runId, wfB);
+
+      // Paths are workflowDir-scoped — same runId, disjoint locations.
+      assertEquals(pathA, `${wfA}/runs/${runId}/worktree`);
+      assertEquals(pathB, `${wfB}/runs/${runId}/worktree`);
+      assertEquals(pathA === pathB, false);
+
+      // Both physically materialize side by side under the same clone.
+      assertEquals((await Deno.stat(`${clone}/${pathA}`)).isDirectory, true);
+      assertEquals((await Deno.stat(`${clone}/${pathB}`)).isDirectory, true);
+
+      // Removing wf-a's worktree leaves wf-b intact.
+      await removeWorktree(pathA);
+      const aGone = await Deno.stat(`${clone}/${pathA}`).then(
+        () => false,
+        () => true,
+      );
+      assertEquals(aGone, true, "wf-a worktree must be gone after removal");
+      assertEquals(
+        (await Deno.stat(`${clone}/${pathB}`)).isDirectory,
+        true,
+        "wf-b worktree must survive removal of wf-a",
+      );
+
+      await removeWorktree(pathB);
     });
   } finally {
     await Deno.remove(origin, { recursive: true });

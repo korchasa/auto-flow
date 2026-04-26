@@ -220,9 +220,11 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
     (FR-E25 invariants preserved).
   - `EngineOptions.lock_path` override (test-only) still wins when set —
     no auto-derivation when explicit.
-  - `worktrees/` directory is **already** per-workflow (`<workflowDir>/worktrees/`
-    via `getRunDir`/state conventions); no further worktree-layout change
-    required for cross-workflow parallelism.
+  - **Worktree namespace was NOT yet per-workflow at FR-E54 time.** Code
+    used a repo-global `WORKTREE_BASE = ".flowai-workflow/worktrees"`,
+    so two distinct workflow folders running concurrently would have
+    collided in that one path. FR-E57 closes the gap by relocating
+    worktrees to `<workflowDir>/runs/<run-id>/worktree/` — see §3.55.
 - **Acceptance criteria:**
   - [x] `defaultLockPath(workflowDir)` returns `<workflowDir>/runs/.lock`.
     Evidence: `lock.ts:22-24`.
@@ -240,3 +242,91 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   - [x] `EngineOptions.lock_path` JSDoc reflects the new default
     (`<workflowDir>/runs/.lock`). Evidence: `types.ts:405-407`.
   - [x] `deno task check` passes.
+
+### 3.55 FR-E57: Per-Run Worktree Co-Location
+
+- **Description:** Each run's git worktree is materialized at
+  `<workflowDir>/runs/<run-id>/worktree/`, sibling to its `state.json` and
+  per-node artifact directories. Replaces the pre-FR-E57 repo-global
+  `.flowai-workflow/worktrees/<run-id>/` location. `<workflowDir>` is the
+  folder containing `workflow.yaml` (FR-S47, FR-E53). The engine derives it
+  once via `deriveWorkflowDir(options.config_path)` and threads it into
+  `getWorktreePath(runId, workflowDir)`, `createWorktree(runId, workflowDir,
+  ref?)`, and `worktreeExists(runId, workflowDir)`.
+- **Motivation:**
+  - **Self-contained run directory:** A single path
+    `<workflowDir>/runs/<run-id>/` now contains everything tied to a run
+    (state, artifacts, live worktree). Inspection, archival, and bulk
+    cleanup operate on one tree.
+  - **Cross-workflow worktree namespace:** FR-E54 already split runs and
+    locks per workflow folder, but `worktree.ts` kept a repo-global
+    `WORKTREE_BASE = ".flowai-workflow/worktrees"`. Two distinct workflow
+    folders running concurrently would have collided in that single
+    namespace. FR-E57 closes the gap so cross-workflow parallel runs are
+    fully isolated.
+  - **Doc/code alignment:** `documents/requirements-engine/04b-...md:223`
+    (FR-E54 constraints) already asserted the worktree directory was
+    "already per-workflow" — that was aspirational. FR-E57 makes it true.
+- **Constraints:**
+  - `worktree_disabled: true` mode (workDir = "."): all `workflowDir`-aware
+    calls become no-ops. Existing semantics preserved.
+  - **Fail-fast when `workflowDir === "."` and worktree mode is active.**
+    `deriveWorkflowDir` returns `"."` when `workflow.yaml` is passed
+    without a directory prefix (legacy back-compat for callers predating
+    FR-S47/FR-E53). Under FR-E57 that would put the worktree at
+    `./runs/<run-id>/worktree`, not covered by `.gitignore`. The engine
+    refuses this combination at run start with a message naming
+    FR-S47/FR-E53. Users must either pass a `workflow.yaml` inside a
+    workflow folder or set `worktree_disabled: true`.
+  - **One-release legacy fallback for resume.** `worktreeExists(runId,
+    workflowDir)` first probes the new path, then falls back to
+    `.flowai-workflow/worktrees/<run-id>` (with a one-line warning) so an
+    in-flight run survives an upgrade across the boundary. The fallback
+    is scheduled for removal in a follow-up FR; new worktrees are never
+    created at the legacy path.
+  - **Cleanup hygiene.** `removeWorktree(path)` calls `git worktree prune`
+    after a successful `git worktree remove --force` (errors swallowed —
+    idempotent). Prevents stale gitlinks from blocking later removal of
+    the parent `runs/<run-id>/` directory.
+  - **`git worktree add` writes an absolute gitdir path into the
+    worktree's `.git` file.** Existing worktrees are never relocated by
+    this change — only new worktrees adopt the new layout.
+  - Engine remains domain-agnostic. Path computation is parametrized by
+    `workflowDir`; no SDLC- or git-workflow-specific knowledge added.
+- **Acceptance criteria:**
+  - [x] `getWorktreePath(runId, workflowDir)` returns
+    `<workflowDir>/runs/<run-id>/worktree`. Old single-arg signature
+    removed. Evidence: `worktree.ts:31-33`. Test:
+    `worktree_test.ts::getWorktreePath — returns
+    <workflowDir>/runs/<runId>/worktree (FR-E57)`.
+  - [x] `createWorktree(runId, workflowDir, ref?)` materializes the
+    worktree at the path returned by `getWorktreePath` and ensures the
+    parent `<workflowDir>/runs/<run-id>/` directory exists before
+    invoking `git worktree add`. Evidence: `worktree.ts:46-66`. Test:
+    `worktree_test.ts::worktree lifecycle — create, exists, remove
+    (FR-E57 layout)`.
+  - [x] `worktreeExists(runId, workflowDir)` prefers the new layout and
+    falls back to the legacy `.flowai-workflow/worktrees/<run-id>` path
+    only when probing for resume. Evidence: `worktree.ts:111-138`. Tests:
+    `worktree_test.ts::worktreeExists — prefers new layout over legacy
+    (FR-E57)` and `worktreeExists — falls back to legacy path when only
+    legacy exists (FR-E57)`.
+  - [x] `Engine.run()` invokes `createWorktree(runId, this.workflowDir)`
+    and uses `resolveExistingWorktreePath(runId, this.workflowDir)` for
+    resume (legacy-aware probe). Evidence: `engine.ts:144-181`.
+  - [x] `Engine.run()` rejects a worktree-mode run when
+    `workflowDir === "."` with an error referencing FR-S47/FR-E53.
+    Evidence: `engine.ts:144-153`. Test: `engine_test.ts::Engine.run() —
+    rejects worktree mode when workflow.yaml is at repo root (FR-E57)`.
+  - [x] `removeWorktree(path)` calls `git worktree prune` after the
+    primary remove. Evidence: `worktree.ts:91-97`. Test:
+    `worktree_test.ts::removeWorktree — prunes stale gitlink after
+    manual dir removal (FR-E57)`.
+  - [x] Two distinct `workflowDir` values hold worktrees at disjoint
+    filesystem paths; concurrent runs across workflow folders do not
+    collide. Evidence: `worktree.ts:31-33`. Tests:
+    `worktree_test.ts::createWorktree — distinct workflow dirs hold
+    independent worktrees (FR-E57)` and
+    `e2e_worktree_isolation_test.ts::e2e — distinct workflow dirs hold
+    independent worktrees (FR-E57)`.
+  - [x] `deno task check` passes (798 tests, 0 failures).
