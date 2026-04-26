@@ -56,7 +56,7 @@
   (`documents/requirements/00-meta.md` §5).
 - **Config format:** YAML workflow config with `defaults` (global settings) and `nodes` (DAG definition). Node types: `agent`, `loop`, `merge`, `human`. Fields per type include `runtime`, `runtime_args`, `prompt`, `inputs`, `validate`, `model`, `run_on`, `after`/`before` hooks. `permission_mode` is Claude-only. Config validation rejects non-claude runtimes with unsupported permission modes.
 - **State:** `<run-dir>/state.json` — node statuses (`pending`/`running`/`completed`/`failed`/`waiting`/`skipped`), session IDs, cost data, timing, HITL question JSON.
-- **Template variables:** `{{input.<node-id>}}` (node output dir), `{{node_dir}}` (current node output dir), `{{run_dir}}` (run root), `{{run_id}}`, `{{loop.iteration}}` (loop body only), `{{env.<KEY>}}`, `{{file("path")}}` (inline file content, path relative to repo root; FR-E32).
+- **Template variables:** `{{input.<node-id>}}` (node output dir), `{{node_dir}}` (current node output dir), `{{run_dir}}` (run root), `{{run_id}}`, `{{loop.iteration}}` (loop body only), `{{env.<KEY>}}`, `{{file("path")}}` (inline file content, path relative to `workDir`; FR-E32), `{{flow_file("path")}}` (inline file content, path relative to current workflow folder `workDir/dirname(config_path)`; FR-E55).
 
 ## 6. Proposals (Non-Binding)
 

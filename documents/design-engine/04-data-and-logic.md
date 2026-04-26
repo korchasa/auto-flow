@@ -80,7 +80,9 @@
 - **Template variables:** `{{node_dir}}`, `{{input.*}}`, `{{run_dir}}`,
   `{{run_id}}`, `{{args.*}}`, `{{env.*}}`, `{{loop.iteration}}`,
   `{{file("path")}}` (FR-E32: inline file inclusion, path relative to CWD,
-  single-pass — no re-interpolation of file contents).
+  single-pass — no re-interpolation of file contents),
+  `{{flow_file("path")}}` (FR-E55: same as `file()` but path resolves against
+  the current workflow directory `workDir/dirname(config_path)`).
 - **After-hook conventions:** Commands run from repo root (no `cd {{run_dir}}`
   prefix needed). Use `|| true` suffix to prevent hook failure from killing
   the node.
@@ -127,17 +129,26 @@
       `verboseInputs()` reports `0 files` without error. No `Deno.stat()` calls.
     - **Missing file stat:** `Deno.stat()` failure on input artifact →
       graceful skip, verbose output includes error detail for affected path.
-  - **File Inclusion Resolution (FR-E32):** In `resolve()`, when key matches
-    `/^file\("(.+)"\)$/`: extract path → resolve relative to `Deno.cwd()` →
-    `Deno.readTextFileSync(resolved)`. Missing → throw
-    `Error('{{file("${path}")}} — file not found: ${resolved}')`. Content
-    returned as-is (no re-interpolation). Size > 100KB → `console.warn()`.
-    Nested template variables inside `file()` path not supported (regex
-    limitation: `{{file("{{var}}")}}` matches inner `}}` first). Acceptable
-    per FR-E32 spec (no recursive includes).
-    Load-time validation: `validateFileReferences(config)` in `config.ts`
-    scans `task_template`/`prompt` fields for `{{file("...")}}` regex, checks
-    existence. Skips paths with `{{` (template vars unresolvable at load time).
+  - **File Inclusion Resolution (FR-E32, FR-E55):** In `resolve()`, when key
+    matches `/^file\("(.+)"\)$/`: extract path → resolve relative to
+    `workDir` (or `Deno.cwd()` when `workDir` undefined) →
+    `Deno.readTextFileSync(resolved)`. When key matches
+    `/^flow_file\("(.+)"\)$/`: same flow but the base is
+    `workDir/ctx.workflow_dir` (the workflow folder containing
+    `workflow.yaml`). Both share `readIncludedFile(fnName, path, resolved)`
+    which throws `Error('{{${fnName}("${path}")}} — file not found:
+    ${resolved}')` on miss and emits `console.warn()` when content size >
+    `FILE_INCLUSION_SIZE_WARN_BYTES`. Content returned as-is — no
+    re-interpolation. Nested template variables inside `file(...)` /
+    `flow_file(...)` paths not supported (regex limitation). `workflow_dir`
+    is populated by `Engine.buildContext` via `dirname(options.config_path)`;
+    fixtures and external callers may omit it (defaults to "" → resolves
+    against `workDir`).
+    Load-time validation: `validateFileReferences(config, workDir,
+    workflowDir)` in `config.ts` scans `task_template`/`prompt` /
+    `system_prompt` fields for `{{(file|flow_file)("...")}}` regex, checks
+    existence using the same base-resolution rules. Skips paths with `{{`
+    (template vars unresolvable at load time).
   - **Hook Template Variable Validation (FR-E7):** In `validateNode()`,
     for each hook command (`before`/`after`): call
     `validateTemplateVars(hookCmd, knownInputs)` from `template.ts`.
@@ -146,7 +157,8 @@
     1. Extract all `{{...}}` patterns via regex (same pattern as `resolve()`).
     2. For each match: parse prefix. Validate against allowed set:
        `input.<id>` (id ∈ knownInputs), `env.<KEY>`, `args.<name>`,
-       `loop.iteration`, `run_dir`, `run_id`, `node_dir`, `file("...")`.
+       `loop.iteration`, `run_dir`, `run_id`, `node_dir`, `file("...")`,
+       `flow_file("...")`.
     3. Unknown prefix or invalid `input.*` suffix → collect error string.
     4. Return all errors (batch, not fail-on-first).
     In `config.ts`: format each error with hook type + node ID, throw single

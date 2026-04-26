@@ -22,6 +22,7 @@ import {
   resolveBudget,
 } from "./config.ts";
 import { resolveRuntimeConfig } from "@korchasa/ai-ide-cli/runtime";
+import { dirname } from "@std/path";
 import { buildLevels } from "./dag.ts";
 import { terminalInput } from "./human.ts";
 import type { UserInput } from "./human.ts";
@@ -230,6 +231,7 @@ export class Engine {
         this.state.args,
         this.output,
         cwd,
+        this.workflowDir(),
       );
     }
 
@@ -553,12 +555,20 @@ export class Engine {
       ...paths,
       run_id: this.state.run_id,
       workDir: this.workDir,
+      workflow_dir: this.workflowDir(),
       args: this.state.args,
       env,
       loop: loopIteration !== undefined
         ? { iteration: loopIteration }
         : undefined,
     };
+  }
+
+  /** workDir-relative directory containing the workflow.yaml config file.
+   * Returns "" when the config sits at workDir root. */
+  private workflowDir(): string {
+    const d = dirname(this.options.config_path);
+    return d === "." || d === "/" ? "" : d;
   }
 
   /** Ensure all node directories exist. */
@@ -708,12 +718,14 @@ export async function runPrepareCommand(
   args: Record<string, string>,
   output: OutputManager,
   cwd?: string,
+  workflowDir?: string,
 ): Promise<void> {
   const ctx: TemplateContext = {
     node_dir: "",
     run_dir: runDir,
     run_id: runId,
     workDir: cwd ?? ".",
+    workflow_dir: workflowDir ?? "",
     args,
     env,
     input: {},

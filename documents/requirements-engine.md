@@ -82,3 +82,4 @@ FR-IDs are stable — never renumber them on move.
 - FR-E50 (Worktree Isolation Guardrail) → 04-runtime-and-hooks
 - FR-E51 (Post-Run Branch-Pin)         → 04-runtime-and-hooks
 - FR-E52 (Cwd-Relative Path Contract)  → 04-runtime-and-hooks
+- FR-E55 (`{{flow_file()}}` Template)  → 04-runtime-and-hooks
