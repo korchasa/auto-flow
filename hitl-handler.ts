@@ -10,6 +10,7 @@ import type {
   HitlConfig,
   NodeConfig,
   NodeSettings,
+  ProcessRegistry,
   ReasoningEffort,
   RunState,
   RuntimeId,
@@ -51,6 +52,10 @@ interface HitlBaseParams {
   allowedTools?: string[];
   /** Resolved tool blacklist (FR-E48). */
   disallowedTools?: string[];
+  /** Caller-supplied process tracker scope
+   * (FR-E60). Forwarded to the runtime adapter
+   * on the resume invocation that delivers the human reply. */
+  processRegistry?: ProcessRegistry;
 }
 
 /** Resume-from-waiting mode: node was previously set to waiting state. */
@@ -103,6 +108,7 @@ export async function handleAgentHitl(
     maxTurns,
     allowedTools,
     disallowedTools,
+    processRegistry,
   } = params;
   // ctx.run_dir is workDir-relative (see TemplateContext); reconstruct
   // the cwd-correct path for FS access.
@@ -144,6 +150,7 @@ export async function handleAgentHitl(
         maxTurns,
         allowedTools,
         disallowedTools,
+        processRegistry,
       },
       true, /* skipAsk — question already delivered */
     );
@@ -195,6 +202,9 @@ export async function handleAgentHitl(
       output,
       cwd,
       maxTurns,
+      allowedTools,
+      disallowedTools,
+      processRegistry,
     },
     false, /* skipAsk=false — deliver question */
   );

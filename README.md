@@ -355,6 +355,64 @@ deno task run:validate     # Type-check engine modules
 - **OpenCode CLI** — configured providers/models in local OpenCode config
 - **`GITHUB_TOKEN`** — required for PR creation and issue comments (set manually or via `gh auth login`)
 
+## Embedding vs standalone use
+
+`@korchasa/flowai-workflow` is built so the same engine that powers the
+`flowai-workflow` CLI can also be embedded as a library inside a larger
+host process (e.g. a TUI control plane, a chat bridge, a long-lived
+operator console). The two modes share one core engine but have
+different ownership contracts for OS-level concerns.
+
+- **Standalone mode** — `flowai-workflow run …` (or any user script that
+  invokes `cli.ts`). The CLI calls `installSignalHandlers()` from
+  [`process-registry.ts`](process-registry.ts) at startup, so SIGINT
+  and SIGTERM trigger `killAll()` followed by `Deno.exit(130|143)`.
+  Spawned subprocesses register in the package-wide default
+  `ProcessRegistry` singleton from `@korchasa/ai-ide-cli`.
+- **Library mode** — embedding host imports `Engine` from this package
+  and calls `engine.run()` from inside its own Deno process. Three
+  contracts the host MUST honor:
+  1. **OS signals are the host's responsibility.** `Engine` itself does
+     NOT call `installSignalHandlers()` and never installs SIGINT or
+     SIGTERM listeners — neither directly nor transitively (FR-E61).
+     The host wires its own listeners and decides whether a signal
+     cancels just the active run or shuts the whole process down.
+  2. **`processRegistry` opt-in for kill scoping.** Pass
+     `EngineOptions.processRegistry` (a `ProcessRegistry` instance from
+     `@korchasa/ai-ide-cli/process-registry`) to scope every child
+     process spawned during the run to your own registry. Calling
+     `killAll()` on that registry then terminates ONLY this engine
+     run's children, leaving sibling subsystems alive (FR-E60). Omit
+     the field to keep the legacy default-singleton behavior.
+  3. **Sequential `Engine.run()` calls are isolated.** The phase
+     registry is per-run — two back-to-back `engine.run()` calls with
+     different `phases:` blocks compute artifact paths strictly from
+     their own configs, so Run A's mapping never leaks into Run B
+     (FR-E59). Parallel `Engine.run()` calls in one process are NOT
+     supported; serialize them in the host's queue.
+
+Minimal embedding sketch:
+
+```ts
+import { Engine } from "@korchasa/flowai-workflow";
+import { ProcessRegistry } from "@korchasa/ai-ide-cli/process-registry";
+
+const processRegistry = new ProcessRegistry();
+// host wires its own SIGINT handler:
+Deno.addSignalListener("SIGINT", () => processRegistry.killAll());
+
+for (const job of queue) {
+  const engine = new Engine({
+    config_path: job.workflowYaml,
+    verbosity: "normal",
+    args: job.args,
+    env_overrides: {},
+    processRegistry, // FR-E60: scope subprocesses to this run
+  });
+  await engine.run(); // returns a RunState
+}
+```
+
 ## License
 
 Private project.

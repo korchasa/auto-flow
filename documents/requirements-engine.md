@@ -92,3 +92,6 @@ FR-IDs are stable — never renumber them on move.
 - FR-E55 (`{{flow_file()}}` Template)   → 04-runtime-and-hooks
 - FR-E57 (Per-Run Worktree Co-Location) → 04b-worktree-isolation
 - FR-E58 (Copy Ignored Into Worktree)  → 04b-worktree-isolation
+- FR-E59 (Phase Registry Scoped to Run) → 06-distribution-and-housekeeping
+- FR-E60 (ProcessRegistry Injection)    → 06-distribution-and-housekeeping
+- FR-E61 (Signal Handler Boundary)      → 06-distribution-and-housekeeping

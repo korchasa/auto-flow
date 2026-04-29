@@ -49,8 +49,8 @@ import {
   markNodeStarted,
   markRunCompleted,
   markRunFailed,
+  PhaseRegistry,
   saveState,
-  setPhaseRegistry,
   workPath,
 } from "./state.ts";
 import { interpolate } from "./template.ts";
@@ -85,6 +85,12 @@ export class Engine {
    * every state-path call so runs land under `<workflowDir>/runs/<run-id>`
    * regardless of layout. */
   private workflowDir: string;
+  /** Per-run phase registry (FR-E59). Built at the top
+   * of `runWithLock` from the loaded config and threaded through path
+   * helpers so back-to-back runs in one Deno process keep their `nodeId →
+   * phase` mappings isolated. Defaults to an empty registry until the run
+   * starts (so dry-run path computations behave as before). */
+  private phaseRegistry: PhaseRegistry = PhaseRegistry.empty();
 
   /** Create an engine instance with the given options and optional user-input provider. */
   constructor(options: EngineOptions, userInput: UserInput = terminalInput) {
@@ -235,8 +241,11 @@ export class Engine {
     levels: string[][],
     _lockPath: string,
   ): Promise<RunState> {
-    // Initialize phase registry before creating any node dirs (FR-E9)
-    setPhaseRegistry(this.config);
+    // FR-E9 / FR-E59: build a fresh per-run phase
+    // registry from the loaded config. Replacing any prior instance is
+    // mandatory — a host that drives several Engine.run() calls back-to-back
+    // would otherwise inherit the previous run's mapping.
+    this.phaseRegistry = PhaseRegistry.fromConfig(this.config);
 
     // Create run directory structure
     await this.ensureRunDirs(levels);
@@ -281,7 +290,12 @@ export class Engine {
       await Deno.mkdir(
         workPath(
           this.workDir,
-          getNodeDir(this.state.run_id, nodeId, this.workflowDir),
+          getNodeDir(
+            this.state.run_id,
+            nodeId,
+            this.workflowDir,
+            this.phaseRegistry,
+          ),
         ),
         { recursive: true },
       );
@@ -468,6 +482,7 @@ export class Engine {
         saveState: () => saveState(this.state, this.workDir, this.workflowDir),
         workDir: this.workDir,
         workflowDir: this.workflowDir,
+        phaseRegistry: this.phaseRegistry,
       };
 
       switch (node.type) {
@@ -580,6 +595,7 @@ export class Engine {
       nodeId,
       node.inputs ?? [],
       this.workflowDir,
+      this.phaseRegistry,
     );
 
     // Merge node-level env with global env (node overrides global)
@@ -611,7 +627,12 @@ export class Engine {
         await Deno.mkdir(
           workPath(
             this.workDir,
-            getNodeDir(this.state.run_id, nodeId, this.workflowDir),
+            getNodeDir(
+              this.state.run_id,
+              nodeId,
+              this.workflowDir,
+              this.phaseRegistry,
+            ),
           ),
           { recursive: true },
         );
@@ -625,7 +646,12 @@ export class Engine {
           await Deno.mkdir(
             workPath(
               this.workDir,
-              getNodeDir(this.state.run_id, bodyId, this.workflowDir),
+              getNodeDir(
+                this.state.run_id,
+                bodyId,
+                this.workflowDir,
+                this.phaseRegistry,
+              ),
             ),
             { recursive: true },
           );

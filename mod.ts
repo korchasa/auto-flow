@@ -40,17 +40,16 @@ export type { ExecutionLevels } from "./dag.ts";
 export { allPassed, formatFailures, runValidations } from "./validate.ts";
 export type { ValidationResult } from "./validate.ts";
 export {
-  clearPhaseRegistry,
   createRunState,
   generateRunId,
   getNodeDir,
-  getPhaseForNode,
   getRunDir,
   getStatePath,
   loadState,
+  PhaseRegistry,
   saveState,
-  setPhaseRegistry,
 } from "./state.ts";
+export { installSignalHandlers, ProcessRegistry } from "./process-registry.ts";
 export { runAgent } from "./agent.ts";
 export type { AgentResult, AgentRunOptions } from "./agent.ts";
 // Runtime adapter types re-exported from @korchasa/ai-ide-cli so engine's

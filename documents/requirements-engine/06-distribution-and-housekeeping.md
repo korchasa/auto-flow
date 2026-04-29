@@ -160,3 +160,99 @@
     has its own `deno task check` in the sibling repo.
 
 
+
+### 3.59 FR-E59: Phase Registry Scoped to Run
+
+- **Description:** The `nodeId → phase` mapping (FR-E9) lives on a per-run
+  `PhaseRegistry` instance constructed at the top of `Engine.run()` from the
+  loaded workflow config. No module-level state. Two consecutive
+  `Engine.run()` calls in the same Deno process keep their phase mappings
+  isolated — Run B's path computations are derived strictly from Run B's
+  own `phases:` (or per-node `phase:` fields), regardless of what Run A
+  configured.
+- **Motivation:** Library hosts (e.g. `flowai-center`) drive a sequential
+  queue of `Engine.run()` calls in one Deno process. Module-level mapping
+  let Run A's mapping persist into Run B and route Run B's nodes into Run
+  A's phase folders, breaking artifact isolation.
+- **Acceptance:**
+  - [x] AC1: `PhaseRegistry` class in `state.ts` with `fromConfig(config)`
+    factory + `empty()` factory + `get(nodeId)` reader; the underlying
+    `Map<string,string>` is private. No module-level mutable state remains.
+    Evidence: `state.ts:18-58`.
+  - [x] AC2: `getNodeDir` and `buildTaskPaths` accept an optional
+    `PhaseRegistry`; when omitted, behave as if the registry were empty
+    (back-compat for legacy callers and dry-run summaries). Evidence:
+    `state.ts:122-179`.
+  - [x] AC3: `Engine.runWithLock` builds a fresh `PhaseRegistry` from the
+    loaded config and threads it through `EngineContext.phaseRegistry` to
+    every node-dispatch path-helper call. Evidence: `engine.ts:241-247`,
+    `engine.ts:475`, `node-dispatch.ts:37-58`.
+  - [x] AC4: Two back-to-back `Engine.run()` calls with different `phases:`
+    blocks land Run B's artifacts at paths derived from Run B's config
+    only. Evidence: `engine_test.ts::Engine — back-to-back runs do not leak
+    phase mapping (FR-E59)`.
+
+
+
+### 3.60 FR-E60: Caller-Supplied ProcessRegistry Injection
+
+- **Description:** `EngineOptions` and `AgentRunOptions` accept an optional
+  `processRegistry?: ProcessRegistry` (type imported from
+  `@korchasa/ai-ide-cli/process-registry`). When supplied, every child
+  process spawned during the `Engine.run()` call (runtime CLI invocations,
+  HITL MCP helpers, continuation re-invocations) registers in the supplied
+  instance instead of the package-wide default singleton. Omitting the
+  option keeps the legacy default-singleton behavior bit-for-bit.
+- **Motivation:** Library hosts run `Engine` alongside other long-lived
+  subsystems (chat dispatchers, schedulers, MCP servers). A host-owned
+  `ProcessRegistry` lets the host call `killAll()` on its own scope to
+  terminate ONLY this engine's children — sibling subprocesses keep
+  running.
+- **Acceptance:**
+  - [x] AC1: `EngineOptions.processRegistry?: ProcessRegistry` exists and
+    is documented. Evidence: `types.ts::EngineOptions`.
+  - [x] AC2: `AgentRunOptions.processRegistry?: ProcessRegistry` exists and
+    is forwarded to every `adapter.invoke()` call (initial AND continuation).
+    Evidence: `agent.ts::runAgent` invoke calls.
+  - [x] AC3: `node-dispatch.ts` passes `eng.options.processRegistry` to
+    `runAgent` and `handleAgentHitl`; HITL handler + loop forward it onto
+    the resume `adapter.invoke`. Evidence: `node-dispatch.ts`,
+    `hitl-handler.ts`, `hitl.ts`.
+  - [x] AC4: Caller-supplied registry receives the runtime-invoke payload;
+    omission leaves the field undefined (default singleton in effect).
+    Evidence: `engine_test.ts::runAgent routes adapter spawns through
+    caller-supplied ProcessRegistry`,
+    `engine_test.ts::runAgent — omitted processRegistry leaves adapter to
+    use ai-ide-cli default singleton`.
+
+
+
+### 3.61 FR-E61: Signal Handler Boundary
+
+- **Description:** `installSignalHandlers()` is exposed as a publicly
+  documented entry point intended exclusively for autonomous bin entry
+  points (`cli.ts`, `scripts/self-runner.ts`). The `Engine` class MUST
+  NOT call it — neither directly nor transitively through any of its
+  methods. A library host that embeds `Engine.run()` in its own Deno
+  process keeps full control over signal routing, log handling, and
+  shutdown sequencing.
+- **Motivation:** Embedding hosts already own SIGINT/SIGTERM listeners
+  (often translating them into queue-cancellation, not process exit).
+  An engine-installed handler would call `Deno.exit(130|143)` and kill
+  unrelated host work.
+- **Acceptance:**
+  - [x] AC1: `process-registry.ts` documents `installSignalHandlers` as
+    bin-entry-point-only and explicitly disclaims its use from `Engine`.
+    Evidence: `process-registry.ts` module-level JSDoc.
+  - [x] AC2: README has an "Embedding vs standalone use" section
+    distinguishing the library-mode contract from the bin-mode contract.
+    Evidence: `README.md`.
+  - [x] AC3: `Engine.run()` does not install OS signal handlers — even
+    end-to-end through a noop merge workflow. Evidence:
+    `engine_test.ts::Engine does not install OS signal handlers
+    (FR-E61)`.
+  - [x] AC4: Source-level corollary: `engine.ts` does not import the
+    `installSignalHandlers` symbol. Evidence: `engine_test.ts::engine.ts
+    does not import installSignalHandlers`.
+
+

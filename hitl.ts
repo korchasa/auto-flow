@@ -13,6 +13,7 @@ import type {
   HumanInputRequest,
   NodeConfig,
   NodeSettings,
+  ProcessRegistry,
   ReasoningEffort,
   RuntimeId,
   TemplateContext,
@@ -97,6 +98,10 @@ export interface HitlRunOptions {
   cwd?: string;
   /** Resolved `budget.max_turns` (FR-E47) forwarded to the runtime on resume. */
   maxTurns?: number;
+  /** Caller-supplied process tracker scope
+   * (FR-E60). Forwarded to the runtime adapter
+   * on the resume invocation that delivers the human reply. */
+  processRegistry?: ProcessRegistry;
 }
 
 /**
@@ -270,6 +275,7 @@ export async function runHitlLoop(
         maxRetries: settings.max_retries,
         retryDelaySeconds: settings.retry_delay_seconds,
         cwd: cwdOpt,
+        processRegistry: opts.processRegistry,
       });
 
       if (result.error) {

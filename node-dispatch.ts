@@ -22,6 +22,7 @@ import {
   getRunDir,
   markNodeFailed,
   markRunAborted,
+  type PhaseRegistry,
   workPath,
 } from "./state.ts";
 import type {
@@ -50,6 +51,10 @@ export interface EngineContext {
    * state-path calls so runs land under `<workflowDir>/runs/<run-id>` regardless
    * of project layout. */
   workflowDir: string;
+  /** Per-run phase registry (FR-E59). Threaded to
+   * every `getNodeDir`/`buildTaskPaths` call so two back-to-back
+   * `Engine.run()` calls in one Deno process keep their mappings isolated. */
+  phaseRegistry: PhaseRegistry;
 }
 
 /** Run an agent node: invoke Claude CLI, handle HITL if triggered, save logs. */
@@ -101,6 +106,7 @@ export async function executeAgentNode(
       output: eng.output,
       cwd,
       maxTurns: resolveBudget(node, eng.config.defaults)?.max_turns,
+      processRegistry: eng.options.processRegistry,
     });
   }
 
@@ -141,6 +147,7 @@ export async function executeAgentNode(
         verbosity: eng.options.verbosity,
         cwd,
         maxTurns: resolveBudget(node, eng.config.defaults)?.max_turns,
+        processRegistry: eng.options.processRegistry,
       }),
   );
 
@@ -223,6 +230,7 @@ export async function executeAgentNode(
         output: eng.output,
         cwd,
         maxTurns: resolveBudget(node, eng.config.defaults)?.max_turns,
+        processRegistry: eng.options.processRegistry,
       });
     }
   }
@@ -252,7 +260,7 @@ export async function executeMergeNode(
 ): Promise<boolean> {
   const nodeDir = workPath(
     eng.workDir,
-    getNodeDir(eng.state.run_id, nodeId, eng.workflowDir),
+    getNodeDir(eng.state.run_id, nodeId, eng.workflowDir, eng.phaseRegistry),
   );
   await Deno.mkdir(nodeDir, { recursive: true });
 
@@ -260,7 +268,12 @@ export async function executeMergeNode(
   for (const inputId of node.inputs ?? []) {
     const inputDir = workPath(
       eng.workDir,
-      getNodeDir(eng.state.run_id, inputId, eng.workflowDir),
+      getNodeDir(
+        eng.state.run_id,
+        inputId,
+        eng.workflowDir,
+        eng.phaseRegistry,
+      ),
     );
     const targetDir = `${nodeDir}/${inputId}`;
     try {

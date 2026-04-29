@@ -1,11 +1,9 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import {
-  clearPhaseRegistry,
   createRunState,
   generateRunId,
   getNodeDir,
   getNodesByStatus,
-  getPhaseForNode,
   getResumableNodes,
   getRunDir,
   getStatePath,
@@ -18,7 +16,7 @@ import {
   markRunAborted,
   markRunCompleted,
   markRunFailed,
-  setPhaseRegistry,
+  PhaseRegistry,
   updateNodeState,
   updateRunCost,
 } from "./state.ts";
@@ -383,91 +381,96 @@ function makeConfig(
   };
 }
 
-Deno.test("getNodeDir — flat path when no phase registry", () => {
-  clearPhaseRegistry();
+Deno.test("getNodeDir — flat path when no phase registry passed", () => {
   assertEquals(
     getNodeDir("20260308T143022", "spec"),
     ".flowai-workflow/runs/20260308T143022/spec",
   );
 });
 
-Deno.test("getNodeDir — phase-aware path when node has phase in registry", () => {
-  clearPhaseRegistry();
-  const config = makeConfig({ plan: ["spec", "design"] });
-  setPhaseRegistry(config);
+Deno.test("getNodeDir — flat path when explicit empty registry", () => {
   assertEquals(
-    getNodeDir("run-1", "spec"),
+    getNodeDir(
+      "20260308T143022",
+      "spec",
+      ".flowai-workflow",
+      PhaseRegistry.empty(),
+    ),
+    ".flowai-workflow/runs/20260308T143022/spec",
+  );
+});
+
+Deno.test("getNodeDir — phase-aware path when registry maps node to phase", () => {
+  const config = makeConfig({ plan: ["spec", "design"] });
+  const reg = PhaseRegistry.fromConfig(config);
+  assertEquals(
+    getNodeDir("run-1", "spec", ".flowai-workflow", reg),
     ".flowai-workflow/runs/run-1/plan/spec",
   );
   assertEquals(
-    getNodeDir("run-1", "design"),
+    getNodeDir("run-1", "design", ".flowai-workflow", reg),
     ".flowai-workflow/runs/run-1/plan/design",
   );
-  clearPhaseRegistry();
 });
 
 Deno.test("getNodeDir — flat path for node not in registry", () => {
-  clearPhaseRegistry();
   const config = makeConfig({ plan: ["spec"] });
-  setPhaseRegistry(config);
+  const reg = PhaseRegistry.fromConfig(config);
   assertEquals(
-    getNodeDir("run-1", "other"),
+    getNodeDir("run-1", "other", ".flowai-workflow", reg),
     ".flowai-workflow/runs/run-1/other",
   );
-  clearPhaseRegistry();
 });
 
-Deno.test("setPhaseRegistry — builds map from top-level phases", () => {
-  clearPhaseRegistry();
+Deno.test("PhaseRegistry.fromConfig — builds map from top-level phases", () => {
   const config = makeConfig({
     plan: ["spec", "design"],
     impl: ["build"],
   });
-  setPhaseRegistry(config);
-  assertEquals(getPhaseForNode("spec"), "plan");
-  assertEquals(getPhaseForNode("design"), "plan");
-  assertEquals(getPhaseForNode("build"), "impl");
-  clearPhaseRegistry();
+  const reg = PhaseRegistry.fromConfig(config);
+  assertEquals(reg.get("spec"), "plan");
+  assertEquals(reg.get("design"), "plan");
+  assertEquals(reg.get("build"), "impl");
 });
 
-Deno.test("setPhaseRegistry — falls back to per-node phase field", () => {
-  clearPhaseRegistry();
+Deno.test("PhaseRegistry.fromConfig — falls back to per-node phase field", () => {
   const config = makeConfig(undefined, { "my-node": "report" });
-  setPhaseRegistry(config);
-  assertEquals(getPhaseForNode("my-node"), "report");
-  clearPhaseRegistry();
+  const reg = PhaseRegistry.fromConfig(config);
+  assertEquals(reg.get("my-node"), "report");
 });
 
-Deno.test("setPhaseRegistry — phases block only: builds registry from phases block", () => {
-  clearPhaseRegistry();
+Deno.test("PhaseRegistry.fromConfig — phases block only", () => {
   const config = makeConfig({ plan: ["spec", "design"] });
-  setPhaseRegistry(config);
-  assertEquals(getPhaseForNode("spec"), "plan");
-  assertEquals(getPhaseForNode("design"), "plan");
-  assertEquals(getPhaseForNode("other"), undefined);
-  clearPhaseRegistry();
+  const reg = PhaseRegistry.fromConfig(config);
+  assertEquals(reg.get("spec"), "plan");
+  assertEquals(reg.get("design"), "plan");
+  assertEquals(reg.get("other"), undefined);
 });
 
-Deno.test("setPhaseRegistry — phase-field-only: builds registry from per-node phase fields", () => {
-  clearPhaseRegistry();
+Deno.test("PhaseRegistry.fromConfig — phase-field-only", () => {
   const config = makeConfig(undefined, { spec: "plan", build: "impl" });
-  setPhaseRegistry(config);
-  assertEquals(getPhaseForNode("spec"), "plan");
-  assertEquals(getPhaseForNode("build"), "impl");
-  clearPhaseRegistry();
+  const reg = PhaseRegistry.fromConfig(config);
+  assertEquals(reg.get("spec"), "plan");
+  assertEquals(reg.get("build"), "impl");
 });
 
-Deno.test("clearPhaseRegistry — resets to empty state", () => {
-  const config = makeConfig({ plan: ["spec"] });
-  setPhaseRegistry(config);
-  assertEquals(getPhaseForNode("spec"), "plan");
-  clearPhaseRegistry();
-  assertEquals(getPhaseForNode("spec"), undefined);
+Deno.test("PhaseRegistry — back-to-back instances are isolated", () => {
+  const reg1 = PhaseRegistry.fromConfig(makeConfig({ plan: ["spec"] }));
+  const reg2 = PhaseRegistry.fromConfig(makeConfig({ impl: ["build"] }));
+  assertEquals(reg1.get("spec"), "plan");
+  assertEquals(reg1.get("build"), undefined);
+  assertEquals(reg2.get("build"), "impl");
+  assertEquals(reg2.get("spec"), undefined);
 });
 
-Deno.test("getPhaseForNode — returns undefined for unknown node", () => {
-  clearPhaseRegistry();
-  assertEquals(getPhaseForNode("nonexistent"), undefined);
+Deno.test("PhaseRegistry.empty — has no mappings", () => {
+  const reg = PhaseRegistry.empty();
+  assertEquals(reg.get("spec"), undefined);
+});
+
+Deno.test("PhaseRegistry.get — returns undefined for unknown node", () => {
+  const reg = PhaseRegistry.fromConfig(makeConfig({ plan: ["spec"] }));
+  assertEquals(reg.get("nonexistent"), undefined);
 });
 
 // --- FR-E22: markNodeCompleted result persistence tests ---

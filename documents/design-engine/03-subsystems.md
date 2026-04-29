@@ -3,58 +3,104 @@
 # SDS Engine — Subsystems (phase, process, binary, backoff, release)
 
 
-### 3.2 Phase Registry (`state.ts`) — IMPLEMENTED
+### 3.2 Phase Registry (`state.ts`) — IMPLEMENTED (FR-E9, FR-E59)
 
-- **Status:** Implemented. `getNodeDir()` in `state.ts` resolves
-  phase-aware artifact paths. Evidence: `state.ts:20-36`
-  (`setPhaseRegistry()` — builds nodeId→phase map from config),
-  `state.ts:98-104` (`getNodeDir()` — phase-aware path resolution),
-  `state.ts:44-46` (`getPhaseForNode()` — lookup),
-  `engine.ts:135` (`setPhaseRegistry(config)` call at engine init).
-- **Purpose:** Module-scoped mapping from nodeId → phase string, enabling
-  `getNodeDir()` to resolve phase-aware artifact paths without signature change.
-- **Data:** `phaseRegistry: Map<string, string>` — populated from
-  `WorkflowConfig` via exactly one mechanism (mutual exclusivity enforced by
-  config validation — FR-E33).
+- **Status:** Implemented. `state.ts::PhaseRegistry` is a per-run instance
+  holding a private `Map<string, string>`. `Engine.runWithLock` builds a
+  fresh `PhaseRegistry.fromConfig(this.config)` at run start and threads it
+  through `getNodeDir`/`buildTaskPaths` and the `EngineContext`.
+- **Purpose:** Map `nodeId → phase string` for the duration of one
+  `Engine.run()`, enabling `getNodeDir` to resolve phase-aware artifact
+  paths. Per-run lifetime is mandatory for library-mode hosts that drive a
+  sequential queue of `Engine.run()` calls in one Deno process — module-
+  scoped state would let Run A's mapping leak into Run B (FR-E59).
+- **Data:** Private `Map<string, string>` per instance. Populated from a
+  `WorkflowConfig` via exactly one mechanism (mutual exclusivity enforced
+  by config validation — FR-E33).
 - **Interfaces:**
-  - `setPhaseRegistry(config: WorkflowConfig)` — exclusive if/else: if
-    `config.phases` exists, populates registry from `phases:` block (iterates
-    phase→nodeIds mapping); else iterates config nodes, builds map from
-    `nodeId → node.phase` (skips nodes without `phase`). Dual-mechanism merge
-    logic removed — config validation guarantees only one mechanism is present.
-    Called once at engine init (both fresh-run and `--resume` paths).
-  - `clearPhaseRegistry()` — resets map. Used in tests for isolation.
-  - `getPhaseForNode(nodeId: string): string | undefined` — lookup.
-  - `getNodeDir(runId, nodeId)` — signature unchanged. Internally: if registry
-    has phase for nodeId, returns `${runDir}/${phase}/${nodeId}/`; otherwise
-    `${runDir}/${nodeId}/` (backward-compatible fallback).
+  - `static PhaseRegistry.fromConfig(config: WorkflowConfig): PhaseRegistry`
+    — exclusive if/else: if `config.phases` exists, iterates phase→nodeIds
+    mapping; else iterates config nodes and builds map from
+    `nodeId → node.phase` (skips nodes without `phase`).
+  - `static PhaseRegistry.empty(): PhaseRegistry` — used by callers without
+    a phase mapping (legacy tests, dry-run summaries).
+  - `instance.get(nodeId: string): string | undefined` — lookup.
+  - `getNodeDir(runId, nodeId, workflowDir, phaseRegistry?)` — when
+    `phaseRegistry` is present and maps `nodeId → phase`, returns
+    `${runDir}/${phase}/${nodeId}/`; otherwise the flat
+    `${runDir}/${nodeId}/` (back-compat for callers that omit the
+    registry).
+  - `buildTaskPaths(runId, nodeId, inputs, workflowDir, phaseRegistry?)` —
+    threads the same registry into every `node_dir` and `input.<id>`
+    computation so loop-body and predecessor paths inherit the active
+    mapping consistently.
 - **Deps:** `types.ts` (`WorkflowConfig`, `NodeConfig`).
-- **Design rationale:** Module-scoped global state (not instance state) because
-  `getNodeDir()` is a free function called from multiple contexts (engine,
-  templates, tests). Single-instance engine guarantee prevents sequential
-  mutation. `clearPhaseRegistry()` ensures test isolation.
+- **Design rationale:** Per-run instance over module-level state because
+  the engine is library-embeddable. Hosts run sequential `Engine.run()`
+  calls; module-level mutable state would leak phase mappings across
+  runs and silently misroute artifacts. Path helpers stay free
+  functions (no capture of `this`) so legacy unit tests with no
+  registry continue to compile and produce flat paths — the registry
+  parameter is optional. Within one run, the registry is read-only:
+  `Engine.runWithLock` builds it before `ensureRunDirs` and never
+  mutates it again.
 
-### 3.3 Process Registry (`process-registry.ts`) — IMPLEMENTED
+### 3.3 Process Registry (`process-registry.ts`) — IMPLEMENTED (FR-E25, FR-E60, FR-E61)
 
-- **Status:** Implemented. FR-E25.
-- **Purpose:** Global singleton tracking spawned `Deno.ChildProcess` instances
-  and shutdown callbacks. Enables graceful cleanup on SIGINT/SIGTERM.
-- **Data:** `processes: Set<Deno.ChildProcess>`, `shutdownCallbacks: Array<() => Promise<void> | void>`.
-- **Interfaces:**
-  - `register(p)` / `unregister(p)` — add/remove process from tracked set.
-  - `onShutdown(cb): () => void` — register cleanup callback, returns disposer.
-  - `killAll()` — SIGTERM all, wait 5s, SIGKILL survivors, run callbacks.
-  - `installSignalHandlers()` — idempotent; adds SIGINT+SIGTERM listeners
-    that call `killAll()` then `Deno.exit(130|143)`.
+- **Status:** Implemented. FR-E25 + FR-E60 + FR-E61.
+- **Purpose:** Track spawned `Deno.ChildProcess` instances and shutdown
+  callbacks; enable graceful cleanup on `killAll()`. Two scoping modes
+  coexist: a package-wide default singleton (back-compat with stand-alone
+  CLI use) and instance-scoped `ProcessRegistry` instances supplied by
+  embedding hosts (FR-E60).
+- **Data:** `Set<Deno.ChildProcess>`, `Array<() => Promise<void> | void>`,
+  configurable `graceMs` per instance — owned by `@korchasa/ai-ide-cli`.
+  Engine's `process-registry.ts` only re-exports the `ProcessRegistry`
+  class plus the default-singleton free functions
+  (`register`/`unregister`/`onShutdown`/`killAll`).
+- **Interfaces (instance-scoped):**
+  - `new ProcessRegistry({ graceMs? })` — construct.
+  - `register(p)` / `unregister(p)` — add/remove tracked process.
+  - `onShutdown(cb): () => void` — register cleanup callback (returns
+    disposer).
+  - `killAll()` — SIGTERM all, wait `graceMs`, SIGKILL survivors, run
+    callbacks.
+- **Interfaces (free functions over default singleton):** Same names; they
+  delegate to the package-wide default `ProcessRegistry` instance. Used by
+  `Engine.run()` itself for its own `onShutdown(() => releaseLock(...))`
+  hook so stand-alone CLI behavior is byte-for-byte identical.
+- **Engine option flow (FR-E60):**
+  `EngineOptions.processRegistry?` → `node-dispatch.ts` →
+  `runAgent({...processRegistry})` / `handleAgentHitl({...})` /
+  `runHitlLoop({...})` → forwarded to every `adapter.invoke()` call as
+  `RuntimeInvokeOptions.processRegistry`. The ai-ide-cli adapters route
+  spawned subprocesses to the supplied instance instead of the default.
+  When the field is omitted at the top, every downstream invoke also sees
+  `undefined` and the default singleton is used.
+- **Signal handler boundary (FR-E61):** `installSignalHandlers()` lives in
+  engine's local `process-registry.ts` and is exposed publicly, but it is
+  NOT called by `Engine`. It exists exclusively for autonomous bin entry
+  points (`cli.ts`, `scripts/self-runner.ts`). Embedding hosts own
+  SIGINT/SIGTERM routing themselves and translate signals into
+  queue-cancellation, not `Deno.exit`. Source-level invariant verified by
+  `engine_test.ts::engine.ts does not import installSignalHandlers`.
 - **Integration points:**
-  - `agent.ts:executeClaudeProcess()` — register/unregister in try/finally.
-  - `engine.ts:Engine.run()` — onShutdown for lock release + state save;
-    disposers called in finally to prevent leak in loops.
-  - `cli.ts`, `self-runner.ts` — installSignalHandlers() at entry point.
-- **Design rationale:** Module-scoped global state (same pattern as Phase
-  Registry) because signal handlers are process-wide. `_reset()` for test
-  isolation. `onShutdown` disposer pattern prevents callback accumulation
-  when `Engine.run()` called in a loop (`self-runner.ts`).
+  - `agent.ts::runAgent` — forwards `processRegistry` to every
+    `adapter.invoke()` (initial + continuation).
+  - `engine.ts::Engine.run()` — `onShutdown(() => releaseLock(...))` for
+    SIGINT/SIGTERM cleanup (default singleton); does NOT call
+    `installSignalHandlers()`.
+  - `cli.ts`, `self-runner.ts` — `installSignalHandlers()` at entry point
+    (bin-mode only).
+- **Design rationale:** The default singleton preserves bit-for-bit
+  stand-alone CLI behavior. The opt-in `processRegistry` field gives
+  embedding hosts a per-run kill scope — calling `killAll()` on the
+  host's instance terminates only this engine's children, leaving any
+  sibling subprocesses (chat dispatcher, scheduler, MCP server) intact.
+  Signal wiring stays out of `Engine` so a host that already owns
+  SIGINT/SIGTERM (most do — they translate signals into UI-level
+  cancellation, not `Deno.exit`) is not blindsided by an engine call to
+  `Deno.exit(130|143)`.
 
 ### 3.3a Workflow Lock (`lock.ts`) — FR-E25, FR-E54
 

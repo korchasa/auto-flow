@@ -14,6 +14,7 @@ import type {
   NodeConfig,
   NodeSettings,
   PermissionDenial,
+  ProcessRegistry,
   ReasoningEffort,
   RuntimeId,
   TemplateContext,
@@ -127,6 +128,13 @@ export interface AgentRunOptions {
   allowedTools?: string[];
   /** Resolved tool blacklist (FR-E48). See {@link allowedTools}. */
   disallowedTools?: string[];
+  /** Caller-supplied process tracker scope
+   * (FR-E60). Forwarded to every
+   * `adapter.invoke()` call this agent makes (initial + continuations) so
+   * the resulting child processes register in this {@link ProcessRegistry}
+   * instead of the ai-ide-cli default singleton. Omit to keep the legacy
+   * singleton behavior. */
+  processRegistry?: ProcessRegistry;
 }
 
 /**
@@ -187,6 +195,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     maxTurns,
     allowedTools,
     disallowedTools,
+    processRegistry,
   } = opts;
   const adapter = runtimeAdapter ?? getRuntimeAdapter(runtime);
   const extraArgs = applyBudgetFlags(runtimeArgs, runtime, maxTurns);
@@ -239,6 +248,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     streamLogPath,
     verbosity,
     cwd,
+    processRegistry,
   });
 
   let continuations = 0;
@@ -350,6 +360,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       streamLogPath,
       verbosity,
       cwd,
+      processRegistry,
     });
   }
 

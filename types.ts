@@ -21,6 +21,7 @@ import type {
 } from "@korchasa/ai-ide-cli/types";
 import type { ExtraArgsMap } from "@korchasa/ai-ide-cli/runtime/types";
 import type { ReasoningEffort } from "@korchasa/ai-ide-cli/runtime/reasoning-effort";
+import type { ProcessRegistry } from "@korchasa/ai-ide-cli/process-registry";
 
 export type {
   CliRunOutput,
@@ -29,6 +30,7 @@ export type {
   HumanInputRequest,
   PermissionDenial,
   PermissionMode,
+  ProcessRegistry,
   ReasoningEffort,
   RuntimeId,
   Verbosity,
@@ -415,4 +417,15 @@ export interface EngineOptions {
   lock_path?: string;
   /** Workflow-wide USD cost cap (FR-E47). Strict: exact-equal does not trigger. */
   budget_usd?: number;
+  /** Optional caller-supplied process tracker scope
+   * (FR-E60). When provided, every child
+   * process spawned for this `Engine.run()` (runtime CLI invocations, HITL
+   * MCP helpers) is registered in this {@link ProcessRegistry} instance
+   * instead of the package-wide default singleton from
+   * `@korchasa/ai-ide-cli`. Embedding hosts that run `Engine` alongside
+   * other long-lived subsystems use this to scope `killAll()` to the
+   * engine's children only — sibling subprocesses keep running. Falls
+   * back to the default singleton when omitted, preserving stand-alone
+   * CLI behavior. */
+  processRegistry?: ProcessRegistry;
 }

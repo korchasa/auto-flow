@@ -6,7 +6,7 @@ import type {
   RunState,
   WorkflowConfig,
 } from "./types.ts";
-import { resolveInputArtifacts } from "./agent.ts";
+import { resolveInputArtifacts, runAgent } from "./agent.ts";
 import { collectAllNodeIds, findNodeConfig } from "./config.ts";
 import { Engine, runPrepareCommand } from "./engine.ts";
 import {
@@ -24,6 +24,15 @@ import {
   markNodeStarted,
 } from "./state.ts";
 import { OutputManager } from "./output.ts";
+import {
+  _isHandlersInstalled,
+  _reset as _resetProcessRegistry,
+  ProcessRegistry,
+} from "./process-registry.ts";
+import type {
+  RuntimeAdapter,
+  RuntimeInvokeOptions,
+} from "@korchasa/ai-ide-cli/runtime/types";
 
 /** Capture output lines from an OutputManager. */
 function createCapture(): { lines: string[]; writer: (text: string) => void } {
@@ -1193,3 +1202,314 @@ Deno.test("FR-E34 — log message format: failure suppressed by on_error: contin
     true,
   );
 });
+
+// --- FR-E59: back-to-back runs do not leak phase mapping ---
+
+/** Two consecutive `Engine.run()` calls in one Deno process must keep their
+ * `nodeId → phase` mappings isolated. Run A maps `shared` to phase `alpha`;
+ * Run B has no phases, so its `shared` node MUST land at the flat path
+ * `<runDir>/shared`, not `<runDir>/alpha/shared`. The legacy module-level
+ * `_phaseRegistry` would carry Run A's mapping into Run B and put the node
+ * dir under `alpha/`. */
+Deno.test("Engine — back-to-back runs do not leak phase mapping (FR-E59)", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  try {
+    await Deno.mkdir(`${tmpDir}/wf-a`);
+    await Deno.writeTextFile(
+      `${tmpDir}/wf-a/workflow.yaml`,
+      `name: a
+version: "1"
+defaults:
+  worktree_disabled: true
+phases:
+  alpha:
+    - shared
+nodes:
+  shared:
+    type: merge
+    label: Shared
+`,
+    );
+    await Deno.mkdir(`${tmpDir}/wf-b`);
+    await Deno.writeTextFile(
+      `${tmpDir}/wf-b/workflow.yaml`,
+      `name: b
+version: "1"
+defaults:
+  worktree_disabled: true
+nodes:
+  shared:
+    type: merge
+    label: Shared
+`,
+    );
+
+    Deno.chdir(tmpDir);
+
+    const engineA = new Engine(makeOptions({
+      config_path: "wf-a/workflow.yaml",
+      lock_path: `${tmpDir}/wf-a.lock`,
+    }));
+    const stateA = await engineA.run();
+    assertEquals(stateA.status, "completed");
+
+    const engineB = new Engine(makeOptions({
+      config_path: "wf-b/workflow.yaml",
+      lock_path: `${tmpDir}/wf-b.lock`,
+    }));
+    const stateB = await engineB.run();
+    assertEquals(stateB.status, "completed");
+
+    // Run B's `shared` node must sit at the FLAT path — no inherited phase.
+    const flatPath = `${tmpDir}/wf-b/runs/${stateB.run_id}/shared`;
+    const flatStat = await Deno.stat(flatPath);
+    assertEquals(flatStat.isDirectory, true);
+
+    // Negative check: leaked phase path must NOT exist on disk.
+    const leakedPath = `${tmpDir}/wf-b/runs/${stateB.run_id}/alpha/shared`;
+    let leaked = false;
+    try {
+      await Deno.stat(leakedPath);
+      leaked = true;
+    } catch {
+      // expected
+    }
+    assertEquals(leaked, false, `leaked path should not exist: ${leakedPath}`);
+  } finally {
+    Deno.chdir(origCwd);
+    await Deno.remove(tmpDir, { recursive: true });
+  }
+});
+
+// --- FR-E60: caller-supplied ProcessRegistry ---
+
+/** Verifies that an `AgentRunOptions.processRegistry` value reaches every
+ * `adapter.invoke()` call (initial + continuation), so an embedding host
+ * scoping `killAll()` to its own registry only kills processes spawned by
+ * THIS engine run — not unrelated subprocesses owned by other subsystems
+ * sharing the same Deno process. */
+Deno.test(
+  "runAgent routes adapter spawns through caller-supplied ProcessRegistry (FR-E60)",
+  async () => {
+    const nodeDir = await Deno.makeTempDir();
+    const outputPath = `${nodeDir}/result.md`;
+    const customReg = new ProcessRegistry();
+
+    const captures: (ProcessRegistry | undefined)[] = [];
+    let invocationCount = 0;
+    const adapter: RuntimeAdapter = {
+      id: "opencode",
+      capabilities: {
+        permissionMode: false,
+        hitl: false,
+        transcript: false,
+        interactive: false,
+        toolUseObservation: false,
+        session: false,
+        capabilityInventory: false,
+        toolFilter: false,
+        reasoningEffort: false,
+      },
+      launchInteractive() {
+        throw new Error("not used");
+      },
+      invoke: async (opts: RuntimeInvokeOptions) => {
+        captures.push(opts.processRegistry);
+        invocationCount++;
+        // Second pass writes the artifact so validation passes and the
+        // continuation loop terminates.
+        if (invocationCount === 2) {
+          await Deno.writeTextFile(outputPath, "# done\n");
+        }
+        return {
+          output: {
+            runtime: "opencode",
+            result: invocationCount === 1 ? "first" : "fixed",
+            session_id: "ses_test",
+            total_cost_usd: 0,
+            duration_ms: 1,
+            duration_api_ms: 1,
+            num_turns: 1,
+            is_error: false,
+          },
+        };
+      },
+    };
+
+    try {
+      const result = await runAgent({
+        node: {
+          type: "agent",
+          label: "Test",
+          prompt: "do",
+          validate: [{ type: "file_exists", path: outputPath }],
+        } as NodeConfig,
+        ctx: {
+          node_dir: nodeDir,
+          run_dir: nodeDir,
+          run_id: "test-run",
+          workDir: ".",
+          args: {},
+          env: {},
+          input: {},
+        },
+        settings: {
+          max_continuations: 2,
+          timeout_seconds: 30,
+          on_error: "fail",
+          max_retries: 1,
+          retry_delay_seconds: 1,
+        },
+        runtime: "opencode",
+        runtimeAdapter: adapter,
+        processRegistry: customReg,
+      });
+
+      assertEquals(result.success, true);
+      assertEquals(invocationCount, 2);
+      // Both initial AND continuation invocations carry the supplied registry.
+      assertEquals(captures.length, 2);
+      assertEquals(captures[0], customReg);
+      assertEquals(captures[1], customReg);
+    } finally {
+      await Deno.remove(nodeDir, { recursive: true });
+    }
+  },
+);
+
+/** Negative companion: omitting `processRegistry` keeps the legacy
+ * single-default-singleton behavior (adapter receives `undefined`). */
+Deno.test(
+  "runAgent — omitted processRegistry leaves adapter to use ai-ide-cli default singleton",
+  async () => {
+    const nodeDir = await Deno.makeTempDir();
+    let captured: ProcessRegistry | undefined = "sentinel" as unknown as
+      | ProcessRegistry
+      | undefined;
+    const adapter: RuntimeAdapter = {
+      id: "opencode",
+      capabilities: {
+        permissionMode: false,
+        hitl: false,
+        transcript: false,
+        interactive: false,
+        toolUseObservation: false,
+        session: false,
+        capabilityInventory: false,
+        toolFilter: false,
+        reasoningEffort: false,
+      },
+      launchInteractive() {
+        throw new Error("not used");
+      },
+      invoke: (opts: RuntimeInvokeOptions) => {
+        captured = opts.processRegistry;
+        return Promise.resolve({
+          output: {
+            runtime: "opencode",
+            result: "ok",
+            session_id: "ses",
+            total_cost_usd: 0,
+            duration_ms: 1,
+            duration_api_ms: 1,
+            num_turns: 1,
+            is_error: false,
+          },
+        });
+      },
+    };
+
+    try {
+      const result = await runAgent({
+        node: { type: "agent", label: "Test", prompt: "do" } as NodeConfig,
+        ctx: {
+          node_dir: nodeDir,
+          run_dir: nodeDir,
+          run_id: "test-run",
+          workDir: ".",
+          args: {},
+          env: {},
+          input: {},
+        },
+        settings: {
+          max_continuations: 1,
+          timeout_seconds: 30,
+          on_error: "fail",
+          max_retries: 1,
+          retry_delay_seconds: 1,
+        },
+        runtime: "opencode",
+        runtimeAdapter: adapter,
+      });
+
+      assertEquals(result.success, true);
+      assertEquals(captured, undefined);
+    } finally {
+      await Deno.remove(nodeDir, { recursive: true });
+    }
+  },
+);
+
+// --- FR-E61: Engine never installs OS signal handlers ---
+
+/** `Engine.run()` MUST NOT wire SIGINT/SIGTERM listeners — neither directly
+ * nor transitively. `installSignalHandlers()` is reserved for autonomous
+ * bin entry points (`cli.ts`, `scripts/self-runner.ts`); a host embedding
+ * the engine in its own Deno process keeps full control over signals. */
+Deno.test(
+  "Engine does not install OS signal handlers (FR-E61)",
+  async () => {
+    const tmpDir = await Deno.makeTempDir();
+    const origCwd = Deno.cwd();
+    try {
+      _resetProcessRegistry();
+      assertEquals(_isHandlersInstalled(), false);
+
+      await Deno.mkdir(`${tmpDir}/wf`);
+      await Deno.writeTextFile(
+        `${tmpDir}/wf/workflow.yaml`,
+        `name: noop
+version: "1"
+defaults:
+  worktree_disabled: true
+nodes:
+  noop:
+    type: merge
+    label: Noop
+`,
+      );
+      Deno.chdir(tmpDir);
+
+      const engine = new Engine(makeOptions({
+        config_path: "wf/workflow.yaml",
+        lock_path: `${tmpDir}/wf.lock`,
+      }));
+      const state = await engine.run();
+      assertEquals(state.status, "completed");
+
+      // Snapshot must match — engine ran end-to-end without touching signals.
+      assertEquals(_isHandlersInstalled(), false);
+    } finally {
+      Deno.chdir(origCwd);
+      await Deno.remove(tmpDir, { recursive: true });
+    }
+  },
+);
+
+/** Source-level corollary: the engine module file MUST NOT import the
+ * `installSignalHandlers` symbol. Catches any future change that would
+ * pull signal wiring into engine.ts even if no test exercises that path. */
+Deno.test(
+  "engine.ts does not import installSignalHandlers (FR-E61)",
+  async () => {
+    const src = await Deno.readTextFile(
+      new URL("./engine.ts", import.meta.url),
+    );
+    assertEquals(
+      src.includes("installSignalHandlers"),
+      false,
+      "engine.ts must not reference installSignalHandlers",
+    );
+  },
+);

@@ -1,8 +1,8 @@
 /**
  * @module
  * Run-state management: create, persist, load, and update RunState across a
- * workflow execution. Also owns the phase registry (nodeId → phase name) used
- * for computing node output directory paths.
+ * workflow execution. Also defines {@link PhaseRegistry}, the per-run
+ * `nodeId → phase` mapping used for computing node output directory paths.
  */
 
 import type {
@@ -13,45 +13,52 @@ import type {
   WorkflowConfig,
 } from "./types.ts";
 
-// --- FR-E9: Phase Registry ---
-
-/** Module-scoped phase registry: nodeId → phase name.
- * Populated once per run via setPhaseRegistry(). */
-const _phaseRegistry = new Map<string, string>();
+// --- FR-E9 / FR-E59: Phase Registry ---
 
 /**
- * Build phase registry from workflow config.
- * Config validation (parseConfig) guarantees mutual exclusivity: either a top-level
- * `phases:` block is present OR per-node `phase:` fields are used, never both.
- * Called once at run start, before ensureRunDirs().
+ * Per-run mapping `nodeId → phase name`. Each `Engine.run()` instantiates a
+ * fresh registry from the workflow config and threads it through
+ * {@link getNodeDir} / {@link buildTaskPaths}. No module-level state — two
+ * back-to-back runs in the same Deno process keep their phase mappings
+ * isolated, which is required for library-embedding hosts that drive a
+ * sequential queue of `Engine.run()` calls.
  */
-export function setPhaseRegistry(config: WorkflowConfig): void {
-  _phaseRegistry.clear();
-  if (config.phases) {
-    // Top-level phases block is the sole mechanism
-    for (const [phase, nodeIds] of Object.entries(config.phases)) {
-      for (const nodeId of nodeIds) {
-        _phaseRegistry.set(nodeId, phase);
-      }
-    }
-  } else {
-    // Per-node phase fields are the sole mechanism when no phases block is present
-    for (const [nodeId, node] of Object.entries(config.nodes)) {
-      if (node.phase) {
-        _phaseRegistry.set(nodeId, node.phase);
-      }
-    }
+export class PhaseRegistry {
+  readonly #map: Map<string, string>;
+
+  private constructor(map: Map<string, string>) {
+    this.#map = map;
   }
-}
 
-/** Clear the phase registry. Used for test isolation. */
-export function clearPhaseRegistry(): void {
-  _phaseRegistry.clear();
-}
+  /**
+   * Build a registry from a workflow config. Config validation (parseConfig)
+   * guarantees mutual exclusivity between the top-level `phases:` block and
+   * per-node `phase:` fields, so this honors whichever mechanism is present.
+   */
+  static fromConfig(config: WorkflowConfig): PhaseRegistry {
+    const map = new Map<string, string>();
+    if (config.phases) {
+      for (const [phase, nodeIds] of Object.entries(config.phases)) {
+        for (const nodeId of nodeIds) map.set(nodeId, phase);
+      }
+    } else {
+      for (const [nodeId, node] of Object.entries(config.nodes)) {
+        if (node.phase) map.set(nodeId, node.phase);
+      }
+    }
+    return new PhaseRegistry(map);
+  }
 
-/** Return the phase for a node, or undefined if not registered. */
-export function getPhaseForNode(nodeId: string): string | undefined {
-  return _phaseRegistry.get(nodeId);
+  /** Return an empty registry — used by callers that have no phase mapping
+   * (legacy back-compat in path helpers, dry-run summaries, tests). */
+  static empty(): PhaseRegistry {
+    return new PhaseRegistry(new Map());
+  }
+
+  /** Return the phase for a node, or undefined if not registered. */
+  get(nodeId: string): string | undefined {
+    return this.#map.get(nodeId);
+  }
 }
 
 /** Generate a run ID from the current timestamp with optional label.
@@ -114,14 +121,17 @@ export function getRunDir(
 }
 
 /** Get the node output directory path.
- * Returns `<runDir>/<phase>/<nodeId>/` when node has a phase in the registry,
- * otherwise flat `<runDir>/<nodeId>/` (backward-compatible). */
+ * Returns `<runDir>/<phase>/<nodeId>/` when the supplied registry maps the
+ * node to a phase, otherwise flat `<runDir>/<nodeId>/`. When `phaseRegistry`
+ * is omitted, behaves as if the registry were empty (back-compat for callers
+ * that predate phase support, e.g. dry-run summaries and unit tests). */
 export function getNodeDir(
   runId: string,
   nodeId: string,
   workflowDir: string = DEFAULT_WORKFLOW_DIR,
+  phaseRegistry?: PhaseRegistry,
 ): string {
-  const phase = getPhaseForNode(nodeId);
+  const phase = phaseRegistry?.get(nodeId);
   if (phase) {
     return `${getRunDir(runId, workflowDir)}/${phase}/${nodeId}`;
   }
@@ -168,15 +178,18 @@ export function buildTaskPaths(
   nodeId: string,
   inputs: readonly string[] = [],
   workflowDir: string = DEFAULT_WORKFLOW_DIR,
+  phaseRegistry?: PhaseRegistry,
 ): {
   node_dir: string;
   run_dir: string;
   input: Record<string, string>;
 } {
   const input: Record<string, string> = {};
-  for (const id of inputs) input[id] = getNodeDir(runId, id, workflowDir);
+  for (const id of inputs) {
+    input[id] = getNodeDir(runId, id, workflowDir, phaseRegistry);
+  }
   return {
-    node_dir: getNodeDir(runId, nodeId, workflowDir),
+    node_dir: getNodeDir(runId, nodeId, workflowDir, phaseRegistry),
     run_dir: getRunDir(runId, workflowDir),
     input,
   };

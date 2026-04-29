@@ -73,6 +73,16 @@ example of engine usage.
   completed nodes skipped based on `state.json`
 - **Observability:** 3 verbosity levels (`-q`/default/`-v`); status lines with
   timestamps; final summary
+- **Library-embedding readiness (FR-E59/E60/E61):** Engine is safe to embed in
+  a host Deno process that runs sequential `Engine.run()` calls alongside
+  other long-lived subsystems. Phase registry is per-run (no module-level
+  leak between runs); `EngineOptions.processRegistry?` lets the host scope
+  subprocess kills to its own `ProcessRegistry`; `installSignalHandlers()`
+  is publicly exposed for autonomous bin entry points (`cli.ts`,
+  `scripts/self-runner.ts`) ONLY — `Engine` itself never installs
+  SIGINT/SIGTERM listeners, so the host keeps full control over signal
+  routing. Parallel `Engine.run()` calls in one process are NOT supported;
+  the host serializes them in its queue.
 - **SDLC workflow (example):** dogfood ships four workflow folders under
   `.flowai-workflow/`:
   - `github-inbox/` (Claude Code runtime; primary)

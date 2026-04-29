@@ -1,9 +1,17 @@
 /**
  * @module
- * Signal-handler wiring for the engine. Delegates process tracking and
- * shutdown callback management to `@korchasa/ai-ide-cli/process-registry`;
- * owns only the OS-level SIGINT/SIGTERM plumbing that translates signals
- * into a graceful `killAll()` + `Deno.exit(130|143)` sequence.
+ * Signal-handler wiring for the standalone engine binary. Delegates process
+ * tracking and shutdown callback management to
+ * `@korchasa/ai-ide-cli/process-registry`; owns only the OS-level
+ * SIGINT/SIGTERM plumbing that translates signals into a graceful
+ * `killAll()` + `Deno.exit(130|143)` sequence.
+ *
+ * **Library boundary (FR-E61).**
+ * {@link installSignalHandlers} is intended exclusively for autonomous bin
+ * entry points (`cli.ts`, `scripts/self-runner.ts`). The {@link Engine}
+ * class itself MUST NOT call it — neither directly nor transitively — so a
+ * library host that embeds `Engine.run()` in its own Deno process keeps full
+ * control over signal routing, log handling, and shutdown sequencing.
  */
 
 import {
@@ -12,6 +20,7 @@ import {
   _reset as _resetLib,
   killAll,
   onShutdown,
+  ProcessRegistry,
   register,
   unregister,
 } from "@korchasa/ai-ide-cli/process-registry";
@@ -23,6 +32,7 @@ export {
   _getShutdownCallbacks,
   killAll,
   onShutdown,
+  ProcessRegistry,
   register,
   unregister,
 };
@@ -67,6 +77,13 @@ export function installSignalHandlers(): void {
 }
 
 // --- Test helpers (prefixed with _ to indicate internal use) ---
+
+/** Inspect whether OS signal handlers have been installed. For test
+ * assertions only — used by FR-E61 to verify
+ * `Engine.run()` does not transitively wire SIGINT/SIGTERM. */
+export function _isHandlersInstalled(): boolean {
+  return handlersInstalled;
+}
 
 /** Reset all state including signal listeners. For test isolation only. */
 export function _reset(): void {
