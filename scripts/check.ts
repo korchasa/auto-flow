@@ -536,7 +536,7 @@ if (import.meta.main) {
   await run("gitleaks", ["detect", "--no-git"], "Secret Scan");
 
   // "." recursively finds every *_test.ts in the repo (root engine
-  // modules, scripts/, .flowai-workflow/, init/, repl/, …). Passing
+  // modules, scripts/, .flowai-workflow/, init/, …). Passing
   // overlapping paths would double-test the same files.
   // Ignore live git-worktree dirs (engine creates them per run; they
   // hold frozen copies of older test files that no longer reflect HEAD).

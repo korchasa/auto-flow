@@ -272,7 +272,6 @@ All 6 workflow agents are framework-independent Markdown files at
 ```
 cli.ts, engine.ts, agent.ts, ... # DAG executor engine modules (root)
 init/                            # Project scaffolder (`flowai-workflow init`)
-repl/                            # Interactive REPL
 scripts/                         # Dev tooling (check, compile, dashboard, release-notes)
 .flowai-workflow/                # One folder per workflow (FR-S47)
   github-inbox/                  # Workflow folder = portable unit

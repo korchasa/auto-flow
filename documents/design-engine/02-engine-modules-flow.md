@@ -141,28 +141,21 @@
     passes to `summary()` for per-node result rendering.
   - `cli.ts` — CLI entry point with subcommand routing (FR-E45):
     `--internal-opencode-hitl-mcp` → HITL MCP server,
-    `run` → `runEngine(args)` (DAG workflow — former default),
+    `run` → `runEngine(args)` (DAG workflow),
+    `init` → `runInit(args)` (project scaffolder),
     `--version`/`--help` → global handlers,
     bare `--` flags → backward-compat shim (deprecated, delegates to `run`),
-    default (no args) → dynamic import `repl/mod.ts` → `launchRepl()`.
+    default (no args or unknown subcommand) → print usage, exit 1.
     `runEngine()` extracted as named function shared by `run` and compat shim.
     `parseArgs()`: parses `--budget <USD>` flag (FR-E47). Converts to float,
     validates positive. Maps to `EngineOptions.budget_usd`. Added to `--help`
     output.
     `VERSION` constant: `Deno.env.get("VERSION") ?? "dev"`.
-  - `repl/mod.ts` — interactive REPL module (FR-E46):
-    `resolveRuntime()` — flag → persisted config
-    (`~/.config/flowai-workflow/runtime.json`) → terminal prompt.
-    `loadBundledSkills()` — `parseSkill()` for each subdir of
-    `repl/skills/` (uses `import.meta.url` for compiled binary compat).
-    `launchRepl()` — orchestrates: resolve runtime, check `interactive`
-    capability, load skills, build system prompt, call
-    `adapter.launchInteractive()`. MVP skills: `flowai-workflow-init`,
-    `flowai-workflow-adapt-agents`.
-  - `repl/skills/flowai-workflow-init/SKILL.md` — guided project initialization
-    skill (replaces removed `flowai-workflow init` subcommand).
-  - `repl/skills/flowai-workflow-adapt-agents/SKILL.md` — agent adaptation
-    after framework update.
+  - ~~`repl/mod.ts`~~ — removed (FR-E46 retired). Interactive REPL and
+    bundled management skills (`flowai-workflow-init`,
+    `flowai-workflow-adapt-agents`) no longer ship; runtime persistence at
+    `~/.config/flowai-workflow/runtime.json` is no longer written. Project
+    scaffolding stays available via the `init` subcommand.
   - `mod.ts` — barrel re-export serving as `deno doc --lint` entry point
     (not a runtime public API; sole non-redundant consumer is
     `scripts/check.ts` JSDoc validation)
@@ -192,9 +185,10 @@
   Follows `cli.ts` format. Exported `printUsage()`/`checkArgs()` for
   unit testing
 - **Interfaces:**
-  - CLI: `flowai-workflow` (REPL), `flowai-workflow run <workflow>
+  - CLI: `flowai-workflow run <workflow>
     [--prompt <text>] [--resume <run-id>] [--dry-run] [-v|-s|-q]
     [--env KEY=VAL] [--skip nodes] [--only nodes] [--budget <USD>]`,
+    `flowai-workflow init [--answers <file>] [--dry-run]`,
     `--version|-V`, `--help`. `<workflow>` is a mandatory positional
     pointing at the workflow folder (FR-E53; FR-S47).
   - Config: `<workflow>/workflow.yaml` (YAML, version "1")

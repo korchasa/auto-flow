@@ -4,8 +4,8 @@
  * CLI entry point for the workflow engine.
  * Parses arguments and delegates to the appropriate subcommand:
  *
- * - `flowai-workflow` (no args) → interactive REPL with bundled management skills
  * - `flowai-workflow run <workflow> [options]` → DAG workflow engine
+ * - `flowai-workflow init [options]` → project scaffolder
  *
  * Run usage (FR-E53):
  *   flowai-workflow run <workflow> [options]
@@ -206,11 +206,10 @@ function printUsage(): void {
 Workflow Engine — Configurable multi-agent workflow runner
 
 Usage:
-  flowai-workflow                          Launch interactive REPL with bundled management skills
-  flowai-workflow run <workflow> [options] Execute DAG workflow
+  flowai-workflow run <workflow> [options]  Execute DAG workflow
+  flowai-workflow init [options]            Scaffold .flowai-workflow/ directory
 
 Subcommands:
-  (default)             Interactive AI-assisted REPL (asks runtime on first use)
   run                   Execute DAG workflow engine
   init                  Scaffold .flowai-workflow/ directory (run init --help for details)
 
@@ -235,7 +234,6 @@ Global options:
   -h, --help            Show this help
 
 Examples:
-  flowai-workflow
   flowai-workflow run .flowai-workflow/github-inbox
   flowai-workflow run .flowai-workflow/github-inbox --prompt "Focus on the login bug"
   flowai-workflow run .flowai-workflow/github-inbox --resume 20260308T143022 -v
@@ -352,9 +350,12 @@ if (import.meta.main) {
     await runEngine(Deno.args);
   }
 
-  // Default (no args or unknown subcommand): launch REPL.
-  // Dynamic import keeps REPL code out of the engine module graph.
-  const { launchRepl } = await import("./repl/mod.ts");
-  const exitCode = await launchRepl({ engineVersion: VERSION });
-  Deno.exit(exitCode);
+  // Default (no args or unknown subcommand): print usage and exit non-zero.
+  if (!subcommand) {
+    printUsage();
+    Deno.exit(1);
+  }
+  console.error(`Error: unknown subcommand: ${subcommand}`);
+  printUsage();
+  Deno.exit(1);
 }

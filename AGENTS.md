@@ -115,7 +115,7 @@ example of engine usage.
 Single-package repository:
 
 - Root `deno.json` defines the `@korchasa/flowai-workflow` JSR package.
-  Source files (engine modules, CLI entry, init scaffolder, REPL, HITL) live
+  Source files (engine modules, CLI entry, init scaffolder, HITL) live
   at repo root — no `engine/` subfolder.
 - `scripts/` — dev tooling (check, compile, dashboard, release-notes,
   loop runners). Excluded from the JSR tarball.
