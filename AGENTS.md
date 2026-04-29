@@ -104,6 +104,16 @@ example of engine usage.
   --force`).
   **`memory/agent-*.md` files are gitignored** at the repo root (they
   accumulate per run); only `memory/reflection-protocol.md` is tracked.
+  **Dogfood = template.** The same `.flowai-workflow/<name>/` folders the
+  project runs are bundled in the JSR tarball AND embedded in every
+  standalone binary (via `deno compile --include`, enumerated by
+  [`scripts/compile.ts`](scripts/compile.ts) using
+  `git ls-files .flowai-workflow/`). `flowai-workflow init` uses them
+  as the source for client scaffolds — no separate `init/templates/`
+  tree, no placeholder substitution, no wizard. Editing a workflow
+  here updates both the project's own runs and the bytes installed by
+  `flowai-workflow init` on the next publish/compile. To see what a
+  given build ships, run `flowai-workflow init --list`.
   **Drift caveat:** agent
   prompts under `.flowai-workflow/<name>/agents/` are intentionally
   duplicated between workflow folders — when editing a shared agent,
@@ -120,8 +130,11 @@ Single-package repository:
 - `scripts/` — dev tooling (check, compile, dashboard, release-notes,
   loop runners). Excluded from the JSR tarball.
 - `documents/` — SRS/SDS and task notes. Excluded from the tarball.
-- `.flowai-workflow/` — dogfood SDLC workflow config and run artifacts.
-  Excluded from the tarball.
+- `.flowai-workflow/` — dogfood SDLC workflow config. Bundled in the JSR
+  tarball (excluding per-run artefacts: `runs/`, `memory/agent-*.md`,
+  `.template.json`) so `flowai-workflow init` can copy a workflow
+  verbatim into client projects. No separate `init/templates/` tree —
+  `init/` is just the verbatim-copy scaffolder.
 
 The Claude/OpenCode/Cursor CLI wrapper library
 (`@korchasa/ai-ide-cli`) lives in the sibling repo
@@ -159,10 +172,20 @@ Publish gotchas honored in `deno.json#publish`:
   `packageFiles: [{ filename: "deno.json", type: "json" }]` and
   `bumpFiles: [{ filename: "deno.json", type: "json" }]`. When cloning the
   CI skeleton to a new repo, copy both files together.
-- Dev-only paths (`scripts/`, `documents/`, `.github/`, `.flowai-workflow/`,
-  `.claude/`, `.devcontainer/`, `AGENTS.md`, `CLAUDE.md`, `CHANGELOG.md`,
+- Dev-only paths (`scripts/`, `documents/`, `.github/`, `.claude/`,
+  `.devcontainer/`, `AGENTS.md`, `CLAUDE.md`, `CHANGELOG.md`,
   `.versionrc.json`) are listed in `publish.exclude` so the JSR tarball
-  ships only runtime source + `deno.json` + `README.md`.
+  ships only runtime source + `deno.json` + `README.md` +
+  `.flowai-workflow/<name>/` (bundled workflows used by `init`).
+- **Per-run dirt under `.flowai-workflow/<name>/`** (`runs/**`,
+  `memory/agent-*.md`, `.template.json`) MUST stay in `publish.exclude`
+  even if you re-organise. Shipping run state would leak local debug
+  output into every client install and bloat the tarball; a stale
+  `.template.json` would mislead any future `flowai-workflow update`
+  diff. Verify after touching `publish.exclude` with
+  `deno publish --dry-run` — the file list should mention only the
+  workflow's tracked `.gitignore`, `workflow.yaml`, `agents/`, `scripts/`,
+  and `memory/reflection-protocol.md`.
 - **JSR slow-types rules (`no-slow-types`, `missing-jsdoc`,
   `private-type-ref`) fire ONLY on `deno publish --dry-run`** — not on
   `deno check` or `deno lint`. Always run `deno task check` before commit

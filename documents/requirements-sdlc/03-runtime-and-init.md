@@ -107,99 +107,114 @@
 
 ### 3.46 FR-S46: Project Init CLI (`flowai-workflow init`)
 
-- **Description:** New CLI subcommand `flowai-workflow init` scaffolds a
-  ready-to-run `.flowai-workflow/` directory in a target project. Pure
-  deterministic file copy with placeholder substitution — no AI calls, no
-  network, no post-init magic. A short interactive wizard collects project-
-  specific values (name, default branch, test/lint commands), autodetected
-  defaults are pre-filled from `deno.json` / `package.json` / `go.mod` /
-  `pyproject.toml` / `Cargo.toml`. A non-interactive `--answers <file.yaml>`
-  mode supports CI-driven provisioning. The bundled template (`sdlc-claude`)
-  is framework-independent: generic agent prompts, zero references to
-  `FR-E/FR-S` numbering, `scope: engine|sdlc` logic, or flowai-workflow
-  internals. Init writes ONLY inside `.flowai-workflow/` — no `.claude/agents/`
-  writes, no top-level `.gitignore` append, no files outside the target
-  directory (self-containment invariant).
-- **Rationale:** Before FR-S46, onboarding required manually creating
-  `workflow.yaml`, copying agent prompts, wiring scripts, and editing
-  placeholder values. High barrier and error-prone. A one-command scaffolder
-  lowers the adoption bar from hours to seconds, and keeps the template
-  shippable via JSR alongside the engine.
-- **Scope separation:** Init implementation lives in a separate workspace
-  member `flowai-init/` (package `@korchasa/flowai-workflow-init`) outside
-  `engine/`. Engine adds only a thin dispatcher: when `argv[0] === "init"`,
-  it dynamically imports the init module and delegates. FR-E14 (engine
-  domain-agnosticism) is preserved — no scaffolding logic or templates live
-  inside `engine/`.
-- **Dep:** Engine workspace layout (separate deno.json per workspace member),
-  FR-S26 (`.flowai-workflow/` asset directory), FR-E14 (engine purity).
+- **Description:** CLI subcommand `flowai-workflow init` copies a bundled
+  workflow folder verbatim from `<package>/.flowai-workflow/<workflow>/`
+  into the target project's `.flowai-workflow/<workflow>/`. Pure file
+  copy — no wizard, no placeholder substitution, no autodetection, no AI
+  calls, no network. Single positional flag `--workflow <name>` selects
+  which bundled workflow to copy (default `github-inbox`). Project-
+  specific configuration (test commands, branch names, repo conventions,
+  required runtimes) is delegated to the workflow agents at first run
+  via `--prompt`. Init writes ONLY inside
+  `.flowai-workflow/<workflow>/` — no `.claude/agents/` writes, no
+  top-level `.gitignore` append, no files outside the target directory.
+- **Rationale:** The earlier wizard/template approach forked the bundled
+  agent prompts and `workflow.yaml` from the dogfooded copies under
+  `.flowai-workflow/`, and the two trees drifted. Replacing
+  templates+placeholders with verbatim copy of the dogfood folder
+  collapses two sources into one: clients run the exact bytes the engine
+  project itself runs. Configuration moves from wizard answers into the
+  agents' first-run prompt, which is more flexible (agents can probe the
+  repo) and keeps the scaffolder trivial.
+- **Scope separation:** Init implementation lives at `init/` next to
+  the engine modules but is loaded via dynamic `import("./init/mod.ts")`
+  from the `cli.ts` dispatcher when `argv[0] === "init"`. The engine
+  module graph stays free of init code at runtime. FR-E14 (engine
+  domain-agnosticism) is preserved: init contains no scaffolding logic
+  beyond verbatim copy, and the bundled workflows under
+  `.flowai-workflow/<name>/` are workflow-level concerns, not engine
+  concerns.
+- **Dep:** FR-S26 (`.flowai-workflow/` asset directory), FR-E14 (engine
+  purity), `deno.json#publish` (bundles `.flowai-workflow/<name>/` into
+  the JSR tarball, excluding per-run `runs/`, `memory/agent-*.md`, and
+  `.template.json`).
 - **Acceptance criteria:**
-  - [x] New workspace member `flowai-init/` with self-contained `deno.json`,
-    `scripts/check.ts`, and JSR package metadata. Evidence:
-    `flowai-init/deno.json:1-25`, `flowai-init/scripts/check.ts:1-84`.
-  - [x] `flowai-init/templates/sdlc-claude/` ships a framework-independent
-    SDLC template: all files live under `.flowai-workflow/` (agents at
-    `agents/agent-*.md`, not `.claude/agents/`). Grep for `FR-E`, `FR-S`,
-    `scope: engine`, `scope: sdlc`, `deno task` in `flowai-init/templates/`
-    returns zero matches. Evidence:
-    `flowai-init/templates/sdlc-claude/files/.flowai-workflow/`.
-  - [x] Template manifest `template.yaml` declares 5 wizard questions
-    (`PROJECT_NAME`, `WORKFLOW_NAME` — default `default`, FR-S47;
-    `DEFAULT_BRANCH`, `TEST_CMD`, `LINT_CMD`), hard requirements
-    (github.com remote), and file copy rules with the destination
-    `.flowai-workflow/__WORKFLOW_NAME__/`. Evidence:
-    `init/templates/sdlc-claude/template.yaml`,
-    `init/integration_test.ts::WORKFLOW_NAME answer scaffolds
-    .flowai-workflow/<name>/`.
-  - [x] `scaffold.ts` implements placeholder substitution, tracked file copy,
-    unwind-on-error, and `.template.json` metadata write. Evidence:
-    `flowai-init/scaffold.ts:1-180`.
-  - [x] `autodetect.ts` implements per-language handlers (deno/npm/cargo/go/
-    pyproject) with priority dispatch. Evidence:
-    `flowai-init/autodetect.ts:1-210`.
-  - [x] `preflight.ts` checks git repo status, `.flowai-workflow/` absence,
-    clean-tree, and parses 3 git remote forms (HTTPS, SCP-SSH, URL-SSH).
-    Evidence: `flowai-init/preflight.ts:1-220`.
-  - [x] `manifest.ts` validates `template.yaml` shape with path-aware errors
-    (e.g. `questions[2].detect: unknown handler`). Evidence:
-    `flowai-init/manifest.ts:1-200`.
-  - [x] `wizard.ts` supports both non-interactive (`--answers`) and
-    interactive (stdin prompts) paths with `resolveFinalAnswers` fallback
-    chain: detected → file → question.default → required check. Evidence:
-    `flowai-init/wizard.ts:1-200`.
-  - [x] `mod.ts` `runInit(argv, opts)` orchestrates preflight → autodetect →
-    wizard → scaffold → metadata with structured exit codes (0/1/3), dry-run
-    path, and help text. Evidence: `flowai-init/mod.ts:1-340`.
+  - [x] `init/mod.ts` exposes `runInit(argv, opts)` with structured
+    exit codes (0 success, 1 preflight/scaffold failure, 3 invalid
+    args), `--workflow <name>` (default `github-inbox`), `--dry-run`,
+    `--allow-dirty`, `--help`. Evidence: `init/mod.ts:64-131`,
+    `init/mod_test.ts`.
+  - [x] `init/scaffold.ts` `copyTemplate(sourceDir, targetDir)` is a
+    verbatim file copy: refuses to overwrite existing files, tracks
+    every written path for unwind-on-error, never substitutes
+    placeholders. Evidence: `init/scaffold.ts:48-94`,
+    `init/scaffold_test.ts::copyTemplate — preserves placeholder-shaped
+    strings verbatim`.
+  - [x] `init/preflight.ts` checks git repo, target dir absence, and
+    (unless `--allow-dirty`) clean-tree. Workflow-specific dependencies
+    (`gh`, `claude`, `opencode`, github.com remote) are NOT pre-checked
+    — surface at first agent run. Evidence: `init/preflight.ts:97-122`,
+    `init/preflight_test.ts`.
   - [x] Engine dispatcher in `cli.ts` routes `init` subcommand to the
     scaffolder via dynamic import, passing `VERSION` as `engineVersion`.
-    Evidence: `cli.ts:197-215`.
-  - [x] Unit tests cover scaffold, autodetect, preflight, manifest, wizard,
-    and flag parsing (79+ tests). Integration tests stand up a tmp git repo,
-    run the full `runInit` path in `--answers` mode, and assert on resulting
-    file tree, placeholder substitution, and self-containment invariant
-    (no files outside `.flowai-workflow/`). Evidence:
-    `flowai-init/scaffold_test.ts`, `flowai-init/autodetect_test.ts`,
-    `flowai-init/preflight_test.ts`, `flowai-init/manifest_test.ts`,
-    `flowai-init/wizard_test.ts`, `flowai-init/mod_test.ts`,
-    `flowai-init/integration_test.ts`.
-  - [x] `.flowai-workflow/.template.json` records template name, template
-    version, engine version, ISO 8601 timestamp, and wizard answers. Layout
-    ready for future `flowai-workflow update` command. Evidence:
-    `flowai-init/scaffold.ts` `writeTemplateMetadata`.
-  - [x] `README.md` quickstart explains the init command. Evidence:
-    `README.md` § "Quick Start: New Project".
+    Evidence: `cli.ts:335-341`.
+  - [x] `deno.json#publish.exclude` ships `.flowai-workflow/<name>/`
+    folders in the JSR tarball but excludes per-run dirt
+    (`*/runs/**`, `*/memory/agent-*.md`, `*/.template.json`). Evidence:
+    `deno.json:46-62`, `deno publish --dry-run` file list shows
+    `.flowai-workflow/github-inbox/workflow.yaml` and agents.
+  - [x] Standalone binaries embed the same publish-clean set via
+    `deno compile --include`. `scripts/compile.ts` enumerates the
+    files via `git ls-files .flowai-workflow/`, filters
+    tracked-but-deleted, and passes one `--include` per file. Init
+    discovers them at runtime by reading the embedded virtual FS.
+    Evidence: `scripts/compile.ts::discoverBundledWorkflowFiles`,
+    `init/mod.ts::listAvailableWorkflows`,
+    `init/mod_test.ts::parseInitArgs — --list flag`.
+  - [x] `flowai-workflow init --list` enumerates every workflow this
+    build ships (sorted, with `(default)` marker), and the
+    unknown-workflow error includes the same list. Evidence:
+    `init/mod.ts:208-225`,
+    `init/integration_test.ts::runInit — --list returns 0 and
+    enumerates bundled workflows`.
+  - [x] When `--workflow` is omitted and stdin is a TTY, init prints
+    the numbered list and prompts the user to pick (empty = default,
+    1-based index, or exact name). Re-prompts on bad input; EOF
+    cancels with exit 1. Non-TTY stdin silently uses the default for
+    backward-compat with scripted callers. Pure dispatch
+    (`resolveWorkflowChoice`) is unit-tested without mocking stdin.
+    Evidence: `init/mod.ts::promptForWorkflow`, `init/mod.ts::
+    resolveWorkflowChoice`, `init/mod_test.ts` (8 picker test cases).
+  - [x] On successful scaffold, init prints a ready-to-paste
+    **adaptation prompt** wrapped in `--- ADAPTATION PROMPT (start)
+    ---` / `(end)` markers. The prompt tells the agents to detect
+    language/runtime/test/lint/branch/repo conventions, patch
+    `workflow.yaml` + `agents/agent-*.md` in place with a
+    `## Project Context` section, leave the diff for review (no
+    auto-commit/push/PR). Replaces the deprecated
+    placeholder-substitution + wizard answers. Evidence:
+    `init/mod.ts::adaptationPrompt`, `init/mod_test.ts` (3 prompt
+    test cases),
+    `init/integration_test.ts::runInit — scaffolds github-inbox
+    verbatim end-to-end` (asserts ADAPTATION PROMPT block in stdout).
+  - [x] Integration test stands up a tmp git repo and asserts the
+    scaffolded `workflow.yaml` byte-equals the bundled source — the
+    dogfooding invariant. Evidence:
+    `init/integration_test.ts::runInit — scaffolds github-inbox
+    verbatim end-to-end`.
+  - [x] `README.md` § "Quick Start: New Project" documents
+    `--workflow`, the `--prompt` first-run pattern, and the verbatim-
+    copy contract. Evidence: `README.md` § "Quick Start: New Project".
 - **Out of scope (deferred):**
-  - AI adaptation / bootstrap workflow / post-init `## Project Context`
-    fills. Users edit template-generated agent prompts by hand if they want
-    project-specific tuning.
-  - `flowai-workflow update` command to pull template changes from upstream.
-    v1 records the state (`.template.json`) to enable it later.
-  - Lite 3-agent template (draft → review → finalize). v1 ships SDLC-only.
-  - Multi-IDE templates (Cursor, OpenCode). Requires alternative agent
-    layouts; current layout has zero `.claude/` coupling so adding is a
-    pure addition.
-  - External template repository. Templates remain in-repo for v1.
-  - Non-GitHub remotes (GitLab, Gitea). SDLC template hard-couples to
-    GitHub by design.
+  - `flowai-workflow update` command to diff installed workflow against
+    bundled upstream. Removed `.template.json` until needed; `init`
+    re-scaffolds from JSR cleanly today.
+  - Auto-adaptation agent that rewrites `workflow.yaml` and agent
+    prompts based on detected project conventions. Replaced by the
+    `--prompt` first-run pattern: users (or a wrapper script) tell the
+    agents what's project-specific.
+  - Restricting the bundled workflow set per release. All
+    `.flowai-workflow/<name>/` folders ship; clients pick via
+    `--workflow`.
 
 

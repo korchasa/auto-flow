@@ -3,110 +3,113 @@
 # SDS SDLC — Project Init Scaffolder, Data, Logic, Non-Functional, Constraints, Evidence
 
 
-### 3.12 Project Init Scaffolder (`flowai-init/`, FR-S46)
+### 3.12 Project Init Scaffolder (`init/`, FR-S46)
 
-- **Purpose:** Scaffold a self-contained `.flowai-workflow/` directory in a
-  target project. Pure deterministic file copy with placeholder substitution
-  — no AI calls, no network. Invoked via `flowai-workflow init`. Dispatched
-  from `engine/cli.ts` via dynamic import to preserve engine purity
-  (FR-E14 / engine MUST NOT contain domain-specific code).
-- **Package:** `@korchasa/flowai-workflow-init`. Separate workspace member
-  under `flowai-init/` with its own `deno.json`, `scripts/check.ts`, and JSR
-  publish config. Templates and scaffold logic ship together as one JSR
-  artifact.
-- **Module layout:**
+- **Purpose:** Verbatim-copy a bundled workflow folder from
+  `<package>/.flowai-workflow/<workflow>/` into the target project's
+  `.flowai-workflow/<workflow>/`. No wizard, no placeholder
+  substitution, no autodetection — just a tracked file copy. Invoked
+  via `flowai-workflow init`. Dispatched from `cli.ts` via dynamic
+  import to keep the init code out of the engine module graph for
+  `run` invocations (FR-E14 — engine MUST NOT contain domain code).
+- **Source bundling:** Two channels share one source set.
+  - JSR install: `deno.json#publish.exclude` ships the same
+    `.flowai-workflow/<name>/` folders the project itself dogfoods,
+    excluding only per-run dirt (`runs/`, `memory/agent-*.md`,
+    `.template.json`).
+  - Standalone binary: [`scripts/compile.ts`](../../scripts/compile.ts)
+    enumerates the publish-clean set via
+    `git ls-files .flowai-workflow/`, filters to files that actually
+    exist on disk (skips tracked-but-deleted), and passes one
+    `--include <path>` per file to `deno compile`. The compiled
+    binary's virtual FS embeds them at the same paths; `init` reads
+    them via `import.meta.url`-relative URLs without distinguishing
+    on-disk from embedded. `init --list` enumerates the available
+    set at runtime.
+  One source of truth across both channels: clients install the
+  exact bytes the engine project runs.
+- **Module layout (`init/`):**
   - `mod.ts` — public entry `runInit(argv, opts)`, flag parser
-    (`parseInitArgs`), help text, and orchestration of all phases.
-  - `types.ts` — `Answers`, `TemplateManifest`, `TemplateQuestion`,
-    `CopyRule`, `TemplateRequirement`, `DetectKey` interfaces.
-  - `scaffold.ts` — `substitutePlaceholders` (regex `/__[A-Z][A-Z0-9_]*__/g`,
-    throws on unknown key), `copyTemplate` (tracked writes for unwind),
-    `unwindScaffold` (reverse-order delete of tracked paths),
-    `writeTemplateMetadata` (`.template.json`).
-  - `autodetect.ts` — per-language handlers exposed as `detectFns` record:
-    `project_name`, `default_branch`, `test_cmd`, `lint_cmd`. Handlers
-    inspect `deno.json`, `package.json`, `go.mod`, `pyproject.toml`,
-    `Cargo.toml` in priority order + read-only git plumbing
-    (`git symbolic-ref`, `git remote get-url`). Never execute build tools.
+    (`parseInitArgs`), help text, and orchestration. Resolves the
+    bundled workflow source via
+    `new URL("../.flowai-workflow/<name>/", import.meta.url)` so the
+    lookup works in local, JSR, and `deno compile` runtimes alike.
+  - `types.ts` — single thin `WorkflowName` type alias. No `Answers`,
+    no `TemplateManifest`, no `TemplateQuestion` — those went away with
+    the wizard.
+  - `scaffold.ts` — `listTemplateFiles` (walk dir tree), `copyTemplate`
+    (verbatim file copy with tracked writes for unwind, refuses to
+    overwrite existing files), `unwindScaffold` (reverse-order delete
+    of tracked paths). No `substitutePlaceholders`.
   - `preflight.ts` — environment checks: `git rev-parse
-    --is-inside-work-tree`, origin remote host validation via
-    `parseGithubRemote` (supports HTTPS, SCP-SSH, URL-SSH forms),
-    `.flowai-workflow/` absence, clean-tree check (skippable with
-    `--allow-dirty`). All failures collected into a single summary.
-    Rationale: binary-presence checks removed — git commands themselves
-    surface missing-binary errors naturally; `claude` is a workflow-runtime
-    dep not needed at `init` time, so pre-validating it just broke CI.
-  - `manifest.ts` — YAML parser + structural validator for `template.yaml`
-    with path-aware error messages (e.g. `questions[2].detect: unknown
-    handler`).
-  - `wizard.ts` — dual-mode resolution: non-interactive (`--answers
-    <file.yaml>`) reads and validates answer YAML, interactive mode uses
-    stdin prompts with autodetected defaults pre-filled. Pure helpers
-    (`parseAnswersYaml`, `mergeAnswers`, `resolveFinalAnswers`) are
-    factored out for unit-testing; `runWizard` is the only function that
-    touches stdin.
-- **Template layout (`flowai-init/templates/sdlc-claude/`):**
-  - `template.yaml` — manifest (wizard questions, requirements, file copy
-    rules).
-  - `README.md` — placeholder list, usage notes, hard dependencies.
-  - `files/.flowai-workflow/` — full self-contained workflow tree:
-    - `workflow.yaml` — generic 6-agent SDLC DAG with `__PROJECT_NAME__`,
-      `__DEFAULT_BRANCH__`, `__TEST_CMD__`, `__LINT_CMD__` placeholders.
-      Agent prompts referenced via `{{file(".flowai-workflow/agents/
-      agent-*.md")}}` (NOT `.claude/agents/`).
-    - `agents/agent-{pm,architect,tech-lead,developer,qa,tech-lead-review}.md`
-      — framework-independent role definitions with no `FR-E/FR-S`,
-      `scope: engine|sdlc`, or flowai-workflow-specific references.
-    - `memory/agent-*.md` + `agent-*-history.md` — empty stubs with a
-      single header line; agents rewrite them via the reflection protocol
-      on first run.
-    - `memory/reflection-protocol.md` — generic two-layer memory protocol.
-    - `scripts/hitl-ask.sh`, `hitl-check.sh` — GitHub HITL scripts (auto-
-      detect repo via `gh`, no project-specific hardcoding).
-    - `.gitignore` — single line `runs/`, scoped so git reads it at the
-      `.flowai-workflow/` level without touching the project root
-      `.gitignore` (self-containment invariant).
-    - `tasks/.gitkeep` — placeholder for `.flowai-workflow/tasks/`.
-- **Engine dispatch:** `engine/cli.ts` adds an early branch inside its
+    --is-inside-work-tree`, target dir absence, clean-tree check
+    (skippable with `--allow-dirty`). Workflow-specific deps (`gh`,
+    `claude`/`opencode` runtime, GitHub remote) are NOT pre-checked
+    here — they surface at first agent run. Each workflow's `agents/`
+    describe what it needs.
+- **Bundled workflows (under `<package>/.flowai-workflow/<name>/`):**
+  - `github-inbox/` — primary, Claude Code runtime, GitHub-issue-driven.
+  - `github-inbox-opencode/` — same DAG, OpenCode runtime.
+  - `github-inbox-opencode-test/` — smoke-test variant.
+  - `autonomous-sdlc/` — local-only, no GitHub, no PR.
+  Each ships `workflow.yaml`, `agents/agent-*.md`, `scripts/`, and
+  `memory/reflection-protocol.md` (per-run memory files are gitignored
+  and excluded from publish).
+- **Engine dispatch:** `cli.ts` adds an early branch inside its
   `if (import.meta.main)` block: when `Deno.args[0] === "init"`, it
-  dynamically `import("@korchasa/flowai-workflow-init")` and delegates
-  with `{ engineVersion: VERSION }`. Dynamic import keeps the init code
-  and bundled templates out of the engine module graph when a user runs
-  any other subcommand.
-- **Wizard flow:**
-  1. Preflight — collect all failures up-front (single pass).
-  2. Load manifest from `./templates/<name>/template.yaml` relative to the
-     package's `import.meta.url` (works in local/JSR/compiled modes).
-  3. Autodetect — aggregate handler results into `Partial<Answers>`.
-  4. Resolve answers — merge detected + file + question defaults, validate
-     required fields.
-  5. Interactive mode only: prompt user per question with detected default,
-     confirm before scaffold.
-  6. Dry-run short-circuit prints file list and exits 0.
-  7. Scaffold — walk `files.copy` rules, substitute placeholders, write
-     files with tracked paths.
-  8. Write `.template.json` metadata (template name/version, engine
-     version, ISO 8601 timestamp, answers).
-  9. Print success message with next-steps (`flowai-workflow --config
-     .flowai-workflow/workflow.yaml`).
+  dynamically `import("./init/mod.ts")` and delegates with
+  `{ engineVersion: VERSION }`. Dynamic import keeps init code out of
+  the engine module graph when a user runs any other subcommand.
+- **Init flow:**
+  1. Parse flags (`--workflow <name>` default `github-inbox`,
+     `--list`/`-l`, `--dry-run`, `--allow-dirty`, `--help`). Parser
+     records `workflowExplicit: boolean` so the picker knows whether
+     the user actually chose vs accepted the default silently.
+  2. **Workflow selection.** When `--workflow` is omitted AND
+     `Deno.stdin.isTerminal()` is true: print the numbered list of
+     bundled workflows and re-prompt until the user supplies a valid
+     answer (empty = default, `1`-based index, or exact name). EOF on
+     stdin → exit 1 with "selection cancelled". Single-workflow build
+     → skip the prompt. Non-TTY stdin → silently use the default.
+     Pure dispatch lives in `resolveWorkflowChoice` for testability;
+     `promptForWorkflow` wraps it with the I/O loop.
+  3. Resolve workflow source URL from `import.meta.url`; fail with exit
+     1 if the directory is missing (error includes the available list).
+  4. Preflight — collect failures (git repo, target absence, clean
+     tree); fail with exit 1 if any.
+  5. Dry-run short-circuit: print the file list and exit 0.
+  6. `copyTemplate` — verbatim copy with tracked paths.
+  7. Print success message naming the target dir + the engine version,
+     followed by an **adaptation prompt** rendered by
+     `adaptationPrompt(workflowDir)` and wrapped in
+     `--- ADAPTATION PROMPT (start) ---` / `(end)` delimiters. The
+     prompt instructs the agents to detect language/runtime/test/lint/
+     branch/repo conventions, patch the freshly copied
+     `workflow.yaml` and `agents/agent-*.md` in place with a
+     `## Project Context` section, and stop without committing.
+     This replaces the wizard-driven parameter capture from earlier
+     versions: scaffolding stays trivial, configuration becomes
+     agent-mediated.
+- **Configuration via prompt:** Project-specific values (test command,
+  default branch, GitHub label conventions, repo slug, etc.) are NOT
+  baked into copied files. Users supply them at first run via
+  `flowai-workflow run .flowai-workflow/<workflow> --prompt "<context>"`.
+  The PM/Architect agents read the prompt and adapt subsequent stages
+  to the project. This trades a one-shot wizard for an
+  agent-mediated configuration pass — more flexible (the agent can
+  probe `deno.json`/`package.json`), and keeps the scaffolder trivial.
 - **Error handling:**
   - Preflight failure → print bullet list + exit 1.
-  - Wizard abort or missing required field → print error + exit 1.
-  - Scaffold mid-flight failure → `unwindScaffold(createdPaths)` deletes
-    only files the scaffolder touched (never walks directory trees),
-    then exit 1.
+  - Unknown `--workflow` name → exit 1 with "workflow not found in
+    package".
+  - Scaffold mid-flight failure → `unwindScaffold(createdPaths)`
+    deletes only files the scaffolder touched (never walks directory
+    trees), then exit 1.
   - Flag parse error → exit 3.
-- **Exit codes:** 0 (success / help / dry-run), 1 (preflight / scaffold
-  failure), 3 (invalid CLI argument).
-- **Root check delegation:** `scripts/check.ts` delegates to
-  `flowai-init/scripts/check.ts` via `deno task check` with `cwd=flowai-init`.
-  Each workspace member owns its own fmt/lint/type-check/tests/doc-lint/
-  publish-dry-run pipeline. (The pre-split `ai-ide-cli` member followed
-  the same pattern before being extracted to a sibling repo.)
-- **Deps:** `@std/yaml` (manifest parser), `@std/path`. Engine module
-  dispatcher imports `@korchasa/flowai-workflow-init` via workspace package
-  name (no static coupling — dynamic `await import()` lazy-loads only on
-  `init` subcommand).
+- **Exit codes:** 0 (success / help / dry-run), 1 (preflight /
+  scaffold / source-missing failure), 3 (invalid CLI argument).
+- **Deps:** `@std/path` only. No YAML parser (no manifest); no `@std/cli`
+  (no interactive prompts).
 
 ## 4. Data
 

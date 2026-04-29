@@ -188,7 +188,7 @@
   - CLI: `flowai-workflow run <workflow>
     [--prompt <text>] [--resume <run-id>] [--dry-run] [-v|-s|-q]
     [--env KEY=VAL] [--skip nodes] [--only nodes] [--budget <USD>]`,
-    `flowai-workflow init [--answers <file>] [--dry-run]`,
+    `flowai-workflow init [--workflow <name>] [--dry-run] [--allow-dirty]`,
     `--version|-V`, `--help`. `<workflow>` is a mandatory positional
     pointing at the workflow folder (FR-E53; FR-S47).
   - Config: `<workflow>/workflow.yaml` (YAML, version "1")

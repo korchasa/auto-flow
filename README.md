@@ -71,27 +71,44 @@ Inter-agent communication uses structured Markdown artifacts in `<runs-dir>/<run
 
 ## Quick Start: New Project
 
-Scaffold a ready-to-run workflow folder into an existing project in one
-command:
+Scaffold a workflow into an existing project:
 
 ```bash
 cd your-project
-flowai-workflow init
+flowai-workflow init                       # interactive picker
+flowai-workflow init --workflow autonomous-sdlc   # non-interactive
 ```
 
-The wizard asks five questions (project name, workflow name — defaults to
-`default`, default branch, test command, lint command) with autodetected
-defaults read from `deno.json`, `package.json`, `go.mod`, `pyproject.toml`,
-or `Cargo.toml`. On success, the bundled SDLC template (PM → Architect →
-Tech Lead → Developer/QA loop → Tech Lead Review) is written into
-`.flowai-workflow/<workflow-name>/`, ready for:
+With no `--workflow` and a TTY, init prints the bundled workflows and
+prompts you to pick one (Enter accepts the default `github-inbox`).
+Pass `--workflow <name>` for CI / scripted use; non-TTY stdin (pipes,
+no terminal) silently uses the default.
+
+`init` is a verbatim copy: it streams the bundled
+`<package>/.flowai-workflow/<workflow>/` tree (the same one the engine
+project itself dogfoods) into your project's
+`.flowai-workflow/<workflow>/`. No placeholder substitution, no
+autodetection — what you see in the source repo is what lands on disk.
+
+Project-specific configuration (test commands, branch names, repo
+conventions, code-style rules) is the agents' job at first run. As the
+last step of `init`, the CLI prints a ready-to-paste
+**adaptation prompt** wrapped between
+`--- ADAPTATION PROMPT (start) ---` / `(end)` markers. Hand that prompt
+to the workflow:
 
 ```bash
-flowai-workflow run .flowai-workflow/<workflow-name>
+flowai-workflow run .flowai-workflow/github-inbox --prompt "$(cat <<'EOF'
+<paste the printed prompt body>
+EOF
+)"
 ```
 
-The workflow folder path is a mandatory positional argument; there is
-no autodetect.
+The agents then inspect your `deno.json` / `package.json` /
+`Cargo.toml` / `go.mod` / `pyproject.toml`, your `AGENTS.md` and CI
+configs, detect language/test/lint/branch/repo conventions, patch
+`workflow.yaml` and `agents/agent-*.md` in place, and stop without
+committing — leaving the diff for you to review.
 
 ### Workflow folder
 
@@ -113,45 +130,39 @@ Multiple workflows in one project: keep them as siblings under
 `.flowai-workflow/`; each is fully isolated. `git mv` a folder to share
 it with another repo — it carries everything it needs.
 
-### Non-interactive init (CI)
+### Init flags
 
-```bash
-cat > init-answers.yaml <<EOF
-PROJECT_NAME: my-project
-WORKFLOW_NAME: default
-DEFAULT_BRANCH: main
-TEST_CMD: npm test
-LINT_CMD: npm run lint
-EOF
-
-flowai-workflow init --answers init-answers.yaml
+```
+flowai-workflow init [--workflow <name>] [--dry-run] [--allow-dirty]
 ```
 
-### Hard dependencies
+- `--workflow <name>` — workflow folder under `<package>/.flowai-workflow/`
+  (default: `github-inbox`). Omit for the interactive picker on a TTY;
+  pipe stdin or pass explicitly in CI to skip the prompt.
+- `-l`, `--list` — enumerate every workflow this build ships, exit 0.
+  The set is identical for the JSR install, the standalone binary, and
+  a local `deno run`; the binary embeds them via `deno compile
+  --include` so installs without a network can still scaffold.
+- `--dry-run` — print the files that would be written, exit 0.
+- `--allow-dirty` — skip the clean-git-tree preflight check.
 
-Init preflight verifies all of these before writing any files:
+### Preflight
 
-- `git` — version control.
-- `gh` — GitHub CLI (issue triage, PR creation, merge).
-- `claude` — Claude Code CLI (agent runtime).
-- A `github.com` remote on `origin` (HTTPS, SCP-SSH, or URL-SSH).
+Init verifies before writing any file:
 
-Missing dependencies are reported together in a single summary so the
-first run can be fixed in one pass. Init writes **only** inside
-`.flowai-workflow/<workflow-name>/` — no native-IDE subagent registry
-writes, no top-level `.gitignore` append, no files outside the target
-directory. Run `flowai-workflow init --dry-run` to preview the file
-list before committing.
+- `cwd` is inside a git worktree.
+- The target `.flowai-workflow/<workflow>/` directory does not already
+  exist.
+- (Unless `--allow-dirty`) the working tree is clean.
 
-### What's inside the template
+Workflow-specific dependencies (`gh` CLI, `claude`/`opencode` runtime,
+GitHub remote, etc.) are NOT pre-checked here — they surface at first
+run. Each workflow's `agents/` describe what it needs.
 
-The `sdlc-claude` template is framework-independent: generic agent
-prompts with no hardcoded project-specific references. Review and tune
-`.flowai-workflow/<workflow-name>/agents/agent-*.md` for your project
-conventions after scaffold. A separate `flowai-workflow update`
-command will pull upstream template changes in a future release —
-metadata in `.flowai-workflow/.template.json` records the engine +
-template version at init time for the diff.
+Init writes **only** inside `.flowai-workflow/<workflow>/` — no
+native-IDE subagent registry writes, no top-level `.gitignore` append,
+no files outside the target directory. Run `flowai-workflow init
+--dry-run` to preview the file list before committing.
 
 ## Quick Start
 

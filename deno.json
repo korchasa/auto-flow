@@ -26,15 +26,13 @@
     "proseWrap": "preserve",
     "exclude": [
       "**/*.md",
-      ".*/**/*.md",
-      "init/templates/"
+      ".*/**/*.md"
     ]
   },
   "lint": {
     "exclude": [
       ".claude/worktrees/",
-      ".flowai-workflow/*/agents/",
-      "init/templates/"
+      ".flowai-workflow/*/agents/"
     ]
   },
   "publish": {
@@ -47,7 +45,10 @@
       "**/*_test.ts",
       ".claude/**",
       ".devcontainer/**",
-      ".flowai-workflow/**",
+      ".flowai-workflow/*/runs/**",
+      ".flowai-workflow/*/memory/agent-*.md",
+      ".flowai-workflow/.template.json",
+      ".flowai-workflow/*/.template.json",
       ".github/**",
       "documents/**",
       "scripts/**",

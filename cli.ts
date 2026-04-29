@@ -331,7 +331,7 @@ if (import.meta.main) {
     await runEngine(Deno.args.slice(1));
   }
 
-  // Subcommand: `init` → project scaffolder (non-interactive via --answers)
+  // Subcommand: `init` → verbatim copy of a bundled workflow folder.
   if (subcommand === "init") {
     const { runInit } = await import("./init/mod.ts");
     const exitCode = await runInit(Deno.args.slice(1), {
