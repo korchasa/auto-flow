@@ -372,6 +372,16 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   - [x] Engine calls it after `createWorktree`; skipped on
     `worktree_disabled` and resume-reuse paths. Evidence: `engine.ts`
     (new-run branch in worktree setup).
+  - [x] Self-copy guard: when `workDir` itself appears under an ignored
+    ancestor in `origRepo` (e.g. `<workflowDir>/runs/` matched by
+    gitignore `runs/`), `git ls-files --directory` collapses the
+    ancestor into a single ignored entry. The recursive walk skips the
+    destination worktree on `resolve(src) === absWorkDir`, preventing
+    the worktree from being copied into itself until `ENAMETOOLONG`.
+    Sibling prior-run leftovers under the same ancestor still mirror.
+    Evidence: `worktree.ts` (`classifyAndCopy` head guard),
+    `worktree_copy_ignored_test.ts` (`does not recurse into workDir`
+    regression test).
   - [x] Untracked-not-ignored paths NOT copied (unit test verifies).
     Evidence: `worktree_copy_ignored_test.ts` (untracked-not-ignored test).
   - [x] Unit tests cover: file, directory recursion, live symlink,

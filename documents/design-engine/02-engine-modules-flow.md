@@ -122,6 +122,13 @@
     are not touched (already present from `origin/main` checkout);
     untracked-but-not-ignored files are not copied. Cross-platform via
     Deno FS APIs only — no shell `cp`, no filesystem-level cloning.
+    Self-copy guard: when `workDir` lives under an ignored ancestor in
+    `origRepo` (typical layout — `runs/` is gitignored and `workDir =
+    <workflowDir>/runs/<runId>/worktree`), `git ls-files --directory`
+    returns the ancestor as a single entry. The recursive walk skips
+    paths whose absolute resolution equals `workDir`, otherwise the new
+    worktree would be copied into itself until `ENAMETOOLONG`. Sibling
+    prior-run dirs under the same ancestor still mirror.
     Progress is logged through `output.status("engine", …)` per
     top-level entry plus a leading "Copying ignored files..." line and a
     trailing "Ignored files copied: <N> files, <S>" summary.

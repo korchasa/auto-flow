@@ -9,7 +9,7 @@
  * per-node artifact directories under the same `runs/<run-id>/` parent.
  */
 
-import { dirname, join } from "@std/path";
+import { dirname, join, resolve } from "@std/path";
 import type { OutputManager } from "./output.ts";
 
 /**
@@ -234,6 +234,13 @@ export async function copyIgnoredIntoWorktree(
 ): Promise<{ files: number; bytes: number }> {
   output.status("engine", "Copying ignored files...");
 
+  // Self-copy guard for `classifyAndCopy`: when `workDir` lives inside
+  // `origRepo` under an ignored ancestor (e.g. `.flowai-workflow/<wf>/runs/`
+  // matched by gitignore `runs/`), `git ls-files --directory` returns the
+  // ancestor as a single entry. Recursing into it would walk into the
+  // freshly-created worktree itself and copy it into itself, deepening the
+  // path on every iteration until ENAMETOOLONG.
+  const absWorkDir = resolve(workDir);
   const paths = await listIgnoredPaths(origRepo);
   let totalFiles = 0;
   let totalBytes = 0;
@@ -243,7 +250,7 @@ export async function copyIgnoredIntoWorktree(
     if (relPath === "") continue;
     const src = join(origRepo, relPath);
     const dst = join(workDir, relPath);
-    const result = await classifyAndCopy(src, dst, output);
+    const result = await classifyAndCopy(src, dst, output, absWorkDir);
     totalFiles += result.files;
     totalBytes += result.bytes;
     output.status(
@@ -298,7 +305,15 @@ async function classifyAndCopy(
   src: string,
   dst: string,
   output: OutputManager,
+  absWorkDir: string,
 ): Promise<{ files: number; bytes: number }> {
+  // Skip the destination worktree itself when encountered through an
+  // ignored ancestor — copying it into itself otherwise recurses without
+  // bound (see `copyIgnoredIntoWorktree` for context).
+  if (resolve(src) === absWorkDir) {
+    return { files: 0, bytes: 0 };
+  }
+
   let stat: Deno.FileInfo;
   try {
     stat = await Deno.lstat(src);
@@ -332,6 +347,7 @@ async function classifyAndCopy(
         join(src, entry.name),
         join(dst, entry.name),
         output,
+        absWorkDir,
       );
       files += r.files;
       bytes += r.bytes;

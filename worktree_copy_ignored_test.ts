@@ -213,6 +213,50 @@ Deno.test("copyIgnoredIntoWorktree — emits start, per-entry, and final progres
   }
 });
 
+Deno.test("copyIgnoredIntoWorktree — does not recurse into workDir when it lives under an ignored ancestor in origRepo", async () => {
+  // Mirrors the engine layout: workDir is inside origRepo at
+  // <origRepo>/runs/<id>/worktree/, and `runs/` is gitignored. Without the
+  // self-copy guard, `git ls-files --directory` returns `runs/` as a single
+  // ignored entry and the recursive walk copies the new worktree into
+  // itself until ENAMETOOLONG.
+  const origRepo = await Deno.makeTempDir();
+  try {
+    await git(["init", "--initial-branch=main"], origRepo);
+    await git(["config", "user.email", "test@test.com"], origRepo);
+    await git(["config", "user.name", "Test"], origRepo);
+    await Deno.writeTextFile(`${origRepo}/.gitignore`, "runs/\n");
+    await Deno.writeTextFile(`${origRepo}/README.md`, "tracked\n");
+    await git(["add", ".gitignore", "README.md"], origRepo);
+    await git(["commit", "-m", "init"], origRepo);
+
+    const workDir = `${origRepo}/runs/new/worktree`;
+    await Deno.mkdir(workDir, { recursive: true });
+    // Sibling prior-run leftover — must still be copied (semantics
+    // unchanged for non-self entries).
+    await Deno.mkdir(`${origRepo}/runs/old`, { recursive: true });
+    await Deno.writeTextFile(`${origRepo}/runs/old/state.json`, "{}");
+
+    const { output } = makeCapturedOutput();
+    await copyIgnoredIntoWorktree(workDir, output, origRepo);
+
+    let selfCopied = true;
+    try {
+      await Deno.lstat(`${workDir}/runs/new/worktree`);
+    } catch {
+      selfCopied = false;
+    }
+    assertEquals(selfCopied, false);
+
+    // Sibling prior run is still mirrored.
+    const sibling = await Deno.readTextFile(
+      `${workDir}/runs/old/state.json`,
+    );
+    assertEquals(sibling, "{}");
+  } finally {
+    await cleanup(origRepo);
+  }
+});
+
 Deno.test("copyIgnoredIntoWorktree — empty repo with no ignored files returns zero counters", async () => {
   const { origRepo, destDir } = await initRepo();
   try {
