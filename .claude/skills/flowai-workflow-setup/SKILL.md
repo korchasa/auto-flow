@@ -1,5 +1,5 @@
 ---
-name: setup-workflow
+name: flowai-workflow-setup
 description: >
   Set up flowai-workflow engine in a project: create workflow YAML config,
   agent definitions, directory structure, and run scripts. Use when the user
