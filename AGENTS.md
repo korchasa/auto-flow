@@ -22,13 +22,6 @@
 - Do not use tables in chat output — use two-level lists instead. Tables render poorly in terminal and are harder to scan.
 - Be precise in your wording. Use a scientific approach. Accompany highly
   specialized terms and abbreviations with short hints in parentheses.
-- When a local phase of work completes (tests green, checks green, files
-  edited), report the result and STOP. Do not propose commit/push/PR/merge
-  as "next steps" and do not roll forward into those actions.
-  Authorization for one remote action (push, PR, merge) is scoped to that
-  action only; each subsequent remote action requires a fresh request from
-  the user. Scope resets between tasks — prior-session approvals do not
-  carry over.
 
 ---
 
