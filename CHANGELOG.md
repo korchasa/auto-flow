@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.7.0](https://github.com/korchasa/flowai-workflow/compare/v0.6.0...v0.7.0) (2026-04-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* **engine:** state.ts no longer exports setPhaseRegistry,
+clearPhaseRegistry, or getPhaseForNode. Replace with
+PhaseRegistry.fromConfig(config) and registry.get(nodeId). The
+optional phaseRegistry parameter on getNodeDir/buildTaskPaths is
+back-compat for callers that omit it (flat path returned).
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+* **init:** `flowai-workflow init` flag surface changed.
+Removed: --template, --answers. Added: --workflow, --list/-l.
+Placeholder substitution (__PROJECT_NAME__, __WORKFLOW_NAME__,
+__TEST_CMD__, etc.) is gone — files copy verbatim. Wizard prompts
+are gone — workflow selection is the only interactive step.
+.template.json metadata is no longer written.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+* **cli:** `flowai-workflow` with no args no longer launches an
+interactive REPL — it prints usage and exits non-zero. Compiled
+binaries no longer embed `repl/skills/` via `deno compile --include`.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+### Features
+
+* **engine:** library-embedding readiness (FR-E59, FR-E60, FR-E61) ([95aa389](https://github.com/korchasa/flowai-workflow/commit/95aa3899fcbfa9c4750073efa724337c385344f8))
+* **init:** dogfood workflows, interactive picker, adapt prompt ([18f6118](https://github.com/korchasa/flowai-workflow/commit/18f61188058ae395922eeefa27e132602fe1f9bb))
+
+
+### Bug Fixes
+
+* **engine:** guard copyIgnoredIntoWorktree against self-copy (FR-E58) ([44710e4](https://github.com/korchasa/flowai-workflow/commit/44710e413d34b5075af0a10b0924e19e8fdf21eb))
+
+
+### Chores
+
+* bump opencode model + ai-ide-cli pin + diagnosis rules from reflect ([a3f4af7](https://github.com/korchasa/flowai-workflow/commit/a3f4af77002910318a9b75545c40a7ddcdf5b979))
+* **cli:** remove interactive REPL (FR-E46) ([59be884](https://github.com/korchasa/flowai-workflow/commit/59be884d4f93f376ee578f79d6ac0a78fe8c15b1))
+
 ## [0.6.0](https://github.com/korchasa/flowai-workflow/compare/v0.5.1...v0.6.0) (2026-04-27)
 
 
