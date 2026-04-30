@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.6.0](https://github.com/korchasa/flowai-workflow/compare/v0.5.1...v0.6.0) (2026-04-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* **engine:** resume of pre-FR-E57 runs (worktrees at
+.flowai-workflow/worktrees/<run-id>/) is no longer supported. New runs
+are unaffected.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+### Features
+
+* **check:** include type checking for .claude/hooks/*.ts directory ([6990b0f](https://github.com/korchasa/flowai-workflow/commit/6990b0f2cad6983720ba03740fa613ccee7c845d))
+
+
+### Chores
+
+* **engine:** purge pre-FR-E57 worktree fallback and align stale refs ([1bfd25b](https://github.com/korchasa/flowai-workflow/commit/1bfd25b931878eb6a9541e98656ba2cc7bbadb2e))
+* **hooks:** rewrite deno-guard hook in Deno with table-tested logic ([a9c67f6](https://github.com/korchasa/flowai-workflow/commit/a9c67f60266ec4ee48f73108f59b18ab6efc36ba))
+
 ### [0.5.1](https://github.com/korchasa/flowai-workflow/compare/v0.5.0...v0.5.1) (2026-04-26)
 
 
