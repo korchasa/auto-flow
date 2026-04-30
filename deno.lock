@@ -18,6 +18,22 @@
         "jsr:@std/yaml"
       ]
     },
+    "@korchasa/ai-ide-cli@0.5.11": {
+      "integrity": "ac4be0acb7dc1baade3b79836bd112cd1c133d2eebe48ee6a5a934ae8ef87689",
+      "dependencies": [
+        "jsr:@std/fs",
+        "jsr:@std/path"
+      ]
+    },
+    "@korchasa/flowai-workflow@0.7.2": {
+      "integrity": "53c51257d57a8c55836d87c3f38ab72ea09747e7a7b85031c3feb74add6a2455",
+      "dependencies": [
+        "jsr:@korchasa/ai-ide-cli",
+        "jsr:@std/path",
+        "jsr:@std/semver",
+        "jsr:@std/yaml"
+      ]
+    },
     "@std/assert@1.0.19": {
       "integrity": "eaada96ee120cb980bc47e040f82814d786fe8162ecc53c91d8df60b8755991e",
       "dependencies": [
