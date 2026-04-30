@@ -8,7 +8,7 @@ import type {
 } from "./types.ts";
 import { resolveInputArtifacts, runAgent } from "./agent.ts";
 import { collectAllNodeIds, findNodeConfig } from "./config.ts";
-import { Engine, runPrepareCommand } from "./engine.ts";
+import { buildSpawnEnv, Engine, runPrepareCommand } from "./engine.ts";
 import {
   collectPostWorkflowNodes,
   executePostWorkflow,
@@ -1513,3 +1513,61 @@ Deno.test(
     );
   },
 );
+
+// --- FR-E49: buildSpawnEnv and DISABLE_AUTOUPDATER tests ---
+
+Deno.test("buildSpawnEnv — returns env containing DISABLE_AUTOUPDATER=1 (FR-E49)", () => {
+  const env = buildSpawnEnv();
+  assertEquals(env["DISABLE_AUTOUPDATER"], "1");
+});
+
+Deno.test("buildSpawnEnv — DISABLE_AUTOUPDATER overrides user-set value (FR-E49)", () => {
+  const prev = Deno.env.get("DISABLE_AUTOUPDATER");
+  try {
+    Deno.env.set("DISABLE_AUTOUPDATER", "0");
+    const env = buildSpawnEnv();
+    assertEquals(env["DISABLE_AUTOUPDATER"], "1");
+  } finally {
+    if (prev === undefined) {
+      Deno.env.delete("DISABLE_AUTOUPDATER");
+    } else {
+      Deno.env.set("DISABLE_AUTOUPDATER", prev);
+    }
+  }
+});
+
+Deno.test("Engine.run() — restores DISABLE_AUTOUPDATER after completion (FR-E49)", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  const prevVal = Deno.env.get("DISABLE_AUTOUPDATER");
+  try {
+    Deno.env.delete("DISABLE_AUTOUPDATER");
+    await Deno.mkdir(`${tmpDir}/wf`);
+    await Deno.writeTextFile(
+      `${tmpDir}/wf/workflow.yaml`,
+      `name: restore-test
+version: "1"
+defaults:
+  worktree_disabled: true
+nodes:
+  noop:
+    type: merge
+    label: Noop
+`,
+    );
+    Deno.chdir(tmpDir);
+    const engine = new Engine(makeOptions({
+      config_path: "wf/workflow.yaml",
+      lock_path: `${tmpDir}/wf.lock`,
+    }));
+    await engine.run();
+    // After run, env must be restored to pre-run state (undefined = not set)
+    assertEquals(Deno.env.get("DISABLE_AUTOUPDATER"), undefined);
+  } finally {
+    Deno.chdir(origCwd);
+    await Deno.remove(tmpDir, { recursive: true });
+    if (prevVal !== undefined) {
+      Deno.env.set("DISABLE_AUTOUPDATER", prevVal);
+    }
+  }
+});

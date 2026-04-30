@@ -343,6 +343,8 @@ export interface RunState {
   nodes: Record<string, NodeState>;
   /** Sum of all nodes[*].cost_usd, recomputed on each node completion (FR-E17). */
   total_cost_usd?: number;
+  /** Claude CLI version string captured at run start via `claude --version` (FR-E49). */
+  claude_cli_version?: string;
 }
 
 // --- Template Context ---

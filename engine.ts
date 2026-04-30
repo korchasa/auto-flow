@@ -210,6 +210,26 @@ export class Engine {
       );
     }
 
+    // FR-E49: prevent Claude CLI auto-update during this run.
+    const origAutoupdaterVal = Deno.env.get("DISABLE_AUTOUPDATER");
+    Deno.env.set("DISABLE_AUTOUPDATER", "1");
+
+    // Capture claude CLI version (non-fatal; claude may not be on PATH in non-Claude runtimes).
+    try {
+      const versionResult = await new Deno.Command("claude", {
+        args: ["--version"],
+        stdout: "piped",
+        stderr: "null",
+      }).output();
+      if (versionResult.success) {
+        this.state.claude_cli_version = new TextDecoder().decode(
+          versionResult.stdout,
+        ).trim();
+      }
+    } catch {
+      this.output.warn("claude --version failed — claude may not be on PATH");
+    }
+
     // Acquire per-workflow lock (FR-E54) — serializes runs against the same
     // workflow folder; distinct workflow folders run in parallel.
     const lockPath = this.options.lock_path ??
@@ -233,6 +253,12 @@ export class Engine {
     } finally {
       for (const dispose of disposers) dispose();
       await releaseLock(lockPath);
+      // FR-E49: restore DISABLE_AUTOUPDATER to its pre-run value.
+      if (origAutoupdaterVal === undefined) {
+        Deno.env.delete("DISABLE_AUTOUPDATER");
+      } else {
+        Deno.env.set("DISABLE_AUTOUPDATER", origAutoupdaterVal);
+      }
     }
   }
 
@@ -824,4 +850,10 @@ export function deriveWorkflowDir(configPath: string): string {
   if (idx < 0) return ".";
   const dir = configPath.slice(0, idx);
   return dir.length > 0 ? dir : ".";
+}
+
+/** FR-E49: Build spawn environment with DISABLE_AUTOUPDATER forced to "1".
+ * Merges over current process env; user-set value cannot override the safety flag. */
+export function buildSpawnEnv(): Record<string, string> {
+  return { ...Deno.env.toObject(), DISABLE_AUTOUPDATER: "1" };
 }
