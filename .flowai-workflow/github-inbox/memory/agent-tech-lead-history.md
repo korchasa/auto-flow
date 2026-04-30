@@ -1,0 +1,26 @@
+# Agent Tech Lead — Run History
+
+<!-- Append-only. ≤20 entries. Format per reflection-protocol.md §Layer 2. -->
+
+| Timestamp       | Issue         | Turns | Outcome                                           | Learnings                                                                                                          |
+| --------------- | ------------- | ----- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| 20260319T182156 | #147 (FR-S32) | ~7    | ✅ Variant A selected, SDS updated, PR #161 draft | Rename issues: minimal blast radius wins. Single Edit for SDS when adding one subsection. No cross-scope leakage.  |
+| 20260319T192055 | #148 (FR-S33) | ~7    | ✅ Variant A selected, SDS updated, PR draft      | 4 targeted Edit calls for SDS symlink removal refs — precise and efficient. Symlink cleanup = pure deletion task.   |
+| 20260319T194808 | #149 (FR-S34) | ~7    | ✅ Variant C selected, SDS updated, PR #163 draft | 3 targeted Edit calls for SDS (add function, update renderHtml, add flow). Dashboard scope = pure SDLC, no engine. |
+| 20260319T201620 | #150 (FR-E33) | ~7    | ✅ Variant B selected, SDS updated, PR draft       | 3 targeted Edit calls for SDS (config validation, registry simplification, logic init). Engine-scope, straightforward. |
+| 20260319T204544 | #151 (FR-S35) | ~7    | ✅ Variant C selected, SDS updated, PR draft       | 2 targeted Edit calls for SDS (add §3.8.1 validation + update YAML snippet). SDLC-scope, check.ts pattern. |
+| 20260319T211036 | #152 (FR-E34) | ~7    | ✅ Variant B selected, SDS updated, PR draft       | 2 targeted Edit calls for SDS (expand FR-E19 interaction rules + update §6 fault). Engine-scope, on_error precedence. |
+| 20260319T213344 | #153 (FR-E35) | ~7    | ✅ Variant A selected, SDS updated, PR draft       | 2 targeted Edit calls for SDS (config.ts forwarding validation + §5 algorithm). Engine-scope, inline loop check. |
+| 20260319T215851 | #154 (FR-S36) | ~7    | ✅ Variant B selected, SDS updated, PR draft       | 3 targeted Edit calls for SDS (wrapper script refs in §2.2, §3.7, §5). SDLC-scope, after-hook observability. |
+| 20260319T221833 | #155 (FR-E36+FR-S37) | ~7 | ✅ Variant A selected, both SDS updated, PR #169 draft | 3 Edit calls engine SDS + 1 Edit SDLC SDS. engine+sdlc scope — 4 targeted edits across 2 SDS files, 0 re-reads. |
+| 20260319T224519 | #156 (FR-S38) | ~7 | ✅ Variant A selected, SDS updated, PR draft | 2 targeted Edit calls for SDS (purpose + interfaces in §3.4). SDLC-scope, file() migration — mechanical single-file change. |
+| 20260319T230952 | #157 (FR-S39) | ~7 | ✅ Variant A selected, SDS updated, PR #171 draft | 1 targeted Edit for SDS (§3.4 agent skills purpose). SDLC-scope, dead-code cleanup — minimal removal pattern. |
+| 20260319T233247 | #158 (FR-S40) | ~7 | ✅ Variant A selected, SDS verified+updated, PR #172 draft | 1 Edit for SDS §8 (evidence entry). Doc-sync issue: SDS already correct post-FR-S38, SRS needs ~25 ref fixes. SRS too large for single read — split into offset 0+500. |
+| 20260320T000829 | #159 (FR-S41) | ~7 | ✅ Variant A selected, SDS updated, PR #173 draft | 2 targeted Edit calls for SDS (§2.2 Legacy Shell Scripts + §5 Logic pre_run auto-stash flow). SDLC-scope, script-only change — no engine impact. |
+| 20260320T092158 | #174 (FR-S42) | ~7 | ✅ Variant C selected, SDS updated, PR #177 draft | 2 targeted Edit calls for SDS (§3.4 Agent Execution Summary + §8 evidence). SDLC-scope, workflow.yaml validate block migration — mechanical single-file change. |
+| 20260320T094502 | #175 (FR-E37) | ~7 | ✅ Variant B selected, SDS updated, PR #179 draft | 5 targeted Edit calls for SDS (types.ts, config.ts, scope-check.ts module, §4 NodeConfig, §5 Logic algorithm). Engine-scope, new module pattern — similar to process-registry.ts. |
+| 20260320T101834 | #176 (FR-E7) | ~7 | ✅ Variant B selected, SDS updated, PR #180 draft | 3 targeted Edit calls for SDS (template.ts module, config.ts validation, §5 Logic algorithm). Engine-scope, validation co-located with resolution — natural template.ts extension. |
+| 20260320T104440 | #178 (FR-S43+FR-S44+FR-S45) | ~7 | ✅ Variant A selected, SDS updated, PR #181 draft | 2 targeted Edit calls for SDS (§3.4 architect exploration + QA confidence/multi-focus). SDLC-scope, prompt-only changes — no engine/workflow.yaml impact. Multi-FR issue handled cleanly. |
+| 20260320T213059 | #182 (FR-E38) | ~7 | ✅ Variant A selected, SDS updated, PR #184 draft | 4 targeted Edit calls for SDS (config.ts validateValidationRule, validate.ts checkArtifact, §4 ValidationRule type, §4.1 artifact rule). Engine-scope, validation extension — inline frontmatter parsing, no refactoring. |
+| 20260320T220824 | #183 (FR-E39) | ~7 | ✅ Variant B selected, SDS updated, PR #185 draft | 4 targeted Edit calls for SDS (cli.ts version, CLI interface, new §3.4 Binary Distribution, §7 deferred). Engine-scope, distribution infra — new component + CI workflow, no runtime changes. |
+| 20260501T020329 | #196 (FR-E49) | ~8 | ✅ Variant C selected, SDS updated, PR #209 updated | 3 targeted Edit calls for SDS (engine.ts module, RunState entity, §5 Logic algorithm). Engine-scope, env mutation with restore — rebase conflict resolved via reset to origin/main. |
