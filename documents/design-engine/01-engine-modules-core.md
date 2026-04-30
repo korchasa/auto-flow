@@ -187,6 +187,15 @@
     `NodeConfig`. Resolution cascade: node → defaults → omit. Config
     validation rejects invalid values. Non-claude runtimes (`opencode`,
     `cursor`) accept only `bypassPermissions`.
+    **CLI auto-update prevention (FR-E49):** `buildSpawnEnv()` private
+    helper in `engine.ts` — returns `Record<string, string>` with
+    `DISABLE_AUTOUPDATER=1` merged over `Deno.env.toObject()`. Engine
+    calls `Deno.env.set("DISABLE_AUTOUPDATER", "1")` in `run()` before
+    node execution; `finally` block restores original value (or deletes
+    if previously unset). Child processes inherit the env automatically.
+    `claude --version` captured once at run start via `Deno.Command` →
+    stored in `RunState.claude_cli_version`. Failure (e.g. `claude` not
+    on PATH for OpenCode runtime) → warning, field remains `undefined`.
     Low-level CLI invocation, stream parsing, event formatting, and
     `FileReadTracker` live in `@korchasa/ai-ide-cli` — see the sibling
     repo's `documents/design/01-modules.md` for details

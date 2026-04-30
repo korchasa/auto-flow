@@ -31,9 +31,12 @@
     inline excerpt logic (filter empty → take 3 → join ` | ` → truncate 400),
     both set at completion via `markNodeCompleted()` optional params (FR-E17,
     FR-E22)
-  - RunState: `{ ..., total_cost_usd?: number }` — sum of all
-    `nodes[*].cost_usd`, recomputed by `updateRunCost()` on each node
-    completion (FR-E17)
+  - RunState: `{ ..., total_cost_usd?: number, claude_cli_version?: string }`
+    — `total_cost_usd`: sum of all `nodes[*].cost_usd`, recomputed by
+    `updateRunCost()` on each node completion (FR-E17).
+    `claude_cli_version` (FR-E49): captured once at run start via
+    `claude --version`; `undefined` when CLI unavailable (e.g. OpenCode
+    runtime)
   - EngineOptions: `{ ..., budget_usd?: number }` — workflow-wide USD cap
     from `--budget` CLI flag (FR-E47). When set, engine aborts after any node
     completion if `state.total_cost_usd > budget_usd`
@@ -343,6 +346,22 @@
     `state.json`; budget applies to the cumulative total. Engine aborts via
     `checkWorkflowBudget("resume")` before executing any node if the loaded
     state already exceeds the cap.
+  - **CLI Auto-Update Prevention (FR-E49):** In `run()`, before node
+    execution loop:
+    1. Save original `Deno.env.get("DISABLE_AUTOUPDATER")`.
+    2. `Deno.env.set("DISABLE_AUTOUPDATER", "1")`.
+    3. Capture `claude --version` via `new Deno.Command("claude",
+       ["--version"]).output()`. On success: store trimmed stdout in
+       `state.claude_cli_version`, save state. On failure: log warning,
+       leave field `undefined`.
+    4. In `finally` block: restore original env value (or
+       `Deno.env.delete()` if previously unset).
+    `buildSpawnEnv()`: private helper returning
+    `{ ...Deno.env.toObject(), DISABLE_AUTOUPDATER: "1" }`. User-provided
+    env values for `DISABLE_AUTOUPDATER` always overridden. Available for
+    future per-subprocess env needs; currently unused (child processes
+    inherit parent env via `Deno.Command` default). Sequential-only
+    `Engine.run()` contract (FR-E60) makes `Deno.env` mutation race-free.
   - **Binary Compile Flow (FR-E39):** `scripts/compile.ts` iterates
     `TARGETS` array. Per target: construct `deno compile --allow-all --target
     <denoTarget> --output dist/flowai-workflow-<os>-<arch> cli.ts`. If
