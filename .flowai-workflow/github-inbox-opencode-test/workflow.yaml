@@ -1,5 +1,5 @@
-# Test workflow config — opencode runtime with glm-5 model
-# Minimal: single agent node to verify opencode+glm-5 integration
+# Test workflow config — opencode runtime with glm-4.7 model
+# Minimal: single agent node to verify opencode+glm-4.7 integration
 
 name: "github-inbox-opencode-test"
 version: "1"
@@ -7,7 +7,7 @@ version: "1"
 defaults:
   worktree_disabled: true
   runtime: opencode
-  model: zai-coding-plan/glm-5
+  model: zai-coding-plan/glm-4.7
   permission_mode: bypassPermissions
   max_continuations: 1
   timeout_seconds: 300
@@ -17,7 +17,7 @@ defaults:
 nodes:
   test-agent:
     type: agent
-    label: "Test Agent — opencode + glm-5"
+    label: "Test Agent — opencode + glm-4.7"
     prompt: |
       You are a test agent. Your task is simple:
       1. List the files in the current directory

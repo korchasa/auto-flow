@@ -17,7 +17,7 @@ defaults:
   max_retries: 3
   retry_delay_seconds: 5
   runtime: opencode
-  model: zai-coding-plan/glm-5
+  model: zai-coding-plan/glm-4.7
   permission_mode: bypassPermissions
   # HITL intentionally disabled: local-only pipeline has no remote channel
   # to post comments on. Re-enable with a local-friendly mechanism (e.g.

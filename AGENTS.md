@@ -71,6 +71,14 @@ example of engine usage.
   (max N per node)
 - **Resume:** Failed/interrupted runs resumable via `--resume <run-id>`;
   completed nodes skipped based on `state.json`
+- **Worktree base ref:** runs are checked out from `origin/<base>` (default
+  `origin/main`), not local `HEAD` ([worktree.ts](worktree.ts) `createWorktree`).
+  Any local edit to a workflow's `workflow.yaml`, `agents/*.md`, or other
+  tracked files takes effect *only after `git push`*. Symptom of forgetting:
+  engine fails inside the new worktree on `loadConfig`
+  (`No such file or directory: .../workflow.yaml`) or runs the *previous*
+  version of an edited file. Uncommitted edits also trip the FR-E50 safety
+  check before the worktree is even created.
 - **Observability:** 3 verbosity levels (`-q`/default/`-v`); status lines with
   timestamps; final summary
 - **Library-embedding readiness (FR-E59/E60/E61):** Engine is safe to embed in
@@ -86,9 +94,9 @@ example of engine usage.
 - **SDLC workflow (example):** dogfood ships four workflow folders under
   `.flowai-workflow/`:
   - `github-inbox/` (Claude Code runtime; primary)
-  - `github-inbox-opencode/` (OpenCode + GLM-5)
+  - `github-inbox-opencode/` (OpenCode + GLM-4.7)
   - `github-inbox-opencode-test/` (smoke-test variant)
-  - `autonomous-sdlc/` (reference template, OpenCode + GLM-5; PM
+  - `autonomous-sdlc/` (reference template, OpenCode + GLM-4.7; PM
     autonomously generates and scores tasks across business directions —
     no GitHub issues. Developer/QA merged into a single agent that owns
     quality end-to-end (TDD + chooses tests + self-verifies acceptance
@@ -304,6 +312,20 @@ The goal is to identify the root cause, not to suppress the symptom. A quick wor
 2. Apply "5 WHY" analysis to find the root cause.
 3. Root cause is fixable → apply the fix, retry.
 4. Second fix attempt failed → STOP. Output "STOP-ANALYSIS REPORT" (state, expected, 5-why chain, root cause, hypotheses). Wait for user help.
+
+Before drawing a conclusion from a single signal:
+
+- **Re-run a transient check before labeling failures "pre-existing" or
+  "out of scope"**. Deno's typecheck cache occasionally serves stale errors;
+  a single failing run is one data point, not ground truth. The retry costs
+  ~15 s; mislabeling forces the user to investigate ghost errors.
+- **Verify the suspect line is on the failing call path before announcing
+  a fix location**. Trace the call graph from the entry point (CLI command,
+  exported function, adapter method actually invoked) to the line you
+  suspect. A literal symptom match (e.g. an error string or unknown flag
+  name appearing verbatim in some source file) is not evidence — the same
+  string can sit on a dead, conditional, or sibling code path that the
+  failing run never reaches.
 
 When the root cause is outside your control (missing API keys/URLs, missing generator scripts, unavailable external services, wrong environment configuration) → STOP immediately and ask the user for the correct values. Do not guess, do not invent replacements, do not create workarounds.
 

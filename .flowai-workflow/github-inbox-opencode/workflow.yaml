@@ -1,5 +1,5 @@
-# Workflow configuration — 6-node SDLC flow via OpenCode + GLM-5.
-# Mirror of workflow.yaml with runtime: opencode and zai-coding-plan/glm-5 model.
+# Workflow configuration — 6-node SDLC flow via OpenCode + GLM-4.7.
+# Mirror of workflow.yaml with runtime: opencode and zai-coding-plan/glm-4.7 model.
 
 name: "github-inbox-opencode"
 version: "1"
@@ -11,7 +11,7 @@ defaults:
   max_retries: 3
   retry_delay_seconds: 5
   runtime: opencode
-  model: zai-coding-plan/glm-5
+  model: zai-coding-plan/glm-4.7
   permission_mode: bypassPermissions
   on_failure_script: .flowai-workflow/github-inbox-opencode/scripts/rollback-uncommitted.sh
   hitl:
