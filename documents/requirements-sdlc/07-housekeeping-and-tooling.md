@@ -62,31 +62,32 @@
 
 
 
-### 3.39 FR-S39: Remove Redundant shared-rules.md Read Instruction from SKILL.md Files
+### 3.39 FR-S39: Remove Redundant Read-Rules Bootstrap from Agent Prompts
 
-- **Description:** After FR-S38, `shared-rules.md` is injected into all agent
-  prompts via `{{file(...)}}` in `task_template`. The explicit "BEFORE YOU DO
-  ANYTHING" block instructing agents to read `shared-rules.md` in each SKILL.md
-  is therefore redundant (dead code). FR-S39 removes this block from all 6
-  SKILL.md files, eliminating one wasted turn and unnecessary token cost per
-  workflow run.
-- **Dep:** FR-S38 (file() injection must be implemented first).
+- **Description:** Shared rules are inlined into each of the 6 agent prompt
+  files (`.flowai-workflow/github-inbox/agents/agent-<name>.md`) per FR-S38;
+  there is no separate `shared-rules.md`. The "BEFORE YOU DO ANYTHING" block
+  that instructed agents to read a shared rules file is therefore redundant —
+  the rules are already part of the loaded system prompt. FR-S39 removed this
+  bootstrap block from every agent prompt file, eliminating one wasted turn
+  and unnecessary token cost per workflow run.
+- **Rationale (no shared-rules.md):** The bootstrap block originally pointed
+  at a `shared-rules.md` file that was never adopted; rules were inlined
+  per-agent instead (see FR-S38 rationale). Documentation referencing a
+  separate file was therefore stale even at the time of removal.
+- **Dep:** FR-S38 (per-agent inlining of shared rules).
 - **Acceptance criteria:**
-  - [x] "BEFORE YOU DO ANYTHING" heading + shared-rules read instruction removed
-    from all 6 SKILL.md files (`agent-pm`, `agent-architect`, `agent-tech-lead`,
+  - [x] "BEFORE YOU DO ANYTHING" heading + read-rules instruction removed from
+    all 6 agent prompt files (`agent-pm`, `agent-architect`, `agent-tech-lead`,
     `agent-developer`, `agent-qa`, `agent-tech-lead-review`). Evidence:
-    `.flowai-workflow/agents/agent-pm/SKILL.md`,
-    `.flowai-workflow/agents/agent-architect/SKILL.md`,
-    `.flowai-workflow/agents/agent-tech-lead/SKILL.md`,
-    `.flowai-workflow/agents/agent-developer/SKILL.md`,
-    `.flowai-workflow/agents/agent-qa/SKILL.md`,
-    `.flowai-workflow/agents/agent-tech-lead-review/SKILL.md`.
-  - [x] Cross-references like "per shared-rules.md § Scope-Aware Doc Reads"
-    preserved in all files. Evidence: verified in each SKILL.md.
-  - [x] YAML frontmatter unchanged in each SKILL.md. Evidence: verified in each
-    SKILL.md.
-  - [x] `deno task check` passes. Evidence: PASS (533 tests, run
-    `20260319T230952`).
+    `grep -rn "BEFORE YOU DO ANYTHING" .flowai-workflow/github-inbox/agents/`
+    returns zero matches.
+  - [x] No agent prompt file references `shared-rules.md` (any cross-reference
+    such as "per shared-rules.md §..." removed or rewritten in-place).
+    Evidence: `grep -rn "shared-rules" .flowai-workflow/github-inbox/` returns
+    zero matches.
+  - [x] YAML frontmatter unchanged in each agent prompt file.
+  - [x] `deno task check` passes.
 
 
 
@@ -157,8 +158,8 @@
   - [x] `agent-architect/SKILL.md` contains `## Codebase Exploration` section
     defining 2–3 parallel sub-agent launch pattern (Prior art, Architecture
     layers, Integration points). Evidence: `.flowai-workflow/agents/agent-architect/SKILL.md`.
-  - [x] `Agent` tool explicitly allowed in `## Codebase Exploration` with
-    shared-rules.md override reference. Evidence:
+  - [x] `Agent` tool explicitly allowed in `## Codebase Exploration`,
+    overriding the agent prompt's default tool prohibition. Evidence:
     `.flowai-workflow/agents/agent-architect/SKILL.md`.
   - [x] Architect Responsibility #3 updated to incorporate exploration findings
     as `file:line` references. Evidence: `.flowai-workflow/agents/agent-architect/SKILL.md`.

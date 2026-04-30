@@ -31,7 +31,7 @@ per file). FR-IDs are stable — never renumber them on move.
   scoring, multi-focus parallel review.
 - [07-housekeeping-and-tooling.md](requirements-sdlc/07-housekeeping-and-tooling.md)
   — Executor → Developer rename, SDLC utility CLI help, stale path cleanup,
-  symlink cleanup, shared-rules redundancy, format change sync, superseded
+  symlink cleanup, redundant read-rules bootstrap, format change sync, superseded
   pre_run, Architect codebase exploration.
 
 ## FR-S ID → Section File
@@ -74,7 +74,7 @@ per file). FR-IDs are stable — never renumber them on move.
 - FR-S36 (After-Script Observability)      → 05-dashboard-and-observability
 - FR-S37 (Verify Node Verdict Validation)  → 06-quality-and-validation
 - FR-S38 (`file()` Injection)              → 06-quality-and-validation
-- FR-S39 (shared-rules.md Redundancy)      → 07-housekeeping-and-tooling
+- FR-S39 (Redundant Read-Rules Bootstrap)  → 07-housekeeping-and-tooling
 - FR-S40 (Format Change Doc Sync)          → 07-housekeeping-and-tooling
 - FR-S41 (pre_run — superseded)            → 07-housekeeping-and-tooling
 - FR-S42 (Composite Artifact Migration)    → 06-quality-and-validation

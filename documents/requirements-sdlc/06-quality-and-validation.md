@@ -53,22 +53,35 @@
 
 
 
-### 3.38 FR-S38: Workflow Agent Context via file() Injection in task_template
+### 3.38 FR-S38: Workflow Agent Context via file() Injection
 
-- **Description:** All 6 agent nodes in `.flowai-workflow/workflow.yaml` MUST inject
-  shared rules and their SKILL.md into the agent prompt via `{{file(...)}}` in
-  `task_template`, separated by `---`. No agent node may use the `prompt:` field.
-  This makes prompt composition explicit and declarative in the workflow config,
-  replacing the implicit `prompt:` loading mechanism.
+- **Description:** All 6 agent nodes in
+  `.flowai-workflow/github-inbox/workflow.yaml` load their system prompt via
+  `{{file(...)}}` injection of
+  `.flowai-workflow/github-inbox/agents/agent-<name>.md` in the `system_prompt`
+  field. The `prompt` field carries the per-task user message and additionally
+  injects `memory/reflection-protocol.md` plus per-agent memory/history paths.
+  Shared agent rules are inlined into each of the 6 agent prompt files — no
+  separate `shared-rules.md` exists.
+- **Rationale (no shared-rules.md):** Six inline copies of the shared rules
+  were judged cheaper than one shared file plus six `{{file(...)}}` references.
+  The separate-file approach was considered and rejected; future readers
+  should not reintroduce `shared-rules.md` under the impression it was the
+  intended design.
 - **Acceptance criteria:**
-  - [x] All 6 agent nodes include `{{file(".flowai-workflow/agents/shared-rules.md")}}`
-    in `task_template`. Evidence: `.flowai-workflow/workflow.yaml:39, 77, 102, 138, 162, 191`.
-  - [x] All 6 agent nodes include `{{file(".flowai-workflow/agents/agent-<name>/SKILL.md")}}`
-    in `task_template`. Evidence: `.flowai-workflow/workflow.yaml:41, 79, 104, 140, 164, 193`.
-  - [x] No agent node in `workflow.yaml` uses the `prompt:` field. Evidence:
-    `workflow_integrity_test.ts` test "workflow.yaml — no agent node uses prompt: field
-    (FR-S38 AC#3)" passes; run `20260319T224519` (533 tests, 0 failures).
-  - [x] `deno task check` passes. Evidence: PASS (533 tests, run `20260319T224519`).
+  - [x] All 6 agent nodes load
+    `{{file(".flowai-workflow/github-inbox/agents/agent-<name>.md")}}` in
+    `system_prompt`. Evidence:
+    `.flowai-workflow/github-inbox/workflow.yaml:43-44, 72-73, 94-95, 130-131,
+    153-154, 179-180`.
+  - [x] All 6 agent nodes inject
+    `{{file(".flowai-workflow/github-inbox/memory/reflection-protocol.md")}}`
+    via the `prompt` field. Evidence:
+    `.flowai-workflow/github-inbox/workflow.yaml:46, 75, 97, 133, 156, 182`.
+  - [x] No workflow node or agent prompt file references `shared-rules.md`.
+    Evidence: `grep -r "shared-rules" .flowai-workflow/github-inbox/` returns
+    zero matches.
+  - [x] `deno task check` passes.
 
 
 
@@ -141,8 +154,8 @@
   - [x] `agent-qa/SKILL.md` contains `## Multi-Focus Review` section defining
     2–3 parallel Agent sub-agents with distinct focus areas. Evidence:
     `.flowai-workflow/agents/agent-qa/SKILL.md`.
-  - [x] `Agent` tool explicitly allowed in `## Multi-Focus Review` with
-    shared-rules.md override reference. Evidence:
+  - [x] `Agent` tool explicitly allowed in `## Multi-Focus Review`, overriding
+    the agent prompt's default tool prohibition. Evidence:
     `.flowai-workflow/agents/agent-qa/SKILL.md`.
   - [x] QA Responsibility #4 updated to delegate to sub-agents with per-focus
     consolidation. Evidence: `.flowai-workflow/agents/agent-qa/SKILL.md`.

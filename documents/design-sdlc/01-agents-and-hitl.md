@@ -34,11 +34,14 @@
 
 - **Purpose:** Versioned system prompts defining each agent's role and behavior.
   Each agent lives in `.flowai-workflow/agents/agent-<name>/SKILL.md` (canonical
-  location per FR-S26). Pipeline-driven only: prompts injected via
-  `{{file(...)}}` in `task_template` (FR-S38); legacy `prompt:` field removed.
-  Redundant `# BEFORE YOU DO ANYTHING` / "Read shared-rules.md" block removed
-  from all 6 SKILL.md files (FR-S39) — content already injected at prompt
-  construction time. Agent-specific "first tool call MUST be" instruction
+  location per FR-S26). Pipeline-driven: agent prompt files loaded via
+  `{{file(...)}}` in the workflow's `system_prompt` field (FR-S38); per-task
+  user message delivered via `prompt` field. Shared agent rules are inlined
+  into each agent prompt file — no separate `shared-rules.md` is maintained
+  (six inline copies were chosen over one shared file plus six references).
+  Redundant `# BEFORE YOU DO ANYTHING` read-rules bootstrap removed from all
+  6 agent prompt files (FR-S39) — the rules are already part of the loaded
+  system prompt. Agent-specific "first tool call MUST be" instruction
   (5 of 6 agents) preserved as standalone paragraph before `# Role:`.
   Legacy `.claude/skills/` symlinks removed per FR-S33 — interactive
   `/agent-<name>` slash commands no longer supported (workflow-only agents
@@ -56,7 +59,7 @@
     architecture layers, integration points). Sub-agents run within same
     session — no separate workflow node. Exploration findings provide concrete
     file:line evidence consumed by variant design phase. Explicit `Agent` tool
-    allowance overrides `shared-rules.md` default prohibition.
+    allowance overrides the agent prompt's default tool prohibition.
   - `agent-tech-lead` — critique + decision + SDS update + branch creation
     (`git checkout -b sdlc/issue-<N>`) or rebase existing branch onto
     `origin/main` (`git rebase origin/main`, with conflict resolution) +
@@ -82,7 +85,7 @@
     (3) conventions/abstractions. Sub-agents run within same QA session — no
     new workflow node. Findings consolidated into per-focus sections in QA
     report. All findings subject to confidence scoring per FR-S44. Explicit
-    `Agent` tool allowance overrides `shared-rules.md` default prohibition.
+    `Agent` tool allowance overrides the agent prompt's default tool prohibition.
   - `agent-tech-lead-review` — post-workflow: final code review + CI gate
     check + merge. `run_on: always`. Handles missing-PR case gracefully.
 - **Removed agents (FR-S15):** `tech-lead-reviewer`, `tech-lead-sds`,
@@ -108,20 +111,24 @@
   - `allowed-tools: []` — no automatic tool grants; agents use tools available
     in their execution context.
 - **Interfaces:**
-  - Pipeline (FR-S38): `prompt:` field removed from all 6 agent nodes.
-    SKILL.md and shared-rules.md injected via `{{file(...)}}` in
-    `task_template`. Template structure per node:
+  - Pipeline (FR-S38): each agent node uses two fields. `system_prompt` loads
+    the agent prompt file via `{{file(...)}}`. `prompt` carries the per-task
+    user message and additionally injects `reflection-protocol.md` plus
+    per-agent memory/history paths. Shared rules are inlined into each agent
+    prompt file — no separate `shared-rules.md`. Template structure per node:
     ```yaml
-    task_template: |
-      {{file(".flowai-workflow/agents/shared-rules.md")}}
-      ---
-      {{file(".flowai-workflow/agents/agent-<name>/SKILL.md")}}
+    system_prompt: |
+      {{file(".flowai-workflow/github-inbox/agents/agent-<name>.md")}}
+    prompt: |
+      {{file(".flowai-workflow/github-inbox/memory/reflection-protocol.md")}}
+      Memory: .flowai-workflow/github-inbox/memory/agent-<name>.md
+      History: .flowai-workflow/github-inbox/memory/agent-<name>-history.md
       ---
       <task-specific content>
     ```
-    Content delivered as user message (`-p`) — no `--system-prompt` flag.
     Engine `file()` template function resolves paths at runtime, inlines
-    file content into task prompt before CLI invocation.
+    file content before CLI invocation. `system_prompt` is delivered as the
+    runtime's system prompt; `prompt` as the user message (`-p`).
   - Interactive: Removed (FR-S33). Legacy `.claude/skills/agent-<name>`
     symlinks deleted. Pipeline-only agents are no longer discoverable as
     interactive Claude Code skills.
