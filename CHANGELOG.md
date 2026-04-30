@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.7.1](https://github.com/korchasa/flowai-workflow/compare/v0.7.0...v0.7.1) (2026-04-30)
+
+
+### Bug Fixes
+
+* **jsr:** widen exports to expose Engine library surface ([f44c934](https://github.com/korchasa/flowai-workflow/commit/f44c9348d04b295de20d8293c98d6d2b4b86cec3)), closes [#216](https://github.com/korchasa/flowai-workflow/issues/216)
+* **workflow:** update effort levels for consistency across nodes ([13ed2ee](https://github.com/korchasa/flowai-workflow/commit/13ed2eec797234a0a2c5353531b68524fe583592))
+
+
+### Documentation
+
+* **sdlc:** align FR-S38/FR-S39 with inlined-rules state (closes [#202](https://github.com/korchasa/flowai-workflow/issues/202)) ([e8951b9](https://github.com/korchasa/flowai-workflow/commit/e8951b94d8119026b6253e89c41d0937fd9aee99))
+
+
+### Chores
+
+* **claude:** rename setup-workflow skill to flowai-workflow-setup ([a3d2678](https://github.com/korchasa/flowai-workflow/commit/a3d26784efdeb9ec423e03d3b90516af89ea8cf7))
+* drop "stop after local phase" rule from AGENTS.md ([f660d74](https://github.com/korchasa/flowai-workflow/commit/f660d742e68965ee90d17a7febcca953926b72a6))
+
 ## [0.7.0](https://github.com/korchasa/flowai-workflow/compare/v0.6.0...v0.7.0) (2026-04-30)
 
 
