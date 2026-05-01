@@ -119,10 +119,12 @@ example of engine usage.
   placement changes (e.g., FR-E52 fix that altered where validate.ts
   looks for files under worktree), agent reflection memory under
   `.flowai-workflow/<wf>/memory/agent-*.md` may carry stale workarounds
-  the agents learned to compensate for the bug. Reset before next run:
-  `rm .flowai-workflow/*/memory/agent-*.md` (history files are
-  append-only logs — keep them; they document what the bug looked like
-  to past runs).
+  the agents learned to compensate for the bug. Reset memory snapshots
+  before next run while preserving append-only history (which documents
+  what the bug looked like to past runs):
+  `find .flowai-workflow/<wf>/memory -name 'agent-*.md' ! -name '*-history.md' -not -path '*/runs/*' -delete`.
+  A bare `rm agent-*.md` would also wipe `agent-*-history.md` — do not
+  use that shorthand.
   **Dogfood = template.** The same `.flowai-workflow/<name>/` folders the
   project runs are bundled in the JSR tarball AND embedded in every
   standalone binary (via `deno compile --include`, enumerated by
