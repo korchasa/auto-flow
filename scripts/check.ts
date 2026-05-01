@@ -701,12 +701,7 @@ export function validateFrFields(
  * Wrapper for `validateFrFields` that reads
  * `documents/requirements-{engine,sdlc}/*.md`. No-op when neither
  * directory exists (fresh end-user project may have no SRS yet).
- *
- * Currently NOT wired into the main check pipeline — the bulk of
- * existing FRs use legacy field shapes; the pure validator is
- * exercised by tests until the migration sweep completes (per
- * ADR-0012). After the sweep, append `await frFieldSet();` to
- * the main pipeline alongside `await adrSet();`.
+ * Wired into the main pipeline after the ADR-0012 sweep.
  */
 export async function frFieldSet(): Promise<void> {
   console.log("\n--- FR Canonical Field Set ---");
@@ -802,6 +797,7 @@ Checks performed:
   - HITL artifact_source template validation
   - Docs token budget (every documents/*.md fits in Read's 10k-token limit)
   - ADR set lint (numbering, required sections, status, cross-links)
+  - FR canonical field set lint (per ADR-0012)
   - Comment marker scan (TODO/FIXME/HACK/XXX)
 
 No options accepted.
@@ -919,6 +915,7 @@ if (import.meta.main) {
   await agentListAccuracy();
   await docsTokenBudget();
   await adrSet();
+  await frFieldSet();
   await commentScan();
 
   console.log("\n=== All checks passed! ===");
