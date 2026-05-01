@@ -66,4 +66,7 @@ graph TD
 
 ## 3. Components
 
+→ continues in [01-engine-modules-core.md](01-engine-modules-core.md)
+(§3.1 first half), [02-engine-modules-flow.md](02-engine-modules-flow.md)
+(§3.1 second half), and [03-subsystems.md](03-subsystems.md) (§3.2–§3.6).
 
