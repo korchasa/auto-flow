@@ -240,6 +240,7 @@
 
 ### 3.47 FR-E47: Run Budget Enforcement
 
+- **ADR:** [documents/adrs/0009-budget-cli-runtime-coupling.md](../adrs/0009-budget-cli-runtime-coupling.md)
 - **Description:** Engine enforces cost caps at two levels: (1) workflow-wide
   `--budget <USD>` CLI argument aborts the run when `total_cost_usd` exceeds
   the cap after any node completes; (2) per-node `budget.max_usd` in YAML

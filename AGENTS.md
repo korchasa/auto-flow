@@ -253,17 +253,45 @@ migration.
 
 ## Key Decisions
 
+Architectural decisions are recorded as ADRs under
+[documents/adrs/](documents/adrs/) (Nygard format, append-only). The
+list below is a one-line index — open the linked ADR for full
+context, alternatives, and consequences.
+
 - **Engine is domain-agnostic:** Generic DAG executor. MUST NOT contain git,
   GitHub, branch, PR, or any domain-specific logic. All domain workflows are
-  implemented exclusively via agent nodes wired in workflow YAML configs
+  implemented exclusively via agent nodes wired in workflow YAML configs.
+  See [ADR-0001](documents/adrs/0001-isolation-provider.md) (isolation
+  provider plugin) and [ADR-0002](documents/adrs/0002-hitl-detection-boundary.md)
+  (HITL detection in `@korchasa/ai-ide-cli`) for the boundary fixes
+  in flight.
 - **Engine is workflow-independent:** MUST NOT depend on any specific workflow
   config. One engine, many workflows. Engine code must not reference concrete
-  node names, artifact filenames, or workflow structure
-- Agents are stateless — all context from file artifacts and system prompts
-- YAML workflow config defines node graph; no hardcoded stage order
-- Artifacts stored per-run for isolation
+  node names, artifact filenames, or workflow structure.
+- Agents are stateless — all context from file artifacts and system prompts.
+- YAML workflow config defines node graph; no hardcoded stage order.
+- Artifacts stored per-run for isolation. Per-run worktree co-located
+  under `<workflowDir>/runs/<run-id>/worktree/` —
+  [ADR-0003](documents/adrs/0003-per-run-worktree-co-location.md).
+- Detached-HEAD worktrees pinned to a rescue branch before removal —
+  [ADR-0004](documents/adrs/0004-detached-head-rescue-branch.md).
+- `TemplateContext` paths are workDir-relative; engine consumers wrap via
+  `workPath` —
+  [ADR-0005](documents/adrs/0005-cwd-relative-template-paths.md).
+- Run lock is per-workflow-folder, rooted at `<workflowDir>/runs/.lock` —
+  [ADR-0006](documents/adrs/0006-per-workflow-run-lock.md).
+- `PhaseRegistry` is per-`Engine.run()`, never module-level —
+  [ADR-0007](documents/adrs/0007-phase-registry-per-run.md).
+- Engine never installs OS signal handlers; bin entry points only —
+  [ADR-0008](documents/adrs/0008-signal-handler-boundary.md).
+- Budget enforcement is coupled to the CLI runtime today; planned
+  move into `@korchasa/ai-ide-cli` —
+  [ADR-0009](documents/adrs/0009-budget-cli-runtime-coupling.md).
+- JSR publish surface: `.versionrc.json`, `publish.exclude`,
+  `--dry-run` verification —
+  [ADR-0010](documents/adrs/0010-jsr-publish-caveats.md).
 - SDLC workflow specifics (diff safety checks, etc.)
-  are workflow-level concerns, not engine-level
+  are workflow-level concerns, not engine-level.
 
 ## Documentation Hierarchy
 1. **`AGENTS.md`**: Project vision, constraints, mandatory rules. READ-ONLY reference.

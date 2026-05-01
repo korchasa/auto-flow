@@ -443,6 +443,183 @@ async function docsTokenBudget(): Promise<void> {
   console.log("  All documents/ files fit within Read-tool token budget.");
 }
 
+/**
+ * FR-E63: Pure validator for the ADR set under `documents/adrs/`.
+ *
+ * Input: an array of `{ name, content }` for every `.md` file under the
+ * directory EXCEPT `README.md` and `_template.md` (the caller filters
+ * those out). Output: offender messages; empty array means the set is
+ * compliant. Pure — no FS I/O — so the caller's `adrSet()` wrapper can
+ * supply fixtures from memory in tests.
+ *
+ * Enforced rules:
+ *  - Filename matches `^\d{4}-[a-z0-9-]+\.md$`.
+ *  - Numbering is contiguous from `0001`, no gaps, no duplicates.
+ *  - Required level-2 sections present in this exact order:
+ *    Status, Context, Decision, Consequences, Alternatives Considered.
+ *  - Status value is `Proposed`, `Accepted`, or `Superseded by ADR-NNNN`.
+ *  - `Superseded by ADR-NNNN` references an ADR present in the set.
+ *  - Every `ADR-NNNN` cross-reference in any ADR body resolves to an
+ *    ADR present in the set.
+ */
+export function validateAdrSet(
+  files: Array<{ name: string; content: string }>,
+): string[] {
+  const offenders: string[] = [];
+  const filenameRe = /^(\d{4})-[a-z0-9-]+\.md$/;
+  const requiredSections = [
+    "## Status",
+    "## Context",
+    "## Decision",
+    "## Consequences",
+    "## Alternatives Considered",
+  ];
+
+  // Step 1 — filename pattern + collect numbers.
+  const numbers: Array<{ n: number; name: string }> = [];
+  for (const f of files) {
+    const m = f.name.match(filenameRe);
+    if (!m) {
+      offenders.push(
+        `${f.name}: filename does not match ^\\d{4}-[a-z0-9-]+\\.md$`,
+      );
+      continue;
+    }
+    numbers.push({ n: Number(m[1]), name: f.name });
+  }
+
+  // Step 2 — monotonic numbering: contiguous from 0001, no gaps, no dups.
+  if (numbers.length > 0) {
+    const sorted = [...numbers].sort((a, b) => a.n - b.n);
+    const seen = new Set<number>();
+    for (let i = 0; i < sorted.length; i++) {
+      const expected = i + 1;
+      const got = sorted[i].n;
+      if (seen.has(got)) {
+        offenders.push(`${sorted[i].name}: duplicate ADR number ${got}`);
+        continue;
+      }
+      seen.add(got);
+      if (got !== expected) {
+        offenders.push(
+          `${sorted[i].name}: numbering gap — expected ${
+            String(expected).padStart(4, "0")
+          }, got ${String(got).padStart(4, "0")}`,
+        );
+      }
+    }
+  }
+
+  // Step 3 — required sections present and in the right order.
+  for (const f of files) {
+    if (!filenameRe.test(f.name)) continue; // already reported
+    let cursor = 0;
+    for (const heading of requiredSections) {
+      const idx = f.content.indexOf(`\n${heading}\n`, cursor);
+      if (idx === -1) {
+        // Allow heading at the very top (no leading \n) — happens after
+        // the H1 title, which is followed by a blank line + `## Status`.
+        const head = f.content.startsWith(`${heading}\n`) ? 0 : -1;
+        if (head === -1) {
+          offenders.push(
+            `${f.name}: missing required section heading '${heading}' (or out of order)`,
+          );
+          break;
+        }
+        cursor = head + heading.length;
+      } else {
+        cursor = idx + heading.length + 2;
+      }
+    }
+  }
+
+  // Step 4 — Status value.
+  const adrNumberSet = new Set<number>(numbers.map((x) => x.n));
+  for (const f of files) {
+    if (!filenameRe.test(f.name)) continue;
+    const statusBlock = f.content.match(/\n## Status\n([\s\S]*?)\n## /);
+    if (!statusBlock) continue; // missing-section already reported
+    const value = statusBlock[1].trim();
+    const valueRe = /^(Proposed|Accepted|Superseded by ADR-(\d{4}))$/;
+    const m = value.match(valueRe);
+    if (!m) {
+      offenders.push(
+        `${f.name}: Status value '${value}' is not one of {Proposed, Accepted, Superseded by ADR-NNNN}`,
+      );
+      continue;
+    }
+    if (m[2] !== undefined) {
+      const target = Number(m[2]);
+      if (!adrNumberSet.has(target)) {
+        offenders.push(
+          `${f.name}: Status references ADR-${m[2]} which is not in the set`,
+        );
+      }
+    }
+  }
+
+  // Step 5 — every ADR-NNNN cross-reference in body resolves.
+  const xrefRe = /\bADR-(\d{4})\b/g;
+  for (const f of files) {
+    if (!filenameRe.test(f.name)) continue;
+    const seen = new Set<string>();
+    let match: RegExpExecArray | null;
+    xrefRe.lastIndex = 0;
+    while ((match = xrefRe.exec(f.content)) !== null) {
+      const ref = match[1];
+      if (seen.has(ref)) continue;
+      seen.add(ref);
+      if (!adrNumberSet.has(Number(ref))) {
+        offenders.push(
+          `${f.name}: cross-reference ADR-${ref} does not resolve to any ADR in the set`,
+        );
+      }
+    }
+  }
+
+  return offenders;
+}
+
+/**
+ * Wrapper for `validateAdrSet` that reads `documents/adrs/`. Skips
+ * `README.md` and `_template.md`. No-op when the directory is absent
+ * (fresh end-user project may not have ADRs yet — non-blocking).
+ */
+async function adrSet(): Promise<void> {
+  console.log("\n--- ADR Set ---");
+  const dir = "documents/adrs";
+  let stat: Deno.FileInfo;
+  try {
+    stat = await Deno.stat(dir);
+  } catch (err) {
+    if (err instanceof Deno.errors.NotFound) {
+      console.log(`  No ${dir}/ directory — skipped.`);
+      return;
+    }
+    throw err;
+  }
+  if (!stat.isDirectory) {
+    console.error(`FAILED: ${dir} exists but is not a directory.`);
+    Deno.exit(1);
+  }
+  const files: Array<{ name: string; content: string }> = [];
+  for await (const entry of Deno.readDir(dir)) {
+    if (!entry.isFile || !entry.name.endsWith(".md")) continue;
+    if (entry.name === "README.md" || entry.name === "_template.md") continue;
+    const content = await Deno.readTextFile(`${dir}/${entry.name}`);
+    files.push({ name: entry.name, content });
+  }
+  const offenders = validateAdrSet(files);
+  if (offenders.length > 0) {
+    for (const line of offenders) console.error(`  ${line}`);
+    console.error(
+      "FAILED: ADR set lint — see documents/adrs/README.md for the format contract.",
+    );
+    Deno.exit(1);
+  }
+  console.log(`  ADR set valid (${files.length} record(s)).`);
+}
+
 /** Render the CLI help text for `deno task check`. */
 export function printUsage(): string {
   return `Full project verification: fmt, lint, test, comment-scan
@@ -462,6 +639,7 @@ Checks performed:
   - AGENTS.md agent list accuracy
   - HITL artifact_source template validation
   - Docs token budget (every documents/*.md fits in Read's 10k-token limit)
+  - ADR set lint (numbering, required sections, status, cross-links)
   - Comment marker scan (TODO/FIXME/HACK/XXX)
 
 No options accepted.
@@ -578,6 +756,7 @@ if (import.meta.main) {
   await hitlArtifactSource();
   await agentListAccuracy();
   await docsTokenBudget();
+  await adrSet();
   await commentScan();
 
   console.log("\n=== All checks passed! ===");

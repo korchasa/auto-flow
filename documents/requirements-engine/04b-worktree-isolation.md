@@ -43,6 +43,9 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   "scope_violation")` and an automatic `git checkout --` rollback of
   exactly the leaked paths. Complements FR-E37 (which checks `allowed_paths`
   inside the worktree) by guarding the dual: writes outside the worktree.
+- **ADR:** [documents/adrs/0001-isolation-provider.md](../adrs/0001-isolation-provider.md)
+  (planned — the guardrail is a worktree-provider concern; rationale will
+  carry forward when the provider plugin lands).
 - **Motivation:** Even after FR-E48/b0db7e6 fixed the cwd-relative template
   path emission, an LLM agent may still decide to write to absolute paths
   for other reasons (e.g., misreading prompts, prior training artifacts,
@@ -102,6 +105,7 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
 
 ### 3.51 FR-E51: Post-Run Branch-Pin for Detached-HEAD Worktree
 
+- **ADR:** [documents/adrs/0004-detached-head-rescue-branch.md](../adrs/0004-detached-head-rescue-branch.md)
 - **Description:** Before `removeWorktree`, the engine checks whether the
   worktree's HEAD is detached. If yes, it creates a rescue branch
   `flowai/run-<runId>-orphan-rescue` pointing at the current HEAD so the
@@ -155,6 +159,7 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
 
 ### 3.52 FR-E52: Cwd-Relative Path Contract for TemplateContext
 
+- **ADR:** [documents/adrs/0005-cwd-relative-template-paths.md](../adrs/0005-cwd-relative-template-paths.md)
 - **Description:** All path fields in `TemplateContext` (`node_dir`,
   `run_dir`, `input.<id>`) are emitted **workDir-relative** by the engine
   (FR-E7 / fix `b0db7e6`). Engine-internal consumers that perform FS I/O
@@ -209,6 +214,7 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
 
 ### 3.54 FR-E54: Per-Workflow Run Lock
 
+- **ADR:** [documents/adrs/0006-per-workflow-run-lock.md](../adrs/0006-per-workflow-run-lock.md)
 - **Description:** The workflow lock file is rooted at `<workflowDir>/runs/.lock`,
   not at the repo-global `.flowai-workflow/runs/.lock`. `<workflowDir>` is the
   folder that contains `workflow.yaml` (FR-S47, FR-E53). The engine derives it
@@ -258,6 +264,7 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
 
 ### 3.55 FR-E57: Per-Run Worktree Co-Location
 
+- **ADR:** [documents/adrs/0003-per-run-worktree-co-location.md](../adrs/0003-per-run-worktree-co-location.md)
 - **Description:** Each run's git worktree is materialized at
   `<workflowDir>/runs/<run-id>/worktree/`, sibling to its `state.json` and
   per-node artifact directories. Replaces the pre-FR-E57 repo-global
@@ -342,6 +349,9 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
 
 ### 3.58 FR-E58: Copy Gitignored Files into Run Worktree
 
+- **ADR:** [documents/adrs/0001-isolation-provider.md](../adrs/0001-isolation-provider.md)
+  (planned — the gitignored-file mirror is a worktree-provider concern;
+  rationale will carry forward when the provider plugin lands).
 - **Description:** After `createWorktree()` and before any node executes,
   the engine mirrors gitignored entries from the original repo into the
   worktree at the same relative paths. Source list:

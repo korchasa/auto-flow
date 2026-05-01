@@ -163,6 +163,7 @@
 
 ### 3.59 FR-E59: Phase Registry Scoped to Run
 
+- **ADR:** [documents/adrs/0007-phase-registry-per-run.md](../adrs/0007-phase-registry-per-run.md)
 - **Description:** The `nodeId → phase` mapping (FR-E9) lives on a per-run
   `PhaseRegistry` instance constructed at the top of `Engine.run()` from the
   loaded workflow config. No module-level state. Two consecutive
@@ -229,6 +230,7 @@
 
 ### 3.61 FR-E61: Signal Handler Boundary
 
+- **ADR:** [documents/adrs/0008-signal-handler-boundary.md](../adrs/0008-signal-handler-boundary.md)
 - **Description:** `installSignalHandlers()` is exposed as a publicly
   documented entry point intended exclusively for autonomous bin entry
   points (`cli.ts`, `scripts/self-runner.ts`). The `Engine` class MUST
@@ -254,5 +256,58 @@
   - [x] AC4: Source-level corollary: `engine.ts` does not import the
     `installSignalHandlers` symbol. Evidence: `engine_test.ts::engine.ts
     does not import installSignalHandlers`.
+
+
+
+### 3.63 FR-E63: ADR Process
+
+- **ADR:** Process meta-FR — defines the ADR mechanism itself; no
+  single back-fill record. The directory and lint that implement it
+  live at [documents/adrs/](../adrs/) and
+  `scripts/check.ts::validateAdrSet`.
+- **Description:** Architectural decisions are recorded as
+  Architecture Decision Records (ADRs) under `documents/adrs/`. ADRs
+  use Michael Nygard's format (Status / Context / Decision /
+  Consequences / Alternatives Considered), are append-only once
+  `Accepted`, evolve via new ADRs that link back via
+  `Superseded by ADR-NNNN`, and are numbered monotonically with no
+  gaps. The set is lint-checked at `deno task check`.
+- **Motivation:** "Why was it built this way?" used to require
+  `git log` + AGENTS.md prose archaeology. New contributors couldn't
+  locate rationale without inside knowledge. ADRs anchor the
+  decisions on a stable, navigable surface; FRs say what is true,
+  ADRs say why.
+- **Constraints:**
+  - One ADR per file. Filename `^\d{4}-[a-z0-9-]+\.md$`. Numbers
+    contiguous from `0001`, no gaps, no duplicates.
+  - Required level-2 sections, exact wording and order:
+    `## Status`, `## Context`, `## Decision`, `## Consequences`,
+    `## Alternatives Considered`.
+  - `Status` ∈ {`Proposed`, `Accepted`, `Superseded by ADR-NNNN`};
+    when superseded, the referenced ADR-NNNN MUST exist.
+  - All `ADR-NNNN` cross-references in ADR bodies MUST resolve to
+    existing files.
+  - ADRs fit the per-file `documents/` token budget
+    (`docsTokenBudget`, FR-E5).
+- **Acceptance criteria:**
+  - [x] `documents/adrs/` directory exists with `README.md` (index)
+    and `_template.md` (skeleton). Evidence:
+    `documents/adrs/README.md`, `documents/adrs/_template.md`.
+  - [x] At least 8 back-filled ADRs covering the most consequential
+    historical decisions (10 ADRs land at FR-E63 introduction).
+    Evidence: `documents/adrs/0001-...md` through
+    `documents/adrs/0010-...md`.
+  - [x] AGENTS.md "Key Decisions" section links each bullet to its
+    ADR. Evidence: `AGENTS.md` "Key Decisions" section.
+  - [x] FR-E acceptance criteria for E47/E51/E52/E54/E57/E59/E61
+    cross-link to corresponding ADRs (FR-E50/E58 link to ADR-0001
+    pending the isolation-provider plugin landing). Evidence: this
+    file + `04b-worktree-isolation.md`, `05-cli-and-observability.md`.
+  - [x] `scripts/check.ts::validateAdrSet` runs as part of
+    `deno task check`, enforcing filename pattern, monotonic
+    numbering, required sections, status values, and cross-link
+    resolution. Evidence: `scripts/check.ts`,
+    `scripts/check_test.ts`.
+  - [x] `deno task check` passes with the full ADR set in place.
 
 

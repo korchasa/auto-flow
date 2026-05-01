@@ -95,3 +95,4 @@ FR-IDs are stable — never renumber them on move.
 - FR-E59 (Phase Registry Scoped to Run) → 06-distribution-and-housekeeping
 - FR-E60 (ProcessRegistry Injection)    → 06-distribution-and-housekeeping
 - FR-E61 (Signal Handler Boundary)      → 06-distribution-and-housekeeping
+- FR-E63 (ADR Process)                  → 06-distribution-and-housekeeping

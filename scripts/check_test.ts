@@ -4,6 +4,7 @@ import {
   assertWorkflowFolderShape,
   checkArgs,
   printUsage,
+  validateAdrSet,
   validateAgentListContent,
   validateDocsTokenBudget,
   validateHitlArtifactSource,
@@ -24,6 +25,7 @@ Deno.test("printUsage — mentions checks performed", () => {
   assertEquals(text.includes("Tests"), true);
   assertEquals(text.includes("Workflow integrity"), true);
   assertEquals(text.includes("AGENTS.md agent list accuracy"), true);
+  assertEquals(text.includes("ADR set lint"), true);
   assertEquals(text.includes("Comment marker scan"), true);
 });
 
@@ -281,4 +283,224 @@ Deno.test("assertWorkflowFolderShape — empty agents/ dir fails when present", 
   } finally {
     await Deno.remove(tmp, { recursive: true });
   }
+});
+
+// --- FR-E63: validateAdrSet ---------------------------------------------
+
+function makeAdr(
+  number: string,
+  title: string,
+  status = "Accepted",
+  bodyExtra = "",
+): { name: string; content: string } {
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(
+    /^-|-$/g,
+    "",
+  );
+  return {
+    name: `${number}-${slug}.md`,
+    content: `# ADR-${number}: ${title}
+
+## Status
+
+${status}
+
+## Context
+
+ctx body
+
+## Decision
+
+decision body${bodyExtra}
+
+## Consequences
+
+consequences body
+
+## Alternatives Considered
+
+- alt
+`,
+  };
+}
+
+Deno.test("validateAdrSet — empty input returns no offenders", () => {
+  assertEquals(validateAdrSet([]), []);
+});
+
+Deno.test("validateAdrSet — single well-formed ADR passes", () => {
+  const offenders = validateAdrSet([makeAdr("0001", "first")]);
+  assertEquals(offenders, []);
+});
+
+Deno.test("validateAdrSet — contiguous numbering 0001..0010 passes", () => {
+  const files: Array<{ name: string; content: string }> = [];
+  for (let i = 1; i <= 10; i++) {
+    files.push(makeAdr(String(i).padStart(4, "0"), `record-${i}`));
+  }
+  assertEquals(validateAdrSet(files), []);
+});
+
+Deno.test("validateAdrSet — bad filename pattern flagged", () => {
+  const bad = makeAdr("0001", "ok");
+  bad.name = "not-an-adr.md";
+  const offenders = validateAdrSet([bad]);
+  assertEquals(offenders.length, 1);
+  assertEquals(offenders[0].includes("not-an-adr.md"), true);
+  assertEquals(offenders[0].includes("filename does not match"), true);
+});
+
+Deno.test("validateAdrSet — numbering gap flagged", () => {
+  const offenders = validateAdrSet([
+    makeAdr("0001", "a"),
+    makeAdr("0003", "c"), // gap: 0002 missing
+  ]);
+  assertEquals(offenders.length, 1);
+  assertEquals(offenders[0].includes("0003-c.md"), true);
+  assertEquals(offenders[0].includes("expected 0002"), true);
+});
+
+Deno.test("validateAdrSet — duplicate numbers flagged", () => {
+  const offenders = validateAdrSet([
+    makeAdr("0001", "a"),
+    makeAdr("0001", "a-dup"),
+  ]);
+  assertEquals(
+    offenders.some((o) => o.includes("duplicate ADR number 1")),
+    true,
+  );
+});
+
+Deno.test("validateAdrSet — first ADR not 0001 flagged", () => {
+  const offenders = validateAdrSet([makeAdr("0002", "a")]);
+  assertEquals(offenders.length, 1);
+  assertEquals(offenders[0].includes("expected 0001"), true);
+});
+
+Deno.test("validateAdrSet — missing required section flagged", () => {
+  const broken = makeAdr("0001", "a");
+  broken.content = broken.content.replace(
+    /## Alternatives Considered[\s\S]*$/,
+    "",
+  );
+  const offenders = validateAdrSet([broken]);
+  assertEquals(
+    offenders.some((o) =>
+      o.includes(
+        "missing required section heading '## Alternatives Considered'",
+      )
+    ),
+    true,
+  );
+});
+
+Deno.test("validateAdrSet — sections out of order flagged", () => {
+  const reordered = {
+    name: "0001-r.md",
+    content: `# ADR-0001: r
+
+## Decision
+
+x
+
+## Status
+
+Accepted
+
+## Context
+
+x
+
+## Consequences
+
+x
+
+## Alternatives Considered
+
+x
+`,
+  };
+  const offenders = validateAdrSet([reordered]);
+  // The walker finds Status/Context past Decision, then can't find a
+  // Decision heading after that cursor — so it reports Decision.
+  assertEquals(
+    offenders.some((o) => o.includes("'## Decision'")),
+    true,
+  );
+});
+
+Deno.test("validateAdrSet — invalid Status value flagged", () => {
+  const f = makeAdr("0001", "a", "Draft");
+  const offenders = validateAdrSet([f]);
+  assertEquals(
+    offenders.some((o) => o.includes("Status value 'Draft'")),
+    true,
+  );
+});
+
+Deno.test("validateAdrSet — Proposed and Accepted both pass", () => {
+  const offenders = validateAdrSet([
+    makeAdr("0001", "a", "Proposed"),
+    makeAdr("0002", "b", "Accepted"),
+  ]);
+  assertEquals(offenders, []);
+});
+
+Deno.test("validateAdrSet — Superseded references existing ADR passes", () => {
+  const offenders = validateAdrSet([
+    makeAdr("0001", "a", "Superseded by ADR-0002"),
+    makeAdr("0002", "b", "Accepted"),
+  ]);
+  assertEquals(offenders, []);
+});
+
+Deno.test("validateAdrSet — Superseded references missing ADR flagged", () => {
+  const offenders = validateAdrSet([
+    makeAdr("0001", "a", "Superseded by ADR-0099"),
+  ]);
+  assertEquals(
+    offenders.some((o) => o.includes("Status references ADR-0099")),
+    true,
+  );
+});
+
+Deno.test("validateAdrSet — body cross-reference to missing ADR flagged", () => {
+  const f = makeAdr(
+    "0001",
+    "a",
+    "Accepted",
+    "\n\nSee ADR-0099 for follow-up.",
+  );
+  const offenders = validateAdrSet([f]);
+  assertEquals(
+    offenders.some((o) => o.includes("ADR-0099 does not resolve")),
+    true,
+  );
+});
+
+Deno.test("validateAdrSet — body cross-reference to present ADR passes", () => {
+  const offenders = validateAdrSet([
+    makeAdr("0001", "a", "Accepted", "\n\nSee ADR-0002."),
+    makeAdr("0002", "b", "Accepted"),
+  ]);
+  assertEquals(offenders, []);
+});
+
+Deno.test("validateAdrSet — real shipped ADR set passes", async () => {
+  const files: Array<{ name: string; content: string }> = [];
+  try {
+    for await (const entry of Deno.readDir("documents/adrs")) {
+      if (!entry.isFile || !entry.name.endsWith(".md")) continue;
+      if (entry.name === "README.md" || entry.name === "_template.md") continue;
+      const content = await Deno.readTextFile(`documents/adrs/${entry.name}`);
+      files.push({ name: entry.name, content });
+    }
+  } catch (err) {
+    if (err instanceof Deno.errors.NotFound) {
+      // No ADR directory in this checkout — skip.
+      return;
+    }
+    throw err;
+  }
+  assertEquals(validateAdrSet(files), []);
 });
