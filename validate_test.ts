@@ -574,3 +574,94 @@ Deno.test("multiple rules — mixed results", async () => {
 
   await Deno.remove(tmpDir, { recursive: true });
 });
+
+// --- FR-E52 regression: validation under worktree isolation ---
+//
+// When ctx.workDir != ".", the engine runs from the original repo cwd while
+// agents run inside a sibling worktree and write artifacts at
+// `<workDir>/<node_dir>/...`. Validation MUST wrap the rule path with
+// `workPath(ctx.workDir, …)` before any FS access — otherwise it stat()s
+// the wrong location, fails (or worse: silently agrees) and the loop's
+// condition extraction sees a different file than validation does.
+// Issue #196 / run 20260501T020329 hit this: build wrote to the doubled
+// path, validate.ts checked the flat path, agents "fixed" by writing to
+// flat too, then loop.extractConditionValue (correctly wrapped) couldn't
+// find the QA report at the doubled path.
+Deno.test(
+  "FR-E52 — file_exists under worktree wraps path with workDir",
+  async () => {
+    const workDir = await Deno.makeTempDir();
+    const nodeDirRel = "runs/test/build";
+    await Deno.mkdir(`${workDir}/${nodeDirRel}`, { recursive: true });
+    await Deno.writeTextFile(
+      `${workDir}/${nodeDirRel}/04-impl-summary.md`,
+      "## Summary\nok\n",
+    );
+
+    const ctx: TemplateContext = {
+      node_dir: nodeDirRel,
+      run_dir: "runs/test",
+      run_id: "test",
+      workDir,
+      args: {},
+      env: {},
+      input: {},
+    };
+    const rules: ValidationRule[] = [
+      { type: "file_exists", path: "{{node_dir}}/04-impl-summary.md" },
+    ];
+    const results = await runValidations(rules, ctx);
+
+    assertEquals(results[0].passed, true);
+    // Display path remains workDir-relative so the agent's error/log
+    // message references a path it can write to from cwd = workDir.
+    assertEquals(
+      results[0].message,
+      `File exists: ${nodeDirRel}/04-impl-summary.md`,
+    );
+
+    await Deno.remove(workDir, { recursive: true });
+  },
+);
+
+Deno.test(
+  "FR-E52 — artifact + frontmatter_field under worktree wrap path",
+  async () => {
+    const workDir = await Deno.makeTempDir();
+    const nodeDirRel = "runs/test/verify";
+    await Deno.mkdir(`${workDir}/${nodeDirRel}`, { recursive: true });
+    await Deno.writeTextFile(
+      `${workDir}/${nodeDirRel}/05-qa-report.md`,
+      "---\nverdict: PASS\n---\n## Summary\nok\n",
+    );
+
+    const ctx: TemplateContext = {
+      node_dir: nodeDirRel,
+      run_dir: "runs/test",
+      run_id: "test",
+      workDir,
+      args: {},
+      env: {},
+      input: {},
+    };
+    const rules: ValidationRule[] = [
+      {
+        type: "artifact",
+        path: "{{node_dir}}/05-qa-report.md",
+        sections: ["Summary"],
+      },
+      {
+        type: "frontmatter_field",
+        path: "{{node_dir}}/05-qa-report.md",
+        field: "verdict",
+        allowed: ["PASS", "FAIL"],
+      },
+    ];
+    const results = await runValidations(rules, ctx);
+
+    assertEquals(results[0].passed, true);
+    assertEquals(results[1].passed, true);
+
+    await Deno.remove(workDir, { recursive: true });
+  },
+);

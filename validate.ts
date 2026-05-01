@@ -8,6 +8,7 @@
 
 import type { TemplateContext, ValidationRule } from "./types.ts";
 import { interpolate } from "./template.ts";
+import { workPath } from "./state.ts";
 
 /** Result of running a validation rule. */
 export interface ValidationResult {
@@ -51,21 +52,32 @@ async function runSingleValidation(
   ctx: TemplateContext,
   cwd?: string,
 ): Promise<ValidationResult> {
-  const resolvedPath = interpolate(rule.path, ctx);
+  // FR-E52: rule.path uses {{node_dir}}-style placeholders that interpolate
+  // to workDir-relative paths. Engine FS callers must wrap with
+  // workPath(ctx.workDir, …) before any Deno.stat/readTextFile, otherwise
+  // validation under worktree isolation looks at the wrong location and
+  // the loop's condition extraction (which DOES wrap) sees a different
+  // file than validation does. Display path stays workDir-relative so the
+  // agent's error message references the path it can write to from cwd =
+  // workDir.
+  const displayPath = interpolate(rule.path, ctx);
+  const fsPath = workPath(ctx.workDir, displayPath);
 
   switch (rule.type) {
     case "file_exists":
-      return await checkFileExists(rule, resolvedPath);
+      return await checkFileExists(rule, displayPath, fsPath);
     case "file_not_empty":
-      return await checkFileNotEmpty(rule, resolvedPath);
+      return await checkFileNotEmpty(rule, displayPath, fsPath);
     case "contains_section":
-      return await checkContainsSection(rule, resolvedPath);
+      return await checkContainsSection(rule, displayPath, fsPath);
     case "custom_script":
-      return await checkCustomScript(rule, resolvedPath, cwd);
+      // displayPath here is a shell command, not a filesystem path; cwd
+      // governs script-execution dir, no path-wrap needed.
+      return await checkCustomScript(rule, displayPath, cwd);
     case "frontmatter_field":
-      return await checkFrontmatterField(rule, resolvedPath);
+      return await checkFrontmatterField(rule, displayPath, fsPath);
     case "artifact":
-      return await checkArtifact(rule, resolvedPath);
+      return await checkArtifact(rule, displayPath, fsPath);
     default:
       return {
         rule,
@@ -77,38 +89,41 @@ async function runSingleValidation(
 
 async function checkFileExists(
   rule: ValidationRule,
-  path: string,
+  displayPath: string,
+  fsPath: string,
 ): Promise<ValidationResult> {
   try {
-    await Deno.stat(path);
-    return { rule, passed: true, message: `File exists: ${path}` };
+    await Deno.stat(fsPath);
+    return { rule, passed: true, message: `File exists: ${displayPath}` };
   } catch {
-    return { rule, passed: false, message: `File not found: ${path}` };
+    return { rule, passed: false, message: `File not found: ${displayPath}` };
   }
 }
 
 async function checkFileNotEmpty(
   rule: ValidationRule,
-  path: string,
+  displayPath: string,
+  fsPath: string,
 ): Promise<ValidationResult> {
   try {
-    const stat = await Deno.stat(path);
+    const stat = await Deno.stat(fsPath);
     if (stat.size === 0) {
-      return { rule, passed: false, message: `File is empty: ${path}` };
+      return { rule, passed: false, message: `File is empty: ${displayPath}` };
     }
     return {
       rule,
       passed: true,
-      message: `File is non-empty: ${path} (${stat.size} bytes)`,
+      message: `File is non-empty: ${displayPath} (${stat.size} bytes)`,
     };
   } catch {
-    return { rule, passed: false, message: `File not found: ${path}` };
+    return { rule, passed: false, message: `File not found: ${displayPath}` };
   }
 }
 
 async function checkContainsSection(
   rule: ValidationRule,
-  path: string,
+  displayPath: string,
+  fsPath: string,
 ): Promise<ValidationResult> {
   const section = rule.value;
   if (!section) {
@@ -120,23 +135,23 @@ async function checkContainsSection(
   }
 
   try {
-    const content = await Deno.readTextFile(path);
+    const content = await Deno.readTextFile(fsPath);
     // Match markdown heading with the section name
     const pattern = new RegExp(`^#{1,6}\\s+${escapeRegex(section)}`, "m");
     if (pattern.test(content)) {
       return {
         rule,
         passed: true,
-        message: `Section '${section}' found in ${path}`,
+        message: `Section '${section}' found in ${displayPath}`,
       };
     }
     return {
       rule,
       passed: false,
-      message: `Section '${section}' not found in ${path}`,
+      message: `Section '${section}' not found in ${displayPath}`,
     };
   } catch {
-    return { rule, passed: false, message: `File not found: ${path}` };
+    return { rule, passed: false, message: `File not found: ${displayPath}` };
   }
 }
 
@@ -191,7 +206,8 @@ async function checkCustomScript(
  */
 async function checkFrontmatterField(
   rule: ValidationRule,
-  path: string,
+  displayPath: string,
+  fsPath: string,
 ): Promise<ValidationResult> {
   if (!rule.field) {
     return {
@@ -203,9 +219,9 @@ async function checkFrontmatterField(
 
   let content: string;
   try {
-    content = await Deno.readTextFile(path);
+    content = await Deno.readTextFile(fsPath);
   } catch {
-    return { rule, passed: false, message: `File not found: ${path}` };
+    return { rule, passed: false, message: `File not found: ${displayPath}` };
   }
 
   // Extract YAML frontmatter between --- delimiters
@@ -214,7 +230,7 @@ async function checkFrontmatterField(
     return {
       rule,
       passed: false,
-      message: `No YAML frontmatter found in ${path}`,
+      message: `No YAML frontmatter found in ${displayPath}`,
     };
   }
 
@@ -228,7 +244,8 @@ async function checkFrontmatterField(
     return {
       rule,
       passed: false,
-      message: `Field '${rule.field}' not found in frontmatter of ${path}`,
+      message:
+        `Field '${rule.field}' not found in frontmatter of ${displayPath}`,
     };
   }
 
@@ -243,7 +260,7 @@ async function checkFrontmatterField(
         message:
           `Field '${rule.field}' has value '${value}', not in allowed set [${
             rule.allowed.join(", ")
-          }] in ${path}`,
+          }] in ${displayPath}`,
       };
     }
   }
@@ -251,7 +268,7 @@ async function checkFrontmatterField(
   return {
     rule,
     passed: true,
-    message: `Field '${rule.field}' = '${value}' in ${path}`,
+    message: `Field '${rule.field}' = '${value}' in ${displayPath}`,
   };
 }
 
@@ -265,26 +282,27 @@ async function checkFrontmatterField(
  */
 async function checkArtifact(
   rule: ValidationRule,
-  path: string,
+  displayPath: string,
+  fsPath: string,
 ): Promise<ValidationResult> {
   const sections = rule.sections ?? [];
   const fields = rule.fields ?? [];
 
   try {
-    await Deno.stat(path);
+    await Deno.stat(fsPath);
   } catch {
-    return { rule, passed: false, message: `File not found: ${path}` };
+    return { rule, passed: false, message: `File not found: ${displayPath}` };
   }
 
   let content: string;
   try {
-    content = await Deno.readTextFile(path);
+    content = await Deno.readTextFile(fsPath);
   } catch {
-    return { rule, passed: false, message: `File not found: ${path}` };
+    return { rule, passed: false, message: `File not found: ${displayPath}` };
   }
 
   if (content.length === 0) {
-    return { rule, passed: false, message: `File is empty: ${path}` };
+    return { rule, passed: false, message: `File is empty: ${displayPath}` };
   }
 
   const missing: string[] = [];
@@ -299,7 +317,7 @@ async function checkArtifact(
     return {
       rule,
       passed: false,
-      message: `Missing sections in ${path}: ${
+      message: `Missing sections in ${displayPath}: ${
         missing.map((s) => `'${s}'`).join(", ")
       }`,
     };
@@ -312,7 +330,7 @@ async function checkArtifact(
       return {
         rule,
         passed: false,
-        message: `No YAML frontmatter found in ${path}`,
+        message: `No YAML frontmatter found in ${displayPath}`,
       };
     }
     const fm = fmMatch[1];
@@ -331,14 +349,14 @@ async function checkArtifact(
       return {
         rule,
         passed: false,
-        message: `Missing or empty frontmatter fields in ${path}: ${
+        message: `Missing or empty frontmatter fields in ${displayPath}: ${
           missingFields.map((f) => `'${f}'`).join(", ")
         }`,
       };
     }
   }
 
-  return { rule, passed: true, message: `Artifact validated: ${path}` };
+  return { rule, passed: true, message: `Artifact validated: ${displayPath}` };
 }
 
 function escapeRegex(str: string): string {

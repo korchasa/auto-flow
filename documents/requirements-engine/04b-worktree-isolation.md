@@ -193,7 +193,19 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
     `hitl-handler.ts`, `node-dispatch.ts`, `engine.ts` wrap correctly.
     Evidence: audit test passes — see `template_paths_test.ts:141-184`
     (assertEquals offenders to []).
-  - [x] `deno task check` passes. Evidence: `deno task check` (PASS, 787 tests).
+  - [x] `validate.ts::runSingleValidation` wraps interpolated rule paths
+    via `workPath(ctx.workDir, …)` before `Deno.stat` / `readTextFile`,
+    and emits workDir-relative `displayPath` in messages so agent sees
+    paths writable from cwd = workDir. Closes a contract gap: the audit
+    regex catches direct `ctx.node_dir` references but not indirect
+    references via `interpolate(rule.path, ctx)`, which validate.ts
+    used. Mismatch with `extractConditionValue` (already wrapped) caused
+    `Loop 'implementation': condition_field 'verdict' not found` on
+    `github-inbox` run `20260501T020329` (issue #196). Evidence:
+    `validate.ts:53-87`, regression tests
+    `validate_test.ts::FR-E52 — file_exists under worktree wraps path with workDir`
+    and `validate_test.ts::FR-E52 — artifact + frontmatter_field under worktree wrap path`.
+  - [x] `deno task check` passes. Evidence: `deno task check` (PASS, 820 tests).
 
 ### 3.54 FR-E54: Per-Workflow Run Lock
 
