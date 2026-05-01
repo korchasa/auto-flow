@@ -115,6 +115,14 @@ example of engine usage.
   --force`).
   **`memory/agent-*.md` files are gitignored** at the repo root (they
   accumulate per run); only `memory/reflection-protocol.md` is tracked.
+  **Memory invalidation:** When the engine path contract or artifact
+  placement changes (e.g., FR-E52 fix that altered where validate.ts
+  looks for files under worktree), agent reflection memory under
+  `.flowai-workflow/<wf>/memory/agent-*.md` may carry stale workarounds
+  the agents learned to compensate for the bug. Reset before next run:
+  `rm .flowai-workflow/*/memory/agent-*.md` (history files are
+  append-only logs — keep them; they document what the bug looked like
+  to past runs).
   **Dogfood = template.** The same `.flowai-workflow/<name>/` folders the
   project runs are bundled in the JSR tarball AND embedded in every
   standalone binary (via `deno compile --include`, enumerated by
