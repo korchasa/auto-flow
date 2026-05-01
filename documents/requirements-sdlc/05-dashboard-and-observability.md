@@ -12,7 +12,6 @@
   - [x] No `white-space: nowrap; text-overflow: ellipsis` CSS for result text. Evidence: `scripts/generate-dashboard.ts:189` (`white-space:pre-wrap`)
   - [x] `escHtml()` applied to all result content to prevent XSS. Evidence: `scripts/generate-dashboard.ts:74-75`
   - [x] Unit tests cover: multi-line result (details/summary structure), single-line result (p tag), empty result, HTML special chars in result. Evidence: `scripts/generate-dashboard_test.ts:100-170`
-  - [x] `deno task check` passes. Evidence: confirmed by CI run on branch `sdlc/issue-47`
 
 
 
@@ -44,7 +43,6 @@
   - [x] `escHtml()` applied to node labels rendered in the timeline. Evidence: `scripts/generate-dashboard.ts:163` (`label = escHtml(nodeId)`).
   - [x] Unit tests cover: bar position/width calculation, bottleneck detection,
     parallel node stacking, single-node edge case, missing-timing omission. Evidence: `scripts/generate-dashboard_test.ts:288-472`.
-  - [x] `deno task check` passes. Evidence: QA PASS — all tests pass (run `20260314T060523`).
 
 
 
@@ -84,7 +82,6 @@
     Evidence: `scripts/generate-dashboard_test.ts:641-647` (link present),
     `scripts/generate-dashboard_test.ts:649-654` (no link when absent),
     `scripts/generate-dashboard_test.ts:656-678` (threading via `renderHtml`).
-  - [x] `deno task check` passes. Evidence: 483 tests pass, 0 failed.
 
 
 
@@ -120,8 +117,6 @@
     Evidence: Inherent behavior of `contains_section` validation in engine;
     `.flowai-workflow/workflow.yaml` `contains_section` rules trigger continuation on
     missing section (same mechanism as all other section validations).
-  - [x] `deno task check` passes after changes.
-    Evidence: Run 20260314T073009 — 490 tests pass, workflow integrity valid.
 
 
 
@@ -173,8 +168,6 @@
     `Set<string>` of always-nodes; passes to `renderHtml()`. Phase heading
     renders secondary `phase-badge-always` badge when `alwaysStatus` present.
     Evidence: `scripts/generate-dashboard.ts`.
-  - [x] `deno task check` passes. Evidence: PASS (509 tests, run
-    `20260319T194808`).
 
 
 
@@ -204,7 +197,5 @@
     `.flowai-workflow/workflow.yaml`.
   - [x] `on_error: continue` and `run_on: always` retained unchanged. Evidence:
     `.flowai-workflow/workflow.yaml`.
-  - [x] `deno task check` passes. Evidence: PASS (528 tests, run
-    `20260319T215851`).
 
 
