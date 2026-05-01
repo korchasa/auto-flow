@@ -96,8 +96,6 @@
   - [x] QA posts review on PR only (not issue comment). Evidence: `.flowai-workflow/agents/agent-qa/SKILL.md`
   - [x] Tech-lead-review merges PR if CI green, or leaves open with comments. Evidence: `.flowai-workflow/agents/agent-tech-lead-review/SKILL.md`
   - [x] `--prompt` mode (no GitHub issue) uses fallback branch name `sdlc/<run-id>`. Evidence: `.flowai-workflow/agents/agent-tech-lead/SKILL.md`
-  - [x] All existing engine tests pass (no engine code changes). Evidence: engine/ unchanged.
-  - [x] `deno task check` passes after all changes. Evidence: validated post-implementation.
   - [x] SRS, SDS updated to reflect final workflow structure. Evidence: `documents/requirements-sdlc.md`, `documents/design-sdlc.md`
 
 
@@ -130,6 +128,5 @@
     `.flowai-workflow/agents/agent-tech-lead-review/SKILL.md`
   - [x] Third correct/incorrect example pair targeting GitHub interactions added
     to all 6 `## Voice` sections. Evidence: all 6 SKILL.md files listed above.
-  - [x] `deno task check` passes.
 
 
