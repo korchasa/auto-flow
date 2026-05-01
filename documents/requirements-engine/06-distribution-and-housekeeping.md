@@ -105,16 +105,17 @@
   local development the root workspace `deno.json` uses the `links` field
   to resolve the JSR specifier from a sibling checkout of the library
   repo. Library has zero imports from engine.
+
+  **Scope:** Library package exports unchanged from the workspace-member
+  era. Repository split preserves per-file git history via
+  `git filter-repo --subdirectory-filter ai-ide-cli`.
 - **Motivation:** Other projects (CLI tools, agent hosts, MCP proxies)
   need Claude/OpenCode subprocess management without pulling the full
   DAG workflow engine. Independent repository + release cadence
   eliminates the monorepo-wide release coupling, isolates issue
   trackers, and lets the library follow IDE-CLI surface evolution on
   its own timeline.
-- **Scope:** Library package exports unchanged from the workspace-member
-  era. Repository split preserves per-file git history via
-  `git filter-repo --subdirectory-filter ai-ide-cli`.
-- **Acceptance:**
+- **Acceptance criteria:**
   - [x] `@korchasa/ai-ide-cli` lives in `korchasa/ai-ide-cli` with its
     own `deno.json`, `mod.ts`, and sub-path exports for `types`,
     `process-registry`, `runtime`, `runtime/types`, `claude/process`,
@@ -146,7 +147,6 @@
 
 ### 3.59 FR-E59: Phase Registry Scoped to Run
 
-- **ADR:** [documents/adrs/0007-phase-registry-per-run.md](../adrs/0007-phase-registry-per-run.md)
 - **Description:** The `nodeId → phase` mapping (FR-E9) lives on a per-run
   `PhaseRegistry` instance constructed at the top of `Engine.run()` from the
   loaded workflow config. No module-level state. Two consecutive
@@ -158,7 +158,8 @@
   queue of `Engine.run()` calls in one Deno process. Module-level mapping
   let Run A's mapping persist into Run B and route Run B's nodes into Run
   A's phase folders, breaking artifact isolation.
-- **Acceptance:**
+- **ADR:** [documents/adrs/0007-phase-registry-per-run.md](../adrs/0007-phase-registry-per-run.md)
+- **Acceptance criteria:**
   - **Tests:** `engine_test.ts` (FR-E59; regression-locked). See ADR-0007.
 
 
@@ -177,14 +178,13 @@
   `ProcessRegistry` lets the host call `killAll()` on its own scope to
   terminate ONLY this engine's children — sibling subprocesses keep
   running.
-- **Acceptance:**
+- **Acceptance criteria:**
   - **Tests:** `engine_test.ts` (FR-E60; regression-locked).
 
 
 
 ### 3.61 FR-E61: Signal Handler Boundary
 
-- **ADR:** [documents/adrs/0008-signal-handler-boundary.md](../adrs/0008-signal-handler-boundary.md)
 - **Description:** `installSignalHandlers()` is exposed as a publicly
   documented entry point intended exclusively for autonomous bin entry
   points (`cli.ts`, `scripts/self-runner.ts`). The `Engine` class MUST
@@ -196,7 +196,8 @@
   (often translating them into queue-cancellation, not process exit).
   An engine-installed handler would call `Deno.exit(130|143)` and kill
   unrelated host work.
-- **Acceptance:**
+- **ADR:** [documents/adrs/0008-signal-handler-boundary.md](../adrs/0008-signal-handler-boundary.md)
+- **Acceptance criteria:**
   - **Tests:** `engine_test.ts` (FR-E61; regression-locked). See ADR-0008.
   - [x] `process-registry.ts` documents `installSignalHandlers` as
     bin-entry-point-only and explicitly disclaims its use from `Engine`.
@@ -209,23 +210,19 @@
 
 ### 3.63 FR-E63: ADR Process
 
-- **ADR:** Process meta-FR — defines the ADR mechanism itself; no
-  single back-fill record. The directory and lint that implement it
-  live at [documents/adrs/](../adrs/) and
-  `scripts/check.ts::validateAdrSet`.
 - **Description:** Architectural decisions are recorded as
   Architecture Decision Records (ADRs) under `documents/adrs/`. ADRs
   use Michael Nygard's format (Status / Context / Decision /
   Consequences / Alternatives Considered), are append-only once
   `Accepted`, evolve via new ADRs that link back via
   `Superseded by ADR-NNNN`, and are numbered monotonically with no
-  gaps. The set is lint-checked at `deno task check`.
-- **Motivation:** "Why was it built this way?" used to require
-  `git log` + AGENTS.md prose archaeology. New contributors couldn't
-  locate rationale without inside knowledge. ADRs anchor the
-  decisions on a stable, navigable surface; FRs say what is true,
-  ADRs say why.
-- **Constraints:**
+  gaps. The set is lint-checked at `deno task check`. This is a
+  process meta-FR — defines the ADR mechanism itself; no single
+  back-fill ADR record. The directory and lint that implement it
+  live at [documents/adrs/](../adrs/) and
+  `scripts/check.ts::validateAdrSet`.
+
+  **Constraints:**
   - One ADR per file. Filename `^\d{4}-[a-z0-9-]+\.md$`. Numbers
     contiguous from `0001`, no gaps, no duplicates.
   - Required level-2 sections, exact wording and order:
@@ -237,6 +234,11 @@
     existing files.
   - ADRs fit the per-file `documents/` token budget
     (`docsTokenBudget`, FR-E5).
+- **Motivation:** "Why was it built this way?" used to require
+  `git log` + AGENTS.md prose archaeology. New contributors couldn't
+  locate rationale without inside knowledge. ADRs anchor the
+  decisions on a stable, navigable surface; FRs say what is true,
+  ADRs say why.
 - **Acceptance criteria:**
   - **Tests:** `scripts/check_test.ts` (regression-locked;
     `validateAdrSet` covers filename pattern, monotonic numbering,

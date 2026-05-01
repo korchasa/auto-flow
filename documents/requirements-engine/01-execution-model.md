@@ -14,8 +14,11 @@
   - [x] Legacy shell implementation in `lib.sh`: `continuation_loop()`,
     `safety_check_diff()`, `run_agent()`, `retry_with_backoff()`.
     Evidence: `.flowai-workflow/scripts/lib.sh:59-233`.
-- **Quality metrics:**
-  - Continuation success rate: percentage of continuations that resolve the issue (target > 70%).
+
+  Quality metrics (observability targets, tracked in dashboards, not
+  per-FR acceptance):
+  - Continuation success rate: percentage of continuations that resolve
+    the issue (target > 70%).
   - Average continuations per stage (target < 1.0 across all runs).
 
 
@@ -63,13 +66,14 @@
   `.flowai-workflow/<name>/`). Within a run, node output directories
   are grouped by workflow phase, separating agent output artifacts
   from runtime metadata (logs, state).
+
+  **Layout:** Node output directories grouped into phase subdirectories
+  reflecting the DAG execution flow. Runtime metadata (`state.json`,
+  `logs/`) at the run root level (not inside phase groups).
 - **Motivation:** Current flat layout intermixes planning nodes, implementation
   loop nodes, commit nodes, and infrastructure files (`logs/`, `state.json`)
   at the same level. This hinders navigability and does not reflect the
   workflow execution flow.
-- **Layout:** Node output directories grouped into phase subdirectories
-  reflecting the DAG execution flow. Runtime metadata (`state.json`, `logs/`)
-  at the run root level (not inside phase groups).
 - **Acceptance criteria:**
   - **Tests:** `state_test.ts`, `template_test.ts` (FR-E9; regression-locked;
     `getRunDir` workflow-aware, `getNodeDir` phase-aware path
@@ -80,11 +84,12 @@
 ### 3.14 FR-E14: Engine-Workflow Separation Invariant
 
 - **Description:** The workflow engine (`engine/`) is a domain-agnostic DAG executor. It MUST be physically separated from workflow-specific concerns (config, agents, run artifacts) by directory structure, not only by convention. This constraint is structural and must be enforced by the project layout.
-- **Rationale:** Issue #12 — collocating engine source with workflow data under `.flowai-workflow/` obscures boundaries, hinders tooling, and blocks future engine reuse.
-- **Rules:**
+
+  **Rules:**
   - Engine source lives in a dedicated top-level directory (e.g., `engine/` or a standardized path); no workflow, agent, git, or GitHub-specific logic inside.
   - Workflow config (`workflow.yaml`), agent prompts (`.claude/skills/`), and run artifacts (`runs/`) are domain-specific — must not be nested under the engine directory.
   - `deno.json` tasks and imports reference the new layout consistently.
+- **Motivation:** Issue #12 — collocating engine source with workflow data under `.flowai-workflow/` obscures boundaries, hinders tooling, and blocks future engine reuse.
 - **Acceptance criteria:**
   - [x] Engine source directory contains only domain-agnostic DAG executor code. Evidence: `git.ts` and `git_test.ts` deleted; `mod.ts` git exports removed; `types.ts` `HitlConfig` fields renamed to domain-neutral names (`artifact_source`, `exclude_login`).
   - [x] Engine source contains zero references to concrete artifact filenames
@@ -146,14 +151,15 @@
   `defaults.on_failure_script` (workflow-end hook) runs once, only when
   `workflowSuccess === false` after all DAG levels complete. Their interaction
   is deterministic and governed by 4 rules.
-- **Rationale:** Without formal definition, workflow authors cannot predict
-  whether the failure hook fires when a node is `continue`-d. Deterministic
-  rules prevent silent unexpected hook invocations.
-- **Interaction rules:**
+
+  **Interaction rules:**
   1. `on_error: continue` → emits info log, continues workflow. Hook not triggered.
   2. All failures suppressed → `workflowSuccess === true` → hook does NOT run.
   3. Any unsuppressed failure → `workflowSuccess === false` → hook runs once.
   4. Hook failure does not affect `on_error: continue` semantics (FR-E19 applies).
+- **Motivation:** Without formal definition, workflow authors cannot predict
+  whether the failure hook fires when a node is `continue`-d. Deterministic
+  rules prevent silent unexpected hook invocations.
 - **Acceptance criteria:**
   - **Tests:** `engine_test.ts` (FR-E34; regression-locked; 5 cases
     cover the 4 interaction rules + log-message format).

@@ -49,17 +49,8 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   "scope_violation")` and an automatic `git checkout --` rollback of
   exactly the leaked paths. Complements FR-E37 (which checks `allowed_paths`
   inside the worktree) by guarding the dual: writes outside the worktree.
-- **ADR:** [documents/adrs/0001-isolation-provider.md](../adrs/0001-isolation-provider.md)
-  (planned — the guardrail is a worktree-provider concern; rationale will
-  carry forward when the provider plugin lands).
-- **Motivation:** Even after FR-E48/b0db7e6 fixed the cwd-relative template
-  path emission, an LLM agent may still decide to write to absolute paths
-  for other reasons (e.g., misreading prompts, prior training artifacts,
-  inferred conventions). Two real incidents observed: this repo issue #196
-  v3 (4 memory files leaked into main) and `kazar-fairy-taler` (developer
-  memory + accidental gitlink). The guardrail converts silent corruption
-  of main into immediate, attributable node failure.
-- **Constraints:**
+
+  **Constraints:**
   - No-op when `workDir === "."` (no worktree); behavior identical to
     pre-feature.
   - `git status --porcelain` snapshot uses
@@ -72,13 +63,22 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   - Whitelist of legitimate cross-workdir actions: `git push`, `git
     checkout` inside worktree, read-only access to main. The guardrail
     sees only working-tree changes, so refs and reads pass through.
+- **Motivation:** Even after FR-E48/b0db7e6 fixed the cwd-relative template
+  path emission, an LLM agent may still decide to write to absolute paths
+  for other reasons (e.g., misreading prompts, prior training artifacts,
+  inferred conventions). Two real incidents observed: this repo issue #196
+  v3 (4 memory files leaked into main) and `kazar-fairy-taler` (developer
+  memory + accidental gitlink). The guardrail converts silent corruption
+  of main into immediate, attributable node failure.
+- **ADR:** [documents/adrs/0001-isolation-provider.md](../adrs/0001-isolation-provider.md)
+  (planned — the guardrail is a worktree-provider concern; rationale will
+  carry forward when the provider plugin lands).
 - **Acceptance criteria:**
   - **Tests:** `guardrail_test.ts`, `guardrail_integration_test.ts`,
     `e2e_worktree_isolation_test.ts` (FR-E50; regression-locked).
 
 ### 3.51 FR-E51: Post-Run Branch-Pin for Detached-HEAD Worktree
 
-- **ADR:** [documents/adrs/0004-detached-head-rescue-branch.md](../adrs/0004-detached-head-rescue-branch.md)
 - **Description:** Before `removeWorktree`, the engine checks whether the
   worktree's HEAD is detached. If yes, it creates a rescue branch
   `flowai/run-<runId>-orphan-rescue` pointing at the current HEAD so the
@@ -87,14 +87,8 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   run-id, repeat invocation), the engine appends a counter suffix
   (`-2`, `-3`, …) until it finds a free name. No-op when HEAD is already
   on a named branch.
-- **Motivation:** Worktrees are created with `--detach` (FR-E24) so they
-  don't pollute the main repo's branch namespace. If a workflow makes
-  commits in the worktree but never explicitly checks out a branch, those
-  commits are reachable only via the worktree's `HEAD` ref. Once the
-  worktree is removed, the commits become unreachable and are eligible for
-  garbage collection — the `kazar-fairy-taler` incident lost three commits
-  this way (`be9bb6a → 12e6e93 → f6f6b94`) before manual rescue.
-- **Constraints:**
+
+  **Constraints:**
   - No-op when `workDir === "."` (engine never invokes worktree teardown).
   - No-op when HEAD is on a named branch — the typical path through a
     `decision`-like agent that explicitly checks out a branch is
@@ -106,6 +100,14 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
     crash or corrupted ref shouldn't prevent cleanup.)
   - User notification at default verbosity: `engine` status line
     `Detached HEAD pinned: branch=<name> worktree=<path>`.
+- **Motivation:** Worktrees are created with `--detach` (FR-E24) so they
+  don't pollute the main repo's branch namespace. If a workflow makes
+  commits in the worktree but never explicitly checks out a branch, those
+  commits are reachable only via the worktree's `HEAD` ref. Once the
+  worktree is removed, the commits become unreachable and are eligible for
+  garbage collection — the `kazar-fairy-taler` incident lost three commits
+  this way (`be9bb6a → 12e6e93 → f6f6b94`) before manual rescue.
+- **ADR:** [documents/adrs/0004-detached-head-rescue-branch.md](../adrs/0004-detached-head-rescue-branch.md)
 - **Acceptance criteria:**
   - **Tests:** `worktree_test.ts`, `e2e_worktree_isolation_test.ts`
     (FR-E51; regression-locked).
@@ -115,7 +117,6 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
 
 ### 3.52 FR-E52: Cwd-Relative Path Contract for TemplateContext
 
-- **ADR:** [documents/adrs/0005-cwd-relative-template-paths.md](../adrs/0005-cwd-relative-template-paths.md)
 - **Description:** All path fields in `TemplateContext` (`node_dir`,
   `run_dir`, `input.<id>`) are emitted **workDir-relative** by the engine
   (FR-E7 / fix `b0db7e6`). Engine-internal consumers that perform FS I/O
@@ -124,13 +125,8 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   rendering (`template.ts`) is the sole legitimate raw consumer — emitted
   values reach subprocess prompts whose cwd is `workDir`, where the
   workDir-relative form is correctly resolved.
-- **Motivation:** Cross-references FR-E7. The Variant A fix (`b0db7e6`)
-  established the contract; FR-E52 enumerates ALL consumers, fixes the
-  remaining bug (`resolveInputArtifacts` read via raw paths from engine
-  cwd → silent empty verbose-input listings under worktree mode), and
-  installs a regression-guard test so the next consumer added cannot
-  silently violate the contract.
-- **Constraints:**
+
+  **Constraints:**
   - Engine cwd is repo root for the entire run; never `chdir`.
   - `template.ts` is the only allowed bare-emission site — anywhere else
     that touches `ctx.node_dir` / `ctx.run_dir` outside `workPath(…)`
@@ -138,6 +134,13 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   - Subprocess invocations (`Deno.Command(..., { cwd: workDir })`) and
     template-rendered shell commands do NOT need wrapping — their working
     directory aligns with workDir.
+- **Motivation:** Cross-references FR-E7. The Variant A fix (`b0db7e6`)
+  established the contract; FR-E52 enumerates ALL consumers, fixes the
+  remaining bug (`resolveInputArtifacts` read via raw paths from engine
+  cwd → silent empty verbose-input listings under worktree mode), and
+  installs a regression-guard test so the next consumer added cannot
+  silently violate the contract.
+- **ADR:** [documents/adrs/0005-cwd-relative-template-paths.md](../adrs/0005-cwd-relative-template-paths.md)
 - **Acceptance criteria:**
   - **Tests:** `template_paths_test.ts`, `validate_test.ts` (FR-E52;
     regression-locked). The `template_paths_test.ts` audit case is
@@ -146,7 +149,6 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
 
 ### 3.54 FR-E54: Per-Workflow Run Lock
 
-- **ADR:** [documents/adrs/0006-per-workflow-run-lock.md](../adrs/0006-per-workflow-run-lock.md)
 - **Description:** The workflow lock file is rooted at `<workflowDir>/runs/.lock`,
   not at the repo-global `.flowai-workflow/runs/.lock`. `<workflowDir>` is the
   folder that contains `workflow.yaml` (FR-S47, FR-E53). The engine derives it
@@ -154,15 +156,8 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   `defaultLockPath(workflowDir)`. Two runs against the **same** workflow folder
   serialize as before; runs against **different** workflow folders proceed in
   parallel because they hold independent lock files.
-- **Motivation:** Multi-workflow layouts under `.flowai-workflow/` (e.g.,
-  `github-inbox/`, `github-inbox-opencode/`, `github-inbox-opencode-test/`)
-  are first-class since FR-S47/FR-E53. The pre-existing single repo-global
-  lock falsely serialized them, blocking parallel dogfood smoke runs and
-  cross-workflow experimentation. Lock scope must align with the actual
-  isolation boundary — the workflow folder, which already owns its `runs/`
-  and state namespaces (per-run worktrees nest under `runs/<run-id>/worktree/`,
-  FR-E57).
-- **Constraints:**
+
+  **Constraints:**
   - Lock path is purely a function of `workflowDir`; no fallback to the
     legacy global path. Stale `.flowai-workflow/runs/.lock` from older
     binaries is ignored (orphan file, not consulted).
@@ -176,6 +171,15 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
     so two distinct workflow folders running concurrently would have
     collided in that one path. FR-E57 closes the gap by relocating
     worktrees to `<workflowDir>/runs/<run-id>/worktree/` — see §3.55.
+- **Motivation:** Multi-workflow layouts under `.flowai-workflow/` (e.g.,
+  `github-inbox/`, `github-inbox-opencode/`, `github-inbox-opencode-test/`)
+  are first-class since FR-S47/FR-E53. The pre-existing single repo-global
+  lock falsely serialized them, blocking parallel dogfood smoke runs and
+  cross-workflow experimentation. Lock scope must align with the actual
+  isolation boundary — the workflow folder, which already owns its `runs/`
+  and state namespaces (per-run worktrees nest under `runs/<run-id>/worktree/`,
+  FR-E57).
+- **ADR:** [documents/adrs/0006-per-workflow-run-lock.md](../adrs/0006-per-workflow-run-lock.md)
 - **Acceptance criteria:**
   - **Tests:** `lock_test.ts` (FR-E54; regression-locked).
   - [x] `EngineOptions.lock_path` JSDoc reflects the new default
@@ -183,7 +187,6 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
 
 ### 3.55 FR-E57: Per-Run Worktree Co-Location
 
-- **ADR:** [documents/adrs/0003-per-run-worktree-co-location.md](../adrs/0003-per-run-worktree-co-location.md)
 - **Description:** Each run's git worktree is materialized at
   `<workflowDir>/runs/<run-id>/worktree/`, sibling to its `state.json` and
   per-node artifact directories. Replaces the pre-FR-E57 repo-global
@@ -192,21 +195,8 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   once via `deriveWorkflowDir(options.config_path)` and threads it into
   `getWorktreePath(runId, workflowDir)`, `createWorktree(runId, workflowDir,
   ref?)`, and `worktreeExists(runId, workflowDir)`.
-- **Motivation:**
-  - **Self-contained run directory:** A single path
-    `<workflowDir>/runs/<run-id>/` now contains everything tied to a run
-    (state, artifacts, live worktree). Inspection, archival, and bulk
-    cleanup operate on one tree.
-  - **Cross-workflow worktree namespace:** FR-E54 already split runs and
-    locks per workflow folder, but `worktree.ts` kept a repo-global
-    `WORKTREE_BASE = ".flowai-workflow/worktrees"`. Two distinct workflow
-    folders running concurrently would have collided in that single
-    namespace. FR-E57 closes the gap so cross-workflow parallel runs are
-    fully isolated.
-  - **Doc/code alignment:** `documents/requirements-engine/04b-...md:223`
-    (FR-E54 constraints) already asserted the worktree directory was
-    "already per-workflow" — that was aspirational. FR-E57 makes it true.
-- **Constraints:**
+
+  **Constraints:**
   - `worktree_disabled: true` mode (workDir = "."): all `workflowDir`-aware
     calls become no-ops. Existing semantics preserved.
   - **Fail-fast when `workflowDir === "."` and worktree mode is active.**
@@ -226,6 +216,21 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
     this change — only new worktrees adopt the new layout.
   - Engine remains domain-agnostic. Path computation is parametrized by
     `workflowDir`; no SDLC- or git-workflow-specific knowledge added.
+- **Motivation:**
+  - **Self-contained run directory:** A single path
+    `<workflowDir>/runs/<run-id>/` now contains everything tied to a run
+    (state, artifacts, live worktree). Inspection, archival, and bulk
+    cleanup operate on one tree.
+  - **Cross-workflow worktree namespace:** FR-E54 already split runs and
+    locks per workflow folder, but `worktree.ts` kept a repo-global
+    `WORKTREE_BASE = ".flowai-workflow/worktrees"`. Two distinct workflow
+    folders running concurrently would have collided in that single
+    namespace. FR-E57 closes the gap so cross-workflow parallel runs are
+    fully isolated.
+  - **Doc/code alignment:** `documents/requirements-engine/04b-...md:223`
+    (FR-E54 constraints) already asserted the worktree directory was
+    "already per-workflow" — that was aspirational. FR-E57 makes it true.
+- **ADR:** [documents/adrs/0003-per-run-worktree-co-location.md](../adrs/0003-per-run-worktree-co-location.md)
 - **Acceptance criteria:**
   - **Tests:** `worktree_test.ts`, `engine_test.ts`,
     `e2e_worktree_isolation_test.ts` (FR-E57; regression-locked).
@@ -234,9 +239,6 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
 
 ### 3.58 FR-E58: Copy Gitignored Files into Run Worktree
 
-- **ADR:** [documents/adrs/0001-isolation-provider.md](../adrs/0001-isolation-provider.md)
-  (planned — the gitignored-file mirror is a worktree-provider concern;
-  rationale will carry forward when the provider plugin lands).
 - **Description:** After `createWorktree()` and before any node executes,
   the engine mirrors gitignored entries from the original repo into the
   worktree at the same relative paths. Source list:
@@ -248,18 +250,22 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   from `origin/main` checkout). Untracked-not-ignored NOT copied —
   committing/stashing them remains operator's job (FR-E50 safety check).
   Special files (socket/FIFO/device) skipped with a warning.
+
+  **Constraints:** No-op when `worktree_disabled: true`; no-op on resume
+  reuse (re-copy would clobber the previous run's persisted state under
+  ignored paths). Errors on regular files/dirs/symlinks are fail-fast —
+  existing teardown cleans the worktree. Physical byte duplication is a
+  deliberate cost of the cross-platform Deno-only constraint; revisit if
+  a real workflow hits the limit.
 - **Motivation:** Workflows often need files outside git — `.env`,
   `node_modules`, `.venv`, local caches. A fresh `git worktree add`
   ref-checkout has none of them, so agents fail with «missing
   dependency» errors that look like workflow bugs. Unconditional copy
   makes the worktree a faithful working-state clone outside git's
   tracking universe.
-- **Constraints:** No-op when `worktree_disabled: true`; no-op on resume
-  reuse (re-copy would clobber the previous run's persisted state under
-  ignored paths). Errors on regular files/dirs/symlinks are fail-fast —
-  existing teardown cleans the worktree. Physical byte duplication is a
-  deliberate cost of the cross-platform Deno-only constraint; revisit if
-  a real workflow hits the limit.
+- **ADR:** [documents/adrs/0001-isolation-provider.md](../adrs/0001-isolation-provider.md)
+  (planned — the gitignored-file mirror is a worktree-provider concern;
+  rationale will carry forward when the provider plugin lands).
 - **Acceptance criteria:**
   - **Tests:** `worktree_copy_ignored_test.ts` (regression-locked;
     `copyIgnoredIntoWorktree` covers files, dir recursion, symlinks
