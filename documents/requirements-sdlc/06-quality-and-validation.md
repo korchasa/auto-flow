@@ -6,7 +6,7 @@
 ### 3.24 FR-S24: Workflow Config Validation
 
 - **Description:** SDLC workflow config (`.flowai-workflow/workflow.yaml`) must be validated for schema correctness as part of `deno task check`. Detects drift between workflow config and engine schema requirements before runtime failures occur.
-- **Rationale:** Unvalidated config changes cause hard-to-diagnose runtime failures. Static validation catches invalid node types, missing required fields, and bad `inputs` references at development time. Maps to SDLC-scope aspect of engine FR-E7 (config drift detection).
+- **Motivation:** Unvalidated config changes cause hard-to-diagnose runtime failures. Static validation catches invalid node types, missing required fields, and bad `inputs` references at development time. Maps to SDLC-scope aspect of engine FR-E7 (config drift detection).
 - **Acceptance criteria:**
   - **Tests:** `scripts/check_test.ts` (regression-locked;
     `workflowIntegrity` covers node-type, required-field, inputs,
@@ -17,14 +17,15 @@
 ### 3.31 FR-S31: QA Agent Check Suite Extension
 
 - **Description:** QA agent may autonomously add new verification classes to `scripts/check.ts` when it identifies recurring quality issues not covered by existing checks.
-- **Motivation:** Recurring defect patterns (dead exports, unused deps, naming violations, missing error handling) require manual developer action to add checks. Enabling QA to extend the suite reduces defect escape across Developer+QA loop iterations.
-- **Rules:**
+
+  **Rules:**
   - Add a check only when evidence of a real recurring problem exists (not speculative).
   - New checks MUST follow existing `check.ts` architecture: standalone function + call in main flow + `Deno.exit(1)` on failure.
   - Each check MUST print a clear label to stdout (`--- Check Name ---`).
   - New checks MUST NOT produce false positives on the current codebase at time of addition.
   - QA MUST run the extended suite after adding any check to confirm zero false positives.
   - `scripts/check.ts` MUST be listed in QA agent's `Allowed File Modifications` in `SKILL.md`.
+- **Motivation:** Recurring defect patterns (dead exports, unused deps, naming violations, missing error handling) require manual developer action to add checks. Enabling QA to extend the suite reduces defect escape across Developer+QA loop iterations.
 - **Acceptance criteria:**
   - [x] QA agent `SKILL.md` lists `scripts/check.ts` in `Allowed File
     Modifications`.
@@ -60,11 +61,11 @@
   injects `memory/reflection-protocol.md` plus per-agent memory/history paths.
   Shared agent rules are inlined into each of the 6 agent prompt files — no
   separate `shared-rules.md` exists.
-- **Rationale (no shared-rules.md):** Six inline copies of the shared rules
-  were judged cheaper than one shared file plus six `{{file(...)}}` references.
-  The separate-file approach was considered and rejected; future readers
-  should not reintroduce `shared-rules.md` under the impression it was the
-  intended design.
+- **Motivation:** Six inline copies of the shared rules were judged cheaper
+  than one shared file plus six `{{file(...)}}` references. The
+  separate-file approach was considered and rejected; future readers should
+  not reintroduce `shared-rules.md` under the impression it was the intended
+  design.
 - **Acceptance criteria:**
   - [x] All 6 agent nodes load
     `{{file(".flowai-workflow/github-inbox/agents/agent-<name>.md")}}` in

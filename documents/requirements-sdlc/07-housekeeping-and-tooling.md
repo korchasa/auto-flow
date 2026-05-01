@@ -6,7 +6,8 @@
 ### 3.18 FR-S18: Rename Executor Agent to Developer
 
 - **Description:** Rename the `executor` agent to `developer` across all project files. The executor agent's actual role — writing code, committing, pushing, posting PR comments — matches the industry term "developer", not the generic "executor". All other workflow agents use role-based names; this rename completes the alignment.
-- **Scope:** Pure rename — no behavioral changes. Affected artifacts: agent skill directory, workflow config node IDs, all SKILL.md cross-references, legacy shell scripts, engine test fixtures, and documentation.
+
+  **Scope:** Pure rename — no behavioral changes. Affected artifacts: agent skill directory, workflow config node IDs, all SKILL.md cross-references, legacy shell scripts, engine test fixtures, and documentation.
 - **Acceptance criteria:**
   - [x] `.flowai-workflow/agents/agent-executor/` directory renamed to `.flowai-workflow/agents/agent-developer/`. `SKILL.md` frontmatter `name` field updated to `agent-developer`. Evidence: commit `f0085df sdlc(impl): rename Executor agent role to Developer (FR-S18)`
   - [x] `.flowai-workflow/workflow.yaml`: loop body node id `executor` → `developer`; all `{{input.executor}}` → `{{input.developer}}` template references updated. Evidence: commit `f0085df`
@@ -68,10 +69,10 @@
   the rules are already part of the loaded system prompt. FR-S39 removed this
   bootstrap block from every agent prompt file, eliminating one wasted turn
   and unnecessary token cost per workflow run.
-- **Rationale (no shared-rules.md):** The bootstrap block originally pointed
-  at a `shared-rules.md` file that was never adopted; rules were inlined
-  per-agent instead (see FR-S38 rationale). Documentation referencing a
-  separate file was therefore stale even at the time of removal.
+- **Motivation:** The bootstrap block originally pointed at a
+  `shared-rules.md` file that was never adopted; rules were inlined per-agent
+  instead (see FR-S38 motivation). Documentation referencing a separate file
+  was therefore stale even at the time of removal.
 - **Dep:** FR-S38 (per-agent inlining of shared rules).
 - **Acceptance criteria:**
   - [x] "BEFORE YOU DO ANYTHING" heading + read-rules instruction removed from

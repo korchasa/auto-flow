@@ -22,7 +22,7 @@
   `started_at` offset from run start; bar width reflects `duration_ms`.
   Parallel nodes appear stacked vertically at the same horizontal offset. The
   longest-duration node (bottleneck) is visually highlighted.
-- **Rationale:** Current dashboard renders node cards with no temporal view,
+- **Motivation:** Current dashboard renders node cards with no temporal view,
   making it impossible to identify parallelism, sequencing, or bottlenecks at
   a glance. `NodeState` already records `started_at`, `completed_at`, and
   `duration_ms` — no engine changes required.
@@ -127,7 +127,8 @@
   accurate header run status with distinct visual styling per state value,
   (3) phase aggregate status with `run_on: always` nodes separated from core
   nodes so their outcomes do not mask each other.
-- **Extends:** FR-S20 (Dashboard Stream Log Links) — from file-link to inline
+
+  Extends FR-S20 (Dashboard Stream Log Links) — from file-link to inline
   content. Reuses FR-S16 `<details>/<summary>` collapsible pattern.
 - **Acceptance criteria:**
 
