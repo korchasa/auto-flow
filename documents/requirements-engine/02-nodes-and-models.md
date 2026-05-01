@@ -9,12 +9,8 @@
   inline as nested objects, not reference top-level node IDs. This makes the
   parent-child relationship explicit, prevents body nodes from being executed
   outside their loop context, and aligns config structure with execution model.
-- **Motivation:** Current config declares loop body nodes (`developer`, `qa`) at
-  the top level alongside workflow-level nodes. Body nodes use loop-scoped
-  template variables (`{{loop.iteration}}`) but nothing in their declaration
-  indicates loop scope. This creates namespace pollution, implicit coupling,
-  and misconfiguration risk.
-- **Config structure:** Loop node gains a `nodes` sub-object containing inline
+
+  **Config structure:** Loop node gains a `nodes` sub-object containing inline
   body node definitions. The `body` field references IDs within `nodes`.
   Example:
   ```yaml
@@ -37,6 +33,11 @@
         inputs: [pm, architect, developer]
         ...
   ```
+- **Motivation:** Current config declares loop body nodes (`developer`, `qa`) at
+  the top level alongside workflow-level nodes. Body nodes use loop-scoped
+  template variables (`{{loop.iteration}}`) but nothing in their declaration
+  indicates loop scope. This creates namespace pollution, implicit coupling,
+  and misconfiguration risk.
 - **Acceptance criteria:**
   - **Tests:** `dag_test.ts`, `config_test.ts`, `loop_test.ts`,
     `template_test.ts` (regression-locked; loop body parsing, DAG
@@ -53,18 +54,20 @@
   levels complete, filtering by workflow outcome. This prevents committer nodes
   from creating PRs/merging when the workflow failed, while allowing meta-agent
   to always run.
-- **Motivation:** `run_always: true` causes committer nodes to run on failure,
-  creating PRs with `Closes #N` that merge broken code. Prompt-level guards are
-  unreliable (LLM can ignore them). Engine-level gating is required.
-- **Enum semantics:**
+
+  **Enum semantics:**
   - `run_on: always` — execute regardless of workflow outcome (current
     `run_always: true` behavior).
   - `run_on: success` — execute only when all regular DAG nodes passed.
   - `run_on: failure` — execute only when workflow failed.
   - Nodes without `run_on` execute in normal DAG order (no change).
-- **Backward compatibility:** `run_always: true` in config is normalized to
+
+  **Backward compatibility:** `run_always: true` in config is normalized to
   `run_on: "always"` during config loading. `run_always: false` (or absent) is
   unchanged (no `run_on` set).
+- **Motivation:** `run_always: true` causes committer nodes to run on failure,
+  creating PRs with `Closes #N` that merge broken code. Prompt-level guards are
+  unreliable (LLM can ignore them). Engine-level gating is required.
 - **Acceptance criteria:**
   - **Tests:** `engine_test.ts`, `config_test.ts` (regression-locked;
     `run_on` filter, `run_always` → `run_on: always` normalization,
@@ -86,11 +89,8 @@
   for agent nodes. Node-level `model` overrides default; absent = CLI default.
   Enables cost optimization (cheap model for simple stages) and quality
   optimization (strong model for complex stages).
-- **Motivation:** All nodes currently use the same model. Simple stages (PM, QA)
-  don't need expensive reasoning models. Complex stages (architect, tech-lead,
-  meta-agent) benefit from stronger models. Static per-node config is the
-  simplest approach.
-- **Config schema:**
+
+  **Config schema:**
   ```yaml
   defaults:
     model: "claude-sonnet-4-6"  # default for all nodes
@@ -98,13 +98,18 @@
     architect:
       model: "claude-opus-4-6"    # override for complex stages
   ```
-- **Engine behavior:**
+
+  **Engine behavior:**
   - On fresh invocation: if `model` resolved (node-level or default), append
     `--model <value>` to Claude CLI args.
   - On `--resume`: do NOT emit `--model`. Session inherits model from original
     invocation.
   - Loop body nodes: inherit loop node's `model` unless overridden in inline
     `nodes` config.
+- **Motivation:** All nodes currently use the same model. Simple stages (PM, QA)
+  don't need expensive reasoning models. Complex stages (architect, tech-lead,
+  meta-agent) benefit from stronger models. Static per-node config is the
+  simplest approach.
 - **Acceptance criteria:**
   - **Tests:** `agent_test.ts`, `loop_test.ts` (FR-E12; regression-locked;
     `--model` flag emission, resume guard, loop body cascade).
@@ -170,12 +175,7 @@
   level, symmetric with `--model`). The `max` level was rejected during
   implementation — it does not exist in the Claude CLI nor in the library
   enum.
-- **Motivation:** Simple nodes (PM triage, merge) don't benefit from deep
-  reasoning. Complex nodes (architect, developer) do. `--effort low` reduces
-  thinking tokens and latency on simple tasks; `--effort high` improves quality
-  on complex ones. Experimentally verified: `claude --effort low -p ...` works
-  in headless `-p` mode (Claude Code v2.1.92).
-- **Config schema:**
+  **Config schema:**
   ```yaml
   defaults:
     effort: medium          # default for all nodes
@@ -185,7 +185,8 @@
     pm:
       effort: low           # override for simple stages
   ```
-- **Engine behavior:**
+
+  **Engine behavior:**
   - On fresh invocation: if `effort` resolved (node-level or default), the
     engine forwards the typed `reasoningEffort` field to the runtime adapter,
     which appends `--effort <value>` (Claude) or the equivalent native control
@@ -196,6 +197,11 @@
   - Loop body nodes: inherit loop node's `effort` unless overridden in inline
     `nodes` config (handled by library `resolveRuntimeConfig`'s
     node → parent → defaults cascade).
+- **Motivation:** Simple nodes (PM triage, merge) don't benefit from deep
+  reasoning. Complex nodes (architect, developer) do. `--effort low` reduces
+  thinking tokens and latency on simple tasks; `--effort high` improves quality
+  on complex ones. Experimentally verified: `claude --effort low -p ...` works
+  in headless `-p` mode (Claude Code v2.1.92).
 - **Acceptance criteria:**
   - **Tests:** `agent_effort_test.ts`, `config_test.ts` (FR-E42;
     regression-locked; flag forwarding, invalid-value rejection,
@@ -210,18 +216,15 @@
   fallback when primary model is overloaded (works only with `-p` mode, which
   is our execution mode). Applied globally — not per-node (failover policy is
   a workflow concern, not a node concern).
-- **Motivation:** Long-running workflows (30+ min) are vulnerable to transient
-  model overloads mid-execution. Without fallback, the node fails and the
-  entire workflow stops. `--fallback-model` provides transparent retry on a
-  cheaper model, keeping the workflow alive. Experimentally verified: flag
-  accepted by Claude Code v2.1.92 in `-p` mode.
-- **Config schema:**
+
+  **Config schema:**
   ```yaml
   defaults:
     model: claude-opus-4-6
     fallback_model: claude-sonnet-4-6   # auto-fallback on overload
   ```
-- **Engine behavior:**
+
+  **Engine behavior:**
   - On fresh invocation: if `fallback_model` set, append
     `--fallback-model <value>` to Claude CLI args.
   - On `--resume`: do NOT emit `--fallback-model`. Session inherits model

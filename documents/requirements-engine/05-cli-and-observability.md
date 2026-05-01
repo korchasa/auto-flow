@@ -85,9 +85,11 @@
 ### 3.20 FR-E20: Repeated File Read Warning
 
 - **Description:** Stream log emits a `[WARN]` line when the same file path is read more than 2 times within one agent session (`executeClaudeProcess()` invocation). Warning includes the file path and read count. Informational only — does not block execution. Enables meta-agent to detect and diagnose repeated-read anti-patterns from log analysis.
+
+  **Implementation:** `FileReadTracker` class in `agent.ts`. Instantiated per `executeClaudeProcess()` call (counters reset per invocation). In event loop: for `tool_use` blocks with `name === "Read"`, calls `tracker.track(block.input.file_path)`. Non-null result written to log via `stampLines()`. Terminal `onOutput` callback unchanged (log-file-only).
+
+  **Warning format:** `[WARN] repeated file read: <path> (<N> times)`.
 - **Motivation:** Agents were silently re-reading the same file 3-4 times per session (run `20260313T025203`: PM agent read `documents/requirements-sdlc.md` 4 times consecutively), wasting tokens. The pattern was invisible to logging and prompt optimization tooling.
-- **Implementation:** `FileReadTracker` class in `agent.ts`. Instantiated per `executeClaudeProcess()` call (counters reset per invocation). In event loop: for `tool_use` blocks with `name === "Read"`, calls `tracker.track(block.input.file_path)`. Non-null result written to log via `stampLines()`. Terminal `onOutput` callback unchanged (log-file-only).
-- **Warning format:** `[WARN] repeated file read: <path> (<N> times)`.
 - **Acceptance criteria:**
   - **Tests:** `agent_test.ts` (regression-locked; `FileReadTracker`
     cases at lines 790-855 cover threshold, per-path independence,
@@ -169,7 +171,7 @@
   bare `--` flags without `run` → treated as `run <args>` with deprecation
   warning.
 - **Motivation:** Explicit subcommand surface; no implicit interactive mode.
-- **Acceptance:**
+- **Acceptance criteria:**
   - [x] `run` subcommand → engine with all current flags.
     Evidence: `cli.ts` (`subcommand === "run"`).
   - [x] `init` subcommand → project scaffolder.
@@ -186,19 +188,19 @@
 
 ### 3.46 FR-E46: Interactive REPL — removed
 
-- **Status:** Removed. The interactive REPL (formerly `repl/mod.ts`,
+- **Description:** The interactive REPL (formerly `repl/mod.ts`,
   bundled skills `flowai-workflow-init` /
   `flowai-workflow-adapt-agents`, runtime persistence at
   `~/.config/flowai-workflow/runtime.json`) is no longer part of the
   product. `flowai-workflow` with no args prints usage and exits.
   Project scaffolding remains available via the `init` subcommand
   (FR-E45).
+- **Status:** Removed.
 
 
 
 ### 3.47 FR-E47: Run Budget Enforcement
 
-- **ADR:** [documents/adrs/0009-budget-cli-runtime-coupling.md](../adrs/0009-budget-cli-runtime-coupling.md)
 - **Description:** Engine enforces cost caps at two levels: (1) workflow-wide
   `--budget <USD>` CLI argument aborts the run when `total_cost_usd` exceeds
   the cap after any node completes; (2) per-node `budget.max_usd` in YAML
@@ -213,6 +215,7 @@
   previously stated "No budget constraints." Runaway workflows on
   misconfigured or unbounded loops can incur unbounded API cost. Users need a
   safety cap without modifying workflow logic.
+- **ADR:** [documents/adrs/0009-budget-cli-runtime-coupling.md](../adrs/0009-budget-cli-runtime-coupling.md)
 - **Acceptance criteria:**
   - **Tests:** `cli_test.ts`, `config_test.ts`, `loop_test.ts`,
     `agent_test.ts` (FR-E47; regression-locked). See ADR-0009.
@@ -232,7 +235,8 @@
   and the transitional `--workflow <dir>` flag are both removed
   (BREAKING; FR-S47). No autodetection — caller must always pass
   the path explicitly.
-- **Rules:**
+
+  **Rules:**
   - First non-flag token after `run` is `<workflow>`. Position is
     flexible — flags may appear before or after the positional.
   - Trailing slash on `<workflow>` is normalized.
@@ -247,7 +251,7 @@
   - Engine derives `workflowDir = path.dirname(config_path)` once
     at construction and threads it to every state-path call (FR-E9
     update / DoD-14).
-- **Acceptance:**
+- **Acceptance criteria:**
   - **Tests:** `cli_test.ts`, `engine_test.ts` (FR-E53; regression-locked).
   - [x] `runEngine` emits `Missing workflow argument` when
     `config_path` is empty. Evidence: `cli.ts::runEngine`.

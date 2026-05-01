@@ -10,17 +10,19 @@
 ### 3.2 FR-E2: Agent Log Storage
 
 - **Description:** Every agent's full session transcript is stored for analysis and prompt improvement.
-- **Log sources:**
+
+  **Log sources:**
   - **JSON output:** Claude CLI with `--output-format json` returns a structured JSON object with `result`, `session_id`, `total_cost_usd`, `duration_ms`, `duration_api_ms`, `num_turns`, `is_error`. This is captured by the stage script or engine.
   - **Normalized runtime output:** OpenCode JSON stream is normalized by the engine into the same `CliRunOutput`-compatible shape (`result`, `session_id`, `total_cost_usd`, `duration_ms`, `num_turns`, `is_error`, optional `hitl_request`) so downstream state, summary, continuation, and logging logic stay runtime-agnostic.
   - **JSONL transcript:** Claude CLI automatically stores full session transcripts as JSONL files in `~/.claude/projects/`. Each line is a JSON event (messages, tool calls, responses).
-- **Acceptance criteria (legacy shell script path):**
+
+  **Legacy shell-script storage (deprecated):**
   - Each stage script saves two log files:
     - `.flowai-workflow/workflow/<issue-number>/logs/stage-<N>-<role>.json` — the JSON output from `claude` CLI (metadata: cost, duration, session ID, result).
     - `.flowai-workflow/workflow/<issue-number>/logs/stage-<N>-<role>.jsonl` — copy of the JSONL transcript from `~/.claude/projects/` for the session.
   - Logs are committed to the feature branch after each stage.
   - Stage script locates the JSONL transcript by session ID extracted from the JSON output.
-- **Acceptance criteria (Deno engine path):**
+- **Acceptance criteria:**
   - **Tests:** `log_test.ts` (regression-locked; successful save,
     JSONL-not-found warning path, iteration-qualified loop body
     log names).
@@ -30,14 +32,16 @@
 ### 3.8 FR-E8: Human-in-the-Loop (Agent-Initiated)
 
 - **Description:** Workflow agents can request human input mid-task through a runtime-specific structured signal. Claude uses the built-in `AskUserQuestion` tool (visible in headless mode as `permission_denials`). OpenCode uses a per-invocation local MCP tool injected by the engine through `OPENCODE_CONFIG_CONTENT`. In both cases the engine normalizes the request, delegates question delivery and reply polling to external workflow scripts, and resumes the agent session with the human's answer.
-- **Mechanism:**
+
+  **Mechanism:**
   1. Claude path: agent calls `AskUserQuestion` → Claude CLI denies it in `-p` mode (no terminal) → structured question visible in `permission_denials`.
   2. OpenCode path: engine injects a local MCP server exposing `request_human_input` via `OPENCODE_CONFIG_CONTENT` → runtime emits structured `tool_use` event for `hitl_request_human_input`.
   3. Engine extracts question (`{question, header, options[], multiSelect}`) and `session_id`.
   4. Engine invokes configurable `ask_script` (workflow script, not engine code) to deliver question (e.g., `gh issue comment`).
   5. Engine enters poll loop: `sleep poll_interval` → invoke `check_script` → if exit 0 (reply found), read reply from stdout.
   6. Engine resumes agent in the same session (`claude --resume <session_id>` or `opencode run --session <session_id>`). Agent continues with full session context.
-- **Key constraint:** Engine contains zero GitHub/Slack/email-specific code. All delivery/polling logic lives in workflow scripts (`.flowai-workflow/scripts/`).
+
+  **Key constraint:** Engine contains zero GitHub/Slack/email-specific code. All delivery/polling logic lives in workflow scripts (`.flowai-workflow/scripts/`).
 - **Acceptance criteria:**
   - **Tests:** `hitl_test.ts` (regression-locked; detection,
     `markNodeWaiting`, ask/check script wiring, poll loop, timeout,
@@ -58,7 +62,7 @@
 ### 3.19 FR-E19: Generic Workflow Failure Hook (`on_failure_script`)
 
 - **Description:** Engine supports a configurable `on_failure_script` field in `WorkflowDefaults` (YAML: `defaults.on_failure_script`). When the workflow fails, the engine executes the specified script via `Deno.Command`. Replaces the former hard-wired `rollbackUncommitted()` git call, which violated the domain-agnostic invariant (FR-E14).
-- **Rationale:** Domain-specific failure recovery (e.g., git rollback) belongs in workflow scripts, not engine code. The engine provides a generic hook; the workflow wires it to the appropriate script.
+- **Motivation:** Domain-specific failure recovery (e.g., git rollback) belongs in workflow scripts, not engine code. The engine provides a generic hook; the workflow wires it to the appropriate script.
 - **Acceptance criteria:**
   - **Tests:** `engine_test.ts` (FR-E19; regression-locked; no-op,
     success path, script failure warning, nonexistent script).
@@ -67,10 +71,6 @@
     `.flowai-workflow/workflow.yaml:18`.
   - [x] Engine does NOT import or call any git functions on failure.
     Evidence: `engine.ts` — no git imports.
-
-
-
-### 3.24 FR-E24: Worktree Isolation — see [04b-worktree-isolation.md](04b-worktree-isolation.md).
 
 
 
@@ -153,16 +153,17 @@
   invocations within a single run, guaranteeing all agent nodes use the same
   CLI version. The engine also captures `claude --version` once at run start
   and stores it in `RunState` for observability.
+
+  **Constraints:**
+  - Engine always sets this — no YAML opt-out. Baseline safety.
+  - Applies only to engine-spawned processes, not the operator's own CLI.
+  - Must not break existing env passthrough (user env + engine-specific vars).
+  - Must be set on every spawn path: initial invocation, continuation, resume.
 - **Motivation:** Claude CLI may silently self-upgrade between invocations. In
   a long-running workflow with multiple agent nodes, earlier nodes could run on
   version X and later on version Y — different system prompts, different tool
   descriptions, no operator visibility. `DISABLE_AUTOUPDATER=1` is a
   startup-only env var exposed by Claude Code that reliably prevents this.
-- **Constraints:**
-  - Engine always sets this — no YAML opt-out. Baseline safety.
-  - Applies only to engine-spawned processes, not the operator's own CLI.
-  - Must not break existing env passthrough (user env + engine-specific vars).
-  - Must be set on every spawn path: initial invocation, continuation, resume.
 - **Acceptance criteria:**
   - [ ] `buildSpawnEnv()` in `claude-process.ts` always sets `DISABLE_AUTOUPDATER=1`.
   - [ ] Applied on initial invocation, continuation, and resume spawn paths.
@@ -174,27 +175,18 @@
 
 
 
-### 3.50 FR-E50: Worktree Isolation Guardrail — see [04b-worktree-isolation.md](04b-worktree-isolation.md).
-
-### 3.51 FR-E51: Post-Run Branch-Pin for Detached-HEAD Worktree — see [04b-worktree-isolation.md](04b-worktree-isolation.md).
-
-### 3.52 FR-E52: Cwd-Relative Path Contract for TemplateContext — see [04b-worktree-isolation.md](04b-worktree-isolation.md).
-
-### 3.54 FR-E54: Per-Workflow Run Lock — see [04b-worktree-isolation.md](04b-worktree-isolation.md).
-
 ### 3.55 FR-E55: `{{flow_file()}}` Template Function
 
-- **Desc:** `template.ts` supports `{{flow_file("path")}}` like `{{file()}}`
+- **Description:** `template.ts` supports `{{flow_file("path")}}` like `{{file()}}`
   but resolves paths relative to the workflow directory
   (`workDir/dirname(config_path)`). Single-pass; fail-fast on miss.
   `validateFileReferences` covers both patterns at load time.
-- **Motiv:** Workflow folders co-exist under `.flowai-workflow/<wf>/`; assets
+- **Motivation:** Workflow folders co-exist under `.flowai-workflow/<wf>/`; assets
   (agents, partials) live inside. `file()` forces hardcoded folder prefix —
   rename breaks all prompts. `flow_file()` decouples prompts from folder name.
-- **Acceptance:**
+- **Acceptance criteria:**
   - **Tests:** `template_test.ts`, `config_test.ts` (regression-locked;
     `flow_file()` resolution against `workflow_dir`, no
     re-interpolation, absolute-path bypass, missing-file error,
     `validateFileReferences` accepts both patterns).
 
-### 3.58 FR-E58: Copy Gitignored Files into Run Worktree — see [04b-worktree-isolation.md](04b-worktree-isolation.md).

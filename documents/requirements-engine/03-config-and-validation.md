@@ -6,7 +6,8 @@
 ### 3.4 FR-E4: Configuration
 
 - **Description:** Workflow configuration via environment variables and `workflow.yaml`. Env vars override YAML defaults.
-- **Variables:**
+
+  **Variables:**
   - `SDLC_MAX_CONTINUATIONS` — maximum continuations per stage (default: `3`).
   - `SDLC_MAX_QA_ITERATIONS` — maximum Developer+QA loop iterations (default: `3`).
   - `SDLC_STAGE_TIMEOUT_MINUTES` — default timeout per stage in minutes (default: `30`).
