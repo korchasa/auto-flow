@@ -8,10 +8,9 @@
 - **Description:** Engine source tree must remain free of dead code and stale documentation. Barrel export files with no runtime or test consumers must be removed. Pre-implementation research docs in `documents/rnd/` superseded by implemented FRs must be deleted or archived. Empty run artifact directories must not be tracked in version control.
 - **Motivation:** `engine/mod.ts` is a barrel re-export not imported by runtime code or tests (only referenced as a type-check target in `deno task check`). Retaining it without a clear owner creates confusion about the engine's public API surface. `documents/rnd/human-in-the-loop.md` (18KB, Russian, 2026-03-11) predates the HITL implementation (FR-E8) and may be superseded by it. Empty `.flowai-workflow/runs/*/implementation` directories accumulate from loop iterations; `.gitignore` covers `.flowai-workflow/runs/` but stale tracked entries must be purged.
 - **Acceptance criteria:**
-  - [x] `engine/mod.ts` purpose documented via module-level JSDoc: barrel re-export for `deno doc --lint`. Evidence: `engine/mod.ts:1`
+  - [x] `engine/mod.ts` purpose documented via module-level JSDoc: barrel re-export for `deno doc --lint`. Evidence: `engine/mod.ts:1`.
   - [x] `documents/rnd/human-in-the-loop.md` deleted — superseded by `engine/hitl.ts` + SDS §5 HITL documentation. Evidence: file removed from repo.
   - [x] Empty `.flowai-workflow/runs/*/implementation` directories are not git-tracked; `.gitignore` covers `runs/` directory.
-  - [x] All existing engine tests pass after changes. Evidence: `deno task check` PASS
 
 
 
@@ -20,10 +19,9 @@
 - **Description:** Every test function in `engine/` test files must contain ≥1 explicit assertion. Tests with no assertions pass trivially, provide zero coverage value, and mask implementation errors.
 - **Motivation:** `engine/lock_test.ts:143` — test "releaseLock - no error if lock file already removed" contained no assertions, silently passing while verifying nothing.
 - **Acceptance criteria:**
-  - [x] Test "releaseLock - no error if lock file already removed" in
-    `engine/lock_test.ts` includes
-    `assertEquals(await releaseLock(lockPath), undefined)`.
-  - [x] All engine tests pass after change.
+  - **Tests:** `lock_test.ts` (regression-locked; one-time hygiene
+    fix: `releaseLock - no error if lock file already removed` now
+    asserts the return value).
 
 
 
@@ -32,10 +30,11 @@
 - **Description:** `nextPause()` function lives in a single module `scripts/backoff.ts` so all loop runners share one implementation.
 - **Motivation:** DRY — backoff logic changes apply in one place.
 - **Acceptance criteria:**
+  - **Tests:** `scripts/backoff_test.ts` (regression-locked;
+    `nextPause` doubles, caps at 4h, progression from 30s).
   - [x] `scripts/backoff.ts` exists and exports `nextPause()`.
   - [x] `scripts/self-runner.ts` imports `nextPause` from `scripts/backoff.ts`;
     no local `nextPause` definition remains.
-  - [x] All tests pass.
 
 
 
@@ -46,7 +45,6 @@
 - **Acceptance criteria:**
   - [x] All `test:*` tasks in `deno.json` referencing `.flowai-workflow/scripts/stage-*_test.ts` paths are identified. Evidence: `deno.json` — no such tasks exist; active test tasks are `test`, `test:lib`, `test:engine` only.
   - [x] All identified obsolete tasks are removed from `deno.json`. Evidence: `deno.json:6-18` — no `.flowai-workflow/scripts/stage-*_test.ts` references present.
-  - [x] All remaining active tests pass. Evidence: `deno task check` PASS (run 20260315T155429).
 
 
 
@@ -62,25 +60,15 @@
   `flowai-workflow run <workflow>` without installing Deno,
   eliminating runtime dependency friction.
 - **Acceptance criteria:**
-  - [x] AC1: Standalone binary produced by `deno compile --allow-all engine/cli.ts` with
-    all deps bundled. Evidence: `scripts/compile.ts`.
-  - [x] AC2: Cross-platform builds for linux-x86_64, linux-arm64, darwin-x86_64,
-    darwin-arm64. Evidence: `scripts/compile.ts:TARGETS` (4 entries);
-    `scripts/compile_test.ts` (4 target name tests).
+  - **Tests:** `scripts/compile_test.ts`, `cli_test.ts`
+    (regression-locked; 4-target list, naming convention,
+    `stripVersionPrefix`, `getVersionString`).
+  - [x] AC1: Standalone binary produced by `deno compile --allow-all
+    engine/cli.ts` with all deps bundled. Evidence: `scripts/compile.ts`.
   - [x] AC3: Version-tag-triggered CI release workflow.
     Evidence: `.github/workflows/release.yml:4-6` (on push tags `v*`).
-  - [x] AC4: Binary naming convention `flowai-workflow-<os>-<arch>`
-    (e.g., `flowai-workflow-linux-x86_64`). Evidence: `scripts/compile.ts:TARGETS`;
-    `scripts/compile_test.ts` (naming convention test).
   - [x] AC5: README installation docs with binary download instructions.
     Evidence: `README.md` §Installation.
-  - [x] AC6: Standalone CLI entry: `flowai-workflow run <workflow>`
-    (positional workflow path; FR-E53). No Deno runtime required.
-    Evidence: `cli.ts::parseArgs` (positional handling);
-    `deno compile` bundles all deps.
-  - [x] AC7: VERSION embedded at compile time; `v` prefix stripped to avoid double-v output.
-    Evidence: `scripts/compile.ts:stripVersionPrefix`; `engine/cli.ts:getVersionString`.
-  - [x] `deno task check` green: 587 tests, 0 failures. Evidence: run `20260320T223114` iter 2.
 
 
 
@@ -101,7 +89,6 @@
     `scripts/generate-release-notes.ts`. Evidence:
     `.github/workflows/release.yml:62-73`.
   - [ ] ~~AC9: Tests for update module removed along with module.~~
-  - [x] AC10: `deno task check` green: 612 tests, 0 failures.
 
 
 
@@ -154,10 +141,6 @@
     `engine/deno.json#imports`, workspace root `deno.json#links`.
   - [x] `deno compile engine/cli.ts` produces a working binary that
     inlines the library (`links` makes the local source self-contained).
-  - [x] Full `deno task check` passes in flowai-workflow: fmt, lint,
-    type-check engine + scripts, CLI smoke test, tests, doc lint,
-    workflow integrity, agent list accuracy, comment scan. Library
-    has its own `deno task check` in the sibling repo.
 
 
 
@@ -176,22 +159,7 @@
   let Run A's mapping persist into Run B and route Run B's nodes into Run
   A's phase folders, breaking artifact isolation.
 - **Acceptance:**
-  - [x] AC1: `PhaseRegistry` class in `state.ts` with `fromConfig(config)`
-    factory + `empty()` factory + `get(nodeId)` reader; the underlying
-    `Map<string,string>` is private. No module-level mutable state remains.
-    Evidence: `state.ts:18-58`.
-  - [x] AC2: `getNodeDir` and `buildTaskPaths` accept an optional
-    `PhaseRegistry`; when omitted, behave as if the registry were empty
-    (back-compat for legacy callers and dry-run summaries). Evidence:
-    `state.ts:122-179`.
-  - [x] AC3: `Engine.runWithLock` builds a fresh `PhaseRegistry` from the
-    loaded config and threads it through `EngineContext.phaseRegistry` to
-    every node-dispatch path-helper call. Evidence: `engine.ts:241-247`,
-    `engine.ts:475`, `node-dispatch.ts:37-58`.
-  - [x] AC4: Two back-to-back `Engine.run()` calls with different `phases:`
-    blocks land Run B's artifacts at paths derived from Run B's config
-    only. Evidence: `engine_test.ts::Engine — back-to-back runs do not leak
-    phase mapping (FR-E59)`.
+  - **Tests:** `engine_test.ts` (FR-E59; regression-locked). See ADR-0007.
 
 
 
@@ -210,21 +178,7 @@
   terminate ONLY this engine's children — sibling subprocesses keep
   running.
 - **Acceptance:**
-  - [x] AC1: `EngineOptions.processRegistry?: ProcessRegistry` exists and
-    is documented. Evidence: `types.ts::EngineOptions`.
-  - [x] AC2: `AgentRunOptions.processRegistry?: ProcessRegistry` exists and
-    is forwarded to every `adapter.invoke()` call (initial AND continuation).
-    Evidence: `agent.ts::runAgent` invoke calls.
-  - [x] AC3: `node-dispatch.ts` passes `eng.options.processRegistry` to
-    `runAgent` and `handleAgentHitl`; HITL handler + loop forward it onto
-    the resume `adapter.invoke`. Evidence: `node-dispatch.ts`,
-    `hitl-handler.ts`, `hitl.ts`.
-  - [x] AC4: Caller-supplied registry receives the runtime-invoke payload;
-    omission leaves the field undefined (default singleton in effect).
-    Evidence: `engine_test.ts::runAgent routes adapter spawns through
-    caller-supplied ProcessRegistry`,
-    `engine_test.ts::runAgent — omitted processRegistry leaves adapter to
-    use ai-ide-cli default singleton`.
+  - **Tests:** `engine_test.ts` (FR-E60; regression-locked).
 
 
 
@@ -243,19 +197,13 @@
   An engine-installed handler would call `Deno.exit(130|143)` and kill
   unrelated host work.
 - **Acceptance:**
-  - [x] AC1: `process-registry.ts` documents `installSignalHandlers` as
+  - **Tests:** `engine_test.ts` (FR-E61; regression-locked). See ADR-0008.
+  - [x] `process-registry.ts` documents `installSignalHandlers` as
     bin-entry-point-only and explicitly disclaims its use from `Engine`.
     Evidence: `process-registry.ts` module-level JSDoc.
-  - [x] AC2: README has an "Embedding vs standalone use" section
-    distinguishing the library-mode contract from the bin-mode contract.
-    Evidence: `README.md`.
-  - [x] AC3: `Engine.run()` does not install OS signal handlers — even
-    end-to-end through a noop merge workflow. Evidence:
-    `engine_test.ts::Engine does not install OS signal handlers
-    (FR-E61)`.
-  - [x] AC4: Source-level corollary: `engine.ts` does not import the
-    `installSignalHandlers` symbol. Evidence: `engine_test.ts::engine.ts
-    does not import installSignalHandlers`.
+  - [x] README has an "Embedding vs standalone use" section distinguishing
+    the library-mode contract from the bin-mode contract. Evidence:
+    `README.md`.
 
 
 
@@ -290,24 +238,21 @@
   - ADRs fit the per-file `documents/` token budget
     (`docsTokenBudget`, FR-E5).
 - **Acceptance criteria:**
+  - **Tests:** `scripts/check_test.ts` (regression-locked;
+    `validateAdrSet` covers filename pattern, monotonic numbering,
+    required sections, status values, cross-link resolution).
   - [x] `documents/adrs/` directory exists with `README.md` (index)
     and `_template.md` (skeleton). Evidence:
     `documents/adrs/README.md`, `documents/adrs/_template.md`.
   - [x] At least 8 back-filled ADRs covering the most consequential
-    historical decisions (10 ADRs land at FR-E63 introduction).
-    Evidence: `documents/adrs/0001-...md` through
-    `documents/adrs/0010-...md`.
+    historical decisions (10 ADRs land at FR-E63 introduction;
+    ADR-0011 codifies this acceptance-block convention). Evidence:
+    `documents/adrs/0001-...md` through `documents/adrs/0011-...md`.
   - [x] AGENTS.md "Key Decisions" section links each bullet to its
     ADR. Evidence: `AGENTS.md` "Key Decisions" section.
   - [x] FR-E acceptance criteria for E47/E51/E52/E54/E57/E59/E61
     cross-link to corresponding ADRs (FR-E50/E58 link to ADR-0001
     pending the isolation-provider plugin landing). Evidence: this
     file + `04b-worktree-isolation.md`, `05-cli-and-observability.md`.
-  - [x] `scripts/check.ts::validateAdrSet` runs as part of
-    `deno task check`, enforcing filename pattern, monotonic
-    numbering, required sections, status values, and cross-link
-    resolution. Evidence: `scripts/check.ts`,
-    `scripts/check_test.ts`.
-  - [x] `deno task check` passes with the full ADR set in place.
 
 
