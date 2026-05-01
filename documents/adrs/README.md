@@ -57,6 +57,9 @@ Use [_template.md](_template.md) as the skeleton.
   `@korchasa/ai-ide-cli` — **Accepted**
 - [ADR-0010](0010-jsr-publish-caveats.md) — JSR publish surface:
   `.versionrc.json`, `publish.exclude`, `--dry-run` — **Accepted**
+- [ADR-0011](0011-dod-test-coverage-convention.md) — DoD items
+  covered by regression tests collapse to a `**Tests:**` pointer
+  — **Accepted**
 
 Status legend:
 - **Proposed** — written, not yet implemented (back-fill anchors a
