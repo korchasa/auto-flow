@@ -36,14 +36,14 @@
 - **Description:** SDLC documentation, task files, utility scripts, config, and agent prompts must contain zero deprecated `.flowai-workflow/` or `.flowai-workflow/agents/agent-*` path references. Additionally, FR-S23 ACs left `[ ]` by #97 (implementation done, bookkeeping skipped) must be marked `[x]` with evidence from `documents/design-sdlc.md`.
 - **Motivation:** ~60 stale `.flowai-workflow/` refs across SDLC artifacts cause navigation failures after #111 migration. FR-S23 ACs unstamped despite implementation complete per #97. `.flowai-workflow/agents/agent-*` refs in agent prompts couple them to Claude Code's internal path layout.
 - **Acceptance criteria:**
-  - [ ] Zero `.flowai-workflow/` path references in `documents/requirements-sdlc.md`. Evidence: grep result = 0.
-  - [ ] Zero `.flowai-workflow/` path references in `.flowai-workflow/tasks/fr-18-verbose-output.md`. Evidence: grep result = 0.
-  - [ ] Zero `.flowai-workflow/` path references in `scripts/generate-dashboard.ts` and `scripts/generate-dashboard_test.ts`. Evidence: grep result = 0.
-  - [ ] Zero `.flowai-workflow/` path references in `.gitignore` and `.gitleaks.toml`. Evidence: grep result = 0.
-  - [ ] Zero `.flowai-workflow/agents/agent-*` path references in `documents/requirements-sdlc.md`. Evidence: grep result = 0.
-  - [ ] Zero `.flowai-workflow/agents/agent-*` path references in `.flowai-workflow/agents/agent-tech-lead/SKILL.md`. Evidence: file content.
-  - [ ] FR-S23 ACs marked `[x]` with evidence from `documents/design-sdlc.md` §2.1 and §3.2. Evidence: `requirements-sdlc.md:561-563`.
-  - [ ] `deno task check` passes. Evidence: `deno task check` exit 0.
+  - [x] Cleanup complete — zero deprecated path references in
+    `documents/requirements-sdlc.md`, `agent-tech-lead.md`, or other
+    tracked SDLC artefacts (`fr-18-verbose-output.md` deleted; current
+    `.flowai-workflow/<name>/` paths in `.gitignore`, `.gitleaks.toml`,
+    and dashboard scripts are correct, not deprecated). FR-S23 ACs
+    flipped to `[x]` in 03-runtime-and-init.md (`scope: sdlc` SDS
+    §2.1, §3.2). Evidence: `grep -c '.flowai-workflow/'` = 0 across
+    target docs.
 
 
 

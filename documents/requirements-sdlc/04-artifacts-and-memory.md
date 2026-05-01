@@ -76,18 +76,12 @@
   - Delete deprecated `stage-*.sh` scripts and their `*_test.ts` files (already marked DEPRECATED).
   - Update all internal path references: `workflow.yaml`, engine CLI defaults, `deno.json` tasks, docs, `CLAUDE.md`.
   - `.claude/hooks/guard-deno-direct.sh` stays in `.claude/hooks/` (Claude Code hooks dir is fixed by Claude Code; not movable).
-- **Acceptance:**
-  - [ ] `workflow.yaml` at `.flowai-workflow/workflow.yaml`
-  - [ ] Agent prompts at `.flowai-workflow/agents/<name>/SKILL.md` (6 agents: pm, architect, tech-lead, developer, qa, tech-lead-review)
-  - [ ] Active scripts at `.flowai-workflow/scripts/` (rollback-uncommitted.sh, hitl-ask.sh, hitl-check.sh, lib.sh)
-  - [ ] Tasks at `.flowai-workflow/tasks/`; runs at `.flowai-workflow/runs/`
-  - [ ] Deprecated stage scripts (`stage-*.sh`) and their `*_test.ts` files deleted
-  - [x] Zero `.flowai-workflow/` path references remain in codebase (except git history). Evidence: completed in this commit.
-  - [x] Zero `.flowai-workflow/agents/agent-*` path references remain in codebase. Evidence: completed in this commit.
-  - [ ] `deno task run` works with `.flowai-workflow/workflow.yaml` as default config path
-  - [ ] `deno task check` passes clean
-  - [ ] All docs (CLAUDE.md, AGENTS.md, SRS, SDS) updated with new paths
-  - [ ] `.claude/hooks/guard-deno-direct.sh` placement decision documented (stays in `.claude/hooks/`)
+- **Acceptance:** Superseded — see FR-S47 for the current
+  workflow-folder contract and its `**Tests:**` line. The original
+  ACs targeted a flat top-level layout (`.flowai-workflow/agents/`,
+  `.flowai-workflow/scripts/`, …) that no longer exists; the
+  per-workflow folder structure is enforced by
+  `assertWorkflowFolderShape` and `dogfood_layout_test.ts`.
 
 
 

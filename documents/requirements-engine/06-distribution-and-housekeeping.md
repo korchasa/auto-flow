@@ -80,7 +80,6 @@
 - **Motivation:** Eliminates manual version management and release process.
 - **Acceptance criteria:**
   - [x] AC1: `deno.json` has `version` field. Evidence: `deno.json:2`.
-  - [ ] ~~AC2-AC5: Self-update functionality removed (no longer needed).~~
   - [x] AC6: `.versionrc.json` configures `standard-version` for conventional
     commit bumping. Evidence: `.versionrc.json`.
   - [x] AC7: `.github/workflows/ci.yml` auto-detects releasable commits on
@@ -88,7 +87,8 @@
   - [x] AC8: `.github/workflows/release.yml` generates release notes via
     `scripts/generate-release-notes.ts`. Evidence:
     `.github/workflows/release.yml:62-73`.
-  - [ ] ~~AC9: Tests for update module removed along with module.~~
+  - AC2-AC5, AC9: removed — self-update functionality and its tests
+    deleted; criteria no longer applicable.
 
 
 
