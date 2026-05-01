@@ -190,15 +190,16 @@ Positional:
                       (mandatory; no autodetect).
 
 Options:
-  --prompt <text>     Additional context passed to first agent
-  --resume <run-id>   Resume a previous run (skip completed nodes)
-  --dry-run           Validate config and show DAG without executing
-  --skip <nodes>      Comma-separated node IDs to skip
-  --only <nodes>      Run only specified nodes
-  --env KEY=VAL       Set environment variable for the run
-  -q                  Quiet output (minimal status)
-  -s                  Show text output only (suppress tool calls)
-  -v                  Verbose output (detailed agent diagnostics)
+  --prompt <text>        Additional context passed to first agent
+  --resume <run-id>      Resume a previous run (skip completed nodes)
+  --dry-run              Validate config and show DAG without executing
+  --skip <nodes>         Comma-separated node IDs to skip
+  --only <nodes>         Run only specified nodes
+  --env KEY=VAL          Set environment variable for the run
+  --skip-update-check    Do not check JSR for a newer version on startup
+  -q                     Quiet output (minimal status)
+  -s                     Show text output only (suppress tool calls)
+  -v                     Verbose output (detailed agent diagnostics)
 ```
 
 ## Configuration
@@ -341,12 +342,14 @@ Alternatively, run directly with Deno (see Prerequisites below).
 ## Development Commands
 
 ```bash
-deno task run              # Run the workflow
-deno task check            # Full verification: format, lint, test, gitleaks
+deno task run              # Run the dogfood SDLC workflow (github-inbox)
+deno task check            # Full verification: fmt, lint, test, gitleaks, ADRs
 deno task test             # Run all tests
-deno task test:engine      # Run engine tests only
 deno task fmt              # Format code
-deno task run:validate     # Type-check engine modules
+deno task dashboard        # Render an HTML run dashboard
+deno task compile          # Build standalone binaries
+deno task loop             # Iterative SDLC self-runner (advanced)
+deno task release          # Cut a standard-version bump (CI-driven)
 ```
 
 ## Authentication
