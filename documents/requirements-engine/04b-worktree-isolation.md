@@ -22,14 +22,20 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   work. Worktree isolation provides clean execution environment without modifying
   the original working tree.
 - **Acceptance criteria:**
-  - [x] `pre_run` field rejected with migration error at config validation. Evidence: `config.ts:220-224`
-  - [x] `extractWorktreeDisabled(yaml)` extracts `defaults.worktree_disabled` without full parsing. Evidence: `config.ts:51-57`
-  - [x] `worktree.ts` module: `createWorktree()`, `removeWorktree()`, `worktreeExists()`, `copyToOriginalRepo()`. Evidence: `worktree.ts`
-  - [x] Engine creates worktree for new runs, reuses existing for resume, skips when `worktree_disabled: true`. Evidence: `engine.ts:120-136`
-  - [x] `workPath()` utility centralizes workDir prefix logic. Evidence: `state.ts:126-128`
-  - [x] All subprocess-spawning functions accept `cwd` parameter (agent, claude-process, hitl, validate, scope-check, loop). Evidence: `agent.ts`, `claude-process.ts`, `hitl.ts`, `validate.ts`, `scope-check.ts`, `loop.ts`
-  - [x] Template `interpolate()` and config `validateFileReferences()` accept `workDir` for `{{file()}}` resolution. Evidence: `template.ts`, `config.ts`
-  - [x] Tests: worktree lifecycle, path computation, error handling, config validation. Evidence: `worktree_test.ts`, `config_test.ts`
+  - **Tests:** `worktree_test.ts`, `config_test.ts` (regression-locked;
+    worktree lifecycle, `pre_run` migration rejection, `worktree_disabled`
+    flag, path computation).
+  - [x] `worktree.ts` exports `createWorktree()`, `removeWorktree()`,
+    `worktreeExists()`, `copyToOriginalRepo()`. Evidence: `worktree.ts`.
+  - [x] `workPath()` utility centralizes workDir prefix logic.
+    Evidence: `state.ts:126-128`.
+  - [x] All subprocess-spawning functions accept `cwd` parameter
+    (agent, claude-process, hitl, validate, scope-check, loop).
+    Evidence: `agent.ts`, `claude-process.ts`, `hitl.ts`, `validate.ts`,
+    `scope-check.ts`, `loop.ts`.
+  - [x] Template `interpolate()` and config `validateFileReferences()`
+    accept `workDir` for `{{file()}}` resolution. Evidence:
+    `template.ts`, `config.ts`.
 
 
 
@@ -67,41 +73,8 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
     checkout` inside worktree, read-only access to main. The guardrail
     sees only working-tree changes, so refs and reads pass through.
 - **Acceptance criteria:**
-  - [x] Engine snapshots main repo tree before and after every agent
-    invocation when `workDir !== "."`. Evidence: `guardrail.ts:186-209`
-    (`runWithGuardrail` wraps with snapshot before/after); wired in
-    `node-dispatch.ts:113-141`.
-  - [x] Difference (after − before), filtered by NOT-prefixed-by `<workDir>/`
-    and NOT-matching `node.allowed_paths`, is treated as leaked paths.
-    Evidence: `guardrail.ts:34-49` (`detectLeaks`).
-  - [x] Non-empty leak triggers `markNodeFailed` with
-    `error_category: "scope_violation"`. Evidence: `node-dispatch.ts:143-151`.
-  - [x] Engine runs `git checkout -- <leaked-paths>` (per-path, not bulk)
-    to restore main. Evidence: `guardrail.ts:116-142` (`rollbackLeaks`).
-  - [x] `workDir === "."` mode is a no-op (no snapshot, no overhead).
-    Evidence: `guardrail.ts:190-192` (early return); test
-    `guardrail_integration_test.ts:148`.
-  - [x] Fail-closed: snapshot or rollback failure marks node failed with
-    explicit error message. Evidence: `guardrail.ts:91-97` throws on git
-    failure; the throw propagates from `runWithGuardrail` and the node's
-    catch block in `engine.ts:523-528` calls `markNodeFailed` with
-    `error_category: "unknown"`.
-  - [x] Output: default verbosity prints
-    `[guardrail] node=<id> leaked <N> file(s): <list> (rolled back)`.
-    Evidence: `guardrail.ts:55-62` (`formatLeakMessage`); test
-    `guardrail_integration_test.ts:184-213`.
-  - [x] Unit test: pure `detectLeaks` covers whitelist (workDir prefix,
-    allowed_paths globs), pre-existing modifications, untracked, modified.
-    Evidence: `guardrail_test.ts` (8 cases for `detectLeaks`/`globMatch`).
-  - [x] Integration test: exercises full guardrail flow against a temp git
-    repo with mocked agent. Evidence:
-    `guardrail_integration_test.ts:39-243` (8 cases including
-    rollback-scope, fail-when-leaked, noop-when-disabled, log-format,
-    allowedPaths whitelist).
-  - [x] E2E test: `e2e_worktree_isolation_test.ts` runs a fake agent that
-    writes outside workDir; main is restored, node fails. Evidence:
-    `e2e_worktree_isolation_test.ts:136-186` (abs-path leak scenario).
-  - [x] `deno task check` passes. Evidence: `deno task check` (PASS, 787 tests).
+  - **Tests:** `guardrail_test.ts`, `guardrail_integration_test.ts`,
+    `e2e_worktree_isolation_test.ts` (FR-E50; regression-locked).
 
 ### 3.51 FR-E51: Post-Run Branch-Pin for Detached-HEAD Worktree
 
@@ -134,28 +107,11 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   - User notification at default verbosity: `engine` status line
     `Detached HEAD pinned: branch=<name> worktree=<path>`.
 - **Acceptance criteria:**
+  - **Tests:** `worktree_test.ts`, `e2e_worktree_isolation_test.ts`
+    (FR-E51; regression-locked).
   - [x] Engine calls `pinDetachedHead(workDir, runId)` immediately before
     every `removeWorktree(workDir)` invocation. Evidence:
     `engine.ts:303-321`.
-  - [x] On detached HEAD: branch `flowai/run-<runId>-orphan-rescue` is
-    created at HEAD; the branch name is returned. Evidence:
-    `worktree.ts:108-140`; tests `worktree_test.ts:198-224`,
-    `worktree_test.ts:273-302`.
-  - [x] On HEAD already on a named branch: no branch is created; function
-    returns `undefined`. Evidence: `worktree.ts:112-117`; test
-    `worktree_test.ts:226-250`.
-  - [x] On existing rescue-branch name: function appends `-2`, `-3`, … and
-    creates the first free name; returns that name. Evidence:
-    `worktree.ts:119-128`; test `worktree_test.ts:252-271`.
-  - [x] `workDir === "."` mode: function is not invoked (engine guards).
-    Evidence: `engine.ts:294` (`if (this.workDir !== ".")`).
-  - [x] Rescue branch creation logged via `output.status("engine", …)` at
-    default verbosity, including branch name and worktree path. Evidence:
-    `engine.ts:311-316`.
-  - [x] Unit tests cover detached / on-branch / counter-conflict paths.
-    Evidence: `worktree_test.ts:198-302` (4 cases) + E2E
-    `e2e_worktree_isolation_test.ts:188-225`.
-  - [x] `deno task check` passes. Evidence: `deno task check` (PASS, 787 tests).
 
 ### 3.52 FR-E52: Cwd-Relative Path Contract for TemplateContext
 
@@ -183,34 +139,10 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
     template-rendered shell commands do NOT need wrapping — their working
     directory aligns with workDir.
 - **Acceptance criteria:**
-  - [x] `agent.ts::resolveInputArtifacts` accepts `workDir` and wraps
-    `inputs[id]` before `Deno.readDir`. Default value `"."` preserves
-    backwards-compatibility for callers in no-worktree mode. Evidence:
-    `agent.ts:43-68`.
-  - [x] Caller `node-dispatch.ts::executeAgentNode` passes `eng.workDir`.
-    Evidence: `node-dispatch.ts:105`.
-  - [x] Audit test (`template_paths_test.ts::FR-E52 — bare ctx.node_dir /
-    ctx.run_dir restricted to template.ts`) scans every non-test root-level
-    `*.ts` source file; fails CI if any line outside `template.ts`
-    references `ctx.node_dir` / `ctx.run_dir` without a `workPath`
-    wrapper on the same line. Evidence: `template_paths_test.ts:141-184`.
-  - [x] Audit confirms all current consumers in `loop.ts`, `human.ts`,
-    `hitl-handler.ts`, `node-dispatch.ts`, `engine.ts` wrap correctly.
-    Evidence: audit test passes — see `template_paths_test.ts:141-184`
-    (assertEquals offenders to []).
-  - [x] `validate.ts::runSingleValidation` wraps interpolated rule paths
-    via `workPath(ctx.workDir, …)` before `Deno.stat` / `readTextFile`,
-    and emits workDir-relative `displayPath` in messages so agent sees
-    paths writable from cwd = workDir. Closes a contract gap: the audit
-    regex catches direct `ctx.node_dir` references but not indirect
-    references via `interpolate(rule.path, ctx)`, which validate.ts
-    used. Mismatch with `extractConditionValue` (already wrapped) caused
-    `Loop 'implementation': condition_field 'verdict' not found` on
-    `github-inbox` run `20260501T020329` (issue #196). Evidence:
-    `validate.ts:53-87`, regression tests
-    `validate_test.ts::FR-E52 — file_exists under worktree wraps path with workDir`
-    and `validate_test.ts::FR-E52 — artifact + frontmatter_field under worktree wrap path`.
-  - [x] `deno task check` passes. Evidence: `deno task check` (PASS, 820 tests).
+  - **Tests:** `template_paths_test.ts`, `validate_test.ts` (FR-E52;
+    regression-locked). The `template_paths_test.ts` audit case is
+    a build-time guard — failing CI on any new bare `ctx.node_dir` /
+    `ctx.run_dir` reference outside `template.ts`.
 
 ### 3.54 FR-E54: Per-Workflow Run Lock
 
@@ -245,22 +177,9 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
     collided in that one path. FR-E57 closes the gap by relocating
     worktrees to `<workflowDir>/runs/<run-id>/worktree/` — see §3.55.
 - **Acceptance criteria:**
-  - [x] `defaultLockPath(workflowDir)` returns `<workflowDir>/runs/.lock`.
-    Evidence: `lock.ts:22-24`.
-  - [x] `Engine.run()` resolves the lock path via
-    `defaultLockPath(this.workflowDir)` (override
-    `options.lock_path` still respected). Evidence: `engine.ts:191-193`.
-  - [x] Two `acquireLock` calls against **distinct** workflow dirs both
-    succeed concurrently. Evidence: `lock_test.ts` ("acquireLock — distinct
-    workflow dirs hold independent locks (FR-E54)").
-  - [x] Two `acquireLock` calls against the **same** workflow dir still
-    refuse the second when the first holder PID is alive (FR-E25 carry-over).
-    Evidence: `lock_test.ts` ("acquireLock — same workflow dir still
-    serializes (FR-E54 carry-over of FR-E25)") and pre-existing
-    "acquireLock — fails if same-host live process holds lock".
+  - **Tests:** `lock_test.ts` (FR-E54; regression-locked).
   - [x] `EngineOptions.lock_path` JSDoc reflects the new default
     (`<workflowDir>/runs/.lock`). Evidence: `types.ts:405-407`.
-  - [x] `deno task check` passes.
 
 ### 3.55 FR-E57: Per-Run Worktree Co-Location
 
@@ -308,42 +227,8 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   - Engine remains domain-agnostic. Path computation is parametrized by
     `workflowDir`; no SDLC- or git-workflow-specific knowledge added.
 - **Acceptance criteria:**
-  - [x] `getWorktreePath(runId, workflowDir)` returns
-    `<workflowDir>/runs/<run-id>/worktree`. Old single-arg signature
-    removed. Evidence: `worktree.ts:31-33`. Test:
-    `worktree_test.ts::getWorktreePath — returns
-    <workflowDir>/runs/<runId>/worktree (FR-E57)`.
-  - [x] `createWorktree(runId, workflowDir, ref?)` materializes the
-    worktree at the path returned by `getWorktreePath` and ensures the
-    parent `<workflowDir>/runs/<run-id>/` directory exists before
-    invoking `git worktree add`. Evidence: `worktree.ts:46-66`. Test:
-    `worktree_test.ts::worktree lifecycle — create, exists, remove
-    (FR-E57 layout)`.
-  - [x] `worktreeExists(runId, workflowDir)` returns true iff the FR-E57
-    `<workflowDir>/runs/<run-id>/worktree/` directory exists. Evidence:
-    `worktree.ts:117-119`. Tests:
-    `worktree_test.ts::worktreeExists — returns false for non-existent
-    worktree (FR-E57)` and `worktreeExists — returns true when FR-E57
-    directory exists`.
-  - [x] `Engine.run()` invokes `createWorktree(runId, this.workflowDir)`
-    and uses `resolveExistingWorktreePath(runId, this.workflowDir)` for
-    resume. Evidence: `engine.ts:144-173`.
-  - [x] `Engine.run()` rejects a worktree-mode run when
-    `workflowDir === "."` with an error referencing FR-S47/FR-E53.
-    Evidence: `engine.ts:144-153`. Test: `engine_test.ts::Engine.run() —
-    rejects worktree mode when workflow.yaml is at repo root (FR-E57)`.
-  - [x] `removeWorktree(path)` calls `git worktree prune` after the
-    primary remove. Evidence: `worktree.ts:91-97`. Test:
-    `worktree_test.ts::removeWorktree — prunes stale gitlink after
-    manual dir removal (FR-E57)`.
-  - [x] Two distinct `workflowDir` values hold worktrees at disjoint
-    filesystem paths; concurrent runs across workflow folders do not
-    collide. Evidence: `worktree.ts:31-33`. Tests:
-    `worktree_test.ts::createWorktree — distinct workflow dirs hold
-    independent worktrees (FR-E57)` and
-    `e2e_worktree_isolation_test.ts::e2e — distinct workflow dirs hold
-    independent worktrees (FR-E57)`.
-  - [x] `deno task check` passes (798 tests, 0 failures).
+  - **Tests:** `worktree_test.ts`, `engine_test.ts`,
+    `e2e_worktree_isolation_test.ts` (FR-E57; regression-locked).
 
 
 
@@ -376,38 +261,8 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   deliberate cost of the cross-platform Deno-only constraint; revisit if
   a real workflow hits the limit.
 - **Acceptance criteria:**
-  - [x] `worktree.ts` exports `copyIgnoredIntoWorktree(workDir, output,
-    origRepo?): Promise<{files: number; bytes: number}>`. Evidence:
-    `worktree.ts`.
-  - [x] Function classifies each entry via `Deno.lstat` and dispatches:
-    symlink → `readLink`+`symlink`, file → `copyFile`, directory →
-    `mkdir`+recurse via `readDir`. Parent dirs auto-created. Evidence:
-    `worktree.ts` (`classifyAndCopy`).
-  - [x] Special files emit `output.warn` and are skipped. Evidence:
-    `worktree.ts` (`classifyAndCopy` final branch).
-  - [x] Progress: leading `Copying ignored files...`, per-top-level
-    `Copied <path>: <N> files, <S>` (B/KB/MB/GB formatter), trailing
-    `Ignored files copied: <N_total> files, <S_total>` — all via
-    `output.status("engine", …)`. Evidence: `worktree.ts`
-    (`copyIgnoredIntoWorktree`), `worktree_copy_ignored_test.ts`
-    (progress-lines test).
-  - [x] Engine calls it after `createWorktree`; skipped on
-    `worktree_disabled` and resume-reuse paths. Evidence: `engine.ts`
-    (new-run branch in worktree setup).
-  - [x] Self-copy guard: when `workDir` itself appears under an ignored
-    ancestor in `origRepo` (e.g. `<workflowDir>/runs/` matched by
-    gitignore `runs/`), `git ls-files --directory` collapses the
-    ancestor into a single ignored entry. The recursive walk skips the
-    destination worktree on `resolve(src) === absWorkDir`, preventing
-    the worktree from being copied into itself until `ENAMETOOLONG`.
-    Sibling prior-run leftovers under the same ancestor still mirror.
-    Evidence: `worktree.ts` (`classifyAndCopy` head guard),
-    `worktree_copy_ignored_test.ts` (`does not recurse into workDir`
-    regression test).
-  - [x] Untracked-not-ignored paths NOT copied (unit test verifies).
-    Evidence: `worktree_copy_ignored_test.ts` (untracked-not-ignored test).
-  - [x] Unit tests cover: file, directory recursion, live symlink,
-    broken symlink, untracked-vs-ignored filter, counters, tracked-file
-    non-overwrite, empty-repo zero-result. Evidence:
-    `worktree_copy_ignored_test.ts` (8 tests).
-  - [ ] `deno task check` passes.
+  - **Tests:** `worktree_copy_ignored_test.ts` (regression-locked;
+    `copyIgnoredIntoWorktree` covers files, dir recursion, symlinks
+    (live + broken), untracked-vs-ignored filter, tracked-file
+    non-overwrite, self-copy guard, empty-repo zero-result, progress
+    lines).
