@@ -40,31 +40,39 @@ a sibling directory. FR-IDs are stable on move — never renumber.
 
 Per [ADR-0011](adrs/0011-dod-test-coverage-convention.md), FR
 acceptance blocks DO NOT enumerate behaviours that are locked by
-named regression tests. The pattern is:
+regression tests. The pattern:
 
 - **Behaviour covered by a `*_test.ts` assertion** — collapse to one
   per-FR line at the top of the acceptance block. Format:
 
   ```markdown
-  - **Tests:** `<test_file>::<test-name-prefix>` (regression-locked).
-    Rationale: see ADR-NNNN (or `see Description` if no ADR exists).
+  - **Tests:** `<test_file>` (FR-E<N>; regression-locked). See ADR-NNNN.
   ```
 
-  The line MAY enumerate several test names if they cover distinct
-  facets. Per-criterion `[x]` bullets exercised by the listed tests
-  are removed — CI catches regressions, not the agent re-reading the
-  FR.
+  Rules:
+  - **Test files only**, comma-separated. No test names — they rot on
+    rename. The reader greps `FR-E<N>` inside the listed file(s);
+    the project convention embeds FR ids in test names already.
+  - `(FR-E<N>; regression-locked)` is the grep anchor + status.
+    When the FR id is NOT embedded in any test name, replace with
+    `(regression-locked; <3-5-word topic>)` — e.g.
+    `(regression-locked; verbose toggle)`.
+  - `See ADR-NNNN.` ONLY when an ADR records the rationale; omit
+    otherwise (the FR's Description already carries the why).
+  - Per-criterion `[x]` bullets exercised by the listed tests are
+    removed. CI catches regressions, not the agent re-reading the FR.
 - **Behaviour requiring manual verification** (prose docs, generated
-  artefacts, one-time migrations, CLI smoke text, behaviours not yet
-  test-covered) — stays as a `[x]` bullet with `Evidence: <path>:<line>`
-  per the rule above.
+  artefacts, one-time migrations, CLI smoke text, static config like
+  `deno.json#tasks`, behaviours not yet test-covered) — stays as a
+  `[x]` bullet with `Evidence: <path>:<line>` per the rule above.
 - **`[x] deno task check passes`** — DROP. The repo runs `deno task
   check` on every commit; restating "CI is green" per FR is noise.
 
 When auditing an existing acceptance block to apply this convention:
-read each named test and confirm its assertions actually exercise
-the claim. A test mentioned in `Evidence:` but unrelated to the
-claim is NOT a regression lock — the item stays as `[x]`.
+grep each listed test file for `FR-E<N>` (or read the tests by name
+when no FR-tagged tests exist) and confirm assertions actually
+exercise the claim. A test mentioned in `Evidence:` but unrelated to
+the claim is NOT a regression lock — the item stays as `[x]`.
 
 ## SRS Format
 

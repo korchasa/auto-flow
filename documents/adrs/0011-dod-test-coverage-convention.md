@@ -36,16 +36,27 @@ Adopt the following convention for FR acceptance blocks across SRS
 files (engine and SDLC):
 
 - **Behaviour locked by a regression test** — collapse to a single
-  per-FR line at the top of the acceptance block:
+  per-FR line at the top of the acceptance block. Format:
 
   ```markdown
-  - **Tests:** `<test_file>::<test-name-prefix>` (regression-locked).
-    Rationale: see ADR-NNNN (or "see Description" if no ADR exists).
+  - **Tests:** `<test_file>` (FR-E<N>; regression-locked). See ADR-NNNN.
   ```
 
-  The line MAY enumerate several test names if they cover distinct
-  facets of the FR. Per-criterion `[x]` bullets that the listed tests
-  exercise are removed.
+  Rules:
+  - List **test files only**, comma-separated. No test names.
+    The reader navigates with `grep "FR-E<N>" <test_file>` — the
+    project convention already embeds the FR id in the test name
+    (e.g. `(FR-E57)` in `worktree_test.ts`), so the file + grep
+    anchor is sufficient.
+  - The `(FR-E<N>; regression-locked)` parenthetical is the grep
+    anchor + status. Drop `(FR-E<N>; …)` only when the FR id has
+    no embedded test names — then state where the assertions live
+    in 3-5 words (e.g. `(regression-locked; verbose toggle)`).
+  - `See ADR-NNNN.` is appended ONLY when an ADR records the
+    rationale. Omit otherwise — the FR's `**Description:**` already
+    carries the why for non-ADR'd FRs.
+  - Per-criterion `[x]` bullets exercised by the listed tests are
+    removed. CI catches regressions; the agent doesn't re-verify.
 
 - **Behaviour requiring manual verification** — keep as a `[x]`
   bullet with `Evidence: <source-path>:<line>` exactly as today.
@@ -58,10 +69,22 @@ files (engine and SDLC):
   per-FR `[x] deno task check passes` line carries no information
   beyond "we ran CI", which every commit already does.
 
-The audit that decides whether an item is "regression-locked" reads
-the named test and confirms its assertions actually exercise the
-behaviour. A test mentioned in `Evidence:` but unrelated to the
-claim is NOT a regression lock — the item stays as `[x]`.
+The audit that decides whether an item is "regression-locked" greps
+the listed test file for the FR id (or, when no FR-tagged tests
+exist, reads the relevant tests by name) and confirms assertions
+actually exercise the behaviour. A test mentioned in `Evidence:`
+but unrelated to the claim is NOT a regression lock — the item
+stays as `[x]`.
+
+> **Note (same-session refinement, pre-application).** The
+> initial Decision block of this ADR enumerated test names inside
+> `**Tests:**`. During application to the first FR (FR-E53) the
+> verbosity proved counter-productive: 6 test names occupied as
+> much space as the original `[x]` bullets. The format was tightened
+> to file-list + grep anchor before any FR migration shipped. No
+> superseding ADR was issued because the policy had not yet been
+> instantiated. Future format changes after FR migration begins
+> MUST follow the supersede-via-new-ADR rule.
 
 ## Consequences
 

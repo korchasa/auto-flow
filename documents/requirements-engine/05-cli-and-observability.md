@@ -61,20 +61,8 @@
   per node to compute cost. A single `state.json` read is sufficient with this
   change.
 - **Acceptance criteria:**
-  - [x] `NodeState.cost_usd?: number` field written at node completion time.
-    Evidence: `types.ts` (`NodeState.cost_usd`), `state.ts`
-    (`markNodeCompleted()` optional `costUsd` param).
-  - [x] `RunState.total_cost_usd?: number` is the sum of all `nodes[*].cost_usd`.
-    Evidence: `state.ts` (`updateRunCost()` / `recomputeTotalCost()`).
-  - [x] Fields written alongside existing fields at node completion.
-    Evidence: `engine.ts` and `loop.ts` — both pass
-    `result.output?.total_cost_usd` to `markNodeCompleted()`.
-  - [x] Loop iteration nodes also report cost.
-    Evidence: `loop.ts` loop body call site.
-  - [x] Backward-compatible: fields are optional; existing state files without
-    cost fields remain valid.
-  - [x] Unit tests cover: cost present, cost absent, mixed multi-node, all-undefined.
-    Evidence: `state_test.ts`.
+  - **Tests:** `state_test.ts`, `engine_test.ts`, `loop_test.ts`
+    (FR-E17; regression-locked).
 
 
 
@@ -88,22 +76,9 @@
 - **Motivation:** Raw JSONL log files lack temporal context, making it hard to
   correlate log entries with real-world events during post-incident analysis.
 - **Acceptance criteria:**
-  - [x] Each non-empty line in the stream log file is prefixed with `[HH:MM:SS]`.
-    Evidence: `agent.ts:606-611` (`stampLines()`),
-    `agent_test.ts:400-407` (single-line test),
-    `agent_test.ts:409-424` (multi-line test).
-  - [x] Timestamp reflects wall-clock time when the event was received (not batch time).
-    Evidence: `agent.ts:594-600` (`tsPrefix()` calls `new Date()` at call time),
-    `agent.ts:384,402` (`stampLines` called inside stream processing loop).
-  - [x] Terminal output via `onOutput` callback is NOT prefixed with timestamps.
-    Evidence: `agent.ts:386,404` (`onOutput` receives raw `summary` without `stampLines`).
-  - [x] Timestamp format is `[HH:MM:SS] <content>` (24-hour, zero-padded, space before content).
-    Evidence: `agent.ts:594-600` (format construction),
-    `agent_test.ts:391-398` (format regex test).
-  - [x] Empty lines pass through to stream log without timestamp prefix.
-    Evidence: `agent.ts:609` (identity branch in `stampLines` map),
-    `agent_test.ts:426-442` (empty-line test).
-  - [x] `deno task check` passes.
+  - **Tests:** `agent_test.ts` (regression-locked; `tsPrefix` and
+    `stampLines` cases at lines 391-442 cover format, single-line,
+    multi-line, and empty-line passthrough).
 
 
 
@@ -114,13 +89,9 @@
 - **Implementation:** `FileReadTracker` class in `agent.ts`. Instantiated per `executeClaudeProcess()` call (counters reset per invocation). In event loop: for `tool_use` blocks with `name === "Read"`, calls `tracker.track(block.input.file_path)`. Non-null result written to log via `stampLines()`. Terminal `onOutput` callback unchanged (log-file-only).
 - **Warning format:** `[WARN] repeated file read: <path> (<N> times)`.
 - **Acceptance criteria:**
-  - [x] Stream log emits `[WARN] repeated file read: <path> (<N> times)` when same path is read >2 times in one session. Evidence: `agent.ts:332` (`FileReadTracker` class), `agent.ts:346` (`track()` method), commit `ebe7cb2`.
-  - [x] Warning includes file path and read count. Evidence: `agent.ts:346` (`FileReadTracker.track()` return value format).
-  - [x] Warning is log-file-only — terminal `onOutput` callback unchanged. Evidence: `agent.ts:410` (`tracker` used in `executeClaudeProcess()`, warning written via `stampLines()` to logFile only).
-  - [x] Counter resets per `executeClaudeProcess()` invocation (not cross-continuation). Evidence: `agent.ts:410` (`FileReadTracker` instantiated inside `executeClaudeProcess()`).
-  - [x] Execution not blocked by warning. Evidence: `agent.ts:346` (`track()` returns warning string; engine continues normally).
-  - [x] `FileReadTracker` is a pure-logic class — unit-testable without I/O. Evidence: `agent_test.ts:790-855` (FileReadTracker unit tests).
-  - [x] `deno task check` passes. Evidence: QA PASS — all tests pass (run `20260314T060523`).
+  - **Tests:** `agent_test.ts` (regression-locked; `FileReadTracker`
+    cases at lines 790-855 cover threshold, per-path independence,
+    warning format, consecutive warnings, reset).
 
 
 
@@ -134,17 +105,9 @@
   lines per node). `normal` shows nothing. Operators need intermediate view:
   agent reasoning + results without tool-call noise.
 - **Acceptance criteria:**
-  - [x] `Verbosity` type includes `"semi-verbose"` value alongside `"quiet"`,
-    `"normal"`, `"verbose"`. Evidence: `types.ts` (`Verbosity` union).
-  - [x] `-s` CLI flag maps to `semi-verbose` verbosity. Evidence: `cli.ts`.
-  - [x] In semi-verbose mode, `formatEventForOutput()` skips `tool_use` content
-    blocks in `assistant` events — emits only `text` blocks. Evidence:
-    `agent.ts` (`formatEventForOutput()` with `verbosity` param).
-  - [x] Log file writes are unaffected — full output preserved. Evidence:
-    `agent.ts` (log path calls `formatEventForOutput()` without verbosity).
-  - [x] `nodeOutput()` gate shows in both `verbose` and `semi-verbose`. Evidence:
-    `output.ts` (`nodeOutput()` condition).
-  - [x] `deno task check` passes. Evidence: design.md (FR-E21 referenced as implemented).
+  - **Tests:** `cli_test.ts`, `agent_test.ts`, `output_test.ts`
+    (regression-locked; semi-verbose flag parsing, `formatEventForOutput`
+    tool_use suppression, and `nodeOutput` gate).
 
 
 
@@ -192,14 +155,9 @@
 - **Description:** `scripts/check.ts` (`deno task check`) must respond to `--help` / `-h` with a usage synopsis describing what checks are run and exit 0. Unknown flags must produce an error message referencing `--help` and exit non-zero. Output format follows the pattern established by `cli.ts`.
 - **Motivation:** Users must read source code to discover what `deno task check` does and whether any options exist. No help text forces unnecessary source inspection.
 - **Acceptance criteria:**
-  - [x] `--help` / `-h` prints usage synopsis and exits 0.
-  - [x] Usage text documents all checks performed (type-check, tests, lint,
-    workflow integrity, secret detection) and any flags.
-  - [x] Unknown flags print an error message referencing `--help` and exit
-    non-zero.
-  - [x] `deno task check` (no args) continues to run all checks unchanged
-    (backward-compatible).
-  - [x] `deno task check` passes (self-check).
+  - **Tests:** `scripts/check_test.ts` (regression-locked; `checkArgs`
+    and `printUsage` cases cover --help/-h exit 0, unknown-flag exit 1,
+    usage-text content).
 
 
 ### 3.45 FR-E45: Subcommand Routing
@@ -256,59 +214,12 @@
   misconfigured or unbounded loops can incur unbounded API cost. Users need a
   safety cap without modifying workflow logic.
 - **Acceptance criteria:**
-  - [x] `--budget <USD>` CLI argument parsed in `cli.ts`; stored in
-    `EngineOptions.budget_usd?: number`. Shown in `--help` output.
-    Evidence: `cli.ts:131-140`, `cli.ts:192`, `types.ts:338`.
-  - [x] Engine checks `total_cost_usd > budget_usd` (strict) after each node
-    completion; aborts workflow with clear error:
-    `Budget exceeded: $X.XX > $Y.YY`. Runs exactly at the cap do not abort.
-    Evidence: `engine.ts:checkWorkflowBudget`, `engine.ts:398` (post-level),
-    `engine.ts:378` (post-chunk).
-  - [x] Loop body (`loop.ts`) checks workflow budget after each iteration
-    node completes. Evidence: `loop.ts:209-219` (throws on overrun).
-  - [x] `budget.max_usd?: number` field on `NodeConfig` (and on `defaults`
-    level); validated as positive number. Engine fails the node (not the
-    workflow) when per-node cost exceeds cap. For nodes inside a loop body,
-    the cap applies **per-iteration** (to each invocation's `cost_usd`), not
-    to cumulative cost across iterations. Evidence: `config.ts:validateBudget`,
-    `engine.ts:executeNode` per-node block, `loop.ts:175-196`.
-  - [x] `budget.max_turns?: number` field on `NodeConfig` (and on `defaults`
-    level); validated as positive integer; emits `--max-turns <N>` in CLI
-    args on both initial and resume invocations **only when runtime is
-    `claude`**. Non-Claude runtimes ignore `budget.max_turns` with a one-line
-    warning at workflow start. Evidence: `agent.ts:applyBudgetFlags`,
-    `hitl.ts:extraArgs` call site, `engine.ts:warnBudgetCaveats`.
-  - [x] Resolution cascade: node → loop → `defaults` for both `budget.max_usd`
-    and `budget.max_turns`; workflow-wide `--budget` and per-node cap checked
-    independently — either can trigger. Evidence: `config.ts:resolveBudget`,
-    `config_test.ts` (resolveBudget cascade tests).
-  - [x] Loop pre-check: before each iteration spawn, if
-    `avg_iter_cost > remaining_budget`, loop exits cleanly with reason
-    `budget_preempt`. No pre-check on first iteration (insufficient data).
-    Pre-check is advisory (average-based) and MAY stop a loop whose next
-    iteration would have fit. Evidence: `loop.ts:shouldPreemptLoop`,
-    `loop_test.ts` (shouldPreemptLoop tests), `loop.ts:LoopExitReason`.
-  - [x] Budget is optional; runs without `--budget` or `budget` YAML fields
-    behave identically to current behavior (no-op). Evidence: guards in
-    `engine.ts:checkWorkflowBudget` (early return on undefined) and
-    `loop.ts:shouldPreemptLoop` (undefined → false).
-  - [x] Runtimes that do not populate `node.cost_usd` cause USD-based checks
-    to no-op silently; a one-line warning is emitted at workflow start when
-    `--budget` is set but the default runtime is not `claude`. Evidence:
-    `engine.ts:warnBudgetCaveats` (second branch).
-  - [x] `--resume <run-id>` preserves accumulated `total_cost_usd` from the
-    prior run segment; `--budget` on resume applies to the cumulative total.
-    If the resumed run is already over budget at load time, engine aborts
-    before executing any node. Evidence: `engine.ts:runWithLock` calls
-    `checkWorkflowBudget("resume")` after state load.
-  - [x] Unit tests: no budget (no-op), not exceeded, exceeded exactly at cap
-    (not triggered), per-node limit hit, cascade, loop pre-check, budget
-    flag emission per runtime. Evidence: `cli_test.ts` (6 cases),
-    `config_test.ts` (13 cases), `loop_test.ts` (7 cases), `agent_test.ts`
-    (5 cases). Full engine-level integration (workflow-wide abort mid-run)
+  - **Tests:** `cli_test.ts`, `config_test.ts`, `loop_test.ts`,
+    `agent_test.ts` (FR-E47; regression-locked). See ADR-0009.
+  - [x] Full engine-level integration (workflow-wide abort mid-run)
     deferred — runtime adapter mocking infrastructure not yet present;
     covered indirectly via `checkWorkflowBudget` unit semantics.
-  - [x] `deno task check` passes.
+    Evidence: `engine.ts:checkWorkflowBudget`.
 
 
 
@@ -337,19 +248,8 @@
     at construction and threads it to every state-path call (FR-E9
     update / DoD-14).
 - **Acceptance:**
-  - [x] `cli.ts::parseArgs` accepts `<workflow>` as a positional
-    and rejects both `--config` and `--workflow` flags with a hint
-    pointing at the positional form. Evidence:
-    `cli_test.ts::parseArgs — positional workflow sets config_path…`,
-    `cli_test.ts::parseArgs — --config flag rejected with positional hint`,
-    `cli_test.ts::parseArgs — --workflow flag rejected with positional hint`.
-  - [x] Positional accepted before or after flags; trailing slash
-    normalized; second positional rejected. Evidence:
-    `cli_test.ts::parseArgs — positional accepted after flags`,
-    `cli_test.ts::parseArgs — trailing slash on positional is normalized`,
-    `cli_test.ts::parseArgs — second positional rejects`.
+  - **Tests:** `cli_test.ts`, `engine_test.ts` (FR-E53; regression-locked).
   - [x] `runEngine` emits `Missing workflow argument` when
     `config_path` is empty. Evidence: `cli.ts::runEngine`.
   - [x] `deno.json#tasks.run` uses positional form
     `cli.ts run .flowai-workflow/github-inbox`. Evidence: `deno.json`.
-  - [x] `deno task check` is green after the migration (DoD-11).
