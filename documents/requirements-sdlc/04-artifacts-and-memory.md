@@ -22,7 +22,6 @@
   - [x] `agents/` top-level directory removed; no broken symlinks in `.claude/skills/`. Evidence: commit `985e3e5 sdlc(impl): remove agents/ directory and fix stale path references`
   - [x] `workflow.yaml` `prompt:` fields updated to `.flowai-workflow/agents/agent-<name>/SKILL.md`. Evidence: `.flowai-workflow/workflow.yaml` (commit `6176e91`)
   - [x] `documents/requirements-sdlc.md` path references updated to reflect new `.claude/skills/` layout and FR-S18 rename. Evidence: this update (run `20260314T010515`); commit `f0085df`
-  - [x] `deno task check` passes after migration. Evidence: QA PASS — 436 tests pass (run `20260313T230627`)
 
 
 
@@ -42,8 +41,6 @@
     `.flowai-workflow/runs/20260314T154052/report/tech-lead-review/`,
     `.flowai-workflow/runs/20260314T154052/report/optimize/` — 6 phase-organized node
     directories across all 3 phases (`plan`, `impl`, `report`).
-  - [x] `deno task check` passes. Evidence: `deno task check` exit 0, 498 tests
-    passed, 0 failed, run 20260314T154052.
 
 
 
@@ -122,7 +119,6 @@
     cross-run memory).
   - [x] At least one end-to-end workflow run completes with agents
     reading/writing their own memory files.
-  - [x] `deno task check` passes after changes.
   - [x] **Commit step in lifecycle:** Each agent's reflection-protocol
     appendix instructs it to commit memory + history files at session end.
     `.flowai-workflow/memory/reflection-protocol.md` §Lifecycle includes
@@ -184,27 +180,13 @@
 - **Extends:** FR-S24 (Workflow Config Validation) — concrete application of
   config validation for `hitl.artifact_source`.
 - **Acceptance criteria:**
+  - **Tests:** `hitl_test.ts`, `scripts/check_test.ts`
+    (regression-locked; template-syntax enforcement,
+    `interpolate()` resolution, `validateHitlArtifactSource` accept
+    /reject/skip cases).
   - [x] `workflow.yaml` omits `defaults.hitl.artifact_source` (Telegram
     transport does not require it). Evidence:
     `.flowai-workflow/workflow.yaml:18-22`.
-  - [x] `interpolate()` applied to `artifact_source` in
-    `hitl.ts:buildScriptArgs()` before passing value to scripts; ctx
-    threaded through `HitlRunOptions`. Evidence: `hitl.ts:257,264`.
-  - [x] `validateHitlArtifactSource(config)` exported pure function: returns
-    error message for hardcoded path (no `{{`), empty array for template or
-    absent field. Evidence: `scripts/check.ts:110–118`.
-  - [x] `hitlArtifactSource()` validation function in `scripts/check.ts` reads
-    workflow config, calls `validateHitlArtifactSource()`, emits error and
-    exits 1 on hardcoded path. Evidence: `scripts/check.ts:120–146`.
-  - [x] Test `runHitlLoop — artifact_source template resolved via ctx` in
-    `hitl_test.ts` verifies `{{input.specification}}/01-spec.md` →
-    `/runs/abc/specification/01-spec.md`. Evidence:
-    `hitl_test.ts:232–277`.
-  - [x] Tests in `scripts/check_test.ts` cover: valid template path (pass),
-    hardcoded path (fail), absent field (skip/pass), empty string (skip/pass).
-    Evidence: `scripts/check_test.ts:109–130`.
-  - [x] `deno task check` passes. Evidence: PASS (519 tests, run
-    `20260319T204544`).
 
 
 
@@ -232,21 +214,8 @@
   applied to every copy or a deliberate divergence must be recorded
   in CLAUDE.md / AGENTS.md.
 - **Acceptance:**
-  - [x] `assertWorkflowFolderShape(dir)` enforces the contract on
-    every dogfood workflow folder. Evidence:
-    `scripts/check.ts::assertWorkflowFolderShape`,
-    `scripts/check.ts::workflowIntegrity`,
-    `scripts/check_test.ts` (5 cases covering OK / missing-yaml /
-    missing-agents-when-referenced / no-agents-when-not-referenced /
-    empty-agents).
-  - [x] Top-level `.flowai-workflow/` of this repo holds exactly the
-    three workflow folders `github-inbox`, `github-inbox-opencode`,
-    `github-inbox-opencode-test` and zero files. Evidence:
-    `dogfood_layout_test.ts`.
-  - [x] No active configs/code reference `.claude/agents/`. Evidence:
-    `scripts/check.ts::noClaudeAgentsRefs` runs as part of
-    `workflowIntegrity` in `deno task check`.
-  - [x] `state.json` migration helper `scripts/migrate-state-paths.ts`
-    rewrites legacy paths in-place; idempotent. Evidence:
-    `scripts/migrate-state-paths_test.ts` (3 cases: rewrite, idempotent,
-    walk).
+  - **Tests:** `scripts/check_test.ts`, `dogfood_layout_test.ts`,
+    `scripts/migrate-state-paths_test.ts` (FR-S47;
+    regression-locked; `assertWorkflowFolderShape`, dogfood
+    top-level shape, `noClaudeAgentsRefs`, `state.json` path
+    migration).
