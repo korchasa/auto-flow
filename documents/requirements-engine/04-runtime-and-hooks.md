@@ -21,14 +21,9 @@
   - Logs are committed to the feature branch after each stage.
   - Stage script locates the JSONL transcript by session ID extracted from the JSON output.
 - **Acceptance criteria (Deno engine path):**
-  - [x] After each non-loop agent node completes successfully, the engine saves a JSON log to `.flowai-workflow/runs/<run-id>/logs/` and, for Claude runtime only, copies the JSONL transcript:
-    - `<node-id>.json` — full `CliRunOutput` JSON object (`result`, `session_id`, `total_cost_usd`, `duration_ms`, `duration_api_ms`, `num_turns`, `is_error`).
-    - `<node-id>.jsonl` — Claude-only copy of the JSONL session transcript from `~/.claude/projects/<project-hash>/`, located by matching `session_id` in filenames.
-    - Evidence: `engine.ts:266-270`, `log.ts`
-  - [x] If the Claude JSONL transcript file is not found: engine logs a warning and continues — workflow does NOT fail. Evidence: `log.ts`
-  - [x] Loop body nodes (developer, qa) must have logs saved after each iteration. Log files use iteration-qualified names: `<node-id>-iter-<N>.json` and `<node-id>-iter-<N>.jsonl`. `runLoop()` calls `saveAgentLog()` for each body node after successful completion. Evidence: `engine.ts:574-582` (onNodeComplete callback in executeLoopNode saves logs using `${id}-iter-${iteration}` node ID)
-  - [x] `LoopResult` includes per-iteration `AgentResult` references (with `CliRunOutput`) to enable log extraction by the engine. Evidence: `loop.ts:18-26` (`LoopResult.bodyResults: AgentResult[]`), `loop.ts:69,99` (initialized, pushed per body node per iteration)
-  - [x] Log-saving logic has unit tests covering: successful save, JSONL-not-found warning path. Evidence: `log_test.ts:29-124` (5 tests)
+  - **Tests:** `log_test.ts` (regression-locked; successful save,
+    JSONL-not-found warning path, iteration-qualified loop body
+    log names).
 
 
 
@@ -44,17 +39,19 @@
   6. Engine resumes agent in the same session (`claude --resume <session_id>` or `opencode run --session <session_id>`). Agent continues with full session context.
 - **Key constraint:** Engine contains zero GitHub/Slack/email-specific code. All delivery/polling logic lives in workflow scripts (`.flowai-workflow/scripts/`).
 - **Acceptance criteria:**
-  - [x] Engine detects runtime-native HITL requests after agent node completes: Claude via `permission_denials`, OpenCode via normalized `tool_use` parsing from `opencode run --format json`. Evidence: `hitl.ts` (`detectHitlRequest()`), `opencode-process.ts` (`extractOpenCodeOutput()`), `node-dispatch.ts` (call in `executeAgentNode`)
-  - [x] Engine saves `session_id`, question JSON, and node status `waiting` to `state.json`. Evidence: `state.ts:93-103` (`markNodeWaiting()`), `engine.ts:324-325` (call + saveState), `types.ts:104` (`question_json` field)
-  - [x] Engine invokes `ask_script` (path from `workflow.yaml` `defaults.hitl`) with args: `--run-dir`, `--artifact-source`, `--run-id`, `--node-id`, `--question-json`. Evidence: `hitl.ts:111-125` (`buildScriptArgs("ask")`), `hitl.ts:127-134` (ask invocation)
-  - [x] Engine enters poll loop calling `check_script` with args: `--run-dir`, `--artifact-source`, `--run-id`, `--node-id`, `--exclude-login`. Exit 0 = reply in stdout; exit 1 = no reply yet. Evidence: `hitl.ts:137-175` (poll loop), `hitl_test.ts:184-214` (poll test)
-  - [x] On reply: engine resumes agent via the selected runtime's session-resume mechanism. Claude uses `--resume`; OpenCode uses `run --session`. Evidence: `hitl.ts` (`adapter.invoke()` with `resumeSessionId`), `agent.ts`, `opencode-process.ts`
-  - [x] Configurable `poll_interval` (default 60s) and `timeout` (default 7200s) per workflow. Evidence: `types.ts:170-175` (`HitlConfig`), `.flowai-workflow/workflow.yaml:16-20` (defaults.hitl)
-  - [x] On timeout: node fails, Meta-Agent triggered. Evidence: `hitl.ts:183-188` (timeout return), `engine.ts:342-347` (markNodeFailed on HITL failure), `hitl_test.ts:216-230` (timeout test)
-  - [x] `deno task run` on a workflow with `waiting` nodes auto-resumes polling (no manual `--resume` needed). Evidence: `engine.ts:278-310` (wasWaiting resume path in executeAgentNode)
-  - [x] Workflow scripts `hitl-ask.sh` and `hitl-check.sh` exist in `.flowai-workflow/scripts/`. Evidence: `.flowai-workflow/scripts/hitl-ask.sh`, `.flowai-workflow/scripts/hitl-check.sh`
-  - [x] `hitl-ask.sh` renders question JSON → markdown with HTML marker `<!-- hitl:<run-id>:<node-id> -->`, posts via `gh issue comment`. Evidence: `.flowai-workflow/scripts/hitl-ask.sh:52-76` (markdown render + marker + gh post)
-  - [x] `hitl-check.sh` finds first non-bot comment after marker, outputs body to stdout (exit 0) or exits 1 if no reply. Evidence: `.flowai-workflow/scripts/hitl-check.sh:39-54` (jq filter + exit codes)
+  - **Tests:** `hitl_test.ts` (regression-locked; detection,
+    `markNodeWaiting`, ask/check script wiring, poll loop, timeout,
+    resume on reply, auto-resume of `waiting` nodes).
+  - [x] Workflow scripts `hitl-ask.sh` and `hitl-check.sh` exist in
+    `.flowai-workflow/scripts/`. Evidence:
+    `.flowai-workflow/scripts/hitl-ask.sh`,
+    `.flowai-workflow/scripts/hitl-check.sh`.
+  - [x] `hitl-ask.sh` renders question JSON → markdown with HTML
+    marker `<!-- hitl:<run-id>:<node-id> -->`, posts via `gh issue
+    comment`. Evidence: `.flowai-workflow/scripts/hitl-ask.sh:52-76`.
+  - [x] `hitl-check.sh` finds first non-bot comment after marker,
+    outputs body to stdout (exit 0) or exits 1 if no reply.
+    Evidence: `.flowai-workflow/scripts/hitl-check.sh:39-54`.
 
 
 
@@ -63,13 +60,13 @@
 - **Description:** Engine supports a configurable `on_failure_script` field in `WorkflowDefaults` (YAML: `defaults.on_failure_script`). When the workflow fails, the engine executes the specified script via `Deno.Command`. Replaces the former hard-wired `rollbackUncommitted()` git call, which violated the domain-agnostic invariant (FR-E14).
 - **Rationale:** Domain-specific failure recovery (e.g., git rollback) belongs in workflow scripts, not engine code. The engine provides a generic hook; the workflow wires it to the appropriate script.
 - **Acceptance criteria:**
-  - [x] `WorkflowDefaults` in `types.ts` includes `on_failure_script?: string`. Evidence: `types.ts:23` (`on_failure_script?: string`)
-  - [x] Engine executes `on_failure_script` via `Deno.Command` on workflow failure (if configured). Evidence: `engine.ts:171-175` (`runFailureHook` called when `!workflowSuccess`), `engine.ts:808-831` (`runFailureHook` using `new Deno.Command(script, ...)`)
-  - [x] Engine does NOT import or call any git functions on failure. Evidence: `engine.ts` — no git imports; failure path uses generic `runFailureHook` only
-  - [x] `.flowai-workflow/workflow.yaml` sets `on_failure_script: .flowai-workflow/scripts/rollback-uncommitted.sh`. Evidence: `.flowai-workflow/workflow.yaml:18` (`on_failure_script: .flowai-workflow/scripts/rollback-uncommitted.sh`)
-  - [x] If script path not found: engine logs warning and continues (no hard failure). Evidence: `engine.ts:828-829` (catch block logs warning, does not throw)
-  - [x] Unit test covers `on_failure_script` execution path. Evidence: `engine_test.ts:776-822` (4 `runFailureHook` tests: no-op, success, script failure, nonexistent script)
-  - [x] `deno task check` passes. Evidence: 490 passed, 0 failed
+  - **Tests:** `engine_test.ts` (FR-E19; regression-locked; no-op,
+    success path, script failure warning, nonexistent script).
+  - [x] `.flowai-workflow/workflow.yaml` sets `on_failure_script:
+    .flowai-workflow/scripts/rollback-uncommitted.sh`. Evidence:
+    `.flowai-workflow/workflow.yaml:18`.
+  - [x] Engine does NOT import or call any git functions on failure.
+    Evidence: `engine.ts` — no git imports.
 
 
 
@@ -96,20 +93,9 @@
 - **Description:** Template engine (`template.ts`) supports `{{file("path/to/file.md")}}` function syntax. Reads named file content and inserts it inline at the call site. Paths resolved relative to repo root. Inserted content NOT re-interpolated (prevents recursion, ensures predictable behavior). Fail-fast: throws descriptive error if file not found.
 - **Motivation:** Two separate mechanisms for file content injection (`prompt` field via `--system-prompt-file`; `task_template` via `{{variable}}` substitution) prevent composition of shared instructions across nodes without duplication. `{{file()}}` unifies inline file injection into the existing template system.
 - **Acceptance criteria:**
-  - [x] `{{file("path")}}` resolves path relative to repo root and inserts
-    file content inline.
-  - [x] Inserted content is NOT re-interpolated (no nested `{{...}}`
-    processing of included text).
-  - [x] Missing file throws a fail-fast error with the missing path in the
-    message.
-  - [x] `deno task check` validates `{{file()}}` references at load time by
-    executing real file reads.
-  - [x] Validation error identifies the missing file path for quick diagnosis.
-  - [x] Size warning emitted when included file content exceeds a threshold.
-  - [x] Unit tests: successful inclusion, missing file error, no
-    re-interpolation of included content.
-  - [x] Config check tests: `deno task check` catches missing `{{file()}}`
-    path in `task_template`.
+  - **Tests:** `template_test.ts`, `config_test.ts` (FR-E32;
+    regression-locked; resolution, no re-interpolation, missing-file
+    error, size warning, load-time validation).
 
 
 
@@ -124,17 +110,12 @@
 - **Motivation:** Declarative, type-safe permission control. Eliminates raw CLI
   arg strings, enables per-node granularity, validates at config load time.
 - **Acceptance criteria:**
-  - [x] AC1: `PermissionMode` type and `permission_mode` field on
-    `WorkflowDefaults` + `NodeConfig`. Evidence: `types.ts:9-24,55,90`.
-  - [x] AC2: `buildClaudeArgs()` emits `--permission-mode <value>` when set.
-    Evidence: `claude-process.ts:88-90`.
-  - [x] AC3: Config validation rejects invalid values. Evidence:
-    `config.ts:138-149`; `config_test.ts` (invalid mode tests).
-  - [x] AC4: `claude_args` field removed in favor of universal `runtime_args`.
-  - [x] AC5: Per-node override resolution (node → defaults → omit) in
-    `node-dispatch.ts` and `loop.ts`. Evidence: `node-dispatch.ts:54`,
-    `loop.ts:93-94`.
-  - [x] AC6: `deno task check` green: 590 tests, 0 failures.
+  - **Tests:** `config_test.ts` (regression-locked; invalid-mode
+    rejection, per-node override cascade). Library-side flag
+    emission covered by `@korchasa/ai-ide-cli` tests.
+  - [x] `claude_args` field removed in favor of universal
+    `runtime_args`. Evidence: code grep — no `claude_args`
+    references in engine source.
 
 
 
@@ -158,33 +139,9 @@
   introspection, and uniform mapping across IDEs via the library adapter
   layer.
 - **Acceptance criteria:**
-  - [x] AC1: `allowed_tools?: string[]` and `disallowed_tools?: string[]`
-    declared on `WorkflowDefaults` and `NodeConfig`. Evidence:
-    `types.ts:101-104`, `types.ts:200-203`.
-  - [x] AC2: Per-level validation — array of non-empty strings, mutex at
-    the same level, reserved-keys conflict with `runtime_args`. Evidence:
-    `config.ts:632-698` (`TOOL_FILTER_RESERVED_KEYS`,
-    `validateToolFilterLevel`, `validateToolFilterField`).
-  - [x] AC3: Cascade resolver `resolveToolFilter(node, defaults, loopParent)`
-    implements replace-semantics, node → loopParent → defaults. Evidence:
-    `config.ts:722-745`.
-  - [x] AC4: Engine wires resolved filter into `RuntimeInvokeOptions` on
-    both initial and resume invocations. Evidence:
-    `agent.ts:219-220,328-329`, `node-dispatch.ts:92-93,115-116,164-165`,
-    `loop.ts:195-196`, `hitl.ts:259-260`.
-  - [x] AC5: Runtime-specific emission of `--allowedTools` /
-    `--disallowedTools` handled by the library adapter (Claude), not by
-    engine. Non-Claude runtimes warn and ignore per FR-L24. Engine code
-    contains no runtime-specific tool-flag logic beyond the typed field
-    pass-through.
-  - [x] AC6: Unit tests — validation (array, mutex, reserved-keys ×3,
-    back-compat, cross-level mode switch), resolver (node/loop/defaults
-    priority, empty cascade, mode switch), wiring (mock adapter captures
-    fields on initial and resume, mutex guard). Evidence:
-    `config_test.ts` (tests `parseConfig — allowed_tools …`,
-    `resolveToolFilter — …`), `agent_tool_filter_test.ts`.
-  - [x] AC7: `deno task check` green (fmt + lint + type-check + tests +
-    doc-lint + publish dry-run).
+  - **Tests:** `config_test.ts`, `agent_tool_filter_test.ts` (FR-E48;
+    regression-locked; field validation, mutex, reserved-keys
+    conflicts, cascade resolver, wiring on initial + resume).
 
 
 
@@ -235,13 +192,9 @@
   (agents, partials) live inside. `file()` forces hardcoded folder prefix —
   rename breaks all prompts. `flow_file()` decouples prompts from folder name.
 - **Acceptance:**
-  - [x] Resolves against `workDir/workflow_dir`. Evidence: `template.ts:81-100`,
-    `engine.ts:564-571`, `template_test.ts`.
-  - [x] No re-interpolation; absolute path bypasses `workflow_dir`. Evidence:
-    `template_test.ts`.
-  - [x] Missing file throws naming `flow_file("path")`. Evidence: `template.ts`.
-  - [x] `validateFileReferences` + `validateTemplateVars` accept `flow_file()`.
-    Evidence: `config.ts`, `template.ts`, `config_test.ts`, `template_test.ts`.
-  - [x] `deno task check` passes.
+  - **Tests:** `template_test.ts`, `config_test.ts` (regression-locked;
+    `flow_file()` resolution against `workflow_dir`, no
+    re-interpolation, absolute-path bypass, missing-file error,
+    `validateFileReferences` accepts both patterns).
 
 ### 3.58 FR-E58: Copy Gitignored Files into Run Worktree — see [04b-worktree-isolation.md](04b-worktree-isolation.md).
