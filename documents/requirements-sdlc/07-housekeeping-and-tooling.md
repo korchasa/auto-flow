@@ -14,7 +14,6 @@
   - [x] Legacy scripts renamed: `stage-6-executor.sh` → `stage-6-developer.sh`; internal refs and `AGENT_PROMPT` path updated. `stage-7-qa.sh` executor output references updated. Evidence: commit `f0085df`
   - [x] Engine test fixtures: node IDs using `executor` as example updated to `developer`. Evidence: commit `f0085df`
   - [x] Documentation updated: `documents/requirements-sdlc.md`, `documents/design-sdlc.md`, `AGENTS.md` (if applicable), `README.md`, `documents/meta.md`. Evidence: commit `f0085df`; QA PASS run `20260314T000902` (436 tests)
-  - [x] `deno task check` passes after all changes. Evidence: QA PASS run `20260314T000902` — 436 tests pass
 
 
 
@@ -29,7 +28,6 @@
   - [x] Both scripts: unknown flags produce error message referencing
     `--help` and exit non-zero.
   - [x] Output format follows `cli.ts` pattern.
-  - [x] `deno task check` passes.
 
 
 
@@ -58,7 +56,6 @@
   - [x] `scripts/check.ts` symlink validation block removed. Evidence: `scripts/check.ts` `workflowIntegrity()` (lines 89–102) retains only `loadConfig()` delegation; no symlink loop remains.
   - [x] `documents/design-sdlc.md` updated: §2.2 Agent Runtime symlink clause removed, §3.4 Purpose/Interfaces/Migration updated with FR-S33 reference. Evidence: `documents/design-sdlc.md §2.2`, `§3.4`.
   - [x] `documents/requirements-sdlc.md` updated: this section (3.33) added; Section 4 NFR Reproducibility updated; Appendix B symlink lines removed; Appendix C FR-S33 row added.
-  - [x] `deno task check` passes. Evidence: `deno task check` PASS (493 tests, run `20260319T192055`).
 
 
 
@@ -87,7 +84,6 @@
     Evidence: `grep -rn "shared-rules" .flowai-workflow/github-inbox/` returns
     zero matches.
   - [x] YAML frontmatter unchanged in each agent prompt file.
-  - [x] `deno task check` passes.
 
 
 
