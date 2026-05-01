@@ -5,15 +5,16 @@
 
 ### 3.17 FR-S17: Agent Prompt Layout
 
-- **Status:** Superseded by FR-S47 — canonical agent location is now
-  `.flowai-workflow/<name>/agents/agent-<role>.md` (single Markdown file per
-  agent; the earlier `agent-<name>/SKILL.md` directory layout is dropped).
-- **Description (current):** Each workflow folder owns its agent prompts as
+- **Description:** Each workflow folder owns its agent prompts as
   flat Markdown files under `.flowai-workflow/<name>/agents/agent-<role>.md`.
   Files are framework-independent (no spec-bound frontmatter required) and
   loaded by `system_prompt: '{{file(...)}}'` in `workflow.yaml`.
-- **Description (legacy):** Earlier revisions of this FR required
+
+  **Legacy:** Earlier revisions of this FR required
   agentskills.io-compliant skill directories at `.flowai-workflow/agents/agent-<name>/SKILL.md`. That layout is no longer used; agent prompts ship as plain `.md` files inside the workflow folder.
+- **Status:** Superseded by FR-S47 — canonical agent location is now
+  `.flowai-workflow/<name>/agents/agent-<role>.md` (single Markdown file per
+  agent; the earlier `agent-<name>/SKILL.md` directory layout is dropped).
 - **Motivation:** Spec compliance enables standard skill tooling and discovery. Co-location reduces cognitive overhead. Removing the `agents/` → `.claude/skills/` symlink indirection eliminates broken-symlink failure mode.
 - **Acceptance criteria:**
   - [x] Each skill directory `.flowai-workflow/agents/agent-<name>/` contains `SKILL.md` with frontmatter fields: `name` (matches directory name), `description`, `compatibility`, `allowed-tools`. No `disable-model-invocation` field. Expected: `.flowai-workflow/agents/agent-pm/SKILL.md`, `.flowai-workflow/agents/agent-architect/SKILL.md`, `.flowai-workflow/agents/agent-tech-lead/SKILL.md`, `.flowai-workflow/agents/agent-tech-lead-review/SKILL.md`, `.flowai-workflow/agents/agent-developer/SKILL.md`, `.flowai-workflow/agents/agent-qa/SKILL.md`, `.flowai-workflow/agents/agent-meta-agent/SKILL.md`. Evidence: commit `f0085df sdlc(impl): rename Executor agent role to Developer (FR-S18)`; QA PASS run `20260314T000902` (436 tests)
@@ -28,7 +29,7 @@
 ### 3.25 FR-S25: Phase-Organized SDLC Artifact Directories
 
 - **Description:** SDLC workflow nodes with a `phase` config field must store output artifacts in phase-organized subdirectories (`.flowai-workflow/runs/<run-id>/<phase>/<node-id>/`). Nodes without `phase` use flat layout (`.flowai-workflow/runs/<run-id>/<node-id>/`). Depends on engine FR-E9 implementation.
-- **Rationale:** SDLC workflow nodes are grouped into `plan`, `impl`, `report` phases in `workflow.yaml`. Phase-organized storage improves navigability and aligns artifact structure with declared execution flow. Without engine FR-E9 (phase registry + phase-aware `getNodeDir()`), the `phase` field in `workflow.yaml` has no effect on artifact paths.
+- **Motivation:** SDLC workflow nodes are grouped into `plan`, `impl`, `report` phases in `workflow.yaml`. Phase-organized storage improves navigability and aligns artifact structure with declared execution flow. Without engine FR-E9 (phase registry + phase-aware `getNodeDir()`), the `phase` field in `workflow.yaml` has no effect on artifact paths.
 - **Acceptance criteria:**
   - [x] All SDLC workflow nodes in `.flowai-workflow/workflow.yaml` have `phase:` field set to `plan`, `impl`, or `report` as appropriate. Evidence: `.flowai-workflow/workflow.yaml` (specification, design, decision → `plan`; implementation → `impl`; tech-lead-review, optimize → `report`).
   - [x] After engine FR-E9 implementation, artifact directories follow `.flowai-workflow/runs/<run-id>/<phase>/<node-id>/` layout for all phased nodes. Evidence: `state.ts:20-36` (`setPhaseRegistry()`), `state.ts:98-103` (`getNodeDir()` phase-aware path), `engine.ts:129-130` (init at run start).
@@ -46,18 +47,17 @@
 
 ### 3.26 FR-S26: Workflow Asset Directory Consolidation
 
-- **Status:** Superseded by FR-S47 — the consolidation unit is now the
-  workflow folder `.flowai-workflow/<name>/`, not the top-level
-  `.flowai-workflow/`. Multiple workflow folders may coexist as siblings.
-- **Desc (current):** All assets for a single workflow (config, agent
+- **Description:** All assets for a single workflow (config, agent
   prompts, memory, scripts, runs, worktrees) live under one
   `.flowai-workflow/<name>/` directory. The top level
   `.flowai-workflow/` holds only workflow folders — never files.
-- **Desc (legacy):** Earlier revisions required all assets at the flat
+
+  **Legacy:** Earlier revisions required all assets at the flat
   top level (`.flowai-workflow/agents/`, `.flowai-workflow/scripts/`,
   …). That layout is replaced by the per-workflow folder shape; each
   workflow is a self-contained, portable unit.
-- **Directory layout:**
+
+  **Directory layout:**
   ```
   .flowai-workflow/
   ├── workflow.yaml          # from .flowai-workflow/workflow.yaml
@@ -71,12 +71,16 @@
   ├── tasks/                 # from .flowai-workflow/tasks/
   └── runs/                  # from .flowai-workflow/runs/
   ```
-- **Rationale:** Single discoverable location; easier portability between projects; `.flowai-workflow/` is engine-brand-aligned and domain-agnostic.
-- **Migration actions:**
+
+  **Migration actions:**
   - Delete deprecated `stage-*.sh` scripts and their `*_test.ts` files (already marked DEPRECATED).
   - Update all internal path references: `workflow.yaml`, engine CLI defaults, `deno.json` tasks, docs, `CLAUDE.md`.
   - `.claude/hooks/guard-deno-direct.sh` stays in `.claude/hooks/` (Claude Code hooks dir is fixed by Claude Code; not movable).
-- **Acceptance:** Superseded — see FR-S47 for the current
+- **Status:** Superseded by FR-S47 — the consolidation unit is now the
+  workflow folder `.flowai-workflow/<name>/`, not the top-level
+  `.flowai-workflow/`. Multiple workflow folders may coexist as siblings.
+- **Motivation:** Single discoverable location; easier portability between projects; `.flowai-workflow/` is engine-brand-aligned and domain-agnostic.
+- **Acceptance criteria:** Superseded — see FR-S47 for the current
   workflow-folder contract and its `**Tests:**` line. The original
   ACs targeted a flat top-level layout (`.flowai-workflow/agents/`,
   `.flowai-workflow/scripts/`, …) that no longer exists; the
@@ -88,21 +92,25 @@
 ### 3.28 FR-S28: Per-Agent Reflection Memory
 
 - **Description:** Each agent owns its own reflection memory stored at `.flowai-workflow/memory/<agent-name>.md`. At session start, agent reads its memory file. At session end, agent rewrites the file in full (not append) with compressed current-state knowledge: anti-patterns, effective strategies, environment quirks, baseline metrics. Agent decides what to retain, evicting stale or resolved items.
-- **Motivation:** Centralized `documents/meta.md` caused: (1) git history pollution from per-run updates to `documents/`; (2) merge conflicts on concurrent runs; (3) ~60% dead-weight content (resolved patterns duplicate git history); (4) no measurable quality improvement; (5) scope violation (workflow-level data in project docs). Per-agent decentralized memory eliminates all five issues.
-- **Storage:** `.flowai-workflow/memory/<agent-name>.md` — one file per agent. Git tracking TBD (tracked enables review; gitignored avoids noise — open decision per issue #117).
-- **Lifecycle per agent run:**
+
+  **Storage:** `.flowai-workflow/memory/<agent-name>.md` — one file per agent. Git tracking TBD (tracked enables review; gitignored avoids noise — open decision per issue #117).
+
+  **Lifecycle per agent run:**
   1. Read `.flowai-workflow/memory/<self>.md` at session start before main work.
   2. Execute main task.
   3. Rewrite `.flowai-workflow/memory/<self>.md` at end — full rewrite, compress stale data out.
   4. **Commit** memory + history files in the worktree before exiting the
      session (prevents reflection-loss; in-loop nodes may opt out via
      `memory_commit_deferred: true` in `workflow.yaml`).
-- **Memory content (agent-curated, ≤50 lines):**
+
+  **Memory content (agent-curated, ≤50 lines):**
   - Known anti-patterns in own behavior and avoidance strategies.
   - Effective strategies discovered empirically.
   - Environment quirks and gotchas.
   - Baseline metrics (turns, cost) for self-assessment.
-- **Scope:** All 6 workflow agents: pm, architect, tech-lead, tech-lead-review, developer, qa.
+
+  **Scope:** All 6 workflow agents: pm, architect, tech-lead, tech-lead-review, developer, qa.
+- **Motivation:** Centralized `documents/meta.md` caused: (1) git history pollution from per-run updates to `documents/`; (2) merge conflicts on concurrent runs; (3) ~60% dead-weight content (resolved patterns duplicate git history); (4) no measurable quality improvement; (5) scope violation (workflow-level data in project docs). Per-agent decentralized memory eliminates all five issues.
 - **Acceptance criteria:**
   - [x] `.flowai-workflow/memory/` directory exists in repo.
   - [x] Each of 6 agent `SKILL.md` files includes: (a) read-memory step at
@@ -142,14 +150,15 @@
 
 - **Description:** SDLC workflow artifact filenames MUST use gapless sequential
   numeric prefixes reflecting actual workflow execution order.
-- **Motivation:** Non-gapless or inverted prefix numbering (e.g., `06-impl-summary`
-  produced before `05-qa-report`) breaks alphabetical-sort as an execution-order
-  proxy, creating confusion for developers and tooling relying on prefix ordering.
-- **Rules:**
+
+  **Rules:**
   - Prefix sequence MUST be gapless (`01, 02, 03, …`) — no skipped numbers.
   - Prefix order MUST match DAG execution order.
   - All references (workflow.yaml, agent SKILL.md prompts, docs, validation rules)
     MUST use the canonical gapless filenames.
+- **Motivation:** Non-gapless or inverted prefix numbering (e.g., `06-impl-summary`
+  produced before `05-qa-report`) breaks alphabetical-sort as an execution-order
+  proxy, creating confusion for developers and tooling relying on prefix ordering.
 - **Acceptance criteria:**
   - [x] Artifact sequence is `01-spec → 02-plan → 03-decision → 04-impl-summary →
     05-qa-report → 06-review` — no gaps, no ordering inversions. Evidence:
@@ -171,7 +180,8 @@
   Telegram HITL transport (see SDS §3.5) which does not read any artifact —
   the field is therefore absent from `workflow.yaml`; validation still
   enforces template syntax for any other workflow that opts in.
-- **Extends:** FR-S24 (Workflow Config Validation) — concrete application of
+
+  Extends FR-S24 (Workflow Config Validation) — concrete application of
   config validation for `hitl.artifact_source`.
 - **Acceptance criteria:**
   - **Tests:** `hitl_test.ts`, `scripts/check_test.ts`
@@ -196,18 +206,21 @@
   level `.flowai-workflow/` MUST NOT contain any non-folder entries
   (no `runs/`, no `memory/`, no shared `_shared/` — keep workflows
   isolated; copy duplicates instead).
-- **Required entries** (per workflow folder):
+
+  **Required entries** (per workflow folder):
   - `workflow.yaml` — engine config; `name:` matches `<name>`.
   - `agents/agent-*.md` — REQUIRED iff `workflow.yaml` references any
     `{{file("…/agents/agent-*.md")}}` prompt. Optional otherwise.
-- **Optional entries:** `memory/`, `scripts/`, `runs/`, `tasks/`,
+
+  **Optional entries:** `memory/`, `scripts/`, `runs/`, `tasks/`,
   `.gitignore`, `.template.json`. (FR-E57: per-run worktrees live under
   `runs/<run-id>/worktree/` — there is no top-level `worktrees/` folder.)
-- **Cross-workflow drift:** Agent prompt copies between workflow
+
+  **Cross-workflow drift:** Agent prompt copies between workflow
   folders are intentional duplicates. Edits to a shared agent must be
   applied to every copy or a deliberate divergence must be recorded
   in CLAUDE.md / AGENTS.md.
-- **Acceptance:**
+- **Acceptance criteria:**
   - **Tests:** `scripts/check_test.ts`, `dogfood_layout_test.ts`,
     `scripts/migrate-state-paths_test.ts` (FR-S47;
     regression-locked; `assertWorkflowFolderShape`, dogfood
