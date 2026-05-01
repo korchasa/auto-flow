@@ -581,6 +581,168 @@ export function validateAdrSet(
 }
 
 /**
+ * Canonical FR field set per ADR-0012.
+ *
+ * Mandatory: `Description`, `Acceptance criteria` (unless `Status`
+ * is set, which marks the FR superseded/deprecated and lifts the
+ * Acceptance requirement).
+ *
+ * Optional, in this exact order:
+ * `Status` → `Motivation` → `ADR` → `Dep` → `Supersedes` →
+ * `Input` / `Output` (workflow-stage FRs only).
+ *
+ * Only top-level `- **Field:**` bullets count — nested fields like
+ * `**Tests:**` inside `Acceptance criteria` are skipped because
+ * they sit at indent ≥ 2.
+ *
+ * Pure — no FS I/O — so the caller's `frFieldSet()` wrapper can
+ * load files separately and tests can pass synthetic fixtures.
+ *
+ * Returns an empty array when every FR conforms; otherwise one
+ * line per violation (`<file>:<line> FR-X<N>: <reason>`).
+ */
+export const FR_CANONICAL_ORDER = [
+  "Description",
+  "Status",
+  "Motivation",
+  "ADR",
+  "Dep",
+  "Supersedes",
+  "Input",
+  "Output",
+  "Acceptance criteria",
+] as const;
+
+export function validateFrFields(
+  files: Array<{ name: string; content: string }>,
+): string[] {
+  const offenders: string[] = [];
+  const frHeaderRe = /^### \d+(?:\.\d+)?\s+(FR-[ES]\d+):/;
+  // Field syntax: `- **Name:**` — colon sits inside the bold span,
+  // before the closing `**`. The captured group is the bare name.
+  const fieldRe = /^- \*\*([^*]+):\*\*/;
+  const orderIndex = new Map<string, number>(
+    FR_CANONICAL_ORDER.map((f, i) => [f, i]),
+  );
+
+  for (const { name, content } of files) {
+    const lines = content.split("\n");
+    let currentFr: string | null = null;
+    let currentFrLine = 0;
+    let frFields: Array<{ field: string; line: number }> = [];
+
+    const flush = () => {
+      if (!currentFr) return;
+      const seen = new Set<string>();
+      let lastIdx = -1;
+      let lastField = "";
+      for (const { field, line } of frFields) {
+        if (!orderIndex.has(field)) {
+          offenders.push(
+            `${name}:${line + 1} ${currentFr}: unknown field '${field}' ` +
+              `(allowed: ${FR_CANONICAL_ORDER.join(", ")})`,
+          );
+          continue;
+        }
+        if (seen.has(field)) {
+          offenders.push(
+            `${name}:${line + 1} ${currentFr}: duplicate field '${field}'`,
+          );
+          continue;
+        }
+        seen.add(field);
+        const idx = orderIndex.get(field)!;
+        if (idx < lastIdx) {
+          offenders.push(
+            `${name}:${line + 1} ${currentFr}: field '${field}' appears ` +
+              `after '${lastField}' (canonical order violated)`,
+          );
+        }
+        lastIdx = idx;
+        lastField = field;
+      }
+      if (!seen.has("Description")) {
+        offenders.push(
+          `${name}:${currentFrLine + 1} ${currentFr}: missing mandatory ` +
+            `field 'Description'`,
+        );
+      }
+      if (!seen.has("Acceptance criteria") && !seen.has("Status")) {
+        offenders.push(
+          `${name}:${currentFrLine + 1} ${currentFr}: missing 'Acceptance ` +
+            `criteria' (no 'Status' field present to mark the FR ` +
+            `superseded/deprecated)`,
+        );
+      }
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const headerMatch = line.match(frHeaderRe);
+      if (headerMatch) {
+        flush();
+        currentFr = headerMatch[1];
+        currentFrLine = i;
+        frFields = [];
+        continue;
+      }
+      const fieldMatch = line.match(fieldRe);
+      if (fieldMatch && currentFr) {
+        const field = fieldMatch[1].trim();
+        frFields.push({ field, line: i });
+      }
+    }
+    flush();
+  }
+  return offenders;
+}
+
+/**
+ * Wrapper for `validateFrFields` that reads
+ * `documents/requirements-{engine,sdlc}/*.md`. No-op when neither
+ * directory exists (fresh end-user project may have no SRS yet).
+ *
+ * Currently NOT wired into the main check pipeline — the bulk of
+ * existing FRs use legacy field shapes; the pure validator is
+ * exercised by tests until the migration sweep completes (per
+ * ADR-0012). After the sweep, append `await frFieldSet();` to
+ * the main pipeline alongside `await adrSet();`.
+ */
+export async function frFieldSet(): Promise<void> {
+  console.log("\n--- FR Canonical Field Set ---");
+  const dirs = [
+    "documents/requirements-engine",
+    "documents/requirements-sdlc",
+  ];
+  const files: Array<{ name: string; content: string }> = [];
+  for (const dir of dirs) {
+    try {
+      for await (const entry of Deno.readDir(dir)) {
+        if (!entry.isFile || !entry.name.endsWith(".md")) continue;
+        const content = await Deno.readTextFile(`${dir}/${entry.name}`);
+        files.push({ name: `${dir}/${entry.name}`, content });
+      }
+    } catch (err) {
+      if (!(err instanceof Deno.errors.NotFound)) throw err;
+    }
+  }
+  if (files.length === 0) {
+    console.log("  No SRS section files found — skipped.");
+    return;
+  }
+  const offenders = validateFrFields(files);
+  if (offenders.length > 0) {
+    for (const line of offenders) console.error(`  ${line}`);
+    console.error(
+      "FAILED: FR field-set lint — see ADR-0012 + documents/CLAUDE.md " +
+        "§FR canonical field set.",
+    );
+    Deno.exit(1);
+  }
+  console.log(`  FR field set valid (${files.length} section file(s)).`);
+}
+
+/**
  * Wrapper for `validateAdrSet` that reads `documents/adrs/`. Skips
  * `README.md` and `_template.md`. No-op when the directory is absent
  * (fresh end-user project may not have ADRs yet — non-blocking).

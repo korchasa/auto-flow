@@ -63,6 +63,8 @@ Use [_template.md](_template.md) as the skeleton.
 - [ADR-0011](0011-dod-test-coverage-convention.md) — DoD acceptance
   items covered by regression tests collapse to a Tests pointer
   — **Accepted**
+- [ADR-0012](0012-fr-canonical-field-set.md) — FR canonical field set
+  — **Accepted**
 
 Status legend:
 - **Proposed** — written, not yet implemented (back-fill anchors a

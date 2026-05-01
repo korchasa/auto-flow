@@ -3,10 +3,12 @@ import { join } from "@std/path";
 import {
   assertWorkflowFolderShape,
   checkArgs,
+  FR_CANONICAL_ORDER,
   printUsage,
   validateAdrSet,
   validateAgentListContent,
   validateDocsTokenBudget,
+  validateFrFields,
   validateHitlArtifactSource,
 } from "./check.ts";
 
@@ -503,4 +505,192 @@ Deno.test("validateAdrSet — real shipped ADR set passes", async () => {
     throw err;
   }
   assertEquals(validateAdrSet(files), []);
+});
+
+// --- ADR-0012: FR canonical field set --------------------------------------
+
+const FR_OK = `<!-- section -->
+
+# SRS — Sample
+
+### 3.1 FR-E1: Sample
+- **Description:** Body.
+- **Acceptance criteria:**
+  - **Tests:** \`x_test.ts\` (FR-E1; regression-locked).
+`;
+
+Deno.test("validateFrFields — minimal mandatory pair passes", () => {
+  assertEquals(validateFrFields([{ name: "fr.md", content: FR_OK }]), []);
+});
+
+Deno.test("validateFrFields — full canonical block passes", () => {
+  const content = `### 3.1 FR-E1: Sample
+- **Description:** d
+- **Status:** Superseded by FR-E2
+- **Motivation:** m
+- **ADR:** ADR-0001
+- **Dep:** FR-E0
+- **Supersedes:** FR-E0
+- **Input:** spec
+- **Output:** plan
+- **Acceptance criteria:**
+  - x
+`;
+  assertEquals(validateFrFields([{ name: "fr.md", content }]), []);
+});
+
+Deno.test("validateFrFields — empty input returns no offenders", () => {
+  assertEquals(validateFrFields([]), []);
+});
+
+Deno.test("validateFrFields — file with no FR sections returns no offenders", () => {
+  assertEquals(
+    validateFrFields([{ name: "f.md", content: "# Title\n\nNo FRs here.\n" }]),
+    [],
+  );
+});
+
+Deno.test("validateFrFields — unknown field flagged with allowlist hint", () => {
+  const content = `### 3.1 FR-E1: T
+- **Description:** d
+- **Rationale:** r
+- **Acceptance criteria:**
+  - x
+`;
+  const offenders = validateFrFields([{ name: "f.md", content }]);
+  assertEquals(offenders.length, 1);
+  assertEquals(offenders[0].includes("FR-E1"), true);
+  assertEquals(offenders[0].includes("'Rationale'"), true);
+  assertEquals(offenders[0].includes("allowed:"), true);
+  assertEquals(offenders[0].includes("Description"), true);
+});
+
+Deno.test("validateFrFields — Acceptance (typo synonym) flagged", () => {
+  const content = `### 3.1 FR-E1: T
+- **Description:** d
+- **Acceptance:** old-style
+`;
+  const offenders = validateFrFields([{ name: "f.md", content }]);
+  assertEquals(offenders.some((o) => o.includes("'Acceptance'")), true);
+});
+
+Deno.test("validateFrFields — Quality metrics flagged", () => {
+  const content = `### 3.1 FR-S1: T
+- **Description:** d
+- **Acceptance criteria:**
+  - x
+- **Quality metrics:**
+  - y
+`;
+  const offenders = validateFrFields([{ name: "f.md", content }]);
+  assertEquals(offenders.some((o) => o.includes("'Quality metrics'")), true);
+});
+
+Deno.test("validateFrFields — out-of-order field flagged", () => {
+  const content = `### 3.1 FR-E1: T
+- **Description:** d
+- **Acceptance criteria:**
+  - x
+- **Motivation:** m
+`;
+  const offenders = validateFrFields([{ name: "f.md", content }]);
+  assertEquals(offenders.length, 1);
+  assertEquals(offenders[0].includes("'Motivation'"), true);
+  assertEquals(offenders[0].includes("'Acceptance criteria'"), true);
+  assertEquals(offenders[0].includes("canonical order violated"), true);
+});
+
+Deno.test("validateFrFields — duplicate field flagged", () => {
+  const content = `### 3.1 FR-E1: T
+- **Description:** d1
+- **Description:** d2
+- **Acceptance criteria:**
+  - x
+`;
+  const offenders = validateFrFields([{ name: "f.md", content }]);
+  assertEquals(offenders.some((o) => o.includes("duplicate field")), true);
+});
+
+Deno.test("validateFrFields — missing Description fails (mandatory)", () => {
+  const content = `### 3.1 FR-E1: T
+- **Acceptance criteria:**
+  - x
+`;
+  const offenders = validateFrFields([{ name: "f.md", content }]);
+  assertEquals(offenders.length, 1);
+  assertEquals(offenders[0].includes("missing mandatory"), true);
+  assertEquals(offenders[0].includes("Description"), true);
+});
+
+Deno.test("validateFrFields — missing Acceptance criteria fails (no Status)", () => {
+  const content = `### 3.1 FR-E1: T
+- **Description:** d
+`;
+  const offenders = validateFrFields([{ name: "f.md", content }]);
+  assertEquals(offenders.length, 1);
+  assertEquals(offenders[0].includes("missing 'Acceptance criteria'"), true);
+});
+
+Deno.test("validateFrFields — missing Acceptance OK when Status is present", () => {
+  const content = `### 3.1 FR-S6: Absorbed
+- **Description:** d
+- **Status:** Superseded by FR-S15
+`;
+  assertEquals(validateFrFields([{ name: "f.md", content }]), []);
+});
+
+Deno.test("validateFrFields — nested **Tests:** is NOT a top-level field", () => {
+  const content = `### 3.1 FR-E1: T
+- **Description:** d
+- **Acceptance criteria:**
+  - **Tests:** \`a_test.ts\` (FR-E1; regression-locked).
+  - [x] manual item.
+`;
+  // Nested two-space-indented fields must be ignored.
+  assertEquals(validateFrFields([{ name: "f.md", content }]), []);
+});
+
+Deno.test("validateFrFields — multiple FRs in one file isolate field state", () => {
+  const content = `### 3.1 FR-E1: A
+- **Description:** d1
+- **Acceptance criteria:**
+  - x
+
+### 3.2 FR-E2: B
+- **Acceptance criteria:**
+  - y
+`;
+  const offenders = validateFrFields([{ name: "f.md", content }]);
+  assertEquals(offenders.length, 1);
+  // FR-E2 missing Description, FR-E1 fine.
+  assertEquals(offenders[0].includes("FR-E2"), true);
+  assertEquals(offenders[0].includes("Description"), true);
+});
+
+Deno.test("validateFrFields — works on FR-S* ids too", () => {
+  const content = `### 3.1 FR-S2: Stage
+- **Description:** d
+- **Input:** issue
+- **Output:** spec.md
+- **Acceptance criteria:**
+  - x
+`;
+  assertEquals(validateFrFields([{ name: "f.md", content }]), []);
+});
+
+Deno.test("FR_CANONICAL_ORDER — canonical order constants are exported", () => {
+  const order = FR_CANONICAL_ORDER as readonly string[];
+  assertEquals(order[0], "Description");
+  assertEquals(order[order.length - 1], "Acceptance criteria");
+  assertEquals(order.includes("Status"), true);
+  assertEquals(order.includes("Motivation"), true);
+  assertEquals(order.includes("ADR"), true);
+  assertEquals(order.includes("Dep"), true);
+  assertEquals(order.includes("Supersedes"), true);
+  assertEquals(order.includes("Input"), true);
+  assertEquals(order.includes("Output"), true);
+  // Removed fields MUST NOT appear:
+  assertEquals(order.includes("Rationale"), false);
+  assertEquals(order.includes("Quality metrics"), false);
+  assertEquals(order.includes("Acceptance"), false);
 });

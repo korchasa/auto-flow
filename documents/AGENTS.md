@@ -93,14 +93,51 @@ Separate files per scope. Same structure in each:
 
 ## 3. Functional Reqs
 ### 3.1 FR-E1: Title
-- **Desc:**
-- **Acceptance:**
+<canonical FR field block — see below>
 
 ## 4. Non-Functional
 ## 5. Interfaces
 ```
 
 FR numbering: `FR-E<N>` for engine, `FR-S<N>` for SDLC workflow.
+
+### FR canonical field set
+
+Per [ADR-0012](adrs/0012-fr-canonical-field-set.md), every FR uses
+ONE allowlist of bolded fields, in fixed order. No other top-level
+`**Field:**` labels are accepted; FR-specific structure folds into
+`Description` as labelled prose subsections.
+
+**Mandatory (in this order):**
+
+1. `Description` — what the requirement is, in active voice. Inline
+   any FR-specific structure (config schema, engine behaviour,
+   variables, rules, …) as prose subsections under this field.
+2. `Acceptance criteria` — checkable conditions; test-locked
+   behaviour collapses to a `**Tests:**` line per ADR-0011;
+   manual-evidence items stay as `[x]` bullets with
+   `Evidence: <path>:<line>`.
+
+**Optional (in this order, only when present):**
+
+3. `Status` — only when superseded/deprecated. Active FRs MUST NOT
+   carry a `Status` field; absence implies "in force".
+4. `Motivation` — problem/incident/force. `Rationale` is the same
+   role and is no longer accepted — migrate to `Motivation`.
+5. `ADR` — cross-links to relevant ADR-NNNN records.
+6. `Dep` — comma-separated dependency FR ids.
+7. `Supersedes` — comma-separated predecessor FR ids.
+8. `Input` / `Output` — workflow-stage FRs only (`FR-S2..S9` and
+   peers); engine-feature FRs MUST NOT use these.
+
+**Removed:** `Rationale`, `Acceptance` (typo of `Acceptance criteria`),
+`Quality metrics`, and all one-off labels (`Engine behavior`,
+`Config schema`, `Variables`, `Rules`, `Constraints`, `Trigger
+conditions`, `Risks`, `Rollback`, `Retry logic`, `Open questions`,
+`Source`, `Out of scope`, …). Fold them into `Description`.
+
+Enforced by `scripts/check.ts::validateFrFields` (fails on unknown
+field names or out-of-order canonical fields).
 
 ## SDS Format
 
