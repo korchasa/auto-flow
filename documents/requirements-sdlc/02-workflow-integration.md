@@ -6,19 +6,22 @@
 ### 3.11 FR-S11: Inter-Stage Data Flow & Commit Strategy
 
 - **Description:** Defines how data flows between workflow stages and when commits happen on the feature branch.
-- **Data flow:**
+
+  **Data flow:**
   - Engine path: artifacts stored in `.flowai-workflow/runs/<run-id>/[<phase>/]<node-id>/` (phase subdir present when node's `phase` field is set in `workflow.yaml`; flat `<node-id>/` otherwise). Linked via `{{input.<node-id>}}` templates. Phase-aware directory creation depends on engine FR-E9 implementation. Evidence: `documents/design-sdlc.md` §2.2 (Artifact Store subsystem description).
   - Legacy path: artifacts in `.flowai-workflow/workflow/<issue-number>/`.
   - The file system is the single source of truth for inter-stage communication. No manifest or registry.
   - Claude CLI's built-in context auto-compression handles large input sets; no manual context management is required.
-- **Commit strategy (FR-S15):**
+
+  **Commit strategy (FR-S15):**
   - Feature branch `sdlc/issue-<N>` created by Tech Lead agent. Fallback `sdlc/{{run_id}}` for `--prompt` mode.
   - Engine does NOT auto-commit after nodes (invariant preserved).
   - No dedicated committer agent nodes. Developer owns commits: `git add`, `git commit`, `git push` after each task. Commit format: `sdlc(impl): <summary>`.
   - Tech Lead creates draft PR before impl-loop. Developer pushes to same branch.
   - QA posts PR review verdicts. Tech-lead-review performs final review + merge.
   - Legacy scripts commit + push after each stage (unchanged).
-- **Branch lifecycle:**
+
+  **Branch lifecycle:**
   - Branch created by Tech Lead agent after variant selection.
   - On re-run, existing branch is reused — new commits overwrite previous artifacts (previous versions preserved in git history per FR-E3).
   - Branch is merged via tech-lead-review post-workflow agent.
@@ -37,12 +40,7 @@
   real-world roles, eliminate artificial agents (committer, reviewer), move git
   operations (branch, commit, push, PR) to the agents that own the work, and
   use PRs (not issues) as the primary communication channel for code review.
-- **Motivation:** Current workflow diverges from standard practices: roles are
-  misnamed (tech-lead does architecture, architect does tech-lead work),
-  artificial roles exist (committer, reviewer), git operations are deferred to
-  separate committer nodes, and QA/review communication happens in issues
-  instead of PRs.
-- **Target workflow flow:**
+  **Target workflow flow:**
   ```
   pm → architect → tech-lead → impl-loop(developer, qa) → tech-lead-review
                                                            ↑
@@ -50,7 +48,8 @@
   ```
   5 agent invocations in happy path (was 8): pm, architect, tech-lead,
   developer, qa — plus tech-lead-review and meta-agent as post-workflow.
-- **Role changes:**
+
+  **Role changes:**
   - `tech-lead` node (current) → renamed to **`architect`** (designs solution
     with variants). Prompt: `.flowai-workflow/agents/agent-architect/SKILL.md`.
   - `reviewer` node → **removed**. Design review absorbed into new tech-lead.
@@ -61,7 +60,8 @@
   - `committer` nodes → **removed**. Developer commits/pushes own code.
   - New **`tech-lead-review`** node (`run_on: always`) — final code review in
     PR, CI gate, merge if green.
-- **Git workflow changes:**
+
+  **Git workflow changes:**
   - **Tech-lead** creates feature branch `sdlc/issue-<N>` + opens draft PR
     after making decision. Fallback branch `sdlc/<run-id>` for `--prompt` mode.
   - **Developer** commits and pushes during implementation, posts progress as PR
@@ -69,7 +69,8 @@
   - **QA** posts results as PR review (`gh pr review --approve` or
     `--request-changes`), not issue comments.
   - **Tech-lead-review** reviews PR diff, checks CI, merges or leaves open.
-- **File changes:**
+
+  **File changes:**
   - Rename `.flowai-workflow/agents/agent-tech-lead/` ↔ `.flowai-workflow/agents/agent-architect/` (swap roles).
   - Expand `.flowai-workflow/agents/agent-tech-lead/SKILL.md` (design review, SDS update, branch creation, draft PR).
   - Delete `.flowai-workflow/agents/agent-tech-lead-reviewer/`, `.flowai-workflow/agents/agent-tech-lead-sds/`,
@@ -78,10 +79,16 @@
   - Update `.flowai-workflow/agents/agent-qa/SKILL.md` — PR review instead of issue comments.
   - New `.flowai-workflow/agents/agent-tech-lead-review/SKILL.md` — code review + CI gate + merge.
   - Update `workflow.yaml` — new DAG with fewer nodes.
-- **Invariants (no changes):**
+
+  **Invariants (no changes):**
   - `engine/` — engine remains domain-agnostic, no code changes.
   - `.flowai-workflow/agents/agent-pm/` — no changes.
   - `.flowai-workflow/agents/agent-meta-agent/` — no changes.
+- **Motivation:** Current workflow diverges from standard practices: roles are
+  misnamed (tech-lead does architecture, architect does tech-lead work),
+  artificial roles exist (committer, reviewer), git operations are deferred to
+  separate committer nodes, and QA/review communication happens in issues
+  instead of PRs.
 - **Acceptance criteria:**
   - [x] Agent directory `.flowai-workflow/agents/agent-architect/` contains design-solution prompt. Evidence: `.flowai-workflow/agents/agent-architect/SKILL.md`
   - [x] Agent directory `.flowai-workflow/agents/agent-tech-lead/` contains expanded prompt: critique + variant selection + task breakdown + SDS update + branch creation + draft PR. Evidence: `.flowai-workflow/agents/agent-tech-lead/SKILL.md`
@@ -107,11 +114,12 @@
   updates in scope; (2) provides correct/incorrect example pairs including one
   targeting GitHub interactions; (3) uses first-person ("I") in all hardcoded
   `gh issue comment` body strings.
-- **Rationale:** FR-S20 established per-agent Voice sections but omitted explicit
+
+  **Scope:** All `gh issue comment` and `gh pr review` body strings in agent
+  SKILL.md files, plus the `## Voice` section scope sentence and examples.
+- **Motivation:** FR-S20 established per-agent Voice sections but omitted explicit
   GitHub interaction scope and lacked GitHub-specific examples. Passive/impersonal
   templates in PM, Architect, and Tech Lead comments reduce traceability.
-- **Scope:** All `gh issue comment` and `gh pr review` body strings in agent
-  SKILL.md files, plus the `## Voice` section scope sentence and examples.
 - **Acceptance criteria:**
   - [x] Hardcoded `gh issue comment --body` templates changed to first-person in
     PM, Architect, and Tech Lead SKILL.md files. Evidence:
