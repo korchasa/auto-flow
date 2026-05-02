@@ -6,25 +6,26 @@
 ### 3.24 FR-S24: Workflow Config Validation
 
 - **Description:** SDLC workflow config (`.flowai-workflow/workflow.yaml`) must be validated for schema correctness as part of `deno task check`. Detects drift between workflow config and engine schema requirements before runtime failures occur.
-- **Rationale:** Unvalidated config changes cause hard-to-diagnose runtime failures. Static validation catches invalid node types, missing required fields, and bad `inputs` references at development time. Maps to SDLC-scope aspect of engine FR-E7 (config drift detection).
+- **Motivation:** Unvalidated config changes cause hard-to-diagnose runtime failures. Static validation catches invalid node types, missing required fields, and bad `inputs` references at development time. Maps to SDLC-scope aspect of engine FR-E7 (config drift detection).
 - **Acceptance criteria:**
-  - [x] `scripts/check.ts` validates `.flowai-workflow/workflow.yaml` schema: node types, required fields, `inputs` references, `run_on` values. Evidence: `scripts/check.ts:84-96` (`workflowIntegrity()` calls `loadConfig()`), `config.ts:43-103` (schema validation), `config.ts:105-249` (node validation — types, inputs, `run_on`).
-  - [x] `deno task check` exits non-zero with descriptive error on invalid config. Evidence: `scripts/check.ts:84-96` (`workflowIntegrity()` catches `loadConfig()` exceptions and reports descriptive error messages).
-  - [x] `deno task check` passes on valid config with no false positives. Evidence: `deno task check` passes on current `.flowai-workflow/workflow.yaml` with no errors.
+  - **Tests:** `scripts/check_test.ts` (regression-locked;
+    `workflowIntegrity` covers node-type, required-field, inputs,
+    and `run_on` validation via `loadConfig()`).
 
 
 
 ### 3.31 FR-S31: QA Agent Check Suite Extension
 
 - **Description:** QA agent may autonomously add new verification classes to `scripts/check.ts` when it identifies recurring quality issues not covered by existing checks.
-- **Motivation:** Recurring defect patterns (dead exports, unused deps, naming violations, missing error handling) require manual developer action to add checks. Enabling QA to extend the suite reduces defect escape across Developer+QA loop iterations.
-- **Rules:**
+
+  **Rules:**
   - Add a check only when evidence of a real recurring problem exists (not speculative).
   - New checks MUST follow existing `check.ts` architecture: standalone function + call in main flow + `Deno.exit(1)` on failure.
   - Each check MUST print a clear label to stdout (`--- Check Name ---`).
   - New checks MUST NOT produce false positives on the current codebase at time of addition.
   - QA MUST run the extended suite after adding any check to confirm zero false positives.
   - `scripts/check.ts` MUST be listed in QA agent's `Allowed File Modifications` in `SKILL.md`.
+- **Motivation:** Recurring defect patterns (dead exports, unused deps, naming violations, missing error handling) require manual developer action to add checks. Enabling QA to extend the suite reduces defect escape across Developer+QA loop iterations.
 - **Acceptance criteria:**
   - [x] QA agent `SKILL.md` lists `scripts/check.ts` in `Allowed File
     Modifications`.
@@ -47,9 +48,6 @@
 - **Acceptance criteria:**
   - [x] `workflow.yaml` `verify` node `validate` block includes `type: frontmatter_field`,
     `field: verdict`, `allowed: [PASS, FAIL]`. Evidence: `.flowai-workflow/workflow.yaml:162-165`.
-  - [x] `deno task check` passes (workflow integrity validation confirms
-    `frontmatter_field: verdict` rule present in verify node). Evidence: run
-    `20260319T221833` (533 tests, 0 failures).
 
 
 
@@ -63,11 +61,11 @@
   injects `memory/reflection-protocol.md` plus per-agent memory/history paths.
   Shared agent rules are inlined into each of the 6 agent prompt files — no
   separate `shared-rules.md` exists.
-- **Rationale (no shared-rules.md):** Six inline copies of the shared rules
-  were judged cheaper than one shared file plus six `{{file(...)}}` references.
-  The separate-file approach was considered and rejected; future readers
-  should not reintroduce `shared-rules.md` under the impression it was the
-  intended design.
+- **Motivation:** Six inline copies of the shared rules were judged cheaper
+  than one shared file plus six `{{file(...)}}` references. The
+  separate-file approach was considered and rejected; future readers should
+  not reintroduce `shared-rules.md` under the impression it was the intended
+  design.
 - **Acceptance criteria:**
   - [x] All 6 agent nodes load
     `{{file(".flowai-workflow/github-inbox/agents/agent-<name>.md")}}` in
@@ -81,7 +79,6 @@
   - [x] No workflow node or agent prompt file references `shared-rules.md`.
     Evidence: `grep -r "shared-rules" .flowai-workflow/github-inbox/` returns
     zero matches.
-  - [x] `deno task check` passes.
 
 
 
@@ -117,8 +114,6 @@
     `20260320T092158`.
   - [x] `frontmatter_field` rules for `specification` (issue, scope) unchanged.
     Evidence: `.flowai-workflow/workflow.yaml`, run `20260320T092158`.
-  - [x] `deno task check` passes. Evidence: run `20260320T092158` (533 tests,
-    workflow integrity valid).
 
 
 

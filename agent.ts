@@ -36,6 +36,7 @@ import {
 } from "./validate.ts";
 import type { OutputManager, VerboseInput } from "./output.ts";
 import { findViolations, snapshotModifiedFiles } from "./scope-check.ts";
+import { workPath } from "./state.ts";
 
 /**
  * Resolve input artifact file paths and sizes from input directories.
@@ -49,7 +50,7 @@ export async function resolveInputArtifacts(
   for (const [_nodeId, dir] of Object.entries(inputs)) {
     // FR-E52: input dirs are workDir-relative — wrap before FS access from
     // engine cwd, otherwise readDir fails silently under worktree isolation.
-    const fullDir = workDir === "." ? dir : `${workDir}/${dir}`;
+    const fullDir = workPath(workDir, dir);
     try {
       for await (const entry of Deno.readDir(fullDir)) {
         if (!entry.isFile) continue;

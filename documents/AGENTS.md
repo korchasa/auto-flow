@@ -36,6 +36,44 @@ a sibling directory. FR-IDs are stable on move — never renumber.
   `- [x] Criterion text. Evidence: \`path/to/file.ts:42\`,
   \`other/file.md:10\``Without evidence, criterion stays`[ ]`.
 
+### Acceptance criteria — test-coverage convention
+
+Per [ADR-0011](adrs/0011-dod-test-coverage-convention.md), FR
+acceptance blocks DO NOT enumerate behaviours that are locked by
+regression tests. The pattern:
+
+- **Behaviour covered by a `*_test.ts` assertion** — collapse to one
+  per-FR line at the top of the acceptance block. Format:
+
+  ```markdown
+  - **Tests:** `<test_file>` (FR-E<N>; regression-locked). See ADR-NNNN.
+  ```
+
+  Rules:
+  - **Test files only**, comma-separated. No test names — they rot on
+    rename. The reader greps `FR-E<N>` inside the listed file(s);
+    the project convention embeds FR ids in test names already.
+  - `(FR-E<N>; regression-locked)` is the grep anchor + status.
+    When the FR id is NOT embedded in any test name, replace with
+    `(regression-locked; <3-5-word topic>)` — e.g.
+    `(regression-locked; verbose toggle)`.
+  - `See ADR-NNNN.` ONLY when an ADR records the rationale; omit
+    otherwise (the FR's Description already carries the why).
+  - Per-criterion `[x]` bullets exercised by the listed tests are
+    removed. CI catches regressions, not the agent re-reading the FR.
+- **Behaviour requiring manual verification** (prose docs, generated
+  artefacts, one-time migrations, CLI smoke text, static config like
+  `deno.json#tasks`, behaviours not yet test-covered) — stays as a
+  `[x]` bullet with `Evidence: <path>:<line>` per the rule above.
+- **`[x] deno task check passes`** — DROP. The repo runs `deno task
+  check` on every commit; restating "CI is green" per FR is noise.
+
+When auditing an existing acceptance block to apply this convention:
+grep each listed test file for `FR-E<N>` (or read the tests by name
+when no FR-tagged tests exist) and confirm assertions actually
+exercise the claim. A test mentioned in `Evidence:` but unrelated to
+the claim is NOT a regression lock — the item stays as `[x]`.
+
 ## SRS Format
 
 Separate files per scope. Same structure in each:
@@ -55,14 +93,51 @@ Separate files per scope. Same structure in each:
 
 ## 3. Functional Reqs
 ### 3.1 FR-E1: Title
-- **Desc:**
-- **Acceptance:**
+<canonical FR field block — see below>
 
 ## 4. Non-Functional
 ## 5. Interfaces
 ```
 
 FR numbering: `FR-E<N>` for engine, `FR-S<N>` for SDLC workflow.
+
+### FR canonical field set
+
+Per [ADR-0012](adrs/0012-fr-canonical-field-set.md), every FR uses
+ONE allowlist of bolded fields, in fixed order. No other top-level
+`**Field:**` labels are accepted; FR-specific structure folds into
+`Description` as labelled prose subsections.
+
+**Mandatory (in this order):**
+
+1. `Description` — what the requirement is, in active voice. Inline
+   any FR-specific structure (config schema, engine behaviour,
+   variables, rules, …) as prose subsections under this field.
+2. `Acceptance criteria` — checkable conditions; test-locked
+   behaviour collapses to a `**Tests:**` line per ADR-0011;
+   manual-evidence items stay as `[x]` bullets with
+   `Evidence: <path>:<line>`.
+
+**Optional (in this order, only when present):**
+
+3. `Status` — only when superseded/deprecated. Active FRs MUST NOT
+   carry a `Status` field; absence implies "in force".
+4. `Motivation` — problem/incident/force. `Rationale` is the same
+   role and is no longer accepted — migrate to `Motivation`.
+5. `ADR` — cross-links to relevant ADR-NNNN records.
+6. `Dep` — comma-separated dependency FR ids.
+7. `Supersedes` — comma-separated predecessor FR ids.
+8. `Input` / `Output` — workflow-stage FRs only (`FR-S2..S9` and
+   peers); engine-feature FRs MUST NOT use these.
+
+**Removed:** `Rationale`, `Acceptance` (typo of `Acceptance criteria`),
+`Quality metrics`, and all one-off labels (`Engine behavior`,
+`Config schema`, `Variables`, `Rules`, `Constraints`, `Trigger
+conditions`, `Risks`, `Rollback`, `Retry logic`, `Open questions`,
+`Source`, `Out of scope`, …). Fold them into `Description`.
+
+Enforced by `scripts/check.ts::validateFrFields` (fails on unknown
+field names or out-of-order canonical fields).
 
 ## SDS Format
 

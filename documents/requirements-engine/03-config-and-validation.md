@@ -6,7 +6,8 @@
 ### 3.4 FR-E4: Configuration
 
 - **Description:** Workflow configuration via environment variables and `workflow.yaml`. Env vars override YAML defaults.
-- **Variables:**
+
+  **Variables:**
   - `SDLC_MAX_CONTINUATIONS` — maximum continuations per stage (default: `3`).
   - `SDLC_MAX_QA_ITERATIONS` — maximum Developer+QA loop iterations (default: `3`).
   - `SDLC_STAGE_TIMEOUT_MINUTES` — default timeout per stage in minutes (default: `30`).
@@ -20,15 +21,14 @@
 
 - **Description:** Automated verification that workflow YAML configs (`workflow.yaml`, `workflow-task.yaml`) remain consistent with engine expectations and SRS requirements. Detects mismatches in node declarations, required fields, hook syntax, and validation rules.
 - **Acceptance criteria:**
-  - ~~`[ ] A deno task check:workflow standalone command`~~ — SDLC workflow convenience, not engine constraint. Implemented as `workflowIntegrity()` in `scripts/check.ts` (SDLC scope). See FR-S24 in `documents/requirements-sdlc.md`.
-  - [x] Engine validates all node types on `loadConfig()`: must be one of `agent`, `loop`, `merge`, `human`. Evidence: `config.ts:43` (`validateSchema()`), `config.ts:71` (type check per node)
-  - [x] Config validation verifies all `{{...}}` patterns in `before`/`after` hook commands resolve to known variables (`input.<nodeId>`, `env.*`, `args.*`, `run_dir`, `run_id`, `node_dir`). Evidence: `config.ts:324-344` (`validateTemplateVars()` called for both hooks inside `validateNode()`), `template.ts:121` (`validateTemplateVars()` definition)
-  - [x] Unresolvable template variables cause validation error at config load time (fail-fast, not runtime). Evidence: `config.ts:326-333`, `config.ts:336-343` (throws synchronously on `errors.length > 0`); tests at `config_test.ts:1240-1345` (`assertThrows` for invalid hook vars)
-  - [x] Validation error message identifies hook type (`before`/`after`), node ID, and unresolved variable name. Evidence: `config.ts:329` (`Node '${id}' before hook has invalid template variables: ...`), `config.ts:339` (`after hook`); tests at `config_test.ts:1241-1301`
-  - [x] Validation runs as part of `deno task check` via `workflowIntegrity()` → `loadConfig()` → `parseConfig()` → `validateNode()`. Evidence: 569 tests pass including 8 new hook validation tests in `config_test.ts:1240-1345`
-  - [x] Engine validates loop nodes reference valid body nodes and `condition_node` within `nodes` sub-object. Evidence: `config.ts:105-249` (`validateNode()` loop section)
-  - [x] Config validation runs as part of `deno task check` via `workflowIntegrity()` → `loadConfig()`. Evidence: `scripts/check.ts:84-96` (`workflowIntegrity()`), `config.ts:32,43` (`validateSchema()` called on every `parseConfig()`)
-  - [x] Validation failures throw descriptive errors with node ID and field context. Evidence: `config.ts:71-103` (error messages include node ID and field name)
+  - **Tests:** `config_test.ts`, `template_test.ts` (FR-E7;
+    regression-locked; node-type validation, hook template-var
+    resolution, error message format, loop body/condition_node
+    refs).
+  - ~~`[ ] A deno task check:workflow standalone command`~~ — SDLC
+    workflow convenience, not engine constraint. Implemented as
+    `workflowIntegrity()` in `scripts/check.ts` (SDLC scope). See
+    FR-S24 in `documents/requirements-sdlc.md`.
 
 
 
@@ -44,12 +44,9 @@
   operators to misread the execution order (e.g., `meta-agent` appears to run in
   parallel with `pm`, `commit` appears as a regular level node).
 - **Acceptance criteria:**
-  - [x] `--dry-run` output excludes `run_on`-configured nodes from regular level display. Evidence: `engine.ts:78-80` (dry-run filters out `postWorkflowNodeIds` from levels before display)
-  - [x] `--dry-run` output includes a "Post-workflow" section listing `run_on` nodes in topological order. Evidence: `engine.ts:73-91` (`collectPostWorkflowNodes` + `sortPostWorkflowNodes` + `dryRunPlan` call), `output.ts:190-197` (`dryRunPlan` renders "Post-workflow" section)
-  - [x] Dry-run applies the same `collectRunOnNodes()` filtering logic as normal execution. Evidence: `engine.ts:73-91` (same `collectPostWorkflowNodes()` + `sortPostWorkflowNodes()` calls in both dry-run and normal paths)
-  - [x] `OutputManager.dryRunPlan()` accepts and displays post-workflow nodes separately. Evidence: `output.ts:173-199` (`dryRunPlan` signature with `postWorkflowNodeIds?: string[]` + `runOnMap?`, renders "Post-workflow" section)
-  - [x] Engine unit tests cover dry-run output with `run_on` nodes present. Evidence: `engine_test.ts:678` ("dry-run — post-workflow nodes excluded from regular levels filtering logic")
-  - [x] `deno task check` passes. Evidence: 490 passed, 0 failed
+  - **Tests:** `engine_test.ts`, `output_test.ts` (regression-locked;
+    dry-run filters `run_on` nodes out of regular levels and emits a
+    Post-workflow section).
 
 
 
@@ -64,19 +61,9 @@
   into a workflow run (incident: run `20260313T025203`). Early batch validation
   surfaces all misconfigurations in one error before any API compute is spent.
 - **Acceptance criteria:**
-  - [x] Config load throws an error if any non-template `prompt` path does not exist.
-    Evidence: `config.ts:336` (`validatePromptPaths()`).
-  - [x] Error message lists all missing paths (batch, not fail-on-first).
-    Evidence: `config.ts:365-367` (accumulates into `missing[]`, throws once).
-  - [x] Paths containing `{{` are skipped (unresolvable at load time).
-    Evidence: `config.ts:340` (`!node.prompt.includes("{{")`).
-  - [x] Validation covers loop body node `prompt` paths (recursion into `nodes`).
-    Evidence: `config.ts:350-362` (nested loop over `node.nodes`).
-  - [x] `validatePromptPaths()` called at end of `mergeDefaults()` on fully-resolved config.
-    Evidence: `config.ts:327` (call in `mergeDefaults()` before return).
-  - [x] Tests: missing file, existing file, template skip, multiple missing, loop body miss.
-    Evidence: `config_test.ts:568-659`.
-  - [x] `deno task check` passes.
+  - **Tests:** `config_test.ts` (regression-locked;
+    `validatePromptPaths` covers missing/existing/template-skip/
+    multi-missing/loop-body-miss paths).
 
 
 
@@ -85,17 +72,8 @@
 - **Description:** `WorkflowDefaults` supports optional `prepare_command` (string). Executed as a shell command once, after config validation and run directory creation, before any node starts. Skipped on `--resume`. Failure (non-zero exit) is fatal: workflow aborts immediately. Supports template interpolation: `{{run_dir}}`, `{{run_id}}`, `{{env.*}}`, `{{args.*}}`. Completes the hook lifecycle: worktree creation → config load → `prepare_command` (pre-node) → node execution → `on_failure_script` (post-failure).
 - **Motivation:** Workflow-level environment preparation (e.g., repo reset to clean state) belongs before node execution, not inside a node's `before` hook. Node hooks are unreliable for env prep: with `--skip`, `--only`, or `--resume`, the first node may be bypassed, leaving the environment unprepared.
 - **Acceptance criteria:**
-  - [x] `WorkflowDefaults.prepare_command` is an optional string field;
-    validated at config load.
-  - [x] Executed once after config validation and run-dir creation, before
-    first node starts.
-  - [x] Skipped when `--resume` flag is active.
-  - [x] Non-zero exit aborts workflow immediately with clear error message.
-  - [x] Template variables `{{run_dir}}`, `{{run_id}}`, `{{env.*}}`,
-    `{{args.*}}` interpolated before execution.
-  - [x] Logged at normal verbosity level.
-  - [x] Unit tests cover: skip on resume, failure abort, template
-    interpolation.
+  - **Tests:** `engine_test.ts` (FR-E30; regression-locked;
+    skip-on-resume, failure-abort, template interpolation, logging).
 
 
 
@@ -111,31 +89,10 @@
   `allowed_paths` provides a lightweight, optional per-node safeguard without violating
   the domain-agnostic invariant.
 - **Acceptance criteria:**
-  - [x] Optional `allowed_paths?: string[]` field added to `NodeConfig`; scope check
-    skipped entirely when field is absent. Evidence: `types.ts:124`,
-    `agent.ts:157`.
-  - [x] Pre-invocation snapshot via `snapshotModifiedFiles()` called before first
-    invocation; stores set of already-modified files as baseline. Evidence:
-    `scope-check.ts:19-41`, `agent.ts:155-158`.
-  - [x] Post-invocation comparison via `findViolations()` pure function; called after
-    each invocation to detect new out-of-scope modifications. Evidence:
-    `scope-check.ts:55-68`, `agent.ts:194-211`.
-  - [x] Out-of-scope detection injects synthetic `ValidationResult` (type `scope_check`,
-    failed, message listing violation paths) into validation results; continuation
-    triggered by FR-E1 mechanism. Evidence: `agent.ts:200-208`.
-  - [x] Pre-existing uncommitted modifications excluded from violation detection
-    (baseline subtracted before comparing). Evidence: `scope-check.ts:62`
-    (`if (before.has(path)) continue`), `scope-check_test.ts:20-25`.
-  - [x] Sub-second latency — `git diff --name-only HEAD` and
-    `git ls-files --others --exclude-standard` run in parallel via `Promise.all`.
-    Evidence: `scope-check.ts:30-33`.
-  - [x] Continuation limit exhaustion applies to scope violations same as artifact
-    validation failures (shared continuation budget). Evidence: `agent.ts:225-236`.
-  - [x] Unit tests: `findViolations()` pure function (no violations, violations detected,
-    glob matching, empty sets); `snapshotModifiedFiles()` with git fixture; `agent.ts`
-    integration (snapshot injection, shared continuation budget). Evidence:
-    `scope-check_test.ts`, `agent_test.ts`; 549 tests pass, 0 failed.
-  - [x] `deno task check` green: 549 tests, 0 failures. Evidence: run `20260320T094502`.
+  - **Tests:** `scope-check_test.ts`, `agent_test.ts`, `guardrail_test.ts`
+    (FR-E37; regression-locked; `findViolations` pure function,
+    `snapshotModifiedFiles` baseline, agent integration, shared
+    continuation budget).
 
 
 
@@ -151,19 +108,8 @@
   across multiple rule declarations. `fields` on `artifact` consolidates presence checks
   alongside section checks in a single rule, reducing verbosity and error surface.
 - **Acceptance criteria:**
-  - [x] AC1: Optional `fields?: string[]` on `artifact` rule; skipped when absent/empty.
-    Evidence: `types.ts:164`.
-  - [x] AC2: Fail-fast order: absent file → empty file → missing sections →
-    missing/empty fields. Evidence: `validate.ts:261-337`.
-  - [x] AC3: Missing/empty fields aggregated into one validation error.
-    Evidence: `validate.ts:314-332`.
-  - [x] AC4: Config-load rejects `artifact` rule with non-string or empty-string entries
-    in `fields`. Evidence: `config.ts:452-460`.
-  - [x] AC5: `frontmatter_field` rule unchanged (covers value constraints; `artifact`
-    covers presence only). Evidence: `validate.ts:187-251`.
-  - [x] AC6: Unit tests: no-fields (skip), all present, one missing, one empty-valued,
-    bad entry rejected. Evidence: `validate_test.ts:469,485,508,533`,
-    `config_test.ts:1137,1148`; 576 tests pass, 0 failed.
-  - [x] `deno task check` green: 576 tests, 0 failures. Evidence: run `20260320T213059`.
+  - **Tests:** `validate_test.ts`, `config_test.ts` (FR-E38;
+    regression-locked; `fields` skip-when-absent, fail-fast order,
+    aggregation, config-load rejection of bad entries).
 
 

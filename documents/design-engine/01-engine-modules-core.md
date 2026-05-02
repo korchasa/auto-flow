@@ -136,6 +136,17 @@
     graph; loop node itself remains in DAG with its declared `inputs`.
   - `validate.ts` — artifact validation rules (file_exists, not_empty,
     contains_section, custom_script, frontmatter_field, artifact).
+    **Path contract (FR-E52):** `runSingleValidation()` interpolates
+    `rule.path` against `ctx`, then derives a pair: `displayPath`
+    (workDir-relative — surfaced in `ValidationResult.message` so the
+    agent sees a path it can write to from cwd = workDir) and
+    `fsPath = workPath(ctx.workDir, displayPath)` (engine-cwd-absolute,
+    used for every `Deno.stat`/`readTextFile`). Helpers accept both.
+    `custom_script` is the only carve-out: the path is a shell command,
+    `cwd` already governs script execution. Without the wrap, validation
+    looks at the wrong location under worktree isolation while
+    `extractConditionValue` (loop.ts) reads the correct one — a
+    mismatch that broke issue #196.
     `checkArtifact(path, sections, fields)` (FR-E33, FR-E38): self-contained
     private function. Stat → read → heading-regex loop → field-presence check
     → aggregate. Fail-fast order: absent file → empty file → missing sections

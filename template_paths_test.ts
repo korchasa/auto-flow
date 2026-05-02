@@ -182,3 +182,74 @@ Deno.test(
     );
   },
 );
+
+// FR-E52: regression-guard for INDIRECT consumers — files that interpolate
+// template paths (whose values ARE workDir-relative, see contract above) and
+// then pass the result to filesystem operations. The first audit test only
+// catches direct `ctx.node_dir` / `ctx.run_dir` references; it missed the
+// validate.ts class of bug for over a release cycle because validate.ts
+// pulled the path through `interpolate(rule.path, ctx)`. Issue #196 / run
+// 20260501T020329 hit it: the loop's condition lookup (correctly wrapped)
+// disagreed with validate.ts (silently un-wrapped) about where the QA report
+// lived, and the loop failed even though QA passed.
+//
+// Invariant under test: a file that imports `interpolate` AND performs file
+// I/O via `Deno.{stat,readTextFile,readDir,copyFile,writeTextFile}` MUST
+// also import `workPath` (= caller has the wrap helper available — the next
+// step is to actually USE it on FS-call paths). This is a coarse heuristic,
+// not full data-flow analysis: it cannot prove the wrap is applied at every
+// callsite, only that the file is "wrap-aware". The first audit test above
+// catches the direct case; this one catches the indirect case at file
+// granularity.
+Deno.test(
+  "FR-E52 — files that interpolate template paths AND do FS I/O must import workPath",
+  async () => {
+    // template.ts defines `interpolate` (no FS). Any other file using both
+    // capabilities must declare it via the workPath import.
+    const allowedNoWrap = new Set([
+      "template.ts", // defines interpolate; emits strings, no FS I/O of its own
+    ]);
+    const sourceDir = new URL(".", import.meta.url).pathname.replace(/\/$/, "");
+    const offenders: string[] = [];
+
+    const fsCallRegex =
+      /\bDeno\.(stat|readTextFile|readDir|copyFile|writeTextFile|mkdir)\s*\(/;
+
+    for await (const entry of Deno.readDir(sourceDir)) {
+      if (!entry.isFile) continue;
+      if (!entry.name.endsWith(".ts")) continue;
+      if (entry.name.endsWith("_test.ts")) continue;
+      if (allowedNoWrap.has(entry.name)) continue;
+
+      const content = await Deno.readTextFile(`${sourceDir}/${entry.name}`);
+      const usesInterpolate =
+        /\bimport\s+\{[^}]*\binterpolate\b[^}]*\}\s+from\s+["']\.\/template\.ts["']/
+          .test(content);
+      if (!usesInterpolate) continue;
+
+      // Strip line/block comments so a comment mentioning `Deno.stat(` in
+      // documentation prose does not falsely classify the file as an FS
+      // consumer. Order matters: block comments first, then line comments.
+      const codeOnly = content
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      const doesFsIo = fsCallRegex.test(codeOnly);
+      if (!doesFsIo) continue;
+
+      const importsWorkPath =
+        /\bimport\s+\{[^}]*\bworkPath\b[^}]*\}\s+from\s+["']\.\/state\.ts["']/
+          .test(content);
+      if (!importsWorkPath) {
+        offenders.push(
+          `${entry.name}: imports interpolate + does Deno FS I/O but does not import workPath`,
+        );
+      }
+    }
+
+    assertEquals(
+      offenders,
+      [],
+      `FR-E52 indirect-consumer violation:\n${offenders.join("\n")}`,
+    );
+  },
+);

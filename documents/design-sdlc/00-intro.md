@@ -69,4 +69,7 @@ graph LR
 
 ## 3. Components
 
+→ continues in [01-agents-and-hitl.md](01-agents-and-hitl.md)
+(§3.1–§3.5), [02-dashboard-and-validation.md](02-dashboard-and-validation.md)
+(§3.6–§3.11), and [03-init-data-logic.md](03-init-data-logic.md) (§3.12).
 
