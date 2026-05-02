@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.7.4](https://github.com/korchasa/flowai-workflow/compare/v0.7.3...v0.7.4) (2026-05-02)
+
+
+### Bug Fixes
+
+* **engine:** strengthen FR-E52 audit + memory invalidation note ([c5bddee](https://github.com/korchasa/flowai-workflow/commit/c5bddee50ae3f1300504a382a4c32478061c10f6)), closes [#196](https://github.com/korchasa/flowai-workflow/issues/196) [#196](https://github.com/korchasa/flowai-workflow/issues/196)
+* **engine:** wrap validate.ts paths via workPath under worktree (FR-E52) ([05774a9](https://github.com/korchasa/flowai-workflow/commit/05774a95314da0e21d624b28979066753e5c6ee7)), closes [#196](https://github.com/korchasa/flowai-workflow/issues/196)
+
+
+### Documentation
+
+* **adrs:** align index summaries to ADR titles + add 'How to add' ([71acffd](https://github.com/korchasa/flowai-workflow/commit/71acffdfb4731665071862414caee53b2cad5fdc))
+* **agents:** fix memory-reset command (preserve history logs) ([b385737](https://github.com/korchasa/flowai-workflow/commit/b3857372f2839132b9c77dde692f28fa4420f6b8))
+* **design:** add §3 Components continuation pointers in SDS intros ([4f1c629](https://github.com/korchasa/flowai-workflow/commit/4f1c629b54e824e6253933b48e2610208aeb768e))
+* **engine+sdlc:** bootstrap ADR directory + back-fill 10 records (FR-E63) ([9df8130](https://github.com/korchasa/flowai-workflow/commit/9df8130828b8590b42c06791afb41e42061f3af6)), closes [#1](https://github.com/korchasa/flowai-workflow/issues/1) [#8](https://github.com/korchasa/flowai-workflow/issues/8)
+* **meta:** codify DoD test-coverage convention (ADR-0011) ([a452a45](https://github.com/korchasa/flowai-workflow/commit/a452a45177972360dc9b1102942e1a706fc83e1c))
+* **readme:** align CLI flags + dev commands with deno.json reality ([c1e1453](https://github.com/korchasa/flowai-workflow/commit/c1e1453c8d1438417986a70edccf7ed4c29cd814))
+* **sdlc:** collapse test-locked SRS items in 03-runtime-and-init (ADR-0011) ([527c247](https://github.com/korchasa/flowai-workflow/commit/527c2470ab5b81876646068880dbb8f3f5d7c9fa))
+* **sdlc:** collapse test-locked SRS items in 04-artifacts-and-memory (ADR-0011) ([694107b](https://github.com/korchasa/flowai-workflow/commit/694107b8f61eb4986e597a5454d3b19be118f6ed))
+* **sdlc:** collapse test-locked SRS items in 06-quality-and-validation (ADR-0011) ([7f22a85](https://github.com/korchasa/flowai-workflow/commit/7f22a856f353c4488446a9006ee7a0e600e083ba))
+* **sdlc:** collapse test-locked SRS items in stages 01-02 (ADR-0011) ([d208a6c](https://github.com/korchasa/flowai-workflow/commit/d208a6c66480e4c0f1c2ba0c4c01cb2426bc7e55))
+* **sdlc:** drop CI-noise lines in 05-dashboard-and-observability (ADR-0011) ([6fa8772](https://github.com/korchasa/flowai-workflow/commit/6fa87722eb530bb4ace3518f7731f820a76d8cc2))
+* **sdlc:** drop CI-noise lines in 07-housekeeping-and-tooling (ADR-0011) ([a352a05](https://github.com/korchasa/flowai-workflow/commit/a352a05ab9bf35aef7ec8f64ed7592f3446f825b))
+* **sdlc:** normalise FR fields in 02-workflow-integration.md ([65a21c3](https://github.com/korchasa/flowai-workflow/commit/65a21c330658204d7c8bdf108a37ae7955c6cfd6))
+* **sdlc:** normalise FR fields in 03-runtime-and-init.md ([8c28aa0](https://github.com/korchasa/flowai-workflow/commit/8c28aa008d1a2f6f199222f99103d1da606842d6))
+* **sdlc:** normalise FR fields in 04-artifacts-and-memory.md ([f3a705a](https://github.com/korchasa/flowai-workflow/commit/f3a705a94a8d65a845d9de87eb661cdebb7aa34a))
+* **sdlc:** normalise FR fields in 05/06/07.md ([054b682](https://github.com/korchasa/flowai-workflow/commit/054b68245ceca71ee8aae4e667396a955b6e5d2a))
+* **srs:** apply ADR-0012 to engine 02/03/04/05 (canonical FR fields) ([724d82a](https://github.com/korchasa/flowai-workflow/commit/724d82a8ead1fce6d3397c1a7948148cad4c7f01))
+* **srs:** apply ADR-0012 to engine 04b/06/01 (canonical FR fields) ([7dcaa82](https://github.com/korchasa/flowai-workflow/commit/7dcaa82e842a8814161b387a7afe6b4d9bce3ac7))
+* **srs:** apply ADR-0012 to sdlc 01-workflow-stages ([51626c4](https://github.com/korchasa/flowai-workflow/commit/51626c472aa6a9b19fe05c5d64f706b49c865d96))
+* **srs:** audit dangling [ ] items — flip done, collapse superseded ([6c01bdc](https://github.com/korchasa/flowai-workflow/commit/6c01bdc1c1e030013f6ea4e86eb060e5c52831a5))
+* **srs:** collapse DoD in 01-execution-model.md (ADR-0011) ([4e1b57b](https://github.com/korchasa/flowai-workflow/commit/4e1b57b02b65ac19fe8268e7fd395a33a791024b))
+* **srs:** collapse DoD in 02-nodes-and-models.md (ADR-0011) ([eded949](https://github.com/korchasa/flowai-workflow/commit/eded949f0afb0ef47c4c15349b6d797a92253b7a))
+* **srs:** collapse DoD in 03-config-and-validation.md (ADR-0011) ([759150f](https://github.com/korchasa/flowai-workflow/commit/759150f90e238f2c257e0f2a5a5ef43300802631))
+* **srs:** collapse DoD in 04-runtime-and-hooks.md (ADR-0011) ([9a45249](https://github.com/korchasa/flowai-workflow/commit/9a45249db1dcd2b6c2ead66d34c10e2ae95bc314))
+* **srs:** collapse DoD in 04b-worktree-isolation.md (ADR-0011) ([c7465b2](https://github.com/korchasa/flowai-workflow/commit/c7465b2a13f0f93526e6e941c2269a77258b3e02))
+* **srs:** collapse DoD in 06-distribution-and-housekeeping.md (ADR-0011) ([c285b51](https://github.com/korchasa/flowai-workflow/commit/c285b516f1bb98e88c5dab19474f6c943958f098))
+* **srs:** pilot DoD collapse on 05-cli-and-observability.md (ADR-0011) ([bdfc1d9](https://github.com/korchasa/flowai-workflow/commit/bdfc1d93cd57ebb3548a872e8c24a41ff3eb452e))
+
+
+### Chores
+
+* **check:** wire frFieldSet() into check pipeline (ADR-0012) ([7fa44d4](https://github.com/korchasa/flowai-workflow/commit/7fa44d49b8a021a61e21866daade30ac65fb0094))
+* update deno.lock ([2088997](https://github.com/korchasa/flowai-workflow/commit/2088997a37ab8408e41b612e5f687f13ddff291e))
+
 ### [0.7.3](https://github.com/korchasa/flowai-workflow/compare/v0.7.2...v0.7.3) (2026-04-30)
 
 ### [0.7.2](https://github.com/korchasa/flowai-workflow/compare/v0.7.0...v0.7.2) (2026-04-30)
