@@ -9,7 +9,7 @@
  * per-node artifact directories under the same `runs/<run-id>/` parent.
  */
 
-import { dirname, join, resolve } from "@std/path";
+import { dirname, join, resolve, SEPARATOR } from "@std/path";
 import type { OutputManager } from "./output.ts";
 
 /**
@@ -222,25 +222,39 @@ async function branchExists(workDir: string, name: string): Promise<boolean> {
  * Progress is logged via `output.status("engine", …)` per top-level entry
  * plus a leading "Copying ignored files..." line and a trailing summary.
  *
- * @param workDir   Destination worktree directory.
- * @param output    OutputManager for status/warn lines.
- * @param origRepo  Source repo root. Defaults to `.` (engine CWD).
- * @returns         Aggregate counters: total files copied, total bytes.
+ * @param workDir       Destination worktree directory.
+ * @param output        OutputManager for status/warn lines.
+ * @param origRepo      Source repo root. Defaults to `.` (engine CWD).
+ * @param workflowDir   Engine's workflow directory. When supplied, the entire
+ *                      `<workflowDir>/runs/` subtree is excluded from
+ *                      mirroring — it is the engine's own runtime state
+ *                      (worktrees of other live runs, their `state.json`,
+ *                      per-node artefacts), not project data the new run
+ *                      should see. Without this skip, sibling worktrees
+ *                      registered for the same repo would be copied into
+ *                      the new worktree (carrying their own mirrored
+ *                      `runs/` snapshots), producing exponentially-nested
+ *                      `runs/<id>/worktree/.flowai-workflow/<wf>/runs/<id>/
+ *                      worktree/...` trees that quickly hit ENAMETOOLONG.
+ *                      When omitted, only the destination `workDir` itself
+ *                      is guarded against self-copy (legacy behavior used
+ *                      by isolated unit tests that don't model the engine
+ *                      runs/ layout).
+ * @returns             Aggregate counters: total files copied, total bytes.
  */
 export async function copyIgnoredIntoWorktree(
   workDir: string,
   output: OutputManager,
   origRepo: string = ".",
+  workflowDir?: string,
 ): Promise<{ files: number; bytes: number }> {
   output.status("engine", "Copying ignored files...");
 
-  // Self-copy guard for `classifyAndCopy`: when `workDir` lives inside
-  // `origRepo` under an ignored ancestor (e.g. `.flowai-workflow/<wf>/runs/`
-  // matched by gitignore `runs/`), `git ls-files --directory` returns the
-  // ancestor as a single entry. Recursing into it would walk into the
-  // freshly-created worktree itself and copy it into itself, deepening the
-  // path on every iteration until ENAMETOOLONG.
   const absWorkDir = resolve(workDir);
+  const skipPrefixes: string[] = [absWorkDir];
+  if (workflowDir !== undefined) {
+    skipPrefixes.push(resolve(workflowDir, "runs"));
+  }
   const paths = await listIgnoredPaths(origRepo);
   let totalFiles = 0;
   let totalBytes = 0;
@@ -250,7 +264,7 @@ export async function copyIgnoredIntoWorktree(
     if (relPath === "") continue;
     const src = join(origRepo, relPath);
     const dst = join(workDir, relPath);
-    const result = await classifyAndCopy(src, dst, output, absWorkDir);
+    const result = await classifyAndCopy(src, dst, output, skipPrefixes);
     totalFiles += result.files;
     totalBytes += result.bytes;
     output.status(
@@ -300,18 +314,26 @@ async function listIgnoredPaths(origRepo: string): Promise<string[]> {
 /**
  * Classify `src` via `lstat` and copy it to `dst`, recursing into
  * directories. Returns counters for the entry (and its descendants).
+ *
+ * `skipPrefixes` lists absolute paths that must NOT be entered or copied:
+ * the destination worktree itself (always present, prevents self-copy when
+ * `workDir` lives under an ignored ancestor in `origRepo`) and, when
+ * provided, the engine's `<workflowDir>/runs/` root (excludes sibling
+ * worktrees of other live runs and their per-run state — see
+ * `copyIgnoredIntoWorktree` for the multi-worktree exponential-nesting
+ * trigger this guards against).
  */
 async function classifyAndCopy(
   src: string,
   dst: string,
   output: OutputManager,
-  absWorkDir: string,
+  skipPrefixes: string[],
 ): Promise<{ files: number; bytes: number }> {
-  // Skip the destination worktree itself when encountered through an
-  // ignored ancestor — copying it into itself otherwise recurses without
-  // bound (see `copyIgnoredIntoWorktree` for context).
-  if (resolve(src) === absWorkDir) {
-    return { files: 0, bytes: 0 };
+  const srcAbs = resolve(src);
+  for (const prefix of skipPrefixes) {
+    if (srcAbs === prefix || srcAbs.startsWith(prefix + SEPARATOR)) {
+      return { files: 0, bytes: 0 };
+    }
   }
 
   let stat: Deno.FileInfo;
@@ -347,7 +369,7 @@ async function classifyAndCopy(
         join(src, entry.name),
         join(dst, entry.name),
         output,
-        absWorkDir,
+        skipPrefixes,
       );
       files += r.files;
       bytes += r.bytes;

@@ -172,7 +172,12 @@ export class Engine {
       this.output.status("engine", "Creating worktree...");
       this.workDir = await createWorktree(runId, this.workflowDir);
       this.output.status("engine", `Worktree: ${this.workDir}`);
-      await copyIgnoredIntoWorktree(this.workDir, this.output);
+      await copyIgnoredIntoWorktree(
+        this.workDir,
+        this.output,
+        ".",
+        this.workflowDir,
+      );
     } else {
       this.workDir = ".";
     }

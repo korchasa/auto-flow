@@ -213,12 +213,10 @@ Deno.test("copyIgnoredIntoWorktree — emits start, per-entry, and final progres
   }
 });
 
-Deno.test("copyIgnoredIntoWorktree — does not recurse into workDir when it lives under an ignored ancestor in origRepo", async () => {
-  // Mirrors the engine layout: workDir is inside origRepo at
-  // <origRepo>/runs/<id>/worktree/, and `runs/` is gitignored. Without the
-  // self-copy guard, `git ls-files --directory` returns `runs/` as a single
-  // ignored entry and the recursive walk copies the new worktree into
-  // itself until ENAMETOOLONG.
+Deno.test("copyIgnoredIntoWorktree — does not recurse into workDir (legacy single-worktree guard, no workflowDir)", async () => {
+  // Legacy guard: when `workflowDir` is omitted, only the destination
+  // worktree itself is protected from self-copy. Mirrors callers that
+  // don't model the engine runs/ layout.
   const origRepo = await Deno.makeTempDir();
   try {
     await git(["init", "--initial-branch=main"], origRepo);
@@ -231,10 +229,6 @@ Deno.test("copyIgnoredIntoWorktree — does not recurse into workDir when it liv
 
     const workDir = `${origRepo}/runs/new/worktree`;
     await Deno.mkdir(workDir, { recursive: true });
-    // Sibling prior-run leftover — must still be copied (semantics
-    // unchanged for non-self entries).
-    await Deno.mkdir(`${origRepo}/runs/old`, { recursive: true });
-    await Deno.writeTextFile(`${origRepo}/runs/old/state.json`, "{}");
 
     const { output } = makeCapturedOutput();
     await copyIgnoredIntoWorktree(workDir, output, origRepo);
@@ -246,16 +240,101 @@ Deno.test("copyIgnoredIntoWorktree — does not recurse into workDir when it liv
       selfCopied = false;
     }
     assertEquals(selfCopied, false);
-
-    // Sibling prior run is still mirrored.
-    const sibling = await Deno.readTextFile(
-      `${workDir}/runs/old/state.json`,
-    );
-    assertEquals(sibling, "{}");
   } finally {
     await cleanup(origRepo);
   }
 });
+
+Deno.test("copyIgnoredIntoWorktree — excludes entire <workflowDir>/runs/ subtree when workflowDir is supplied", async () => {
+  // Multi-worktree exponential-nesting bug. With workflowDir supplied,
+  // the engine's runs/ root is wholly skipped: no sibling worktrees,
+  // no foreign state.json, no foreign per-node artefacts leak into the
+  // freshly-created worktree. Ignored paths OUTSIDE that root (e.g.
+  // top-level .env) must still mirror normally.
+  const origRepo = await Deno.makeTempDir();
+  try {
+    await git(["init", "--initial-branch=main"], origRepo);
+    await git(["config", "user.email", "test@test.com"], origRepo);
+    await git(["config", "user.name", "Test"], origRepo);
+    await Deno.writeTextFile(
+      `${origRepo}/.gitignore`,
+      ".flowai-workflow/wf/runs/\n.env\n",
+    );
+    await Deno.writeTextFile(`${origRepo}/README.md`, "tracked\n");
+    await Deno.writeTextFile(`${origRepo}/.env`, "secret");
+    await git(["add", ".gitignore", "README.md"], origRepo);
+    await git(["commit", "-m", "init"], origRepo);
+
+    const workflowDir = `${origRepo}/.flowai-workflow/wf`;
+
+    // Two prior runs: a "live" one with its own deeply-nested mirror
+    // (worst-case shape) and a stale one with only state.json.
+    const liveOldRoot = `${workflowDir}/runs/T_old/worktree`;
+    await Deno.mkdir(`${liveOldRoot}/.flowai-workflow/wf/runs/T_older`, {
+      recursive: true,
+    });
+    await Deno.writeTextFile(`${liveOldRoot}/foo.txt`, "x");
+    await Deno.writeTextFile(
+      `${liveOldRoot}/.flowai-workflow/wf/runs/T_older/state.json`,
+      "{}",
+    );
+    await Deno.writeTextFile(`${workflowDir}/runs/T_old/state.json`, "{}");
+    await Deno.mkdir(`${workflowDir}/runs/T_stale`, { recursive: true });
+    await Deno.writeTextFile(
+      `${workflowDir}/runs/T_stale/state.json`,
+      "{}",
+    );
+
+    // Fresh worktree for the new run.
+    const workDir = `${workflowDir}/runs/T_new/worktree`;
+    await Deno.mkdir(workDir, { recursive: true });
+
+    const { output } = makeCapturedOutput();
+    await copyIgnoredIntoWorktree(workDir, output, origRepo, workflowDir);
+
+    // Nothing from the engine runs/ root should appear under workDir.
+    let runsMirrored = true;
+    try {
+      await Deno.lstat(`${workDir}/.flowai-workflow/wf/runs`);
+    } catch {
+      runsMirrored = false;
+    }
+    assertEquals(runsMirrored, false);
+
+    // No nested worktree dir at any depth.
+    const nested = await collectPathsByName(workDir, "worktree");
+    assertEquals(nested.length, 0);
+
+    // Out-of-runs ignored file is still mirrored.
+    const env = await Deno.readTextFile(`${workDir}/.env`);
+    assertEquals(env, "secret");
+  } finally {
+    await cleanup(origRepo);
+  }
+});
+
+/** Recursively collect paths under `root` whose basename equals `name`. */
+async function collectPathsByName(
+  root: string,
+  name: string,
+): Promise<string[]> {
+  const out: string[] = [];
+  async function walk(dir: string): Promise<void> {
+    let entries: AsyncIterable<Deno.DirEntry>;
+    try {
+      entries = Deno.readDir(dir);
+    } catch {
+      return;
+    }
+    for await (const entry of entries) {
+      const full = `${dir}/${entry.name}`;
+      if (entry.name === name) out.push(full);
+      if (entry.isDirectory) await walk(full);
+    }
+  }
+  await walk(root);
+  return out;
+}
 
 Deno.test("copyIgnoredIntoWorktree — empty repo with no ignored files returns zero counters", async () => {
   const { origRepo, destDir } = await initRepo();

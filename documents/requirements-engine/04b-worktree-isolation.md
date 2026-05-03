@@ -257,6 +257,17 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   existing teardown cleans the worktree. Physical byte duplication is a
   deliberate cost of the cross-platform Deno-only constraint; revisit if
   a real workflow hits the limit.
+
+  **Skip-prefix guard:** the recursive walk rejects any source path equal
+  to (or under) one of two roots: the destination worktree itself
+  (prevents self-copy when `workDir` lives under an ignored ancestor in
+  `origRepo`) and `<workflowDir>/runs/` (engine's runtime state — sibling
+  worktrees of other live runs plus their per-run `state.json`/artefacts).
+  Without the second guard, each prior live worktree carries its own
+  mirrored `runs/` snapshot, producing exponentially-nested
+  `runs/<id>/worktree/.flowai-workflow/<wf>/runs/<id>/worktree/…` trees
+  that quickly hit `ENAMETOOLONG`. Ignored paths OUTSIDE the engine's
+  `runs/` root mirror normally.
 - **Motivation:** Workflows often need files outside git — `.env`,
   `node_modules`, `.venv`, local caches. A fresh `git worktree add`
   ref-checkout has none of them, so agents fail with «missing
@@ -270,5 +281,6 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   - **Tests:** `worktree_copy_ignored_test.ts` (regression-locked;
     `copyIgnoredIntoWorktree` covers files, dir recursion, symlinks
     (live + broken), untracked-vs-ignored filter, tracked-file
-    non-overwrite, self-copy guard, empty-repo zero-result, progress
+    non-overwrite, self-copy guard, runs-root skip with `workflowDir`
+    excluding nested-worktree mirrors, empty-repo zero-result, progress
     lines).

@@ -129,20 +129,26 @@
     re-reads (potentially updated) config.
     **Ignored-files mirror (FR-E58):** Immediately after `createWorktree`
     on a fresh run (not resume, not `worktree_disabled`), `run()` calls
-    `copyIgnoredIntoWorktree(workDir, output)` which enumerates ignored
-    paths via `git ls-files --others --ignored --exclude-standard
-    --directory -z` in the original repo and mirrors each entry into
-    the worktree. Symlinks are preserved as symlinks; tracked files
-    are not touched (already present from `origin/main` checkout);
-    untracked-but-not-ignored files are not copied. Cross-platform via
-    Deno FS APIs only — no shell `cp`, no filesystem-level cloning.
-    Self-copy guard: when `workDir` lives under an ignored ancestor in
-    `origRepo` (typical layout — `runs/` is gitignored and `workDir =
-    <workflowDir>/runs/<runId>/worktree`), `git ls-files --directory`
-    returns the ancestor as a single entry. The recursive walk skips
-    paths whose absolute resolution equals `workDir`, otherwise the new
-    worktree would be copied into itself until `ENAMETOOLONG`. Sibling
-    prior-run dirs under the same ancestor still mirror.
+    `copyIgnoredIntoWorktree(workDir, output, ".", workflowDir)` which
+    enumerates ignored paths via `git ls-files --others --ignored
+    --exclude-standard --directory -z` in the original repo and mirrors
+    each entry into the worktree. Symlinks are preserved as symlinks;
+    tracked files are not touched (already present from `origin/main`
+    checkout); untracked-but-not-ignored files are not copied.
+    Cross-platform via Deno FS APIs only — no shell `cp`, no
+    filesystem-level cloning. **Skip-prefix guard:** the recursive walk
+    rejects any source path equal to (or under) one of two roots: the
+    destination worktree itself (always — prevents the new worktree
+    from being copied into itself when `workDir` lives under an ignored
+    ancestor in `origRepo`) and `<workflowDir>/runs/` (when
+    `workflowDir` is supplied — excludes sibling worktrees of other
+    live runs and their per-run `state.json`/artefacts; without this,
+    each prior live worktree carries its own mirrored `runs/` snapshot,
+    producing exponentially-nested
+    `runs/<id>/worktree/.flowai-workflow/<wf>/runs/<id>/worktree/...`
+    trees that quickly hit `ENAMETOOLONG`). Engine always supplies
+    `workflowDir`; the legacy two-arg call shape remains for isolated
+    unit tests that don't model the engine `runs/` layout.
     Progress is logged through `output.status("engine", …)` per
     top-level entry plus a leading "Copying ignored files..." line and a
     trailing "Ignored files copied: <N> files, <S>" summary.
