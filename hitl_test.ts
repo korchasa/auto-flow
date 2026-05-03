@@ -1,119 +1,10 @@
 import { assertEquals } from "@std/assert";
-import type { CliRunOutput, HitlConfig } from "./types.ts";
-import { detectHitlRequest, runHitlLoop } from "./hitl.ts";
+import type { HitlConfig } from "./types.ts";
+import { runHitlLoop } from "./hitl.ts";
 import type { HitlRunOptions } from "./hitl.ts";
 
-// --- detectHitlRequest tests ---
-
-Deno.test("detectHitlRequest — returns null when no permission_denials", () => {
-  const output: CliRunOutput = {
-    result: "done",
-    session_id: "sess-1",
-    total_cost_usd: 0.05,
-    duration_ms: 1000,
-    duration_api_ms: 800,
-    num_turns: 1,
-    is_error: false,
-  };
-  assertEquals(detectHitlRequest(output), null);
-});
-
-Deno.test("detectHitlRequest — returns null when permission_denials has no AskUserQuestion", () => {
-  const output: CliRunOutput = {
-    result: "done",
-    session_id: "sess-1",
-    total_cost_usd: 0.05,
-    duration_ms: 1000,
-    duration_api_ms: 800,
-    num_turns: 1,
-    is_error: false,
-    permission_denials: [
-      { tool_name: "Bash", tool_input: { command: "rm -rf /" } },
-    ],
-  };
-  assertEquals(detectHitlRequest(output), null);
-});
-
-Deno.test("detectHitlRequest — returns HitlQuestion when AskUserQuestion present", () => {
-  const output: CliRunOutput = {
-    result: "done",
-    session_id: "sess-1",
-    total_cost_usd: 0.05,
-    duration_ms: 1000,
-    duration_api_ms: 800,
-    num_turns: 1,
-    is_error: false,
-    permission_denials: [
-      {
-        tool_name: "AskUserQuestion",
-        tool_input: {
-          questions: [{
-            question: "Which language?",
-            header: "Language Choice",
-            options: [
-              { label: "Go", description: "Fast compiled" },
-              { label: "Python", description: "Universal" },
-            ],
-            multiSelect: false,
-          }],
-        },
-      },
-    ],
-  };
-  const q = detectHitlRequest(output);
-  assertEquals(q !== null, true);
-  assertEquals(q!.question, "Which language?");
-  assertEquals(q!.header, "Language Choice");
-  assertEquals(q!.options!.length, 2);
-  assertEquals(q!.options![0].label, "Go");
-});
-
-Deno.test("detectHitlRequest — handles flat tool_input (no questions wrapper)", () => {
-  const output: CliRunOutput = {
-    result: "done",
-    session_id: "sess-1",
-    total_cost_usd: 0.05,
-    duration_ms: 1000,
-    duration_api_ms: 800,
-    num_turns: 1,
-    is_error: false,
-    permission_denials: [
-      {
-        tool_name: "AskUserQuestion",
-        tool_input: {
-          question: "What is your name?",
-        },
-      },
-    ],
-  };
-  const q = detectHitlRequest(output);
-  assertEquals(q !== null, true);
-  assertEquals(q!.question, "What is your name?");
-});
-
-Deno.test("detectHitlRequest — returns runtime-normalized hitl_request directly", () => {
-  const output: CliRunOutput = {
-    runtime: "opencode",
-    result: "",
-    session_id: "sess-1",
-    total_cost_usd: 0,
-    duration_ms: 1000,
-    duration_api_ms: 0,
-    num_turns: 1,
-    is_error: false,
-    hitl_request: {
-      question: "Which target environment?",
-      header: "Deploy",
-      options: [{ label: "prod" }, { label: "staging" }],
-    },
-  };
-
-  const q = detectHitlRequest(output);
-  assertEquals(q !== null, true);
-  assertEquals(q!.question, "Which target environment?");
-  assertEquals(q!.header, "Deploy");
-  assertEquals(q!.options?.[0].label, "prod");
-});
+// HITL detection tests have moved to hitl-injection_test.ts (observer-based
+// detection via runtime-neutral onToolUseObserved hook; ADR-0013, FR-L35).
 
 // --- runHitlLoop tests ---
 
@@ -129,11 +20,14 @@ function makeHitlConfig(): HitlConfig {
 }
 
 function makeBaseOpts(overrides?: Partial<HitlRunOptions>): HitlRunOptions {
+  // Per-call tmp dir keeps the FR-E64 audit-artifact append from
+  // colliding across tests and pollutes only $TMPDIR.
+  const runDir = Deno.makeTempDirSync({ prefix: "flowai-hitl-test-" });
   return {
     config: makeHitlConfig(),
     nodeId: "pm",
     runId: "test-run",
-    runDir: "/tmp/run",
+    runDir,
     env: {},
     sessionId: "sess-123",
     question: {

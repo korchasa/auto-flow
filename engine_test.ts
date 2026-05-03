@@ -29,6 +29,7 @@ import {
   _reset as _resetProcessRegistry,
   ProcessRegistry,
 } from "./process-registry.ts";
+import { defaultRegistry } from "@korchasa/ai-ide-cli/process-registry";
 import type {
   RuntimeAdapter,
   RuntimeInvokeOptions,
@@ -1302,7 +1303,7 @@ Deno.test(
       id: "opencode",
       capabilities: {
         permissionMode: false,
-        hitl: false,
+        mcpInjection: false,
         transcript: false,
         interactive: false,
         toolUseObservation: false,
@@ -1381,7 +1382,7 @@ Deno.test(
 /** Negative companion: omitting `processRegistry` keeps the legacy
  * single-default-singleton behavior (adapter receives `undefined`). */
 Deno.test(
-  "runAgent — omitted processRegistry leaves adapter to use ai-ide-cli default singleton",
+  "runAgent — omitted processRegistry forwards ai-ide-cli default singleton",
   async () => {
     const nodeDir = await Deno.makeTempDir();
     let captured: ProcessRegistry | undefined = "sentinel" as unknown as
@@ -1391,7 +1392,7 @@ Deno.test(
       id: "opencode",
       capabilities: {
         permissionMode: false,
-        hitl: false,
+        mcpInjection: false,
         transcript: false,
         interactive: false,
         toolUseObservation: false,
@@ -1444,7 +1445,10 @@ Deno.test(
       });
 
       assertEquals(result.success, true);
-      assertEquals(captured, undefined);
+      // ProcessRegistry is mandatory on RuntimeInvokeOptions since
+      // ai-ide-cli v0.8.x; when the caller omits it the engine
+      // substitutes the package-level default singleton.
+      assertEquals(captured, defaultRegistry);
     } finally {
       await Deno.remove(nodeDir, { recursive: true });
     }

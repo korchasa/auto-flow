@@ -80,7 +80,7 @@ export type {
   FetchCapabilitiesOptions,
 } from "@korchasa/ai-ide-cli/runtime/capabilities";
 export type { SkillDef, SkillFrontmatter } from "@korchasa/ai-ide-cli/skill";
-export { detectHitlRequest, runHitlLoop } from "./hitl.ts";
+export { isHitlConfigured, runHitlLoop } from "./hitl.ts";
 export type {
   ClaudeRunner,
   HitlQuestion,

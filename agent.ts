@@ -11,6 +11,7 @@ import type {
   CliRunOutput,
   ErrorCategory,
   HitlConfig,
+  HumanInputRequest,
   NodeConfig,
   NodeSettings,
   PermissionDenial,
@@ -27,7 +28,9 @@ import type {
 } from "@korchasa/ai-ide-cli/runtime/types";
 import { interpolate } from "./template.ts";
 import { getRuntimeAdapter } from "@korchasa/ai-ide-cli/runtime";
-import { buildEngineHitlMcpCommand } from "./hitl-mcp-command.ts";
+import { defaultRegistry } from "@korchasa/ai-ide-cli/process-registry";
+import { isHitlConfigured } from "./hitl.ts";
+import { buildHitlMcpServers, createHitlObserver } from "./hitl-injection.ts";
 import {
   allPassed,
   formatFailures,
@@ -85,6 +88,11 @@ export interface AgentResult {
   error_category?: ErrorCategory;
   /** Tool permission denials encountered during execution. */
   permission_denials?: PermissionDenial[];
+  /** HITL question captured from the agent's MCP `request_human_input` tool
+   * call (FR-L35). Populated when the engine intercepted the call via
+   * `onToolUseObserved` and aborted the run. The caller is expected to
+   * route this through `handleAgentHitl` for ask/poll/resume. */
+  hitl_question?: HumanInputRequest;
 }
 
 /** Options for running an agent. */
@@ -201,6 +209,16 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
   const adapter = runtimeAdapter ?? getRuntimeAdapter(runtime);
   const extraArgs = applyBudgetFlags(runtimeArgs, runtime, maxTurns);
 
+  // FR-L35: register the engine's HITL MCP server when (a) the workflow
+  // has HITL configured AND (b) the runtime supports per-invocation MCP
+  // injection. The `onToolUseObserved` observer intercepts the agent's
+  // call to `request_human_input` and aborts the run with the question
+  // stashed for the caller to route through `handleAgentHitl`.
+  const hitlEnabled = isHitlConfigured(hitlConfig) &&
+    adapter.capabilities.mcpInjection;
+  const mcpServers = hitlEnabled ? buildHitlMcpServers() : undefined;
+  const hitlObserver = hitlEnabled ? createHitlObserver(runtime) : undefined;
+
   // Derive onOutput callback from OutputManager
   const onOutput = output && nodeId
     ? (line: string) => output.nodeOutput(nodeId, line)
@@ -240,8 +258,8 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     reasoningEffort,
     allowedTools,
     disallowedTools,
-    hitlConfig,
-    hitlMcpCommandBuilder: buildEngineHitlMcpCommand,
+    mcpServers,
+    onToolUseObserved: hitlObserver?.observer,
     timeoutSeconds: settings.timeout_seconds,
     maxRetries: settings.max_retries,
     retryDelaySeconds: settings.retry_delay_seconds,
@@ -249,7 +267,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     streamLogPath,
     verbosity,
     cwd,
-    processRegistry,
+    processRegistry: processRegistry ?? defaultRegistry,
   });
 
   let continuations = 0;
@@ -352,8 +370,8 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       reasoningEffort,
       allowedTools,
       disallowedTools,
-      hitlConfig,
-      hitlMcpCommandBuilder: buildEngineHitlMcpCommand,
+      mcpServers,
+      onToolUseObserved: hitlObserver?.observer,
       timeoutSeconds: settings.timeout_seconds,
       maxRetries: settings.max_retries,
       retryDelaySeconds: settings.retry_delay_seconds,
@@ -361,7 +379,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       streamLogPath,
       verbosity,
       cwd,
-      processRegistry,
+      processRegistry: processRegistry ?? defaultRegistry,
     });
   }
 
@@ -399,6 +417,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     output: result.output,
     continuations,
     permission_denials: result.output?.permission_denials,
+    hitl_question: hitlObserver?.getQuestion() ?? undefined,
   };
 }
 

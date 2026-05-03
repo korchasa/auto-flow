@@ -13,7 +13,7 @@
 
   **Log sources:**
   - **JSON output:** Claude CLI with `--output-format json` returns a structured JSON object with `result`, `session_id`, `total_cost_usd`, `duration_ms`, `duration_api_ms`, `num_turns`, `is_error`. This is captured by the stage script or engine.
-  - **Normalized runtime output:** OpenCode JSON stream is normalized by the engine into the same `CliRunOutput`-compatible shape (`result`, `session_id`, `total_cost_usd`, `duration_ms`, `num_turns`, `is_error`, optional `hitl_request`) so downstream state, summary, continuation, and logging logic stay runtime-agnostic.
+  - **Normalized runtime output:** OpenCode JSON stream is normalized by the engine into the same `CliRunOutput`-compatible shape (`result`, `session_id`, `total_cost_usd`, `duration_ms`, `num_turns`, `is_error`) so downstream state, summary, continuation, and logging logic stay runtime-agnostic.
   - **JSONL transcript:** Claude CLI automatically stores full session transcripts as JSONL files in `~/.claude/projects/`. Each line is a JSON event (messages, tool calls, responses).
 
   **Legacy shell-script storage (deprecated):**
@@ -31,31 +31,85 @@
 
 ### 3.8 FR-E8: Human-in-the-Loop (Agent-Initiated)
 
-- **Description:** Workflow agents can request human input mid-task through a runtime-specific structured signal. Claude uses the built-in `AskUserQuestion` tool (visible in headless mode as `permission_denials`). OpenCode uses a per-invocation local MCP tool injected by the engine through `OPENCODE_CONFIG_CONTENT`. In both cases the engine normalizes the request, delegates question delivery and reply polling to external workflow scripts, and resumes the agent session with the human's answer.
+- **Description:** Workflow agents request human input mid-task through one
+  cross-runtime mechanism: a stdio MCP server (engine-owned, named
+  `flowai-workflow-hitl`) registered for the duration of each invocation
+  exposes a single tool `request_human_input`. The engine intercepts the
+  agent's call to that tool via the runtime-neutral `onToolUseObserved`
+  hook (FR-L35 in `@korchasa/ai-ide-cli`), aborts the run with the
+  question stashed, delegates question delivery and reply polling to
+  external workflow scripts (`ask_script` / `check_script`), and resumes
+  the agent session with the human's answer.
 
-  **Mechanism:**
-  1. Claude path: agent calls `AskUserQuestion` → Claude CLI denies it in `-p` mode (no terminal) → structured question visible in `permission_denials`.
-  2. OpenCode path: engine injects a local MCP server exposing `request_human_input` via `OPENCODE_CONFIG_CONTENT` → runtime emits structured `tool_use` event for `hitl_request_human_input`.
-  3. Engine extracts question (`{question, header, options[], multiSelect}`) and `session_id`.
-  4. Engine invokes configurable `ask_script` (workflow script, not engine code) to deliver question (e.g., `gh issue comment`).
-  5. Engine enters poll loop: `sleep poll_interval` → invoke `check_script` → if exit 0 (reply found), read reply from stdout.
-  6. Engine resumes agent in the same session (`claude --resume <session_id>` or `opencode run --session <session_id>`). Agent continues with full session context.
+  **Mechanism (single path for every MCP-capable runtime):**
+  1. Engine builds an `mcpServers` invoke option with one entry
+     `flowai-workflow-hitl: { type: "stdio", command, args }` whenever
+     `defaults.hitl` is configured AND the runtime adapter advertises
+     `capabilities.mcpInjection === true` (Claude / OpenCode / Codex —
+     Cursor warns and drops it).
+  2. The library renders the entry into the runtime's native MCP
+     plumbing — Claude `--mcp-config <tmp>`, OpenCode
+     `OPENCODE_CONFIG_CONTENT`, Codex `--config mcp_servers.*`.
+  3. Engine registers an `onToolUseObserved` callback that matches the
+     runtime-prefixed tool name
+     (`mcp__flowai-workflow-hitl__request_human_input` for Claude,
+     `flowai-workflow-hitl_request_human_input` for OpenCode,
+     `flowai-workflow-hitl.request_human_input` for Codex), normalises
+     the input into `HumanInputRequest`, and returns `"abort"`.
+  4. Engine extracts the captured question and the run's `session_id`.
+  5. Engine invokes configurable `ask_script` to deliver the question
+     (e.g., `gh issue comment`, Telegram bot).
+  6. Engine enters poll loop: `sleep poll_interval` → invoke
+     `check_script` → if exit 0 (reply found), read reply from stdout.
+  7. Engine resumes the agent in the same session (re-injects the same
+     `mcpServers` so nested HITL on resume is supported).
 
-  **Key constraint:** Engine contains zero GitHub/Slack/email-specific code. All delivery/polling logic lives in workflow scripts (`.flowai-workflow/scripts/`).
+  **Key constraints:**
+  - Engine contains zero GitHub/Slack/email-specific code. All
+    delivery/polling logic lives in workflow scripts
+    (`.flowai-workflow/<wf>/scripts/`).
+  - Engine pattern-matches no runtime-native tool names except via the
+    runtime-prefixed `request_human_input` derivation in
+    `hitl-injection.ts::hitlToolNameFor`.
+  - Workflow YAML and agent prompts MUST NOT mention
+    `AskUserQuestion`, `request_human_input`, or any other
+    runtime-specific HITL tool name (the agent discovers the tool
+    from its runtime catalogue).
+- **ADR:** ADR-0013.
 - **Acceptance criteria:**
-  - **Tests:** `hitl_test.ts` (regression-locked; detection,
+  - **Tests:** `hitl_test.ts`, `hitl-injection_test.ts`,
+    `hitl-mcp-server_test.ts` (FR-E8; regression-locked;
     `markNodeWaiting`, ask/check script wiring, poll loop, timeout,
-    resume on reply, auto-resume of `waiting` nodes).
+    resume on reply, auto-resume of `waiting` nodes, observer
+    capture across runtimes, MCP server NDJSON handshake).
+    See ADR-0013.
   - [x] Workflow scripts `hitl-ask.sh` and `hitl-check.sh` exist in
-    `.flowai-workflow/scripts/`. Evidence:
-    `.flowai-workflow/scripts/hitl-ask.sh`,
-    `.flowai-workflow/scripts/hitl-check.sh`.
-  - [x] `hitl-ask.sh` renders question JSON → markdown with HTML
-    marker `<!-- hitl:<run-id>:<node-id> -->`, posts via `gh issue
-    comment`. Evidence: `.flowai-workflow/scripts/hitl-ask.sh:52-76`.
-  - [x] `hitl-check.sh` finds first non-bot comment after marker,
-    outputs body to stdout (exit 0) or exits 1 if no reply.
-    Evidence: `.flowai-workflow/scripts/hitl-check.sh:39-54`.
+    `.flowai-workflow/<wf>/scripts/`. Evidence:
+    `.flowai-workflow/github-inbox/scripts/hitl-ask.sh`,
+    `.flowai-workflow/github-inbox/scripts/hitl-check.sh`.
+
+### 3.64 FR-E64: HITL Q+A Audit Artefact
+
+- **Description:** When a HITL round completes (reply received), the
+  engine appends one line to `<nodeDirAbs>/hitl.jsonl` BEFORE invoking
+  the resume call, where `<nodeDirAbs>` is `workPath(ctx.workDir,
+  ctx.node_dir)`. Record shape:
+  `{ts: ISO8601, round: number, question: HumanInputRequest, reply:
+  string}`. Round counter is reconstructed from the existing line
+  count of the file so resume after engine crash continues numbering
+  correctly. Append is atomic on POSIX (single `Deno.writeTextFile`
+  with `append: true, create: true`); ordering before resume
+  guarantees the question survives a mid-resume crash for post-mortem.
+- **Motivation:** Before FR-E64 the Q+A trail lived only inside the
+  external transport's history (Telegram chat) and the agent's tool-use
+  stream. Reconstructing the human-decision trail from `runs/<id>/`
+  required scraping a third-party system. The audit artefact is the
+  canonical, in-tree record used by post-mortem and dashboard tooling.
+- **ADR:** ADR-0013.
+- **Dep:** FR-E8.
+- **Acceptance criteria:**
+  - **Tests:** `hitl_test.ts` (FR-E64; regression-locked; reply-path
+    audit append, multi-round counter, runDir tmp lifecycle).
 
 
 

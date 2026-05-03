@@ -37,7 +37,7 @@ Deno.test("runAgent — continuation uses runtime adapter resume session", async
     id: "opencode",
     capabilities: {
       permissionMode: false,
-      hitl: false,
+      mcpInjection: false,
       transcript: false,
       interactive: false,
       toolUseObservation: false,
@@ -88,7 +88,7 @@ Deno.test("runAgent — continuation uses runtime adapter resume session", async
   assertEquals(calls[1].resumeSessionId, "ses_test");
 });
 
-Deno.test("runAgent — forwards hitlConfig to runtime adapter", async () => {
+Deno.test("runAgent — registers HITL MCP server when hitlConfig + capabilities.mcpInjection", async () => {
   const nodeDir = Deno.makeTempDirSync();
   const calls: RuntimeInvokeOptions[] = [];
 
@@ -96,7 +96,7 @@ Deno.test("runAgent — forwards hitlConfig to runtime adapter", async () => {
     id: "opencode",
     capabilities: {
       permissionMode: false,
-      hitl: true,
+      mcpInjection: true,
       transcript: false,
       interactive: false,
       toolUseObservation: false,
@@ -145,6 +145,13 @@ Deno.test("runAgent — forwards hitlConfig to runtime adapter", async () => {
 
   assertEquals(result.success, true);
   assertEquals(calls.length, 1);
-  assertEquals(calls[0].hitlConfig?.ask_script, "ask.sh");
-  assertEquals(calls[0].hitlConfig?.check_script, "check.sh");
+  // FR-L35 / ADR-0013: engine renders hitlConfig into the typed
+  // mcpServers field plus an onToolUseObserved hook; the library
+  // routes them to the runtime's native MCP injection. The legacy
+  // hitlConfig / hitlMcpCommandBuilder fields no longer exist.
+  const servers = calls[0].mcpServers;
+  assertEquals(servers !== undefined, true);
+  const entry = servers?.["flowai-workflow-hitl"];
+  assertEquals(entry?.type, "stdio");
+  assertEquals(typeof calls[0].onToolUseObserved, "function");
 });

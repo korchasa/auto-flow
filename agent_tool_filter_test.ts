@@ -45,7 +45,7 @@ function makeCapturingAdapter(
     id: "opencode",
     capabilities: {
       permissionMode: false,
-      hitl: false,
+      mcpInjection: false,
       transcript: false,
       interactive: false,
       toolUseObservation: false,

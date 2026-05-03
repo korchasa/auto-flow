@@ -3,31 +3,27 @@
  * Type declarations for the configurable node-based workflow engine.
  * No logic — pure type definitions.
  *
- * Runtime-neutral agent-CLI types (runtime identifiers, permission modes,
- * verbosity, HITL request shapes, normalized CLI output, HITL config) are
- * defined in `@korchasa/ai-ide-cli/types` and re-exported here so existing
- * engine-internal imports continue to resolve through `./types.ts`.
+ * Runtime-neutral CLI-wrapper types (runtime identifiers, permission modes,
+ * verbosity, normalized CLI output) come from `@korchasa/ai-ide-cli` and
+ * are re-exported here. HITL types (`HitlConfig`, `HumanInputRequest`,
+ * `HumanInputOption`) are owned by the engine — the library v0.8.0 dropped
+ * the entire HITL layer (see `@korchasa/ai-ide-cli` removal ADR
+ * `2026-05-02-remove-hitl.md` and this repo's ADR-0013).
  */
 
 import type {
   CliRunOutput,
-  HitlConfig,
-  HumanInputOption,
-  HumanInputRequest,
   PermissionDenial,
-  PermissionMode,
   RuntimeId,
   Verbosity,
 } from "@korchasa/ai-ide-cli/types";
 import type { ExtraArgsMap } from "@korchasa/ai-ide-cli/runtime/types";
 import type { ReasoningEffort } from "@korchasa/ai-ide-cli/runtime/reasoning-effort";
 import type { ProcessRegistry } from "@korchasa/ai-ide-cli/process-registry";
+import type { PermissionMode } from "@korchasa/ai-ide-cli";
 
 export type {
   CliRunOutput,
-  HitlConfig,
-  HumanInputOption,
-  HumanInputRequest,
   PermissionDenial,
   PermissionMode,
   ProcessRegistry,
@@ -35,11 +31,51 @@ export type {
   RuntimeId,
   Verbosity,
 };
-export {
-  VALID_PERMISSION_MODES,
-  VALID_RUNTIME_IDS,
-} from "@korchasa/ai-ide-cli/types";
+export { VALID_RUNTIME_IDS } from "@korchasa/ai-ide-cli/types";
+export { VALID_PERMISSION_MODES } from "@korchasa/ai-ide-cli";
 export { REASONING_EFFORT_VALUES } from "@korchasa/ai-ide-cli/runtime/reasoning-effort";
+
+// --- HITL Types (engine-owned, post library v0.8.0; ADR-0013) ---
+
+/** A single answer-option attached to a HITL request. */
+export interface HumanInputOption {
+  /** User-visible option label. */
+  label: string;
+  /** Optional explanatory text shown alongside the label. */
+  description?: string;
+}
+
+/** Runtime-normalised human-input request captured from an MCP tool call. */
+export interface HumanInputRequest {
+  /** Main question text to present to the operator. */
+  question: string;
+  /** Optional heading displayed above the question. */
+  header?: string;
+  /** Optional list of predefined answer choices. */
+  options?: HumanInputOption[];
+  /** Whether multiple options may be selected. */
+  multiSelect?: boolean;
+}
+
+/**
+ * Workflow-level HITL configuration. Specifies the external transport
+ * scripts the engine invokes to post questions and poll for replies, plus
+ * polling/timeout knobs. Read from `defaults.hitl` in workflow.yaml.
+ */
+export interface HitlConfig {
+  /** Script invoked to post a question to the human operator. */
+  ask_script: string;
+  /** Script polled to check if the human has responded. */
+  check_script: string;
+  /** Relative path from run_dir to artifact containing issue frontmatter. */
+  artifact_source?: string;
+  /** Seconds between consecutive polls of check_script (default 60). */
+  poll_interval: number;
+  /** Maximum seconds to wait for a human response before timing out (default 7200). */
+  timeout: number;
+  /** Login name to exclude from HITL responses (e.g. bot's own login). */
+  exclude_login?: string;
+}
 
 // --- Workflow Configuration (parsed from YAML) ---
 

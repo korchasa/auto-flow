@@ -219,27 +219,41 @@
       `markNodeSkipped()`.
     - `run_on: "failure"` → skip if `workflowSuccess`, call
       `markNodeSkipped()`.
-  - **HITL via Runtime-Native Structured Requests** (FR-E8):
-    Engine detects agent HITL requests through runtime-specific structured
-    output and normalizes them into one engine-level resume flow. Flow:
-    1. Agent node completes or is intentionally interrupted after emitting a
-       structured HITL request.
-    2. Claude path: inspect `permission_denials[]` for
-       `tool_name == "AskUserQuestion"` and extract `tool_input`.
-    3. OpenCode path: inject a per-invocation local MCP server via
-       `OPENCODE_CONFIG_CONTENT`; inspect NDJSON `tool_use` events for
-       `hitl_request_human_input`; terminate the process after the first
-       detected HITL tool event so the model session can be resumed later by
-       the engine.
-    4. Engine normalizes the payload to `{question, header, options[],
-       multiSelect}` and stores it in `state.json` together with `session_id`.
-    5. Engine calls `defaults.hitl.ask_script` (external workflow script) with
-       question JSON + context args.
+  - **HITL via Engine-Owned MCP Server** (FR-E8, FR-E64; ADR-0013):
+    Engine ships a single stdio MCP server (`flowai-workflow-hitl`)
+    exposing one tool `request_human_input`. Detection uses the
+    library's runtime-neutral `onToolUseObserved` hook (FR-L35);
+    library v0.8.0 dropped the in-library HITL layer entirely and
+    v0.8.1 added the generic `mcpServers` invoke field that the
+    engine renders into each runtime's native MCP plumbing. Flow:
+    1. When `defaults.hitl` is configured AND
+       `adapter.capabilities.mcpInjection === true`, `runAgent()`
+       passes `mcpServers` (one entry under `flowai-workflow-hitl`)
+       and an `onToolUseObserved` observer to every `adapter.invoke()`
+       (initial + continuation).
+    2. Library renders the entry to the runtime-native plumbing
+       (Claude `--mcp-config <tmp>`, OpenCode
+       `OPENCODE_CONFIG_CONTENT`, Codex `--config mcp_servers.*`).
+       Cursor adapter warns and drops it (no per-invocation MCP).
+    3. Agent calls the MCP tool; runtime emits a `tool_use` event;
+       observer matches the runtime-prefixed name
+       (`mcp__flowai-workflow-hitl__request_human_input` /
+       `flowai-workflow-hitl_request_human_input` /
+       `flowai-workflow-hitl.request_human_input`), normalises the
+       input into `HumanInputRequest`, returns `"abort"`.
+    4. Engine reads `result.hitl_question` and dispatches to
+       `handleAgentHitl({mode: "detect"})` in `node-dispatch.ts`.
+    5. Engine calls `defaults.hitl.ask_script` (external workflow
+       script) with question JSON + context args.
     6. Engine enters poll loop: `sleep(poll_interval)` → call
-       `defaults.hitl.check_script` → if exit 0, read reply from stdout.
-    7. Engine resumes the same session through the selected runtime
-       (`claude --resume <session_id>` or `opencode run --session <session_id>`).
-    8. On `timeout` exceeded: node marked `failed`.
+       `defaults.hitl.check_script` → if exit 0, read reply from
+       stdout.
+    7. Engine appends one `{ts, round, question, reply}` record to
+       `<nodeDirAbs>/hitl.jsonl` (FR-E64; round counter from existing
+       line count for crash-resume) BEFORE the resume call.
+    8. Engine resumes the session through the same adapter
+       (`resumeSessionId` + same `mcpServers` so nested HITL works).
+    9. On `timeout` exceeded: node marked `failed`.
   - **Runtime-Normalized Logging**:
     Agent outputs are persisted as runtime-agnostic JSON logs using the
     normalized `CliRunOutput` shape. Transcript copying is capability-based:

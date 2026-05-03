@@ -166,6 +166,6 @@ Deno.test("resolveRuntimeConfig — body node overrides loop and defaults", () =
 Deno.test("getRuntimeAdapter — opencode adapter declares HITL and permissionMode support", () => {
   const adapter = getRuntimeAdapter("opencode");
   assertEquals(adapter.id, "opencode");
-  assertEquals(adapter.capabilities.hitl, true);
+  assertEquals(adapter.capabilities.mcpInjection, true);
   assertEquals(adapter.capabilities.permissionMode, true);
 });

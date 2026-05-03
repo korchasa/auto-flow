@@ -7,7 +7,7 @@
     "./engine": "./mod.ts"
   },
   "imports": {
-    "@korchasa/ai-ide-cli": "jsr:@korchasa/ai-ide-cli@^0.5.10",
+    "@korchasa/ai-ide-cli": "jsr:@korchasa/ai-ide-cli@^0.8.1",
     "@std/assert": "jsr:@std/assert@^1.0.19",
     "@std/path": "jsr:@std/path@^1.1.4",
     "@std/yaml": "jsr:@std/yaml@^1.0.12",

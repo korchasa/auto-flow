@@ -27,7 +27,9 @@ import type {
   RuntimeAdapter,
   RuntimeInvokeOptions,
 } from "@korchasa/ai-ide-cli/runtime/types";
-import { buildEngineHitlMcpCommand } from "./hitl-mcp-command.ts";
+import { defaultRegistry } from "@korchasa/ai-ide-cli/process-registry";
+import { workPath } from "./state.ts";
+import { buildHitlMcpServers, createHitlObserver } from "./hitl-injection.ts";
 import type { OutputManager } from "./output.ts";
 
 /** Structured question extracted from a runtime-native HITL request. */
@@ -105,54 +107,6 @@ export interface HitlRunOptions {
 }
 
 /**
- * Detect an AskUserQuestion HITL request in Claude CLI output.
- * Returns the extracted HitlQuestion or null if none found.
- */
-export function detectHitlRequest(
-  output: CliRunOutput,
-): HitlQuestion | null {
-  if (output.hitl_request) {
-    return output.hitl_request;
-  }
-  if (!output.permission_denials || output.permission_denials.length === 0) {
-    return null;
-  }
-
-  const denial = output.permission_denials.find(
-    (d) => d.tool_name === "AskUserQuestion",
-  );
-  if (!denial) return null;
-
-  const input = denial.tool_input;
-
-  // Format 1: { questions: [{ question, header, options, multiSelect }] }
-  if (
-    input.questions && Array.isArray(input.questions) &&
-    input.questions.length > 0
-  ) {
-    const q = input.questions[0] as Record<string, unknown>;
-    return {
-      question: q.question as string,
-      header: q.header as string | undefined,
-      options: q.options as HitlQuestion["options"],
-      multiSelect: q.multiSelect as boolean | undefined,
-    };
-  }
-
-  // Format 2: flat { question, header, options, multiSelect }
-  if (typeof input.question === "string") {
-    return {
-      question: input.question as string,
-      header: input.header as string | undefined,
-      options: input.options as HitlQuestion["options"],
-      multiSelect: input.multiSelect as boolean | undefined,
-    };
-  }
-
-  return null;
-}
-
-/**
  * Run the HITL poll loop: deliver question, poll for reply, resume agent.
  *
  * Flow:
@@ -167,6 +121,7 @@ export async function runHitlLoop(
 ): Promise<AgentResult> {
   const {
     config,
+    ctx,
     nodeId,
     runId,
     runDir,
@@ -195,11 +150,12 @@ export async function runHitlLoop(
     };
   }
 
-  if (!adapter.capabilities.hitl) {
+  if (!adapter.capabilities.mcpInjection) {
     return {
       success: false,
       continuations: 0,
-      error: `Runtime '${runtime}' does not support HITL`,
+      error:
+        `Runtime '${runtime}' does not support per-invocation MCP injection (capabilities.mcpInjection === false). HITL requires it.`,
       error_category: "unknown",
     };
   }
@@ -256,9 +212,20 @@ export async function runHitlLoop(
     const checkResult = await runner(config.check_script, checkArgs);
 
     if (checkResult.exitCode === 0 && checkResult.stdout.trim()) {
-      // Reply received — resume agent
+      // Reply received — append Q+A audit artefact (FR-E64) before resume,
+      // so a crash mid-resume still leaves the question on disk for the
+      // post-mortem dashboard. Use ctx.node_dir wrapped with workPath
+      // (FR-E52 convention) so the artefact lands in the same per-node
+      // directory the engine uses for every other artefact.
       const reply = checkResult.stdout.trim();
+      const nodeDirAbs = workPath(ctx.workDir, ctx.node_dir);
+      await appendHitlAuditRecord(nodeDirAbs, question, reply);
 
+      // Re-register the HITL MCP server on resume so the agent can raise
+      // another HITL request inside the same session if needed (a single
+      // run may legitimately HITL multiple rounds; the per-round audit
+      // artefact records each).
+      const resumeObserver = createHitlObserver(runtime);
       const result = await runtimeRun({
         resumeSessionId: sessionId,
         taskPrompt: reply,
@@ -269,13 +236,13 @@ export async function runHitlLoop(
         reasoningEffort: opts.reasoningEffort,
         allowedTools: opts.allowedTools,
         disallowedTools: opts.disallowedTools,
-        hitlConfig: config,
-        hitlMcpCommandBuilder: buildEngineHitlMcpCommand,
+        mcpServers: buildHitlMcpServers(),
+        onToolUseObserved: resumeObserver.observer,
         timeoutSeconds: settings.timeout_seconds,
         maxRetries: settings.max_retries,
         retryDelaySeconds: settings.retry_delay_seconds,
         cwd: cwdOpt,
-        processRegistry: opts.processRegistry,
+        processRegistry: opts.processRegistry ?? defaultRegistry,
       });
 
       if (result.error) {
@@ -295,6 +262,7 @@ export async function runHitlLoop(
         output: result.output,
         continuations: 0,
         permission_denials: result.output?.permission_denials,
+        hitl_question: resumeObserver.getQuestion() ?? undefined,
       };
     }
 
@@ -318,6 +286,43 @@ export async function runHitlLoop(
 }
 
 // --- Internal helpers ---
+
+/**
+ * Append one HITL Q+A round to `<nodeDirAbs>/hitl.jsonl` (FR-E64).
+ * Round counter is reconstructed from existing line count so resume after
+ * crash continues numbering correctly. Atomic on POSIX append (single
+ * `writeTextFile` call with `append: true`).
+ *
+ * Caller wraps `ctx.node_dir` with {@link workPath} before passing —
+ * keeps FS I/O cwd-correct under worktree isolation (FR-E52).
+ */
+async function appendHitlAuditRecord(
+  nodeDirAbs: string,
+  question: HitlQuestion,
+  reply: string,
+): Promise<void> {
+  await Deno.mkdir(nodeDirAbs, { recursive: true });
+  const path = `${nodeDirAbs}/hitl.jsonl`;
+
+  let round = 0;
+  try {
+    const existing = await Deno.readTextFile(path);
+    round = existing.split("\n").filter((l) => l.trim()).length;
+  } catch (err) {
+    if (!(err instanceof Deno.errors.NotFound)) throw err;
+  }
+
+  const record = {
+    ts: new Date().toISOString(),
+    round,
+    question,
+    reply,
+  };
+  await Deno.writeTextFile(path, JSON.stringify(record) + "\n", {
+    append: true,
+    create: true,
+  });
+}
 
 /** Build args array for ask/check scripts. */
 function buildScriptArgs(

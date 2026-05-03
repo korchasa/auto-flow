@@ -9,7 +9,7 @@ import { resolveInputArtifacts, runAgent } from "./agent.ts";
 import { resolveBudget, resolveToolFilter } from "./config.ts";
 import { runWithGuardrail } from "./guardrail.ts";
 import { handleAgentHitl } from "./hitl-handler.ts";
-import { detectHitlRequest, isHitlConfigured } from "./hitl.ts";
+import { isHitlConfigured } from "./hitl.ts";
 import { runHuman } from "./human.ts";
 import { findDirtyMemoryFiles, formatMemoryViolation } from "./memory-check.ts";
 import type { UserInput } from "./human.ts";
@@ -196,43 +196,43 @@ export async function executeAgentNode(
     }
   }
 
-  // Check for HITL request in permission_denials
-  if (result.output) {
-    const hitlQuestion = detectHitlRequest(result.output);
-    if (hitlQuestion) {
-      if (!hitlConfig) {
-        markNodeFailed(
-          eng.state,
-          nodeId,
-          "Agent requested HITL (AskUserQuestion) but defaults.hitl not configured in workflow.yaml",
-          "unknown",
-        );
-        return null;
-      }
-      return await handleAgentHitl({
-        mode: "detect",
+  // FR-L35 / ADR-0013: HITL request was captured by the engine's
+  // `onToolUseObserved` observer in agent.ts (replaces the legacy
+  // `permission_denials` AskUserQuestion path). Route to the handler when
+  // present.
+  if (result.hitl_question && result.output) {
+    if (!hitlConfig) {
+      markNodeFailed(
+        eng.state,
         nodeId,
-        hitlQuestion,
-        agentSessionId: result.output.session_id,
-        hitlConfig,
-        state: eng.state,
-        saveState: eng.saveState,
-        node,
-        ctx,
-        settings,
-        runtime: runtimeConfig.runtime,
-        runtimeArgs: runtimeConfig.args,
-        permissionMode: runtimeConfig.permissionMode,
-        model: runtimeConfig.model,
-        reasoningEffort: runtimeConfig.reasoningEffort,
-        allowedTools: toolFilter.allowedTools,
-        disallowedTools: toolFilter.disallowedTools,
-        output: eng.output,
-        cwd,
-        maxTurns: resolveBudget(node, eng.config.defaults)?.max_turns,
-        processRegistry: eng.options.processRegistry,
-      });
+        "Agent called request_human_input but defaults.hitl not configured in workflow.yaml",
+        "unknown",
+      );
+      return null;
     }
+    return await handleAgentHitl({
+      mode: "detect",
+      nodeId,
+      hitlQuestion: result.hitl_question,
+      agentSessionId: result.output.session_id,
+      hitlConfig,
+      state: eng.state,
+      saveState: eng.saveState,
+      node,
+      ctx,
+      settings,
+      runtime: runtimeConfig.runtime,
+      runtimeArgs: runtimeConfig.args,
+      permissionMode: runtimeConfig.permissionMode,
+      model: runtimeConfig.model,
+      reasoningEffort: runtimeConfig.reasoningEffort,
+      allowedTools: toolFilter.allowedTools,
+      disallowedTools: toolFilter.disallowedTools,
+      output: eng.output,
+      cwd,
+      maxTurns: resolveBudget(node, eng.config.defaults)?.max_turns,
+      processRegistry: eng.options.processRegistry,
+    });
   }
 
   if (result.session_id) {

@@ -191,8 +191,8 @@ export class OutputManager {
     for (const line of (output.result ?? "").split("\n")) {
       if (line.trim()) this.write(`  ${line}\n`);
     }
-    const cost = output.total_cost_usd.toFixed(4);
-    const durationS = Math.round(output.duration_ms / 1000);
+    const cost = (output.total_cost_usd ?? 0).toFixed(4);
+    const durationS = Math.round((output.duration_ms ?? 0) / 1000);
     this.write(
       `  cost=$${cost} | duration=${durationS}s | turns=${output.num_turns}\n`,
     );

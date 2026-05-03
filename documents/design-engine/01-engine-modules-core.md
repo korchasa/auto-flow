@@ -183,8 +183,16 @@
     via `task_template` `{{file(...)}}` (FR-S38). Base system prompt preserved.
     Runtime resolution centralized in `@korchasa/ai-ide-cli/runtime`;
     `runAgent()` resolves the adapter once and keeps continuation semantics
-    unchanged across runtimes. `runAgent()` wires `hitlMcpCommandBuilder`
-    from `engine/hitl-mcp-command.ts` for OpenCode HITL.
+    unchanged across runtimes. **HITL injection (FR-E8, ADR-0013):**
+    when `defaults.hitl` is configured AND
+    `adapter.capabilities.mcpInjection === true`, `runAgent()` builds an
+    `mcpServers` invoke option (engine's `request_human_input` MCP server,
+    name `flowai-workflow-hitl`) and an `onToolUseObserved` observer; the
+    library renders the entry into each runtime's native MCP plumbing
+    (Claude `--mcp-config`, OpenCode `OPENCODE_CONFIG_CONTENT`, Codex
+    `--config mcp_servers.*`). Engine modules: `hitl-injection.ts`
+    (server registration + observer), `hitl-mcp-server.ts` (NDJSON MCP
+    server, dispatched from `cli.ts` via `--internal-hitl-mcp`).
     **Budget max_turns emission (FR-E47):** In `runAgent()`, if resolved
     `budget.max_turns` is present AND the active runtime identifier is
     `claude`, appends `--max-turns <N>` to `extraArgs`. Same pattern as

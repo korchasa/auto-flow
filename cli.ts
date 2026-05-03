@@ -31,9 +31,9 @@
 import type { EngineOptions, Verbosity } from "./types.ts";
 import { Engine } from "./engine.ts";
 import {
-  INTERNAL_OPENCODE_HITL_MCP_ARG,
-  runOpenCodeHitlMcpServer,
-} from "@korchasa/ai-ide-cli/opencode/hitl-mcp";
+  INTERNAL_HITL_MCP_ARG,
+  runFlowaiHitlMcpServer,
+} from "./hitl-mcp-server.ts";
 import { installSignalHandlers } from "./process-registry.ts";
 import { checkForUpdate } from "./version.ts";
 
@@ -309,9 +309,11 @@ async function runEngine(args: string[]): Promise<never> {
 }
 
 if (import.meta.main) {
-  // Internal dispatch: OpenCode HITL MCP server
-  if (Deno.args[0] === INTERNAL_OPENCODE_HITL_MCP_ARG) {
-    await runOpenCodeHitlMcpServer();
+  // Internal dispatch: engine-owned HITL MCP server. Every MCP-capable
+  // runtime adapter (Claude / OpenCode / Codex) spawns the engine binary
+  // with this flag via the `mcpServers` invoke option (FR-L35; ADR-0013).
+  if (Deno.args[0] === INTERNAL_HITL_MCP_ARG) {
+    await runFlowaiHitlMcpServer();
     Deno.exit(0);
   }
 

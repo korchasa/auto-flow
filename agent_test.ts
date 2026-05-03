@@ -2,6 +2,7 @@ import { assertEquals } from "@std/assert";
 import type { AgentRunOptions } from "./agent.ts";
 import { buildClaudeArgs } from "@korchasa/ai-ide-cli/claude/process";
 import type { ClaudeInvokeOptions } from "@korchasa/ai-ide-cli/claude/process";
+import { defaultRegistry } from "@korchasa/ai-ide-cli/process-registry";
 import { OutputManager } from "./output.ts";
 import {
   extractClaudeOutput,
@@ -131,11 +132,14 @@ Deno.test("AgentRunOptions — loop context available", () => {
 function makeInvokeOpts(
   overrides?: Partial<ClaudeInvokeOptions>,
 ): ClaudeInvokeOptions {
+  // ProcessRegistry is now mandatory on RuntimeInvokeOptions
+  // (library v0.8.x). Tests use the package-default singleton.
   return {
     taskPrompt: "do something",
     timeoutSeconds: 60,
     maxRetries: 1,
     retryDelaySeconds: 1,
+    processRegistry: defaultRegistry,
     ...overrides,
   };
 }
