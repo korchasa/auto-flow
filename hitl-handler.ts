@@ -22,8 +22,9 @@ import type {
 } from "@korchasa/ai-ide-cli/runtime/types";
 import type { AgentResult } from "./agent.ts";
 import type { HitlQuestion } from "./hitl.ts";
+import { resolve } from "@std/path";
 import { runHitlLoop } from "./hitl.ts";
-import { markNodeFailed, markNodeWaiting, workPath } from "./state.ts";
+import { getRunDir, markNodeFailed, markNodeWaiting } from "./state.ts";
 import { saveAgentLog } from "./log.ts";
 import type { OutputManager } from "./output.ts";
 
@@ -33,6 +34,11 @@ interface HitlBaseParams {
   hitlConfig: HitlConfig;
   state: RunState;
   saveState: () => Promise<void>;
+  /** Workflow folder (e.g., `.flowai-workflow/autonomous-sdlc`). Used to
+   * resolve the absolute run-dir path passed to HITL scripts, which run
+   * with cwd=workDir under worktree isolation and cannot resolve a
+   * workDir-relative path back to the project-root run-dir. */
+  workflowDir: string;
   node: NodeConfig;
   ctx: TemplateContext;
   settings: Required<NodeSettings>;
@@ -109,10 +115,17 @@ export async function handleAgentHitl(
     allowedTools,
     disallowedTools,
     processRegistry,
+    workflowDir,
   } = params;
-  // ctx.run_dir is workDir-relative (see TemplateContext); reconstruct
-  // the cwd-correct path for FS access.
-  const runDir = workPath(ctx.workDir, ctx.run_dir);
+  // HITL scripts run with cwd=workDir (worktree under isolation) and write
+  // bookkeeping files (`.tg_baseline`, `hitl.jsonl`) into the run-dir at
+  // project root. Resolve the run-dir to an ABSOLUTE path so the script
+  // finds it regardless of its own cwd — workDir-relative path would
+  // resolve into the worktree (where the run-dir does not exist) and
+  // ask_script would fail with "run-dir not writable". Computed via
+  // getRunDir(runId, workflowDir) (engine state, no ctx coupling) so the
+  // FR-E52 workPath convention stays scoped to engine FS access.
+  const runDir = resolve(getRunDir(state.run_id, workflowDir));
 
   if (params.mode === "resume") {
     const nodeState = state.nodes[nodeId];
