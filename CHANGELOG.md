@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.7.5](https://github.com/korchasa/flowai-workflow/compare/v0.7.4...v0.7.5) (2026-05-03)
+
+
+### Features
+
+* **hitl:** absorb HITL MCP stack into engine (ADR-0013) ([9af4edf](https://github.com/korchasa/flowai-workflow/commit/9af4edf47d0fc86354b64ffd4ac27df2a107d09e))
+
 ### [0.7.4](https://github.com/korchasa/flowai-workflow/compare/v0.7.3...v0.7.4) (2026-05-02)
 
 
