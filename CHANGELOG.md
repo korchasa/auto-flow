@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.7.6](https://github.com/korchasa/flowai-workflow/compare/v0.7.5...v0.7.6) (2026-05-03)
+
+
+### Bug Fixes
+
+* **engine:** exclude <workflowDir>/runs/ from FR-E58 ignored mirror ([7a6f638](https://github.com/korchasa/flowai-workflow/commit/7a6f638e6115ffb9fc91addc930aeb2d7503c473))
+* **hitl:** resolve run-dir path for HITL scripts using workflowDir ([e27e0f2](https://github.com/korchasa/flowai-workflow/commit/e27e0f28972ba6036550619d1931771b1ffcf065))
+* **hitl:** short-circuit runAgent on observer-captured question ([d300e01](https://github.com/korchasa/flowai-workflow/commit/d300e0108fd10e728a713aabe93a4d095745f4d3))
+* **hitl:** surface script stderr in failure messages ([4908b50](https://github.com/korchasa/flowai-workflow/commit/4908b502eff8e94ed7c353e1a9acea68542b32fb))
+
 ### [0.7.5](https://github.com/korchasa/flowai-workflow/compare/v0.7.4...v0.7.5) (2026-05-03)
 
 
