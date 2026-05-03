@@ -273,6 +273,32 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
   let continuations = 0;
   const validationRules = node.validate ?? [];
 
+  // FR-L35 / ADR-0013: HITL question captured by `onToolUseObserved` is the
+  // run's terminal state. Skip the cli_crash branch (the abort-induced
+  // is_error is by design) AND skip validation/continuation: the artifact
+  // is intentionally absent until the user replies, so validation would
+  // fail and a resume would re-invoke the agent — at which point the
+  // observer's "captured-once" guard lets the second tool call through with
+  // a fake `{ok:true}` response. The agent then believes the question was
+  // answered, and the engine never surfaces the captured question to
+  // `handleAgentHitl`. Short-circuit here and let the caller route it.
+  const hitlEarlyReturn = (): AgentResult | null => {
+    const captured = hitlObserver?.getQuestion();
+    if (!captured) return null;
+    return {
+      success: true,
+      session_id: result.output?.session_id,
+      output: result.output,
+      continuations,
+      hitl_question: captured,
+      permission_denials: result.output?.permission_denials,
+    };
+  };
+  {
+    const early = hitlEarlyReturn();
+    if (early) return early;
+  }
+
   // Fail fast if initial invocation returned no output at all
   if (result.error && !result.output) {
     return {
@@ -381,6 +407,13 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       cwd,
       processRegistry: processRegistry ?? defaultRegistry,
     });
+
+    // Same short-circuit applies if the observer captures during a
+    // continuation: the artifact still cannot be produced without the
+    // user's reply, and any further continuation would race the
+    // observer's captured-once guard.
+    const earlyAfterResume = hitlEarlyReturn();
+    if (earlyAfterResume) return earlyAfterResume;
   }
 
   if (result.error) {
