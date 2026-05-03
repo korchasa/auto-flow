@@ -1,3 +1,6 @@
+// FR-E8: agent-initiated HITL via engine-owned MCP server (ADR-0013).
+// Detection helpers live in hitl-injection_test.ts; this file covers
+// the runHitlLoop ask/poll/resume cycle and FR-E64 audit append.
 import { assertEquals } from "@std/assert";
 import type { HitlConfig } from "./types.ts";
 import { runHitlLoop } from "./hitl.ts";
@@ -227,4 +230,106 @@ Deno.test("runHitlLoop — skipAsk=true skips ask invocation", async () => {
   // ask_script should NOT have been called
   const askCalls = calls.filter((p) => p.includes("ask"));
   assertEquals(askCalls.length, 0);
+});
+
+// --- FR-E64: Q+A audit artefact at <nodeDirAbs>/hitl.jsonl ---
+
+Deno.test("runHitlLoop — FR-E64 appends audit record on reply", async () => {
+  const tmpRoot = await Deno.makeTempDir({ prefix: "flowai-hitl-audit-" });
+  const opts = makeBaseOpts({
+    ctx: {
+      node_dir: "node-pm",
+      run_dir: tmpRoot,
+      run_id: "test-run",
+      workDir: tmpRoot,
+      args: {},
+      env: {},
+      input: {},
+    },
+    question: {
+      question: "Which language?",
+      options: [{ label: "Go" }, { label: "Python" }],
+    },
+    scriptRunner: (path: string, _args: string[]) => {
+      if (path.includes("check")) {
+        return Promise.resolve({ exitCode: 0, stdout: "Go" });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: "" });
+    },
+    claudeRunner: (_o) =>
+      Promise.resolve({
+        output: {
+          result: "ok",
+          session_id: "sess-r1",
+          total_cost_usd: 0,
+          duration_ms: 1,
+          duration_api_ms: 1,
+          num_turns: 1,
+          is_error: false,
+        },
+      }),
+  });
+
+  await runHitlLoop(opts);
+
+  const auditPath = `${tmpRoot}/node-pm/hitl.jsonl`;
+  const body = await Deno.readTextFile(auditPath);
+  const lines = body.split("\n").filter((l) => l.trim());
+  assertEquals(lines.length, 1);
+  const rec = JSON.parse(lines[0]);
+  assertEquals(rec.round, 0);
+  assertEquals(rec.reply, "Go");
+  assertEquals(rec.question.question, "Which language?");
+  assertEquals(typeof rec.ts, "string");
+});
+
+Deno.test("runHitlLoop — FR-E64 round counter survives existing file", async () => {
+  const tmpRoot = await Deno.makeTempDir({ prefix: "flowai-hitl-audit-" });
+  await Deno.mkdir(`${tmpRoot}/node-pm`, { recursive: true });
+  // Pre-seed two prior rounds (simulating crash-resumed run).
+  await Deno.writeTextFile(
+    `${tmpRoot}/node-pm/hitl.jsonl`,
+    JSON.stringify({ round: 0, prior: true }) + "\n" +
+      JSON.stringify({ round: 1, prior: true }) + "\n",
+  );
+
+  const opts = makeBaseOpts({
+    ctx: {
+      node_dir: "node-pm",
+      run_dir: tmpRoot,
+      run_id: "test-run",
+      workDir: tmpRoot,
+      args: {},
+      env: {},
+      input: {},
+    },
+    question: { question: "Resume?" },
+    scriptRunner: (path: string, _args: string[]) => {
+      if (path.includes("check")) {
+        return Promise.resolve({ exitCode: 0, stdout: "yes" });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: "" });
+    },
+    claudeRunner: (_o) =>
+      Promise.resolve({
+        output: {
+          result: "ok",
+          session_id: "sess-r2",
+          total_cost_usd: 0,
+          duration_ms: 1,
+          duration_api_ms: 1,
+          num_turns: 1,
+          is_error: false,
+        },
+      }),
+  });
+
+  await runHitlLoop(opts);
+
+  const lines = (await Deno.readTextFile(`${tmpRoot}/node-pm/hitl.jsonl`))
+    .split("\n").filter((l) => l.trim());
+  assertEquals(lines.length, 3);
+  const last = JSON.parse(lines[2]);
+  assertEquals(last.round, 2); // continued from existing line count
+  assertEquals(last.reply, "yes");
 });

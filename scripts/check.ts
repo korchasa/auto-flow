@@ -698,7 +698,123 @@ export function validateFrFields(
 }
 
 /**
- * Wrapper for `validateFrFields` that reads
+ * Validate every `**Tests:** \`a_test.ts\`, \`b_test.ts\` (FR-E<N>; …).`
+ * line inside an FR's Acceptance criteria block:
+ *
+ * 1. Each backtick-quoted file MUST exist on disk (repo root). Stale
+ *    references (renamed/deleted tests) are caught here, not at PR
+ *    review.
+ * 2. If the parenthetical opens with the FR's own id (e.g.
+ *    `(FR-E64; regression-locked; …)`), every listed file MUST
+ *    contain that id somewhere (test name, comment, …). The
+ *    project convention embeds FR ids in test names so a reader can
+ *    grep — that's the regression lock per ADR-0011. Files listed
+ *    with NO matching FR id break the lock.
+ * 3. The `(regression-locked; <topic>)` form (no FR id) is the
+ *    explicit "manually verified, no FR-id grep anchor" escape
+ *    hatch per ADR-0011 — those lines are skipped.
+ *
+ * Pure-ish: file I/O delegated to `readFile`/`exists` callbacks so
+ * unit tests can pass synthetic fixtures.
+ */
+export async function validateFrTestRefs(
+  files: Array<{ name: string; content: string }>,
+  exists: (path: string) => Promise<boolean>,
+  readFile: (path: string) => Promise<string>,
+): Promise<string[]> {
+  const offenders: string[] = [];
+  const frHeaderRe = /^### \d+(?:\.\d+)?\s+(FR-[ES]\d+):/;
+  // Indented inside the Acceptance block — at least 2 leading spaces.
+  // Match `**Tests:**` then capture (a) the bare list before the paren
+  // and (b) the parenthetical tag.
+  const testsLineRe = /^\s{2,}-\s+\*\*Tests:\*\*\s+([^()]+?)\s*\(([^)]*)\)/;
+  const fileRe = /`([^`]+_test\.ts)`/g;
+
+  // Cache test-file contents across FRs in the same run.
+  const bodyCache = new Map<string, string | null>();
+  const readBody = async (path: string): Promise<string | null> => {
+    if (bodyCache.has(path)) return bodyCache.get(path)!;
+    const body = (await exists(path)) ? await readFile(path) : null;
+    bodyCache.set(path, body);
+    return body;
+  };
+
+  for (const { name, content } of files) {
+    const lines = content.split("\n");
+    let currentFr: string | null = null;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const headerMatch = line.match(frHeaderRe);
+      if (headerMatch) {
+        currentFr = headerMatch[1];
+        continue;
+      }
+      if (!currentFr) continue;
+
+      // Multi-line Tests: blocks fold with continuation indents; collapse
+      // a few following lines for the parse so file refs after a wrap
+      // still match.
+      let probe = line;
+      let j = i + 1;
+      while (j < lines.length && j < i + 6 && !lines[j].match(testsLineRe)) {
+        if (/^\s+\S/.test(lines[j]) && !lines[j].match(/^\s{2,}-/)) {
+          probe += " " + lines[j].trim();
+          j++;
+        } else break;
+      }
+      const testsMatch = probe.match(testsLineRe);
+      if (!testsMatch) continue;
+
+      const fileList = [...probe.matchAll(fileRe)].map((m) => m[1]);
+      if (fileList.length === 0) continue;
+      const tag = testsMatch[2];
+      // First semicolon-separated chunk holds the FR id when present.
+      const firstChunk = tag.split(";")[0].trim();
+      const expectFrId = firstChunk === currentFr ? currentFr : null;
+
+      // Existence check — every file must be on disk regardless of tag.
+      const existing: string[] = [];
+      for (const file of fileList) {
+        if (!(await exists(file))) {
+          offenders.push(
+            `${name}:${i + 1} ${currentFr}: Tests reference missing file ` +
+              `'${file}'`,
+          );
+          continue;
+        }
+        existing.push(file);
+      }
+
+      // FR-id anchor check — per ADR-0011 the reader greps the listed
+      // files for the id, so AT LEAST ONE file must carry the marker
+      // (test name or comment). Splitting the marker across files is
+      // fine; demanding it in every file would force boilerplate.
+      if (!expectFrId || existing.length === 0) continue;
+      let anyHasMarker = false;
+      for (const file of existing) {
+        const body = await readBody(file);
+        if (body !== null && body.includes(expectFrId)) {
+          anyHasMarker = true;
+          break;
+        }
+      }
+      if (!anyHasMarker) {
+        offenders.push(
+          `${name}:${i + 1} ${currentFr}: none of [${
+            existing.join(", ")
+          }] contains a '${expectFrId}' marker (regression-lock anchor ` +
+            `missing — add an FR-id-tagged test name or comment, or ` +
+            `switch the tag to \`(regression-locked; <topic>)\` per ` +
+            `ADR-0011).`,
+        );
+      }
+    }
+  }
+  return offenders;
+}
+
+/**
+ * Wrapper for `validateFrFields` + `validateFrTestRefs` that reads
  * `documents/requirements-{engine,sdlc}/*.md`. No-op when neither
  * directory exists (fresh end-user project may have no SRS yet).
  * Wired into the main pipeline after the ADR-0012 sweep.
@@ -726,6 +842,21 @@ export async function frFieldSet(): Promise<void> {
     return;
   }
   const offenders = validateFrFields(files);
+  const fileExists = async (p: string): Promise<boolean> => {
+    try {
+      await Deno.stat(p);
+      return true;
+    } catch (err) {
+      if (err instanceof Deno.errors.NotFound) return false;
+      throw err;
+    }
+  };
+  const testRefOffenders = await validateFrTestRefs(
+    files,
+    fileExists,
+    Deno.readTextFile,
+  );
+  offenders.push(...testRefOffenders);
   if (offenders.length > 0) {
     for (const line of offenders) console.error(`  ${line}`);
     console.error(

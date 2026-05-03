@@ -108,27 +108,35 @@ ONE allowlist of bolded fields, in fixed order. No other top-level
 `**Field:**` labels are accepted; FR-specific structure folds into
 `Description` as labelled prose subsections.
 
-**Mandatory (in this order):**
+**Source of truth: `scripts/check.ts::FR_CANONICAL_ORDER`.** This
+list mirrors that constant — if they ever drift, the constant wins
+(it's what `deno task check` enforces).
 
-1. `Description` — what the requirement is, in active voice. Inline
-   any FR-specific structure (config schema, engine behaviour,
-   variables, rules, …) as prose subsections under this field.
-2. `Acceptance criteria` — checkable conditions; test-locked
-   behaviour collapses to a `**Tests:**` line per ADR-0011;
-   manual-evidence items stay as `[x]` bullets with
-   `Evidence: <path>:<line>`.
+**Order (in this order, only when present — `Description` and
+`Acceptance criteria` are mandatory, the rest optional):**
 
-**Optional (in this order, only when present):**
-
-3. `Status` — only when superseded/deprecated. Active FRs MUST NOT
+1. `Description` (mandatory) — what the requirement is, in active
+   voice. Inline any FR-specific structure (config schema, engine
+   behaviour, variables, rules, …) as prose subsections under this
+   field.
+2. `Status` — only when superseded/deprecated. Active FRs MUST NOT
    carry a `Status` field; absence implies "in force".
-4. `Motivation` — problem/incident/force. `Rationale` is the same
+3. `Motivation` — problem/incident/force. `Rationale` is the same
    role and is no longer accepted — migrate to `Motivation`.
-5. `ADR` — cross-links to relevant ADR-NNNN records.
-6. `Dep` — comma-separated dependency FR ids.
-7. `Supersedes` — comma-separated predecessor FR ids.
-8. `Input` / `Output` — workflow-stage FRs only (`FR-S2..S9` and
+4. `ADR` — cross-links to relevant ADR-NNNN records.
+5. `Dep` — comma-separated dependency FR ids.
+6. `Supersedes` — comma-separated predecessor FR ids.
+7. `Input` / `Output` — workflow-stage FRs only (`FR-S2..S9` and
    peers); engine-feature FRs MUST NOT use these.
+8. `Acceptance criteria` (mandatory; ALWAYS LAST) — checkable
+   conditions; test-locked behaviour collapses to a `**Tests:**`
+   line per ADR-0011; manual-evidence items stay as `[x]` bullets
+   with `Evidence: <path>:<line>`.
+
+**Common mistake**: writing `Acceptance criteria` second
+(immediately after `Description`) followed by `Motivation`/`ADR`.
+Wrong — `Acceptance criteria` is ALWAYS last, after every optional
+field.
 
 **Removed:** `Rationale`, `Acceptance` (typo of `Acceptance criteria`),
 `Quality metrics`, and all one-off labels (`Engine behavior`,

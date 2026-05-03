@@ -1,3 +1,5 @@
+// FR-S47: one-shot state-path migration (legacy `.flowai-workflow/`
+// → `.flowai-workflow/`). Pure rewriter + idempotent integration.
 import { assertEquals } from "@std/assert";
 import { join } from "@std/path";
 import { migrate, rewriteStateText } from "./migrate-state-paths.ts";

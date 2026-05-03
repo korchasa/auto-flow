@@ -1,3 +1,6 @@
+// FR-E47: budget controls — `--budget` CLI flag, `budget.max_turns`,
+// per-node and workflow-level enforcement. Covered below by parseArgs
+// and budget-related assertions.
 import { assertEquals, assertThrows } from "@std/assert";
 import {
   extractCliFlags,

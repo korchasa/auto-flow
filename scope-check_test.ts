@@ -1,3 +1,4 @@
+// FR-E37: scope-based file modification detection (allowed_paths).
 import { assertEquals } from "@std/assert";
 import { findViolations, snapshotModifiedFiles } from "./scope-check.ts";
 

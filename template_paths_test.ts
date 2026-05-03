@@ -166,8 +166,11 @@ Deno.test(
         ) continue;
 
         if (/ctx\.(node_dir|run_dir)\b/.test(line)) {
-          // Allowed when the same line wraps via workPath(ctx.workDir, …).
-          if (line.includes("workPath(ctx.workDir,")) continue;
+          // Allowed when the same line wraps via workPath(<chain>.workDir, …).
+          // Matches `workPath(ctx.workDir,` and `workPath(opts.ctx.workDir,`
+          // alike — the relevant invariant is "wrap with a workDir-relative
+          // root", not the exact identifier path the caller uses.
+          if (/workPath\(\s*[\w.]*\bworkDir\b\s*,/.test(line)) continue;
           offenders.push(`${entry.name}:${i + 1}: ${trimmed}`);
         }
       }
