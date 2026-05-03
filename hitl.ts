@@ -40,11 +40,14 @@ export function isHitlConfigured(config?: HitlConfig): config is HitlConfig {
   return Boolean(config?.ask_script && config?.check_script);
 }
 
-/** Script runner function signature (injectable for testing). */
+/** Script runner function signature (injectable for testing). The stderr
+ * field surfaces the script's diagnostic output to the engine, which
+ * embeds it into the failure message — without it, callers see only an
+ * exit code and cannot diagnose what actually broke. */
 export type ScriptRunner = (
   path: string,
   args: string[],
-) => Promise<{ exitCode: number; stdout: string }>;
+) => Promise<{ exitCode: number; stdout: string; stderr?: string }>;
 
 /** Claude CLI runner function signature (injectable for testing). */
 export type ClaudeRunner = (
@@ -177,7 +180,7 @@ export async function runHitlLoop(
       return {
         success: false,
         continuations: 0,
-        error: `ask_script failed with exit code ${askResult.exitCode}`,
+        error: formatScriptFailure("ask_script", askResult),
         error_category: "unknown",
       };
     }
@@ -269,8 +272,11 @@ export async function runHitlLoop(
     // exit 1 = no reply yet; other codes = transient error, continue
     if (checkResult.exitCode !== 1 && checkResult.exitCode !== 0) {
       if (output) {
+        const detail = (checkResult.stderr ?? "").trim().slice(0, 500);
         output.warn(
-          `check_script returned exit code ${checkResult.exitCode} (transient error, retrying)`,
+          `check_script returned exit code ${checkResult.exitCode} (transient error, retrying)${
+            detail ? `: ${detail}` : ""
+          }`,
         );
       }
     }
@@ -361,7 +367,7 @@ async function defaultScriptRunner(
   path: string,
   args: string[],
   cwd?: string,
-): Promise<{ exitCode: number; stdout: string }> {
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   const cmd = new Deno.Command("sh", {
     args: [path, ...args],
     stdout: "piped",
@@ -372,7 +378,22 @@ async function defaultScriptRunner(
   return {
     exitCode: output.code,
     stdout: new TextDecoder().decode(output.stdout).trim(),
+    stderr: new TextDecoder().decode(output.stderr).trim(),
   };
+}
+
+/** Format a non-zero script exit into an error message that includes the
+ * trimmed stderr (capped at 500 chars to keep engine logs/state.json
+ * compact). Without this, callers see only the exit code and cannot
+ * diagnose the cause. */
+function formatScriptFailure(
+  scriptName: string,
+  result: { exitCode: number; stderr?: string },
+): string {
+  const stderr = (result.stderr ?? "").trim();
+  if (!stderr) return `${scriptName} failed with exit code ${result.exitCode}`;
+  const truncated = stderr.length > 500 ? `${stderr.slice(0, 500)}…` : stderr;
+  return `${scriptName} failed with exit code ${result.exitCode}: ${truncated}`;
 }
 
 function sleep(ms: number): Promise<void> {

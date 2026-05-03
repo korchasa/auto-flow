@@ -1,7 +1,7 @@
 // FR-E8: agent-initiated HITL via engine-owned MCP server (ADR-0013).
 // Detection helpers live in hitl-injection_test.ts; this file covers
 // the runHitlLoop ask/poll/resume cycle and FR-E64 audit append.
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertStringIncludes } from "@std/assert";
 import type { HitlConfig } from "./types.ts";
 import { runHitlLoop } from "./hitl.ts";
 import type { HitlRunOptions } from "./hitl.ts";
@@ -333,3 +333,48 @@ Deno.test("runHitlLoop — FR-E64 round counter survives existing file", async (
   assertEquals(last.round, 2); // continued from existing line count
   assertEquals(last.reply, "yes");
 });
+
+Deno.test(
+  "runHitlLoop — surfaces ask_script stderr in error message on non-zero exit",
+  async () => {
+    // Without surfacing stderr, callers see only `ask_script failed with
+    // exit code 1` and cannot diagnose the underlying cause (e.g. invalid
+    // bot token, chat-not-found, network timeout). The runner already
+    // pipes stderr; this test pins the contract that hitl.ts MUST include
+    // it in the returned error message so the post-mortem dashboard and
+    // engine logs reveal what actually broke.
+    const opts = makeBaseOpts({
+      scriptRunner: (path: string, _args: string[]) => {
+        if (path.includes("ask")) {
+          return Promise.resolve({
+            exitCode: 1,
+            stdout: "",
+            stderr: "ERROR: sendMessage failed: chat not found",
+          });
+        }
+        return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+      },
+      claudeRunner: () =>
+        Promise.resolve({
+          output: {
+            result: "",
+            session_id: "sess-x",
+            total_cost_usd: 0,
+            duration_ms: 0,
+            duration_api_ms: 0,
+            num_turns: 0,
+            is_error: false,
+          },
+        }),
+    });
+
+    const result = await runHitlLoop(opts);
+    assertEquals(result.success, false);
+    assertStringIncludes(result.error ?? "", "exit code 1");
+    assertStringIncludes(
+      result.error ?? "",
+      "chat not found",
+      "ask_script stderr must appear in the error message",
+    );
+  },
+);
