@@ -65,6 +65,8 @@ Use [_template.md](_template.md) as the skeleton.
   — **Accepted**
 - [ADR-0012](0012-fr-canonical-field-set.md) — FR canonical field set
   — **Accepted**
+- [ADR-0014](0014-remove-git-from-engine.md) — Remove git from engine
+  — isolation is workflow concern (supersedes ADR-0001) — **Proposed**
 
 Status legend:
 - **Proposed** — written, not yet implemented (back-fill anchors a
