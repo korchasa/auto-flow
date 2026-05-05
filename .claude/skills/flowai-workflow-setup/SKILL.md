@@ -9,321 +9,288 @@ description: >
 
 # Setup flowai-workflow in a Project
 
-Guide for configuring the flowai-workflow DAG engine in any project.
+Complete reference for configuring the flowai-workflow DAG engine. Covers every field accepted by `workflow.yaml` and every CLI flag.
 
 ## Prerequisites
 
-- `flowai-workflow` binary installed (or Deno runtime for source mode)
-- Claude Code CLI (`claude`) installed and authenticated
-- Git repository (engine uses worktrees by default)
+- `flowai-workflow` binary (JSR install or `deno compile`), or Deno runtime for source mode.
+- One of the supported AI IDE CLIs installed and authenticated: `claude` (Claude Code), `opencode`, `cursor`, `codex`. Match the CLI to `defaults.runtime`.
+- Git repository — engine creates per-run worktrees by default (`worktree_disabled: false`).
 
 ## Directory Structure
 
-Create this layout in the target project:
-
 ```
 .flowai-workflow/
-  workflow.yaml          # Main workflow config (required)
-  runs/                  # Run artifacts (auto-created, gitignore)
-  scripts/               # Helper scripts (HITL, hooks, optional)
-  memory/                # Agent memory files (optional)
-  prompts/               # Reusable prompt fragments (optional)
+  <workflow-name>/
+    workflow.yaml          # Workflow config (required, name-locked to folder)
+    agents/                # Reusable system_prompt fragments (recommended)
+      agent-*.md
+    prompts/               # Reusable user-prompt fragments (optional)
+    scripts/               # HITL ask/check, prepare, on_failure scripts
+    memory/                # Agent reflection-memory (FR-S28)
+      reflection-protocol.md     # tracked
+      agent-*.md                 # gitignored, per-run
+    runs/                  # Per-run state + worktrees (gitignore)
+      <run-id>/
+        state.json
+        worktree/
+        <node-id>/         # node artifacts
 ```
 
-Add to `.gitignore`:
+`.gitignore`:
 
 ```
-.flowai-workflow/runs/
+.flowai-workflow/<workflow-name>/runs/
+.flowai-workflow/<workflow-name>/memory/agent-*.md
+!.flowai-workflow/<workflow-name>/memory/agent-*-history.md
 ```
 
-## Workflow YAML Schema
+## Top-Level Fields (`workflow.yaml`)
 
-Minimal valid config:
+- `name` (string, **required**) — workflow identifier; appears in logs and `state.json`.
+- `version` (string, **required**) — must be `"1"` (only schema version supported).
+- `defaults` (object, optional) — workflow-wide defaults, see below.
+- `env` (object, optional) — `Record<string, string>`; merged into agent env, accessible as `{{env.<key>}}`.
+- `nodes` (object, **required**) — DAG node definitions; at least one entry.
+- `phases` (object, optional) — `Record<string, string[]>` mapping phase name to node IDs. Mutually exclusive with per-node `phase:` field.
 
-```yaml
-name: "my-workflow"
-version: "1"
+`pre_run` was removed — use `defaults.worktree_disabled: true` to opt out of worktree isolation. The engine rejects `pre_run` with a migration error.
 
-nodes:
-  my-agent:
-    type: agent
-    label: "My Agent"
-    prompt: |
-      Do the thing.
-      Output: {{node_dir}}/result.md
-```
+## `defaults` Block (workflow-wide)
 
-### Top-Level Fields
+Every field is optional; engine fallbacks shown.
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | yes | Workflow identifier (used in logs, state files) |
-| `version` | yes | Must be `"1"` |
-| `defaults` | no | Global settings applied to all nodes |
-| `env` | no | Global env vars, accessible via `{{env.<key>}}` |
-| `nodes` | yes | DAG node definitions (at least one) |
-| `phases` | no | Group nodes into phases for organized artifact dirs |
+### Execution
 
-### Defaults Block
+- `worktree_disabled` (boolean, default `false`) — when `true`, engine runs in CWD instead of creating per-run git worktrees. Two-phase loaded: read before worktree creation.
+- `max_parallel` (number, default `0`) — concurrent node cap; `0` means unlimited. Note: parallel execution is currently deferred — nodes run sequentially.
+- `prepare_command` (string, default `""`) — shell command run once before the node loop on **fresh** runs (skipped on resume). Templated with `run_dir`, `run_id`, `env.*`, `args.*`. Non-zero exit aborts the workflow.
+- `on_failure_script` (string, default `""`) — script invoked when the workflow fails (FR-E19).
 
-```yaml
-defaults:
-  max_parallel: 2              # Concurrent node limit (0 = unlimited)
-  max_continuations: 3         # Re-invocations on validation failure
-  timeout_seconds: 1800        # Per-node wall-clock timeout
-  max_retries: 3               # Full retry attempts after failure
-  retry_delay_seconds: 5       # Delay between retries
-  model: claude-sonnet-4-6     # Default Claude model
-  permission_mode: bypassPermissions  # Claude CLI permission mode
-  worktree_disabled: false     # true = run in CWD instead of worktree
-  on_failure_script: path/to/script.sh  # Runs on workflow failure
-  prepare_command: "echo setup"  # Runs once before node execution (fresh runs only)
-  hitl:                        # Human-in-the-loop config
-    ask_script: scripts/ask.sh
-    check_script: scripts/check.sh
-    poll_interval: 60
-    timeout: 7200
-```
+### Runtime selection
 
-### Node Types
+- `runtime` (`"claude" | "opencode" | "cursor" | "codex"`, default `"claude"`) — selects which AI IDE CLI executes agent nodes.
+- `runtime_args` (`Record<string, string | null>`, default `{}`) — generic extra CLI args forwarded to the runtime:
+  - `{ "--flag": "value" }` — flag with value
+  - `{ "--bool": "" }` — boolean flag (empty string)
+  - `{ "--suppressed": null }` — suppress a parent-supplied flag
+  - Reserved keys forbidden when typed `allowed_tools`/`disallowed_tools` is set: `--allowedTools`, `--allowed-tools`, `--disallowedTools`, `--disallowed-tools`, `--tools`.
+- `permission_mode` (`"acceptEdits" | "bypassPermissions" | "default" | "plan"`, no default) — Claude `--permission-mode`. For `opencode` and `cursor`, only `bypassPermissions` is supported; other values fail validation.
+- `model` (string, default `""`) — model ID forwarded to the runtime (e.g. `"claude-sonnet-4-6"`, `"claude-opus-4-7"`).
+- `effort` (`"minimal" | "low" | "medium" | "high"`, no default) — reasoning effort dial (FR-E42). Maps to Claude `--effort`, Codex `--config model_reasoning_effort=…`, OpenCode `--variant`. Cursor warns and ignores. Skipped on `--resume` (session inherits).
 
-#### Agent Node
+### Per-node settings (cascade into every node's `settings`)
 
-Invokes Claude Code CLI with a prompt:
+- `max_continuations` (number, default `3`) — re-invocations on validation failure within the same Claude session.
+- `timeout_seconds` (number, default `1800`) — wall-clock cap per node.
+- `on_error` (`"fail" | "continue"`, default `"fail"`) — node failure policy.
+- `max_retries` (number, default `3`) — full retry attempts after failure.
+- `retry_delay_seconds` (number, default `5`) — delay between retries.
 
-```yaml
-my-agent:
-  type: agent
-  label: "Role — Description"
-  inputs: [dependency-node]     # DAG edges (optional)
-  model: claude-opus-4-6        # Override default model (optional)
-  permission_mode: acceptEdits  # Override default (optional)
-  system_prompt: |              # Injected via --append-system-prompt (optional)
-    {{file(".flowai-workflow/prompts/my-agent.md")}}
-  prompt: |                     # Task prompt via -p flag (required)
-    Read input at {{input.dependency-node}}/artifact.md.
-    Output: {{node_dir}}/result.md
-  before: "echo starting"      # Pre-execution hook (optional)
-  after: "echo done"           # Post-execution hook (optional)
-  validate:                    # Artifact validation (optional)
-    - type: artifact
-      path: "{{node_dir}}/result.md"
-      sections: ["Summary"]
-  settings:                    # Per-node overrides (optional)
-    timeout_seconds: 3600
-    on_error: continue
-```
+### Budget (FR-E47)
 
-`system_prompt` is optional. Use `{{file()}}` to inline reusable prompt
-fragments from any path — `.flowai-workflow/prompts/`, project docs, or
-IDE-specific locations like `.claude/agents/`.
+- `budget` (object, no default):
+  - `max_usd` (positive number, optional) — per-node `cost_usd` cap.
+  - `max_turns` (positive integer, optional) — Claude only, maps to `--max-turns`. Other runtimes warn once and ignore.
 
-#### Loop Node
+### Tool filter (FR-E48; mutually exclusive)
 
-Iterative body with exit condition:
+- `allowed_tools` (string[], no default) — whitelist; Claude `--allowedTools <comma-joined>`. Other runtimes warn and ignore.
+- `disallowed_tools` (string[], no default) — blacklist.
 
-```yaml
-my-loop:
-  type: loop
-  label: "Iterative Process"
-  inputs: [prior-node]
-  condition_node: checker       # Body node to check
-  condition_field: verdict      # Frontmatter field to evaluate
-  exit_value: PASS              # Value that stops the loop
-  max_iterations: 3
-  nodes:
-    worker:
-      type: agent
-      label: "Worker"
-      inputs: [prior-node]      # Can reference external inputs
-      prompt: |
-        Iteration {{loop.iteration}}.
-        Output: {{node_dir}}/work.md
-    checker:
-      type: agent
-      label: "Checker"
-      inputs: [worker]          # Must reference another body node
-      prompt: |
-        Check {{input.worker}}/work.md.
-        Output: {{node_dir}}/check.md with frontmatter verdict: PASS or FAIL
-      validate:
-        - type: frontmatter_field
-          path: "{{node_dir}}/check.md"
-          field: verdict
-          allowed: [PASS, FAIL]
-```
+### Memory check (FR-S28)
 
-**Loop rules:**
-- `condition_node` must be a key in the loop's `nodes`
-- If >1 body node, at least one must have `inputs` referencing another body node
-- Body nodes referencing external inputs must list them in loop's `inputs`
-- If condition node has `validate`, it must include `frontmatter_field` matching `condition_field`
+- `memory_paths` (string[], no default) — globs identifying agent reflection-memory files. After every agent invocation under worktree isolation, dirty matches without `memory_commit_deferred: true` fail the node. Empty/undefined disables the check entirely.
 
-#### Human Node
+### HITL (Human-in-the-loop)
 
-Terminal prompt for manual input:
+- `hitl` (object, no default — engine fallback is empty scripts):
+  - `ask_script` (string, **required if hitl set**) — script that posts the question.
+  - `check_script` (string, **required if hitl set**) — script polled for the response.
+  - `artifact_source` (string, optional) — relative path from `run_dir` to artifact carrying issue frontmatter.
+  - `poll_interval` (number, default `60`) — seconds between polls.
+  - `timeout` (number, default `7200`) — max seconds to wait.
+  - `exclude_login` (string, optional) — login excluded from HITL replies (e.g. bot's own).
 
-```yaml
-approval:
-  type: human
-  label: "Human Approval"
-  inputs: [prior-node]
-  question: "Approve the changes? (yes/no)"
-  options: [yes, no]
-  abort_on: [no]
-```
+## Node Types
 
-#### Merge Node
+Every node accepts these **common** fields:
 
-Combines outputs from multiple nodes:
+- `type` (`"agent" | "loop" | "merge" | "human"`, **required**).
+- `label` (string, **required**) — shown in logs and status output.
+- `inputs` (string[], optional) — DAG edges; node IDs whose artifacts this node consumes.
+- `phase` (string, optional) — alternative to top-level `phases:`. Mutually exclusive with the top-level block.
+- `run_on` (`"always" | "success" | "failure"`, optional) — when set, node runs after all DAG levels complete (post-workflow). `run_always: true` is the legacy alias and is normalized to `run_on: "always"`.
+- `before` (string, optional) — shell command run before the node; templated.
+- `after` (string, optional) — shell command run after success; templated.
+- `settings` (object, optional) — overrides `max_continuations`, `timeout_seconds`, `on_error`, `max_retries`, `retry_delay_seconds` (any unknown key throws).
+- `validate` (ValidationRule[], optional) — see [Validation Rules](#validation-rules).
+- `env` (`Record<string, string>`, optional) — node-level env vars merged over global `env`.
 
-```yaml
-combined:
-  type: merge
-  label: "Merge Inputs"
-  inputs: [node-a, node-b]
-  merge_strategy: copy_all
-```
+### `agent`
 
-### Template Variables
+Invokes the AI IDE CLI with a prompt. Required: `prompt`.
 
-Available in `prompt`, `system_prompt`, `before`, `after`, and validation paths:
+- `prompt` (string, **required**) — task prompt; templated.
+- `system_prompt` (string, optional) — appended via `--append-system-prompt`; templated. Use `{{file()}}` / `{{flow_file()}}` to inline reusable role files.
+- `agent` (string, optional) — name of an IDE-native subagent (without `.md`). Resolved by the runtime against its own subagent registry.
+- `model` (string, optional) — overrides `defaults.model`.
+- `effort` (effort enum, optional) — overrides `defaults.effort`. Cascade: node → enclosing loop → defaults.
+- `runtime` (runtime enum, optional) — overrides `defaults.runtime`.
+- `runtime_args` (ExtraArgsMap, optional) — merged with defaults (per-key); same shape as `defaults.runtime_args`.
+- `permission_mode` (enum, optional) — overrides `defaults.permission_mode`.
+- `allowed_paths` (string[], optional, FR-E37) — glob patterns of paths the agent may modify. Engine snapshots before/after under worktree isolation; mismatches inject a `scope_check` validation failure. Pre-existing uncommitted changes are excluded from the diff.
+- `budget` (NodeBudget, optional) — overrides `defaults.budget`. Cascade: node → enclosing loop → defaults.
+- `allowed_tools` / `disallowed_tools` (string[], optional, REPLACE semantics) — node→loop→defaults, first-defined level wins; no merge.
+- `memory_commit_deferred` (boolean, default `false`, FR-S28) — opt out of the per-invocation memory-dirty check. Useful for loop bodies that legitimately defer the commit. Only meaningful when `defaults.memory_paths` is set.
 
-| Variable | Description |
-|----------|-------------|
-| `{{node_dir}}` | Current node's artifact directory |
-| `{{run_dir}}` | Run root directory |
-| `{{run_id}}` | Unique run identifier |
-| `{{input.<node-id>}}` | Dependency node's artifact directory |
-| `{{args.<key>}}` | CLI argument value |
-| `{{env.<key>}}` | Environment variable |
-| `{{loop.iteration}}` | Current loop iteration (loop body only) |
-| `{{file("path")}}` | Inline file content (relative to project root) |
+### `loop`
 
-### Validation Rules
+Iterative body with exit condition. Required: `nodes`, `condition_node`, `condition_field`, `exit_value`.
 
-| Type | Description | Extra Fields |
-|------|-------------|--------------|
-| `artifact` | Check sections/frontmatter in .md file | `sections`, `fields` |
-| `file_exists` | File exists at path | — |
-| `file_not_empty` | File exists and is non-empty | — |
-| `contains_section` | File contains markdown section | `value` (heading text) |
-| `frontmatter_field` | YAML frontmatter has specific field | `field`, `allowed` (optional) |
-| `custom_script` | Run shell command, 0 = pass | `path` (command string) |
+- `nodes` (`Record<string, NodeConfig>`, **required**) — inline body node definitions.
+- `condition_node` (string, **required**) — body node ID whose output is inspected for the exit value.
+- `condition_field` (string, **required**) — frontmatter field on the condition node's artifact whose value is matched against `exit_value`.
+- `exit_value` (string, **required**) — value that terminates the loop.
+- `max_iterations` (number, optional) — safety cap; engine aborts loop on reach.
+- `effort`, `budget`, `allowed_tools`, `disallowed_tools`, `runtime_args` — inherited by body nodes via cascade.
 
-### Phases
+**Loop validation rules (enforced at config load):**
 
-Group nodes for organized artifact directories (`<run-dir>/<phase>/<node-id>/`):
+- `condition_node` MUST be a key in `nodes`.
+- If `>1` body node, at least one body node MUST declare `inputs` referencing another body node (intra-body ordering).
+- Body nodes referencing external (non-body) inputs MUST list those inputs in the loop's own `inputs` (FR-E35).
+- If the condition node has a `validate` block, it MUST include a `frontmatter_field` rule with `field` matching `condition_field` (FR-E36).
+
+### `merge`
+
+Combines outputs of multiple `inputs` into the node's artifact directory.
+
+- `merge_strategy` (`"copy_all"`, optional, default `"copy_all"`) — only strategy currently supported.
+
+### `human`
+
+Terminal prompt for manual input (interactive runs).
+
+- `question` (string, **required**) — prompt text shown to the operator.
+- `options` (string[], optional) — allowed responses.
+- `abort_on` (string[], optional) — responses that abort the workflow.
+
+## Validation Rules
+
+`validate` is an array of rule objects. Common: `path` (string, required — empty only for engine-injected `scope_check`).
+
+- `file_exists` — file present at `path`.
+- `file_not_empty` — file present and non-empty.
+- `contains_section` — file contains markdown heading equal to `value`.
+  - `value` (string) — heading text.
+- `frontmatter_field` — YAML frontmatter contains `field`.
+  - `field` (string) — frontmatter key.
+  - `allowed` (string[], optional) — acceptable values.
+- `artifact` — composite check on a markdown file. Requires at least one of `sections` or `fields`.
+  - `sections` (string[]) — required `# Heading` strings.
+  - `fields` (string[]) — required frontmatter keys (presence + non-empty).
+- `custom_script` — runs shell command `path`; exit 0 = pass.
+- `scope_check` — engine-injected only when `allowed_paths` is set; do not declare manually.
+
+## Phases
+
+Two mutually exclusive mechanisms — pick one workflow-wide:
 
 ```yaml
 phases:
   planning: [spec, design]
   execution: [build, test]
-  review: [final-review]
 ```
 
-Without phases, artifacts go to `<run-dir>/<node-id>/`.
-
-**Rule:** `phases` block and per-node `phase:` field cannot coexist.
-
-### Post-Workflow Nodes
-
-Nodes that run after all DAG levels complete:
+or per-node:
 
 ```yaml
-cleanup:
-  type: agent
-  label: "Post-workflow cleanup"
-  run_on: always    # always | success | failure
-  inputs: [some-node]
-  prompt: "..."
+nodes:
+  spec:
+    phase: planning
+    type: agent
+    # ...
 ```
 
-### Scope Check (allowed_paths)
+Mixing the top-level block with any per-node `phase:` field throws. Without phases, artifacts go to `<run-dir>/<node-id>/`. With phases: `<run-dir>/<phase>/<node-id>/`.
 
-Restrict which files an agent can modify:
+## Template Variables
 
-```yaml
-my-agent:
-  type: agent
-  allowed_paths: ["src/**/*.ts", "tests/**"]
-  # ...
+Available in `prompt`, `system_prompt`, `before`, `after`, validation paths, and `prepare_command`.
+
+- `{{node_dir}}` — workDir-relative path to current node's artifact dir.
+- `{{run_dir}}` — workDir-relative path to run root.
+- `{{run_id}}` — unique run identifier.
+- `{{input.<node-id>}}` — predecessor node's artifact dir.
+- `{{args.<key>}}` — value of `--<key> <val>` CLI passthrough or `--prompt`.
+- `{{env.<key>}}` — environment variable.
+- `{{loop.iteration}}` — zero-based iteration counter (loop body only).
+- `{{file("path")}}` — inlines file contents; path resolved against `workDir` (project root). Single-pass — the included content is **not** re-templated. Absolute paths used as-is.
+- `{{flow_file("path")}}` — same, but path is resolved against the workflow folder (`<workDir>/.flowai-workflow/<workflow-name>/`). Falls back to `file()` semantics when the workflow sits at workDir root.
+
+`{{workDir}}` and `{{workflow_dir}}` are NOT template placeholders — they exist only on the engine's internal `TemplateContext`.
+
+`{{file()}}` / `{{flow_file()}}` references in `prompt` and `system_prompt` are validated at config load — missing files fail fast. Paths containing nested `{{` are skipped (resolved at render time).
+
+## CLI Invocation
+
+```
+flowai-workflow run <workflow-folder> [flags]
 ```
 
-## Prompt Files
+Positional argument is the **workflow folder** (engine appends `/workflow.yaml`). Only one positional argument is accepted.
 
-Store reusable prompt fragments (role descriptions, constraints, output formats)
-as `.md` files anywhere in the project. Common locations:
+Flags:
 
-- `.flowai-workflow/prompts/` — workflow-specific prompts (recommended default)
-- `prompts/` or `docs/prompts/` — shared across workflows
-- `.claude/agents/` — if also used as Claude Code native subagents
+- `--prompt <text>` — sets `args.prompt` (convenience alias).
+- `--resume <run-id>` — resume an existing run; completed nodes skipped.
+- `--dry-run` — validate config and print execution plan; no nodes run. Use this for config validation; `--validate` does NOT exist (unknown flags are silently captured as `args.<flag>`).
+- `-v` / `--verbose` — full streaming output.
+- `-s` / `--semi-verbose` — text output only (suppress tool calls).
+- `-q` / `--quiet` — errors only.
+- `--env KEY=VAL` — set env override (repeatable).
+- `--skip <id1,id2>` — skip listed nodes.
+- `--only <id1,id2>` — run only listed nodes.
+- `--budget <usd>` — workflow-wide cost cap (positive number; strict — exact-equal does not trigger).
+- `--skip-update-check` — do not query JSR for new versions on startup.
+- `--version` / `-V` — print version.
+- `--help` / `-h` — print usage.
+- `--<any-other-key> <val>` — generic passthrough; becomes `args.<any-other-key>` and is referenceable as `{{args.<any-other-key>}}`.
 
-Reference from workflow via `{{file()}}`:
+Other subcommands (separate from `run`):
 
-```yaml
-system_prompt: |
-  {{file(".flowai-workflow/prompts/reviewer.md")}}
-```
-
-Prompt files are plain markdown — role description, constraints, output format.
-The engine inlines file content at runtime, no special format required.
-
-## Running
-
-```bash
-# Run workflow
-flowai-workflow --config .flowai-workflow/workflow.yaml
-
-# Or with deno (source mode)
-deno run -A engine/cli.ts --config .flowai-workflow/workflow.yaml
-
-# With additional context
-flowai-workflow --config .flowai-workflow/workflow.yaml --prompt "Focus on X"
-
-# Resume failed run
-flowai-workflow --config .flowai-workflow/workflow.yaml --resume <run-id>
-
-# Dry run (validate + show DAG)
-flowai-workflow --config .flowai-workflow/workflow.yaml --dry-run
-
-# Skip/only specific nodes
-flowai-workflow --config .flowai-workflow/workflow.yaml --skip node-a,node-b
-flowai-workflow --config .flowai-workflow/workflow.yaml --only node-c
-
-# Verbosity: -q (quiet), -s (semi), -v (verbose)
-flowai-workflow --config .flowai-workflow/workflow.yaml -v
-```
+- `flowai-workflow init [--list]` — copy a bundled workflow scaffold into the current project.
 
 ## Setup Checklist
 
-- [ ] Create `.flowai-workflow/` directory
-- [ ] Create `.flowai-workflow/workflow.yaml` with nodes
-- [ ] Create prompt files if using `{{file()}}` (e.g. in `.flowai-workflow/prompts/`)
-- [ ] Add `.flowai-workflow/runs/` to `.gitignore`
-- [ ] Run `flowai-workflow --dry-run` to validate config
-- [ ] Test with a single node first, expand DAG incrementally
+- [ ] Create `.flowai-workflow/<workflow-name>/`.
+- [ ] Author `workflow.yaml` (`name`, `version: "1"`, `nodes`).
+- [ ] Pick a `runtime` and verify the matching CLI is installed and authenticated.
+- [ ] Add `runs/` and `memory/agent-*.md` (excluding `*-history.md`) to `.gitignore`.
+- [ ] Write reusable role prompts under `agents/` referenced via `{{flow_file("agents/<role>.md")}}`.
+- [ ] Run `flowai-workflow run <folder> --dry-run` to validate config and see the topological plan.
+- [ ] Start with one or two nodes; expand the DAG incrementally.
+- [ ] If using HITL, write `scripts/ask.sh` and `scripts/check.sh` and configure `defaults.hitl`.
+- [ ] If gating output paths, set `allowed_paths` on agent nodes.
 
 ## Common Patterns
 
 ### Linear Pipeline
 
 ```yaml
+name: linear
+version: "1"
 nodes:
   step1:
     type: agent
     label: "Step 1"
-    prompt: "..."
+    prompt: "Output: {{node_dir}}/out.md"
   step2:
     type: agent
     label: "Step 2"
     inputs: [step1]
-    prompt: "Read {{input.step1}}/output.md ..."
-  step3:
-    type: agent
-    label: "Step 3"
-    inputs: [step2]
-    prompt: "Read {{input.step2}}/output.md ..."
+    prompt: "Read {{input.step1}}/out.md. Write {{node_dir}}/out.md"
 ```
 
 ### Fan-Out / Fan-In
@@ -344,15 +311,47 @@ nodes:
     label: "Branch B"
     inputs: [source]
     prompt: "..."
-  merge:
+  combined:
     type: merge
     label: "Combine"
     inputs: [branch-a, branch-b]
   final:
     type: agent
     label: "Final"
-    inputs: [merge]
-    prompt: "..."
+    inputs: [combined]
+    prompt: "Inputs in {{input.combined}}/"
+```
+
+### Loop with Self-Verifying Body
+
+```yaml
+nodes:
+  fix-loop:
+    type: loop
+    label: "Build → Verify"
+    inputs: [spec]
+    condition_node: verify
+    condition_field: verdict
+    exit_value: PASS
+    max_iterations: 5
+    nodes:
+      build:
+        type: agent
+        label: "Build"
+        inputs: [spec]
+        prompt: "Iteration {{loop.iteration}}; spec at {{input.spec}}/"
+      verify:
+        type: agent
+        label: "Verify"
+        inputs: [build]
+        prompt: |
+          Check {{input.build}}/. Output {{node_dir}}/verdict.md
+          with frontmatter `verdict: PASS` or `verdict: FAIL`.
+        validate:
+          - type: frontmatter_field
+            path: "{{node_dir}}/verdict.md"
+            field: verdict
+            allowed: [PASS, FAIL]
 ```
 
 ### Human Gate
@@ -375,4 +374,27 @@ nodes:
     label: "Publish"
     inputs: [draft, review]
     prompt: "..."
+```
+
+### Post-Workflow Cleanup
+
+```yaml
+nodes:
+  pipeline-end:
+    type: agent
+    label: "Final"
+    inputs: [...]
+    prompt: "..."
+  notify:
+    type: agent
+    label: "Notify"
+    run_on: always
+    inputs: [pipeline-end]
+    prompt: "Send a summary."
+  on-fail:
+    type: agent
+    label: "Failure handler"
+    run_on: failure
+    inputs: [pipeline-end]
+    prompt: "Open an issue with the error."
 ```
