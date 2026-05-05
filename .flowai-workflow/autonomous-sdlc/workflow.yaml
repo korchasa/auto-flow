@@ -52,23 +52,15 @@ nodes:
       - type: artifact
         path: "{{node_dir}}/01-spec.md"
         sections: [
-          "Analysis",
-          "Candidates Considered",
-          "Challenge",
-          "Problem Statement",
-          "Acceptance Criteria",
-          "Scope",
-          "Summary",
+          Analysis,
+          Candidates Considered,
+          Challenge,
+          Problem Statement,
+          Acceptance Criteria,
+          Scope,
+          Summary,
         ]
-      - type: frontmatter_field
-        path: "{{node_dir}}/01-spec.md"
-        field: slug
-      - type: frontmatter_field
-        path: "{{node_dir}}/01-spec.md"
-        field: direction
-      - type: frontmatter_field
-        path: "{{node_dir}}/01-spec.md"
-        field: score
+        fields: [slug, direction, score]
 
   # Stage 2: Architect — implementation plan with variants
   design:
