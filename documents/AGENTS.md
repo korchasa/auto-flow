@@ -61,6 +61,15 @@ regression tests. The pattern:
     otherwise (the FR's Description already carries the why).
   - Per-criterion `[x]` bullets exercised by the listed tests are
     removed. CI catches regressions, not the agent re-reading the FR.
+  - **Test naming obligation:** every test asserting an FR's behaviour
+    MUST start its `Deno.test(...)` name with `FR-E<N> ` (or `FR-S<N> `)
+    — e.g. `Deno.test("FR-E65 --cycles rejects non-positive values", …)`.
+    `scripts/check.ts::validateFrFields` greps the test files listed
+    under `**Tests:**` for the literal FR id; an FR with no anchor in
+    any listed file fails `deno task check` (`regression-lock anchor
+    missing`). A `// FR-E<N>` source comment in the same file also
+    satisfies the grep, but test-name embedding is preferred — it
+    survives test-runner output and grep-by-feature workflows.
 - **Behaviour requiring manual verification** (prose docs, generated
   artefacts, one-time migrations, CLI smoke text, static config like
   `deno.json#tasks`, behaviours not yet test-covered) — stays as a
