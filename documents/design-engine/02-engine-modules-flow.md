@@ -177,6 +177,13 @@
     `parseArgs()`: parses `--budget <USD>` flag (FR-E47). Converts to float,
     validates positive. Maps to `EngineOptions.budget_usd`. Added to `--help`
     output.
+    `extractCliFlags()`: strips CLI-only flags (`--skip-update-check`,
+    `--cycles <N>`; FR-E65) before `parseArgs`. `cycles` defaults to `1`,
+    rejects non-positive / non-integer values. `runEngine` wraps
+    `new Engine(options).run()` in a `for` loop of length `cycles`,
+    fail-fast on the first non-`completed` state; banner
+    `=== Cycle k/N ===` on stderr (suppressed under `-q`). `--cycles >1`
+    + `--resume` rejected at parse time.
     `VERSION` constant: `Deno.env.get("VERSION") ?? "dev"`.
   - ~~`repl/mod.ts`~~ — removed (FR-E46 retired). Interactive REPL and
     bundled management skills (`flowai-workflow-init`,
@@ -214,7 +221,8 @@
 - **Interfaces:**
   - CLI: `flowai-workflow run <workflow>
     [--prompt <text>] [--resume <run-id>] [--dry-run] [-v|-s|-q]
-    [--env KEY=VAL] [--skip nodes] [--only nodes] [--budget <USD>]`,
+    [--env KEY=VAL] [--skip nodes] [--only nodes] [--budget <USD>]
+    [--cycles <N>]`,
     `flowai-workflow init [--workflow <name>] [--dry-run] [--allow-dirty]`,
     `--version|-V`, `--help`. `<workflow>` is a mandatory positional
     pointing at the workflow folder (FR-E53; FR-S47).

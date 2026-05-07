@@ -24,6 +24,7 @@
  *   --env <KEY=VAL>       Set environment variable (repeatable)
  *   --skip <node-ids>     Comma-separated node IDs to skip
  *   --only <node-ids>     Comma-separated node IDs to run exclusively
+ *   --cycles <N>          Run the whole workflow N times sequentially (default 1)
  *   --skip-update-check   Do not check JSR for a newer version on startup
  *   --version / -V        Print version and exit
  */
@@ -44,26 +45,48 @@ export const VERSION: string = Deno.env.get("VERSION") ?? "dev";
 export interface CliFlags {
   /** True when user passed `--skip-update-check`. */
   skipUpdateCheck: boolean;
+  /**
+   * Number of times to run the whole workflow sequentially (`--cycles N`).
+   * Defaults to 1. Each cycle is an independent `Engine.run()` with its
+   * own auto-generated run-id; on the first non-completed cycle the
+   * launcher stops (fail-fast).
+   */
+  cycles: number;
   /** Remaining args with CLI-only flags stripped; passed to {@link parseArgs}. */
   remaining: string[];
 }
 
 /**
  * Extract CLI-only flags (things that never belong on {@link EngineOptions}
- * because they are not domain concerns of the engine). Currently handles
- * `--skip-update-check`. Returns both the parsed flags and the remaining
- * args so the caller can forward the rest to {@link parseArgs}.
+ * because they are not domain concerns of the engine). Handles
+ * `--skip-update-check` and `--cycles <N>`. Returns both the parsed flags
+ * and the remaining args so the caller can forward the rest to
+ * {@link parseArgs}.
  */
 export function extractCliFlags(args: string[]): CliFlags {
   let skipUpdateCheck = false;
-  const remaining = args.filter((a) => {
+  let cycles = 1;
+  const remaining: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
     if (a === "--skip-update-check") {
       skipUpdateCheck = true;
-      return false;
+      continue;
     }
-    return true;
-  });
-  return { skipUpdateCheck, remaining };
+    if (a === "--cycles") {
+      const raw = args[++i];
+      const parsed = Number(raw);
+      if (!Number.isInteger(parsed) || parsed < 1) {
+        throw new Error(
+          `Invalid --cycles value: ${raw}. Expected positive integer.`,
+        );
+      }
+      cycles = parsed;
+      continue;
+    }
+    remaining.push(a);
+  }
+  return { skipUpdateCheck, cycles, remaining };
 }
 
 /** Returns the formatted version string for `--version` output. */
@@ -227,6 +250,9 @@ Run options:
   --skip <node-ids>     Comma-separated node IDs to skip
   --only <node-ids>     Comma-separated node IDs to run exclusively
   --budget <USD>        Workflow-wide cost cap (positive USD; strict >)
+  --cycles <N>          Run the whole workflow N times sequentially (default 1;
+                        stops on the first non-completed cycle; not compatible
+                        with --resume)
   --skip-update-check   Do not check JSR for a newer version on startup
 
 Global options:
@@ -251,7 +277,7 @@ async function runEngine(args: string[]): Promise<never> {
   installSignalHandlers();
 
   try {
-    const { skipUpdateCheck, remaining } = extractCliFlags(args);
+    const { skipUpdateCheck, cycles, remaining } = extractCliFlags(args);
     const options = parseArgs(remaining);
 
     // FR-E53: workflow path is mandatory and positional.
@@ -259,6 +285,15 @@ async function runEngine(args: string[]): Promise<never> {
       throw new Error(
         "Missing workflow argument. " +
           "Usage: flowai-workflow run <workflow> [options]",
+      );
+    }
+
+    // `--cycles N` repeats the whole workflow; resuming a specific run
+    // is incompatible with that semantics.
+    if (cycles > 1 && options.resume) {
+      throw new Error(
+        "--cycles cannot be combined with --resume: resume targets a " +
+          "single run-id, while --cycles starts fresh runs.",
       );
     }
 
@@ -298,10 +333,17 @@ async function runEngine(args: string[]): Promise<never> {
       // .env file is optional
     }
 
-    const engine = new Engine(options);
-    const state = await engine.run();
-
-    Deno.exit(state.status === "completed" ? 0 : 1);
+    for (let cycle = 1; cycle <= cycles; cycle++) {
+      if (cycles > 1 && options.verbosity !== "quiet") {
+        console.error(`\n=== Cycle ${cycle}/${cycles} ===\n`);
+      }
+      const engine = new Engine(options);
+      const state = await engine.run();
+      if (state.status !== "completed") {
+        Deno.exit(1);
+      }
+    }
+    Deno.exit(0);
   } catch (err) {
     console.error(`Error: ${(err as Error).message}`);
     Deno.exit(2);

@@ -257,3 +257,45 @@
     `config_path` is empty. Evidence: `cli.ts::runEngine`.
   - [x] `deno.json#tasks.run` uses positional form
     `cli.ts run .flowai-workflow/github-inbox`. Evidence: `deno.json`.
+
+
+
+
+### 3.65 FR-E65: Sequential Cycles (`--cycles N`)
+
+- **Description:** `run` subcommand accepts an optional `--cycles <N>` flag
+  that repeats the whole workflow `N` times sequentially. Each cycle is an
+  independent `Engine.run()` invocation with its own auto-generated run-id;
+  cycles do not share state, artifacts, or worktrees. The launcher prints
+  `=== Cycle N/M ===` on stderr before each cycle (suppressed under
+  `-q`/`--quiet`).
+
+  **Rules:**
+  - `N` MUST be a positive integer (`Number.isInteger(N) && N >= 1`).
+    Non-integer (`1.5`, `abc`), zero, or negative values are rejected with
+    `Invalid --cycles value: <raw>. Expected positive integer.`
+  - Default is `1` when the flag is absent — behaviour identical to
+    pre-FR-E65 single-run mode.
+  - **Fail-fast:** the launcher exits with code `1` on the first cycle whose
+    final `state.status !== "completed"`; remaining cycles are skipped.
+    All `N` cycles must complete for exit code `0`.
+  - `--cycles` is CLI-only — it lives on `CliFlags`, never on
+    `EngineOptions`. The Engine itself remains single-run; cycle
+    orchestration is an `cli.ts::runEngine` concern.
+  - **Mutual exclusion with `--resume`:** `--cycles N` with `N > 1` and
+    `--resume <run-id>` are rejected at parse time with
+    `--cycles cannot be combined with --resume: resume targets a single
+    run-id, while --cycles starts fresh runs.` `N == 1` + `--resume` is
+    permitted (effectively a no-op cycle wrapper).
+  - `.env` loading and `--skip-update-check` evaluation occur once before
+    the cycle loop, not per-cycle.
+- **Motivation:** Unattended autonomous workflows (e.g. `autonomous-sdlc`)
+  need to run multiple end-to-end iterations without manual re-invocation
+  or external supervisors. A CLI-level wrapper avoids leaking repetition
+  semantics into the domain-agnostic engine.
+- **Acceptance criteria:**
+  - **Tests:** `cli_test.ts` (FR-E65; regression-locked).
+  - [x] `--cycles >1` + `--resume` rejected with the exact error string
+    above. Evidence: `cli.ts::runEngine` (mutual-exclusion guard).
+  - [x] Cycle banner emitted on stderr; suppressed under `-q`. Evidence:
+    `cli.ts::runEngine` (cycle loop with `verbosity !== "quiet"` guard).

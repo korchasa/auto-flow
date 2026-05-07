@@ -180,6 +180,46 @@ Deno.test("extractCliFlags — --skip-update-check can appear anywhere", () => {
   assertEquals(remaining, [".flowai-workflow/x", "-v"]);
 });
 
+Deno.test("FR-E65 extractCliFlags — cycles defaults to 1 when --cycles is absent", () => {
+  const { cycles, remaining } = extractCliFlags(["--prompt", "Fix"]);
+  assertEquals(cycles, 1);
+  assertEquals(remaining, ["--prompt", "Fix"]);
+});
+
+Deno.test("FR-E65 extractCliFlags — --cycles is stripped and parsed as integer", () => {
+  const { cycles, remaining } = extractCliFlags([
+    ".flowai-workflow/x",
+    "--cycles",
+    "3",
+    "-v",
+  ]);
+  assertEquals(cycles, 3);
+  assertEquals(remaining, [".flowai-workflow/x", "-v"]);
+});
+
+Deno.test("FR-E65 extractCliFlags — --cycles rejects non-positive or non-integer values", () => {
+  assertThrows(
+    () => extractCliFlags(["--cycles", "0"]),
+    Error,
+    "Invalid --cycles value",
+  );
+  assertThrows(
+    () => extractCliFlags(["--cycles", "-1"]),
+    Error,
+    "Invalid --cycles value",
+  );
+  assertThrows(
+    () => extractCliFlags(["--cycles", "1.5"]),
+    Error,
+    "Invalid --cycles value",
+  );
+  assertThrows(
+    () => extractCliFlags(["--cycles", "abc"]),
+    Error,
+    "Invalid --cycles value",
+  );
+});
+
 Deno.test("extractCliFlags — output passes through parseArgs cleanly", () => {
   const { skipUpdateCheck, remaining } = extractCliFlags([
     "--skip-update-check",
