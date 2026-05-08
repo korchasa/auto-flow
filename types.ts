@@ -8,7 +8,7 @@
  * are re-exported here. HITL types (`HitlConfig`, `HumanInputRequest`,
  * `HumanInputOption`) are owned by the engine — the library v0.8.0 dropped
  * the entire HITL layer (see `@korchasa/ai-ide-cli` removal ADR
- * `2026-05-02-remove-hitl.md` and this repo's ADR-0013).
+ * `2026-05-02-remove-hitl.md` and this repo's hitl-via-engine-mcp).
  */
 
 import type {
@@ -35,7 +35,7 @@ export { VALID_RUNTIME_IDS } from "@korchasa/ai-ide-cli/types";
 export { VALID_PERMISSION_MODES } from "@korchasa/ai-ide-cli";
 export { REASONING_EFFORT_VALUES } from "@korchasa/ai-ide-cli/runtime/reasoning-effort";
 
-// --- HITL Types (engine-owned, post library v0.8.0; ADR-0013) ---
+// --- HITL Types (engine-owned, post library v0.8.0; hitl-via-engine-mcp) ---
 
 /** A single answer-option attached to a HITL request. */
 export interface HumanInputOption {

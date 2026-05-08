@@ -197,7 +197,7 @@ export async function executeAgentNode(
     }
   }
 
-  // FR-L35 / ADR-0013: HITL request was captured by the engine's
+  // FR-L35 / hitl-via-engine-mcp: HITL request was captured by the engine's
   // `onToolUseObserved` observer in agent.ts (replaces the legacy
   // `permission_denials` AskUserQuestion path). Route to the handler when
   // present.

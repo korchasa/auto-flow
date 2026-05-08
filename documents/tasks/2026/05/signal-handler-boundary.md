@@ -1,10 +1,24 @@
-# ADR-0008: Engine never installs OS signal handlers; bin entry points only
+---
+date: "2026-05-01"
+status: done
+implements: [FR-E59, FR-E60, FR-E61]
+tags: [decision, engine, embedding, signals, accepted]
+related_tasks:
+  - 2026/05/phase-registry-per-run.md
+---
+# Engine never installs OS signal handlers; bin entry points only
 
-## Status
+> **Status:** Accepted (decision implemented in code).
 
-Accepted
+## Goal
 
-## Context
+Keep `Engine.run()` free of side-effects on host signal listeners —
+bin entry points install handlers; library hosts retain full control
+over signal routing.
+
+## Overview
+
+### Context
 
 `process-registry.ts` (in the `@korchasa/ai-ide-cli` library) ships
 `installSignalHandlers()` — wires `Deno.addSignalListener("SIGINT" |
@@ -20,7 +34,31 @@ flows. If `Engine.run()` quietly installed signal handlers as a side
 effect, it would clobber the host's listeners and call
 `Deno.exit(130)` mid-host-run, killing unrelated work.
 
-## Decision
+### Constraints
+
+- `engine.ts` MUST NOT import `installSignalHandlers` from any source.
+- README "Embedding vs standalone use" section keeps the user-facing
+  contract in sync.
+
+## Definition of Done
+
+- [x] `installSignalHandlers()` documented as
+      bin-entry-point-only.
+- [x] `Engine` class never calls it (directly or transitively).
+- [x] Bin entry points (`cli.ts`, `scripts/self-runner.ts`) install
+      handlers themselves before constructing `Engine`.
+- [x] `process-registry.ts` module-level JSDoc states the contract and
+      explicitly disclaims use from `Engine`.
+- [x] `engine_test.ts::engine.ts does not import installSignalHandlers`
+      asserts at the source level that the engine module has no import
+      of the symbol.
+- [x] `engine_test.ts::Engine does not install OS signal handlers
+      (FR-E61)` runs an end-to-end noop merge workflow with the test
+      observing zero signal-listener registrations.
+
+## Solution
+
+### Decision
 
 `installSignalHandlers()` is publicly documented as bin-entry-point-
 only. The `Engine` class MUST NOT call it — neither directly nor
@@ -41,12 +79,13 @@ Enforcement is mechanical:
   (FR-E61)` runs an end-to-end noop merge workflow with the test
   observing zero signal-listener registrations.
 
-## Consequences
+### Consequences
 
 - **Positive.** Library hosts can embed `Engine.run()` without
   defending against unwanted signal-handler installation. The
   bin/library boundary is explicit and lint-checked. Companion to
-  FR-E59 (per-run phase registry; ADR-0007) and FR-E60 (caller-
+  FR-E59 (per-run phase registry; see
+  `2026/05/phase-registry-per-run.md`) and FR-E60 (caller-
   supplied `ProcessRegistry`) — the three together define the
   embedding contract.
 - **Negative.** A new contributor adding a "convenient" handler
@@ -54,14 +93,11 @@ Enforcement is mechanical:
   contract. (Counter: failing fast at CI is the goal.) Bin entry
   points carry the responsibility for cleanup themselves — but they
   always did; this just makes it explicit.
-- **Invariants.** `engine.ts` MUST NOT import
-  `installSignalHandlers` from any source. README "Embedding vs
-  standalone use" section keeps the user-facing contract in sync.
 - **Cross-link.** Implements FR-E61 (see
   `documents/requirements-engine/06-distribution-and-housekeeping.md`
   §3.61).
 
-## Alternatives Considered
+### Alternatives Considered
 
 - **Make `installSignalHandlers()` a no-op when an existing listener
   is detected.** Rejected — Deno's `addSignalListener` does not

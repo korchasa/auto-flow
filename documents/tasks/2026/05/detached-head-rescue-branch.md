@@ -1,10 +1,24 @@
-# ADR-0004: Pin detached-HEAD worktrees to a rescue branch before removal
+---
+date: "2026-05-01"
+status: done
+implements: [FR-E24, FR-E51]
+tags: [decision, engine, worktree, accepted]
+related_tasks:
+  - 2026/05/worktree-frs-consolidation.md
+---
+# Pin detached-HEAD worktrees to a rescue branch before removal
 
-## Status
+> **Status:** Accepted (decision implemented in code).
 
-Accepted
+## Goal
 
-## Context
+Prevent silent commit loss when an agent commits inside a detached-HEAD
+worktree but never explicitly checks out a named branch — by pinning
+HEAD to a run-id-keyed rescue branch before `removeWorktree`.
+
+## Overview
+
+### Context
 
 `createWorktree` (FR-E24) uses `git worktree add --detach` so per-run
 worktrees never pollute the main repo's branch namespace. If a workflow
@@ -24,7 +38,30 @@ through a `decision`-like agent that explicitly checks out a feature
 branch is unaffected). The bug is the missing safety net for the
 "agent committed but never branched" path.
 
-## Decision
+### Constraints
+
+- `removeWorktree` is never called without a prior `pinDetachedHead`.
+- Engine tests assert this via call-site coverage in `engine.ts` and a
+  unit test for the pin function itself.
+
+## Definition of Done
+
+- [x] `pinDetachedHead(workDir, runId)` invoked before every
+      `removeWorktree(workDir)` call.
+- [x] Pin function inspects worktree HEAD via
+      `git symbolic-ref --short HEAD`; named branch → no-op; detached
+      → creates `flowai/run-<runId>-orphan-rescue` at HEAD via
+      `git branch <name> HEAD` (non-destructive — never overwrites an
+      existing branch).
+- [x] If branch with the name already exists (resume of the same
+      run-id, repeat invocation), appends `-2`, `-3`, ... until a free
+      name is found.
+- [x] Failure to pin emits `output.warn` but does NOT block worktree
+      removal — best-effort.
+
+## Solution
+
+### Decision
 
 Before every `removeWorktree(workDir)` invocation, the engine calls
 `pinDetachedHead(workDir, runId)`. The pin function:
@@ -42,7 +79,7 @@ Failure to pin emits `output.warn` but does NOT block worktree
 removal — best-effort. A mid-run crash or corrupted ref must not
 prevent cleanup.
 
-## Consequences
+### Consequences
 
 - **Positive.** Commits made inside detached-HEAD worktrees survive
   worktree teardown, recoverable via the named rescue branch. The
@@ -55,13 +92,10 @@ prevent cleanup.
   main repo. Operators are expected to delete them after merging or
   discarding the contents. (Counter: the alternative is silent
   commit loss; a noisy branch is strictly less bad.)
-- **Invariants.** `removeWorktree` is never called without a prior
-  `pinDetachedHead`. Engine tests assert this via call-site coverage
-  in `engine.ts` and a unit test for the pin function itself.
 - **Cross-link.** Implements FR-E51 (see
   `documents/requirements-engine/04b-worktree-isolation.md` §3.51).
 
-## Alternatives Considered
+### Alternatives Considered
 
 - **Refuse to remove worktrees with a detached HEAD that has
   unreachable commits.** Rejected — turns recovery into a manual

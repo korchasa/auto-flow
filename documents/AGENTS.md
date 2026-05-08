@@ -38,7 +38,7 @@ a sibling directory. FR-IDs are stable on move — never renumber.
 
 ### Acceptance criteria — test-coverage convention
 
-Per [ADR-0011](adrs/0011-dod-test-coverage-convention.md), FR
+Per [dod-test-coverage-convention](tasks/2026/05/dod-test-coverage-convention.md), FR
 acceptance blocks DO NOT enumerate behaviours that are locked by
 regression tests. The pattern:
 
@@ -46,7 +46,7 @@ regression tests. The pattern:
   per-FR line at the top of the acceptance block. Format:
 
   ```markdown
-  - **Tests:** `<test_file>` (FR-E<N>; regression-locked). See ADR-NNNN.
+  - **Tests:** `<test_file>` (FR-E<N>; regression-locked). See adr-NNNN-<slug>.
   ```
 
   Rules:
@@ -57,8 +57,9 @@ regression tests. The pattern:
     When the FR id is NOT embedded in any test name, replace with
     `(regression-locked; <3-5-word topic>)` — e.g.
     `(regression-locked; verbose toggle)`.
-  - `See ADR-NNNN.` ONLY when an ADR records the rationale; omit
-    otherwise (the FR's Description already carries the why).
+  - `See adr-NNNN-<slug>.` ONLY when a decision-task records the
+    rationale; omit otherwise (the FR's Description already carries
+    the why).
   - Per-criterion `[x]` bullets exercised by the listed tests are
     removed. CI catches regressions, not the agent re-reading the FR.
   - **Test naming obligation:** every test asserting an FR's behaviour
@@ -112,7 +113,7 @@ FR numbering: `FR-E<N>` for engine, `FR-S<N>` for SDLC workflow.
 
 ### FR canonical field set
 
-Per [ADR-0012](adrs/0012-fr-canonical-field-set.md), every FR uses
+Per [fr-canonical-field-set](tasks/2026/05/fr-canonical-field-set.md), every FR uses
 ONE allowlist of bolded fields, in fixed order. No other top-level
 `**Field:**` labels are accepted; FR-specific structure folds into
 `Description` as labelled prose subsections.
@@ -132,18 +133,19 @@ list mirrors that constant — if they ever drift, the constant wins
    carry a `Status` field; absence implies "in force".
 3. `Motivation` — problem/incident/force. `Rationale` is the same
    role and is no longer accepted — migrate to `Motivation`.
-4. `ADR` — cross-links to relevant ADR-NNNN records.
+4. `Decision` — cross-links to relevant decision-task records (paths to
+   `documents/tasks/<YYYY>/<MM>/adr-NNNN-<slug>.md`).
 5. `Dep` — comma-separated dependency FR ids.
 6. `Supersedes` — comma-separated predecessor FR ids.
 7. `Input` / `Output` — workflow-stage FRs only (`FR-S2..S9` and
    peers); engine-feature FRs MUST NOT use these.
 8. `Acceptance criteria` (mandatory; ALWAYS LAST) — checkable
    conditions; test-locked behaviour collapses to a `**Tests:**`
-   line per ADR-0011; manual-evidence items stay as `[x]` bullets
+   line per dod-test-coverage-convention; manual-evidence items stay as `[x]` bullets
    with `Evidence: <path>:<line>`.
 
 **Common mistake**: writing `Acceptance criteria` second
-(immediately after `Description`) followed by `Motivation`/`ADR`.
+(immediately after `Description`) followed by `Motivation`/`Decision`.
 Wrong — `Acceptance criteria` is ALWAYS last, after every optional
 field.
 

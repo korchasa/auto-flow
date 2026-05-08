@@ -70,7 +70,7 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   v3 (4 memory files leaked into main) and `kazar-fairy-taler` (developer
   memory + accidental gitlink). The guardrail converts silent corruption
   of main into immediate, attributable node failure.
-- **ADR:** [documents/adrs/0001-isolation-provider.md](../adrs/0001-isolation-provider.md)
+- **Decision:** [documents/tasks/2026/05/isolation-provider.md](../tasks/2026/05/isolation-provider.md)
   (planned — the guardrail is a worktree-provider concern; rationale will
   carry forward when the provider plugin lands).
 - **Acceptance criteria:**
@@ -107,7 +107,7 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   worktree is removed, the commits become unreachable and are eligible for
   garbage collection — the `kazar-fairy-taler` incident lost three commits
   this way (`be9bb6a → 12e6e93 → f6f6b94`) before manual rescue.
-- **ADR:** [documents/adrs/0004-detached-head-rescue-branch.md](../adrs/0004-detached-head-rescue-branch.md)
+- **Decision:** [documents/tasks/2026/05/detached-head-rescue-branch.md](../tasks/2026/05/detached-head-rescue-branch.md)
 - **Acceptance criteria:**
   - **Tests:** `worktree_test.ts`, `e2e_worktree_isolation_test.ts`
     (FR-E51; regression-locked).
@@ -140,7 +140,7 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   cwd → silent empty verbose-input listings under worktree mode), and
   installs a regression-guard test so the next consumer added cannot
   silently violate the contract.
-- **ADR:** [documents/adrs/0005-cwd-relative-template-paths.md](../adrs/0005-cwd-relative-template-paths.md)
+- **Decision:** [documents/tasks/2026/05/cwd-relative-template-paths.md](../tasks/2026/05/cwd-relative-template-paths.md)
 - **Acceptance criteria:**
   - **Tests:** `template_paths_test.ts`, `validate_test.ts` (FR-E52;
     regression-locked). The `template_paths_test.ts` audit case is
@@ -179,7 +179,7 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   isolation boundary — the workflow folder, which already owns its `runs/`
   and state namespaces (per-run worktrees nest under `runs/<run-id>/worktree/`,
   FR-E57).
-- **ADR:** [documents/adrs/0006-per-workflow-run-lock.md](../adrs/0006-per-workflow-run-lock.md)
+- **Decision:** [documents/tasks/2026/05/per-workflow-run-lock.md](../tasks/2026/05/per-workflow-run-lock.md)
 - **Acceptance criteria:**
   - **Tests:** `lock_test.ts` (FR-E54; regression-locked).
   - [x] `EngineOptions.lock_path` JSDoc reflects the new default
@@ -230,7 +230,7 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   - **Doc/code alignment:** `documents/requirements-engine/04b-...md:223`
     (FR-E54 constraints) already asserted the worktree directory was
     "already per-workflow" — that was aspirational. FR-E57 makes it true.
-- **ADR:** [documents/adrs/0003-per-run-worktree-co-location.md](../adrs/0003-per-run-worktree-co-location.md)
+- **Decision:** [documents/tasks/2026/05/per-run-worktree-co-location.md](../tasks/2026/05/per-run-worktree-co-location.md)
 - **Acceptance criteria:**
   - **Tests:** `worktree_test.ts`, `engine_test.ts`,
     `e2e_worktree_isolation_test.ts` (FR-E57; regression-locked).
@@ -274,7 +274,7 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   dependency» errors that look like workflow bugs. Unconditional copy
   makes the worktree a faithful working-state clone outside git's
   tracking universe.
-- **ADR:** [documents/adrs/0001-isolation-provider.md](../adrs/0001-isolation-provider.md)
+- **Decision:** [documents/tasks/2026/05/isolation-provider.md](../tasks/2026/05/isolation-provider.md)
   (planned — the gitignored-file mirror is a worktree-provider concern;
   rationale will carry forward when the provider plugin lands).
 - **Acceptance criteria:**

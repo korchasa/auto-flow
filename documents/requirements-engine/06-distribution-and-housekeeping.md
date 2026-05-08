@@ -158,9 +158,9 @@
   queue of `Engine.run()` calls in one Deno process. Module-level mapping
   let Run A's mapping persist into Run B and route Run B's nodes into Run
   A's phase folders, breaking artifact isolation.
-- **ADR:** [documents/adrs/0007-phase-registry-per-run.md](../adrs/0007-phase-registry-per-run.md)
+- **Decision:** [documents/tasks/2026/05/phase-registry-per-run.md](../tasks/2026/05/phase-registry-per-run.md)
 - **Acceptance criteria:**
-  - **Tests:** `engine_test.ts` (FR-E59; regression-locked). See ADR-0007.
+  - **Tests:** `engine_test.ts` (FR-E59; regression-locked). See phase-registry-per-run.
 
 
 
@@ -196,9 +196,9 @@
   (often translating them into queue-cancellation, not process exit).
   An engine-installed handler would call `Deno.exit(130|143)` and kill
   unrelated host work.
-- **ADR:** [documents/adrs/0008-signal-handler-boundary.md](../adrs/0008-signal-handler-boundary.md)
+- **Decision:** [documents/tasks/2026/05/signal-handler-boundary.md](../tasks/2026/05/signal-handler-boundary.md)
 - **Acceptance criteria:**
-  - **Tests:** `engine_test.ts` (FR-E61; regression-locked). See ADR-0008.
+  - **Tests:** `engine_test.ts` (FR-E61; regression-locked). See signal-handler-boundary.
   - [x] `process-registry.ts` documents `installSignalHandlers` as
     bin-entry-point-only and explicitly disclaims its use from `Engine`.
     Evidence: `process-registry.ts` module-level JSDoc.
@@ -208,53 +208,38 @@
 
 
 
-### 3.63 FR-E63: ADR Process
+### 3.63 FR-E63: Decision-Task Process
 
-- **Description:** Architectural decisions are recorded as
-  Architecture Decision Records (ADRs) under `documents/adrs/`. ADRs
-  use Michael Nygard's format (Status / Context / Decision /
-  Consequences / Alternatives Considered), are append-only once
-  `Accepted`, evolve via new ADRs that link back via
-  `Superseded by ADR-NNNN`, and are numbered monotonically with no
-  gaps. The set is lint-checked at `deno task check`. This is a
-  process meta-FR — defines the ADR mechanism itself; no single
-  back-fill ADR record. The directory and lint that implement it
-  live at [documents/adrs/](../adrs/) and
-  `scripts/check.ts::validateAdrSet`.
-
-  **Constraints:**
-  - One ADR per file. Filename `^\d{4}-[a-z0-9-]+\.md$`. Numbers
-    contiguous from `0001`, no gaps, no duplicates.
-  - Required level-2 sections, exact wording and order:
-    `## Status`, `## Context`, `## Decision`, `## Consequences`,
-    `## Alternatives Considered`.
-  - `Status` ∈ {`Proposed`, `Accepted`, `Superseded by ADR-NNNN`};
-    when superseded, the referenced ADR-NNNN MUST exist.
-  - All `ADR-NNNN` cross-references in ADR bodies MUST resolve to
-    existing files.
-  - ADRs fit the per-file `documents/` token budget
-    (`docsTokenBudget`, FR-E5).
+- **Description:** Architectural decisions are recorded as permanent
+  task files under `documents/tasks/<YYYY>/<MM>/adr-NNNN-<slug>.md`.
+  Each decision-task carries GODS-format frontmatter (`date`,
+  `status`, `implements`, `tags`, `related_tasks`) and a body with
+  `Goal`, `Overview` (Context / Current State / Constraints),
+  `Definition of Done` (with `[x]` items checked when implemented),
+  and `Solution` (preserving the original Decision + Alternatives
+  Considered prose). Decisions evolve via new tasks that reference
+  the predecessor in `supersedes:` frontmatter. This is a process
+  meta-FR — defines the decision-record mechanism itself; no single
+  back-fill record.
 - **Motivation:** "Why was it built this way?" used to require
   `git log` + AGENTS.md prose archaeology. New contributors couldn't
-  locate rationale without inside knowledge. ADRs anchor the
-  decisions on a stable, navigable surface; FRs say what is true,
-  ADRs say why.
+  locate rationale without inside knowledge. Decision-tasks anchor
+  the rationale on a stable, navigable surface alongside the
+  ordinary task layout; FRs say what is true, decision-tasks say
+  why. Folding decisions into the task system (rather than a
+  separate `documents/tasks/` tree) collapses two parallel
+  numbering/format conventions into one.
 - **Acceptance criteria:**
-  - **Tests:** `scripts/check_test.ts` (regression-locked;
-    `validateAdrSet` covers filename pattern, monotonic numbering,
-    required sections, status values, cross-link resolution).
-  - [x] `documents/adrs/` directory exists with `README.md` (index)
-    and `_template.md` (skeleton). Evidence:
-    `documents/adrs/README.md`, `documents/adrs/_template.md`.
-  - [x] At least 8 back-filled ADRs covering the most consequential
-    historical decisions (10 ADRs land at FR-E63 introduction;
-    ADR-0011 codifies this acceptance-block convention). Evidence:
-    `documents/adrs/0001-...md` through `documents/adrs/0011-...md`.
+  - [x] `documents/tasks/2026/05/adr-*.md` files cover the back-filled
+    historical decisions. Evidence:
+    `documents/tasks/2026/05/isolation-provider.md` through
+    `documents/tasks/2026/05/remove-git-from-engine.md`.
   - [x] AGENTS.md "Key Decisions" section links each bullet to its
-    ADR. Evidence: `AGENTS.md` "Key Decisions" section.
+    decision-task. Evidence: `AGENTS.md` "Key Decisions" section.
   - [x] FR-E acceptance criteria for E47/E51/E52/E54/E57/E59/E61
-    cross-link to corresponding ADRs (FR-E50/E58 link to ADR-0001
-    pending the isolation-provider plugin landing). Evidence: this
-    file + `04b-worktree-isolation.md`, `05-cli-and-observability.md`.
+    cross-link to corresponding decision-tasks (FR-E50/E58 link to
+    `isolation-provider` pending the isolation-provider
+    plugin landing). Evidence: this file +
+    `04b-worktree-isolation.md`, `05-cli-and-observability.md`.
 
 

@@ -1,10 +1,23 @@
-# ADR-0010: JSR publish surface — `.versionrc.json`, `publish.exclude`, `--dry-run` verification
+---
+date: "2026-05-01"
+status: done
+implements: [FR-E39]
+tags: [decision, distribution, jsr, accepted]
+related_tasks: []
+---
+# JSR publish surface — `.versionrc.json`, `publish.exclude`, `--dry-run` verification
 
-## Status
+> **Status:** Accepted (decision implemented in CI/check pipeline).
 
-Accepted
+## Goal
 
-## Context
+Codify three JSR publish-time failure modes (version drift, tarball
+bloat/leak, slow-types lint blind spot) so they fail fast at
+`deno task check` instead of breaking the release CI run.
+
+## Overview
+
+### Context
 
 Publishing `@korchasa/flowai-workflow` to JSR is the supported
 distribution channel (alongside the standalone binaries from FR-E39).
@@ -36,7 +49,31 @@ project once each before being codified:
   given entry — barrel-bypassed exports go unchecked. A clean local
   `deno check` does NOT mean a clean publish.
 
-## Decision
+### Constraints
+
+- `scripts/check.ts` MUST keep `deno publish --dry-run --allow-dirty`
+  as a step.
+- `.versionrc.json` MUST stay at repo root with the documented field
+  set.
+- `publish.exclude` MUST include the per-run dirt patterns inside
+  `.flowai-workflow/<name>/`.
+
+## Definition of Done
+
+- [x] `.versionrc.json` mandatory at repo root, declaring
+      `packageFiles: [{ filename: "deno.json", type: "json" }]` and
+      `bumpFiles: [{ filename: "deno.json", type: "json" }]`.
+- [x] `deno.json#publish.include` and `publish.exclude` keep dev paths
+      out of the tarball and per-run dirt out of the bundled workflow
+      folders.
+- [x] `deno task check` runs `deno publish --dry-run --allow-dirty` as
+      its final step (`scripts/check.ts` lines 570–574).
+- [x] `publish.include` does NOT reference paths outside the package
+      directory.
+
+## Solution
+
+### Decision
 
 Codify all three contracts in the project, lint-or-CI-enforced where
 possible:
@@ -60,7 +97,7 @@ possible:
   slow-types failures surface locally before commit, not on the
   release CI run.
 
-## Consequences
+### Consequences
 
 - **Positive.** Three classes of release-time-only failures all fail
   fast at `deno task check`. New contributors don't need to
@@ -69,15 +106,11 @@ possible:
 - **Negative.** `deno publish --dry-run` adds wallclock time to every
   local check (cost ~5–10 s). `.versionrc.json` is a CI-skeleton
   artefact that looks superfluous on a casual read of the tree.
-- **Invariants.** `scripts/check.ts` MUST keep `deno publish --dry-run
-  --allow-dirty` as a step. `.versionrc.json` MUST stay at repo root
-  with the documented field set. `publish.exclude` MUST include the
-  per-run dirt patterns inside `.flowai-workflow/<name>/`.
 - **Cross-link.** AGENTS.md "Repo Layout" section enumerates the
-  publish-side gotchas in narrative form; this ADR is the canonical
+  publish-side gotchas in narrative form; this task is the canonical
   rationale.
 
-## Alternatives Considered
+### Alternatives Considered
 
 - **Drop standard-version; bump `deno.json#version` by hand in
   release PRs.** Rejected — manual step, easy to forget, and the

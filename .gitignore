@@ -4,6 +4,6 @@
 .flowai-workflow/*/memory/agent-*.md
 .flowai-workflow/runs/
 .claude/worktrees/
-documents/tasks/
+# documents/tasks/ — committed since task migration to permanent layout
 tmp/
 documents/visualization/

@@ -15,7 +15,7 @@
  * reply. The MCP tool only needs to surface the typed request.
  *
  * Absorbed from `@korchasa/ai-ide-cli/hitl-mcp.ts` (deleted in library
- * v0.8.0; HITL pushed entirely to consumer per ADR-0013 here and the
+ * v0.8.0; HITL pushed entirely to consumer per hitl-via-engine-mcp here and the
  * library's own removal ADR `2026-05-02-remove-hitl.md`).
  */
 

@@ -215,10 +215,10 @@
   previously stated "No budget constraints." Runaway workflows on
   misconfigured or unbounded loops can incur unbounded API cost. Users need a
   safety cap without modifying workflow logic.
-- **ADR:** [documents/adrs/0009-budget-cli-runtime-coupling.md](../adrs/0009-budget-cli-runtime-coupling.md)
+- **Decision:** [documents/tasks/2026/05/budget-cli-runtime-coupling.md](../tasks/2026/05/budget-cli-runtime-coupling.md)
 - **Acceptance criteria:**
   - **Tests:** `cli_test.ts`, `config_test.ts`, `loop_test.ts`,
-    `agent_test.ts` (FR-E47; regression-locked). See ADR-0009.
+    `agent_test.ts` (FR-E47; regression-locked). See budget-cli-runtime-coupling.
   - [x] Full engine-level integration (workflow-wide abort mid-run)
     deferred — runtime adapter mocking infrastructure not yet present;
     covered indirectly via `checkWorkflowBudget` unit semantics.

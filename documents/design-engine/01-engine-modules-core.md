@@ -183,7 +183,7 @@
     via `task_template` `{{file(...)}}` (FR-S38). Base system prompt preserved.
     Runtime resolution centralized in `@korchasa/ai-ide-cli/runtime`;
     `runAgent()` resolves the adapter once and keeps continuation semantics
-    unchanged across runtimes. **HITL injection (FR-E8, ADR-0013):**
+    unchanged across runtimes. **HITL injection (FR-E8, hitl-via-engine-mcp):**
     when `defaults.hitl` is configured AND
     `adapter.capabilities.mcpInjection === true`, `runAgent()` builds an
     `mcpServers` invoke option (engine's `request_human_input` MCP server,

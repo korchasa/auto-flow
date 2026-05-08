@@ -1,10 +1,27 @@
-# ADR-0002: HITL detection lives in `@korchasa/ai-ide-cli`, not in the engine
+---
+date: "2026-05-01"
+status: to do
+implements: [FR-E8, FR-E44]
+tags: [decision, engine, hitl, library, cross-repo]
+related_tasks:
+  - 2026/05/hitl-detection-to-cli-lib.md
+  - 2026/05/hitl-via-engine-mcp.md
+---
+# HITL detection lives in `@korchasa/ai-ide-cli`, not in the engine
 
-## Status
+> **Status:** Proposed. Largely overtaken by
+> `2026/05/hitl-via-engine-mcp.md` (engine owns HITL via MCP;
+> library is HITL-agnostic). Retained as the earlier alternative for
+> contrast.
 
-Proposed
+## Goal
 
-## Context
+Move HITL trigger detection out of the engine into the runtime adapter
+layer — the engine sees only normalized `HitlRequest` objects.
+
+## Overview
+
+### Context
 
 Human-in-the-loop (FR-E8) is implemented today by code split awkwardly
 across two repos. The engine owns `hitl.ts`, `hitl-handler.ts`, and
@@ -21,8 +38,8 @@ new adapter contributor to update both repos in lock-step.
 
 Triggering forces:
 
-- Task `documents/tasks/2026-05-01-hitl-detection-to-cli-lib.md` (cross-
-  repo coordination required).
+- Task `2026/05/hitl-detection-to-cli-lib.md` (cross-repo coordination
+  required).
 - A new adapter (e.g., Cursor) cannot ship HITL support without an
   engine release because the detection lives in engine code.
 - The `RuntimeInvokeOptions.hitlMcpCommandBuilder` callback (FR-E44 AC4)
@@ -30,7 +47,28 @@ Triggering forces:
   engine to spawn its own HITL helper. Detection should follow the same
   callback-based ownership flip.
 
-## Decision
+### Constraints
+
+- `engine/*.ts` MUST NOT pattern-match on raw adapter event payloads.
+- The engine sees only normalized `HitlRequest` objects.
+- Audit test (planned) greps engine files for the literal string
+  `"AskUserQuestion"` and asserts zero matches.
+
+## Definition of Done
+
+- [ ] HITL trigger detection moved into `@korchasa/ai-ide-cli`.
+- [ ] Library gains `onHitlRequest` callback in `RuntimeInvokeOptions`.
+- [ ] Adapters emit a normalized `HitlRequest` payload (question text,
+      allowed answers, run-id, source event) and invoke the callback.
+- [ ] Engine supplies the callback when invoking adapters and resumes
+      via existing machinery.
+- [ ] Engine deletes inline tool-name matching and event introspection.
+- [ ] MCP-server-spawn callback (`hitlMcpCommandBuilder`) stays exactly
+      as-is — orthogonal contract.
+
+## Solution
+
+### Decision
 
 Move HITL trigger detection into `@korchasa/ai-ide-cli`. The library
 gains an `onHitlRequest` callback in `RuntimeInvokeOptions`; adapters
@@ -41,7 +79,7 @@ machinery. Engine deletes inline tool-name matching and event
 introspection. The MCP-server-spawn callback
 (`hitlMcpCommandBuilder`) stays exactly as-is — orthogonal contract.
 
-## Consequences
+### Consequences
 
 - **Positive.** Engine stops knowing the on-the-wire shape of any
   particular adapter's HITL events. Library can ship a new adapter
@@ -53,17 +91,13 @@ introspection. The MCP-server-spawn callback
   older version, the engine cannot delete its detection code (back-
   compat shim required for one release cycle). Library version pin in
   `deno.json#imports` becomes a load-bearing coordination point.
-- **Invariants.** `engine/*.ts` MUST NOT pattern-match on raw adapter
-  event payloads. The engine sees only normalized `HitlRequest`
-  objects. Audit test (planned) greps engine files for the literal
-  string `"AskUserQuestion"` and asserts zero matches.
 
-## Alternatives Considered
+### Alternatives Considered
 
 - **Keep detection in engine, expose a registry of "HITL tool
   names".** Rejected — every new adapter still requires an engine
   registry update; the cross-repo coupling is unchanged in substance.
-- **Move HITL **handling** (not just detection) into the library.**
+- **Move HITL handling (not just detection) into the library.**
   Rejected — the resume path involves engine state, run-id resolution,
   and `state.json` mutations the library cannot own without re-pulling
   engine concerns. Detection is the natural seam.

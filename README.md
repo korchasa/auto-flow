@@ -343,7 +343,7 @@ Alternatively, run directly with Deno (see Prerequisites below).
 
 ```bash
 deno task run              # Run the dogfood SDLC workflow (github-inbox)
-deno task check            # Full verification: fmt, lint, test, gitleaks, ADRs
+deno task check            # Full verification: fmt, lint, test, gitleaks, FR field set
 deno task test             # Run all tests
 deno task fmt              # Format code
 deno task dashboard        # Render an HTML run dashboard

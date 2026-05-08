@@ -1,10 +1,25 @@
-# ADR-0007: PhaseRegistry is per-`Engine.run()`, never module-level
+---
+date: "2026-05-01"
+status: done
+implements: [FR-E9, FR-E59, FR-E60, FR-E61]
+tags: [decision, engine, embedding, accepted]
+related_tasks:
+  - 2026/05/signal-handler-boundary.md
+  - 2026/05/engine-singleton-guard.md
+---
+# `PhaseRegistry` is per-`Engine.run()`, never module-level
 
-## Status
+> **Status:** Accepted (decision implemented in code).
 
-Accepted
+## Goal
 
-## Context
+Make the phase registry per-run instance state so sequential `Engine.run()`
+calls in a single Deno process keep their phase mappings isolated —
+unblocking library-host embedding (FR-E59/E60/E61).
+
+## Overview
+
+### Context
 
 FR-E9 introduced a `nodeId → phase` mapping that drives where each
 node's artifacts land under `<run-dir>/<phase>/<node-id>/`. The first
@@ -22,7 +37,29 @@ phases, Run B loaded its phases on top. The module map was union-
 of-both, so Run B's nodes routed into Run A's phase folders, breaking
 artifact isolation across runs that never overlapped in time.
 
-## Decision
+### Constraints
+
+- `engine.ts` MUST construct a fresh registry per `runWithLock`
+  invocation.
+- Path helpers MUST NOT reach into module scope for phase information.
+- Test `engine_test.ts::Engine — back-to-back runs do not leak phase
+  mapping (FR-E59)` exercises the isolation directly.
+
+## Definition of Done
+
+- [x] `PhaseRegistry` class with `fromConfig(config)` and `empty()`
+      factories and a private `Map<string, string>`.
+- [x] `Engine.run()` builds a fresh registry from the loaded config at
+      the top of each invocation and threads it through
+      `EngineContext.phaseRegistry` to every path-helper call
+      (`getNodeDir`, `buildTaskPaths`, `node-dispatch`).
+- [x] Path helpers accept the registry as an optional parameter; when
+      omitted they behave as if the registry were empty (back-compat).
+- [x] No module-level mutable state remains.
+
+## Solution
+
+### Decision
 
 `PhaseRegistry` is a class with `fromConfig(config)` and `empty()`
 factories and a private `Map<string, string>`. `Engine.run()` builds
@@ -35,7 +72,7 @@ parameter; when omitted they behave as if the registry were empty
 
 No module-level mutable state remains.
 
-## Consequences
+### Consequences
 
 - **Positive.** Two consecutive `Engine.run()` calls in the same Deno
   process keep their phase mappings strictly isolated — Run B's path
@@ -47,18 +84,13 @@ No module-level mutable state remains.
   pass either the registry or `PhaseRegistry.empty()`. Parallel
   `Engine.run()` calls in one process are still NOT supported — the
   host serializes them in its queue (cf. FR-E59 motivation).
-- **Invariants.** `engine.ts` MUST construct a fresh registry per
-  `runWithLock` invocation. Path helpers MUST NOT reach into module
-  scope for phase information. Test `engine_test.ts::Engine — back-
-  to-back runs do not leak phase mapping (FR-E59)` exercises the
-  isolation directly.
 - **Cross-link.** Implements FR-E59 (see
   `documents/requirements-engine/06-distribution-and-housekeeping.md`
   §3.59). Companion to FR-E60 (caller-supplied `ProcessRegistry`
-  injection) and FR-E61 (signal-handler boundary; ADR-0008) — the
-  three together make the engine safely embeddable in a host process.
+  injection) and FR-E61 (signal-handler boundary;
+  `2026/05/signal-handler-boundary.md`).
 
-## Alternatives Considered
+### Alternatives Considered
 
 - **AsyncLocalStorage / context-passing instead of explicit
   parameter.** Rejected — Deno lacks a stable AsyncLocalStorage

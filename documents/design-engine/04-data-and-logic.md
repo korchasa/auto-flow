@@ -219,7 +219,7 @@
       `markNodeSkipped()`.
     - `run_on: "failure"` → skip if `workflowSuccess`, call
       `markNodeSkipped()`.
-  - **HITL via Engine-Owned MCP Server** (FR-E8, FR-E64; ADR-0013):
+  - **HITL via Engine-Owned MCP Server** (FR-E8, FR-E64; hitl-via-engine-mcp):
     Engine ships a single stdio MCP server (`flowai-workflow-hitl`)
     exposing one tool `request_human_input`. Detection uses the
     library's runtime-neutral `onToolUseObserved` hook (FR-L35);

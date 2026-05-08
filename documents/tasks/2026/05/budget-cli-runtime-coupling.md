@@ -1,10 +1,26 @@
-# ADR-0009: Budget enforcement is coupled to the CLI runtime; planned move into `@korchasa/ai-ide-cli`
+---
+date: "2026-05-01"
+status: done
+implements: [FR-E47]
+tags: [decision, engine, budget, library, accepted]
+related_tasks:
+  - 2026/05/budget-to-cli-lib.md
+---
+# Budget enforcement is coupled to the CLI runtime; planned move into `@korchasa/ai-ide-cli`
 
-## Status
+> **Status:** Accepted (records current coupling; migration planned in
+> `2026/05/budget-to-cli-lib.md`).
 
-Accepted
+## Goal
 
-## Context
+Acknowledge the runtime-specific reality of FR-E47 budget enforcement
+explicitly so reviewers of the cross-repo migration task have a stable
+reference point — and define the target boundary (engine = generic
+predicate; adapter = USD/turns mechanics).
+
+## Overview
+
+### Context
 
 FR-E47 (Run Budget Enforcement) gave the engine three budget knobs:
 workflow-wide `--budget <USD>` cap, per-node `budget.max_usd`, and
@@ -31,7 +47,34 @@ actually feeds. The "engine is domain-agnostic" NFR (`AGENTS.md` Key
 Decisions) is in tension with "engine knows about CLI cost
 schemas".
 
-## Decision
+### Constraints
+
+- While the migration is pending, the YAML budget field schema MUST
+  stay back-compat — workflows authored under FR-E47 today must keep
+  working after the move.
+- Tests in `cli_test.ts`, `config_test.ts`, `loop_test.ts`,
+  `agent_test.ts` cover the resolution cascade and per-runtime
+  behaviour.
+
+## Definition of Done
+
+- [x] Coupling recognized explicitly and accepted as the current state.
+- [x] Plan to relocate budget primitives (cost-tracking, turn-cap flag
+      emission, per-node cap evaluation, loop pre-check) into
+      `@korchasa/ai-ide-cli` as adapter-side responsibilities.
+- [x] Engine retains only:
+      - Workflow-wide kill-switch (workflow stops when a host-supplied
+        callback says "you've spent too much") — generic predicate,
+        not USD-specific.
+      - YAML schema fields, validated at config load and forwarded
+        verbatim to the adapter.
+- [x] Migration scoped in `2026/05/budget-to-cli-lib.md` (cross-repo —
+      library minor release ships first, engine pins the new version,
+      deletes the duplicated code on the second release).
+
+## Solution
+
+### Decision
 
 Recognize the coupling explicitly and accept it as the current
 state. Plan to relocate the budget primitives (cost-tracking,
@@ -45,14 +88,13 @@ the engine retaining only:
 - The YAML schema fields, validated at config load and forwarded
   verbatim to the adapter.
 
-The migration is scoped in
-`documents/tasks/2026-05-01-budget-to-cli-lib.md` (cross-repo —
+The migration is scoped in `2026/05/budget-to-cli-lib.md` (cross-repo —
 library minor release ships first, engine pins the new version,
 deletes the duplicated code on the second release). Until that task
 lands, the FR-E47 implementation in the engine is the source of
 truth.
 
-## Consequences
+### Consequences
 
 - **Positive.** Records the rationale BEFORE the migration so
   reviewers of the cross-repo task have a stable reference point.
@@ -63,22 +105,16 @@ truth.
   CLI-specific accounting. Two runtime caveats (`max_turns` Claude-
   only; cost reporting adapter-dependent) must be re-documented in
   every workflow that wires budgets.
-- **Invariants.** While the migration is pending, the YAML budget
-  field schema MUST stay back-compat — workflows authored under
-  FR-E47 today must keep working after the move. Tests in
-  `cli_test.ts`, `config_test.ts`, `loop_test.ts`, `agent_test.ts`
-  cover the resolution cascade and per-runtime behaviour.
 - **Cross-link.** Implements / documents FR-E47 (see
   `documents/requirements-engine/05-cli-and-observability.md` §3.47).
-  Migration tracked by task `2026-05-01-budget-to-cli-lib.md`.
 
-## Alternatives Considered
+### Alternatives Considered
 
 - **Keep budget enforcement fully in the engine forever.** Rejected
   — every new adapter forces the engine to learn its cost surface,
   which violates the domain-agnostic NFR. The further the engine
   drifts from "DAG executor", the harder decomposition becomes
-  (cf. ADR-0001).
+  (cf. `2026/05/isolation-provider.md`).
 - **Drop USD enforcement; keep only `max_turns`.** Rejected — USD
   caps are the safety primitive operators actually want for unbounded
   loops. Removing them in favour of a turn count would push cost

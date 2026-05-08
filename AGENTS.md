@@ -253,16 +253,16 @@ migration.
 
 ## Key Decisions
 
-Architectural decisions are recorded as ADRs under
-[documents/adrs/](documents/adrs/) (Nygard format, append-only). The
-list below is a one-line index — open the linked ADR for full
-context, alternatives, and consequences.
+Architectural decisions are recorded as permanent task files under
+[documents/tasks/](documents/tasks/) (`adr-NNNN-<slug>.md` naming).
+The list below is a one-line index — open the linked decision-task
+for full context, alternatives, and consequences.
 
 - **Engine is domain-agnostic:** Generic DAG executor. MUST NOT contain git,
   GitHub, branch, PR, or any domain-specific logic. All domain workflows are
   implemented exclusively via agent nodes wired in workflow YAML configs.
-  See [ADR-0001](documents/adrs/0001-isolation-provider.md) (isolation
-  provider plugin) and [ADR-0002](documents/adrs/0002-hitl-detection-boundary.md)
+  See [isolation-provider](documents/tasks/2026/05/isolation-provider.md) (isolation
+  provider plugin) and [hitl-detection-boundary](documents/tasks/2026/05/hitl-detection-boundary.md)
   (HITL detection in `@korchasa/ai-ide-cli`) for the boundary fixes
   in flight.
 - **Engine is workflow-independent:** MUST NOT depend on any specific workflow
@@ -272,24 +272,24 @@ context, alternatives, and consequences.
 - YAML workflow config defines node graph; no hardcoded stage order.
 - Artifacts stored per-run for isolation. Per-run worktree co-located
   under `<workflowDir>/runs/<run-id>/worktree/` —
-  [ADR-0003](documents/adrs/0003-per-run-worktree-co-location.md).
+  [per-run-worktree-co-location](documents/tasks/2026/05/per-run-worktree-co-location.md).
 - Detached-HEAD worktrees pinned to a rescue branch before removal —
-  [ADR-0004](documents/adrs/0004-detached-head-rescue-branch.md).
+  [detached-head-rescue-branch](documents/tasks/2026/05/detached-head-rescue-branch.md).
 - `TemplateContext` paths are workDir-relative; engine consumers wrap via
   `workPath` —
-  [ADR-0005](documents/adrs/0005-cwd-relative-template-paths.md).
+  [cwd-relative-template-paths](documents/tasks/2026/05/cwd-relative-template-paths.md).
 - Run lock is per-workflow-folder, rooted at `<workflowDir>/runs/.lock` —
-  [ADR-0006](documents/adrs/0006-per-workflow-run-lock.md).
+  [per-workflow-run-lock](documents/tasks/2026/05/per-workflow-run-lock.md).
 - `PhaseRegistry` is per-`Engine.run()`, never module-level —
-  [ADR-0007](documents/adrs/0007-phase-registry-per-run.md).
+  [phase-registry-per-run](documents/tasks/2026/05/phase-registry-per-run.md).
 - Engine never installs OS signal handlers; bin entry points only —
-  [ADR-0008](documents/adrs/0008-signal-handler-boundary.md).
+  [signal-handler-boundary](documents/tasks/2026/05/signal-handler-boundary.md).
 - Budget enforcement is coupled to the CLI runtime today; planned
   move into `@korchasa/ai-ide-cli` —
-  [ADR-0009](documents/adrs/0009-budget-cli-runtime-coupling.md).
+  [budget-cli-runtime-coupling](documents/tasks/2026/05/budget-cli-runtime-coupling.md).
 - JSR publish surface: `.versionrc.json`, `publish.exclude`,
   `--dry-run` verification —
-  [ADR-0010](documents/adrs/0010-jsr-publish-caveats.md).
+  [jsr-publish-caveats](documents/tasks/2026/05/jsr-publish-caveats.md).
 - SDLC workflow specifics (diff safety checks, etc.)
   are workflow-level concerns, not engine-level.
 
@@ -314,7 +314,7 @@ context, alternatives, and consequences.
 - **Data-First**: When integrating with external APIs or processes, inspect the actual protocol and data formats before planning — assumptions about data shape are the #1 source of integration bugs.
 - **Architectural Validation**: For complex logic changes, visualize the event sequence (sequence diagram or pseudocode) — it catches race conditions and missing edges that prose descriptions miss.
 - **Variant Analysis**: When the path is non-obvious, propose variants with Pros/Cons/Risks per variant and trade-offs across them. Quality over quantity — one well-reasoned variant is fine if the path is clear.
-- **Reframe Before Extending**: When a new requirement won't fit an existing type/API/argument shape, write the requirement as a problem statement BEFORE proposing to widen the existing abstraction. Ask: "is this the same concern as the existing field, or a new concern wearing the same shape?" Often the answer is "new concern" — and the right fix is a new typed field, not a wider existing one. Stretching one map/string/tuple to cover two concerns leaks abstraction (e.g. attempting to make `ExtraArgsMap`'s `Record<string,string|null>` carry repeated MCP-config flags rather than recognising that per-invocation MCP registration is its own concern; resolved upstream by a new `mcpServers` typed field — see ADR-0013).
+- **Reframe Before Extending**: When a new requirement won't fit an existing type/API/argument shape, write the requirement as a problem statement BEFORE proposing to widen the existing abstraction. Ask: "is this the same concern as the existing field, or a new concern wearing the same shape?" Often the answer is "new concern" — and the right fix is a new typed field, not a wider existing one. Stretching one map/string/tuple to cover two concerns leaks abstraction (e.g. attempting to make `ExtraArgsMap`'s `Record<string,string|null>` carry repeated MCP-config flags rather than recognising that per-invocation MCP registration is its own concern; resolved upstream by a new `mcpServers` typed field — see hitl-via-engine-mcp).
 - **User Decision Gate**: Do NOT detail implementation plan until user explicitly selects a variant.
 - **Plan Persistence**: After variant selection, save the detailed plan to `documents/tasks/<YYYY-MM-DD>-<slug>.md` using GODS format — chat-only plans are lost between sessions.
 - **Proactive Resolution**: Before asking the user, exhaust available resources (codebase, docs, web) to find the answer autonomously — unnecessary questions slow the workflow and signal lack of initiative.

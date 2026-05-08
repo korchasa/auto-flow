@@ -1,7 +1,7 @@
 /**
  * @module
  * Tests for the engine's HITL MCP injection + observer-based detection
- * (FR-L35; ADR-0013).
+ * (FR-L35; hitl-via-engine-mcp).
  */
 
 import { assertEquals, assertNotEquals } from "@std/assert";

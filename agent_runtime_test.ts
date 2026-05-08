@@ -145,7 +145,7 @@ Deno.test("runAgent — registers HITL MCP server when hitlConfig + capabilities
 
   assertEquals(result.success, true);
   assertEquals(calls.length, 1);
-  // FR-L35 / ADR-0013: engine renders hitlConfig into the typed
+  // FR-L35 / hitl-via-engine-mcp: engine renders hitlConfig into the typed
   // mcpServers field plus an onToolUseObserved hook; the library
   // routes them to the runtime's native MCP injection. The legacy
   // hitlConfig / hitlMcpCommandBuilder fields no longer exist.

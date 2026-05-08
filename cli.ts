@@ -353,7 +353,7 @@ async function runEngine(args: string[]): Promise<never> {
 if (import.meta.main) {
   // Internal dispatch: engine-owned HITL MCP server. Every MCP-capable
   // runtime adapter (Claude / OpenCode / Codex) spawns the engine binary
-  // with this flag via the `mcpServers` invoke option (FR-L35; ADR-0013).
+  // with this flag via the `mcpServers` invoke option (FR-L35; hitl-via-engine-mcp).
   if (Deno.args[0] === INTERNAL_HITL_MCP_ARG) {
     await runFlowaiHitlMcpServer();
     Deno.exit(0);

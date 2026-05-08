@@ -1,10 +1,24 @@
-# ADR-0013: HITL via engine-owned MCP server, library is HITL-agnostic
+---
+date: "2026-05-03"
+status: done
+implements: [FR-E8, FR-E64, FR-L35]
+tags: [decision, engine, hitl, mcp, accepted]
+related_tasks:
+  - 2026/05/hitl-detection-boundary.md
+---
+# HITL via engine-owned MCP server, library is HITL-agnostic
 
-## Status
+> **Status:** Accepted (decision implemented in code).
 
-Accepted
+## Goal
 
-## Context
+Centralize HITL in the engine via an engine-owned MCP server, leaving
+the library as a HITL-agnostic CLI wrapper that only ships generic
+`mcpServers` injection + `onToolUseObserved` hook.
+
+## Overview
+
+### Context
 
 `flowai-workflow` runs agent CLIs in headless mode. When an agent
 needs a human decision mid-task, the engine pauses the run, delivers
@@ -40,10 +54,51 @@ then added a generic per-invocation `mcpServers` option in v0.8.1
 MCP server through a single typed field that each adapter renders
 to its native plumbing.
 
-This ADR records how the engine absorbs the HITL stack on top of
+This task records how the engine absorbs the HITL stack on top of
 those new generic primitives.
 
-## Decision
+### Constraints
+
+- `engine/*.ts` MUST NOT pattern-match runtime-native tool names
+  except via `hitlToolNameFor(runtime)` in `hitl-injection.ts`.
+- `.flowai-workflow/<wf>/agents/*.md` and
+  `.flowai-workflow/<wf>/workflow.yaml` MUST NOT mention
+  `AskUserQuestion`, `request_human_input`, or any runtime-specific
+  HITL tool name.
+- `request_human_input` MCP schema is the cross-runtime contract.
+  Schema lives in `hitl-mcp-server.ts::REQUEST_HUMAN_INPUT_TOOL`;
+  any breaking change requires an engine major bump.
+- HITL flow gates on `capabilities.mcpInjection` exclusively; the
+  legacy `capabilities.hitl` flag was removed in library v0.8.0
+  and MUST NOT be reintroduced.
+
+## Definition of Done
+
+- [x] Engine owns the entire HITL stack; library stays HITL-agnostic.
+- [x] `hitl-mcp-server.ts` absorbed into engine: exports
+      `runFlowaiHitlMcpServer`, `INTERNAL_HITL_MCP_ARG`,
+      `HITL_MCP_SERVER_NAME = "flowai-workflow-hitl"`,
+      `HITL_TOOL_NAME = "request_human_input"`,
+      `normalizeHumanInputRequest`, `buildHitlMcpServerArgv`.
+- [x] `hitl-injection.ts` provides `buildHitlMcpServers()`,
+      `hitlToolNameFor(runtime)`, `createHitlObserver(runtime)`.
+- [x] `agent.ts::runAgent`: builds `mcpServers` and a `HitlObserver`,
+      passes both to every `adapter.invoke()` when
+      `defaults.hitl` configured AND
+      `adapter.capabilities.mcpInjection === true`.
+- [x] `hitl.ts::runHitlLoop` gates on `capabilities.mcpInjection`.
+- [x] `node-dispatch.ts` routes `result.hitl_question` to
+      `handleAgentHitl({mode: "detect"})`.
+- [x] Audit artefact `<workDir>/<node_dir>/hitl.jsonl` written per
+      Q+A round (FR-E64).
+- [x] Library pin `deno.json#imports`
+      `@korchasa/ai-ide-cli@^0.8.1`. Legacy
+      `INTERNAL_OPENCODE_HITL_MCP_ARG` dispatch and
+      `hitl-mcp-command.ts` deleted.
+
+## Solution
+
+### Decision
 
 The engine owns the entire HITL stack. The library stays
 HITL-agnostic — it only ships the generic `mcpServers` injection
@@ -88,7 +143,7 @@ Engine layout:
   `INTERNAL_OPENCODE_HITL_MCP_ARG` dispatch and
   `hitl-mcp-command.ts` are deleted.
 
-## Consequences
+### Consequences
 
 - **Positive.** Engine no longer pattern-matches `AskUserQuestion`;
   the Claude-specific branch and both input-shape parsers in the
@@ -108,28 +163,12 @@ Engine layout:
   library's old `INTERNAL_OPENCODE_HITL_MCP_ARG`). Cursor stays
   without HITL — same as before, gap formally pinned to upstream
   Cursor's missing per-invocation `--mcp-config`.
-- **Invariants.**
-  - `engine/*.ts` MUST NOT pattern-match runtime-native tool names
-    except via `hitlToolNameFor(runtime)` in
-    `hitl-injection.ts`. Audit (planned): `scripts/check.ts` greps
-    engine code for the literal `"AskUserQuestion"` and asserts
-    zero matches.
-  - `.flowai-workflow/<wf>/agents/*.md` and
-    `.flowai-workflow/<wf>/workflow.yaml` MUST NOT mention
-    `AskUserQuestion`, `request_human_input`, or any
-    runtime-specific HITL tool name. Lint rule planned in
-    `scripts/check.ts`.
-  - `request_human_input` MCP schema is the cross-runtime contract.
-    Schema lives in `hitl-mcp-server.ts::REQUEST_HUMAN_INPUT_TOOL`;
-    any breaking change requires an engine major bump.
-  - HITL flow gates on `capabilities.mcpInjection` exclusively;
-    the legacy `capabilities.hitl` flag was removed in library
-    v0.8.0 and MUST NOT be reintroduced.
 
-## Alternatives Considered
+### Alternatives Considered
 
-- **Keep library-side HITL detection (the path of ADR-0002 in this
-  repo).** Rejected — the library's own
+- **Keep library-side HITL detection (the path of
+  `2026/05/hitl-detection-boundary.md`).** Rejected — the
+  library's own
   `documents/adr/2026-05-02-remove-hitl.md` chose alternative D
   (remove entirely): "ai-ide-cli is a thin CLI wrapper; HITL is
   workflow-layer policy". Reintroducing HITL into the library

@@ -1,10 +1,24 @@
-# ADR-0005: TemplateContext path fields are workDir-relative; engine consumers wrap via `workPath`
+---
+date: "2026-05-01"
+status: done
+implements: [FR-E7, FR-E48, FR-E50, FR-E52]
+tags: [decision, engine, template, accepted]
+related_tasks: []
+---
+# TemplateContext path fields are workDir-relative; engine consumers wrap via `workPath`
 
-## Status
+> **Status:** Accepted (decision implemented in code).
 
-Accepted
+## Goal
 
-## Context
+Codify a single contract for `TemplateContext.node_dir`, `.run_dir`, and
+`.input.<id>` — emitted workDir-relative for prompts, wrapped via
+`workPath()` by every engine-internal consumer — so subprocesses and
+engine FS I/O agree on cwd semantics.
+
+## Overview
+
+### Context
 
 `TemplateContext` (`template.ts`) carries `node_dir`, `run_dir`, and
 `input.<id>` path fields that flow into both:
@@ -30,7 +44,32 @@ verbose-input listings and `Loop 'implementation': condition_field
 'verdict' not found` (`github-inbox` run `20260501T020329`, issue
 #196).
 
-## Decision
+### Constraints
+
+- `template.ts` is the audit allowlist.
+- Adding a new emission site requires updating the allowlist AND
+  adding a regression test for any indirect consumer it implies.
+
+## Definition of Done
+
+- [x] `TemplateContext.node_dir`, `.run_dir`, and `.input.<id>` emitted
+      workDir-relative by the engine — canonical form.
+- [x] `template.ts` is the only legitimate raw-emission consumer.
+- [x] Every other consumer wraps via `workPath(ctx.workDir, …)` before
+      any `Deno.stat`, `readDir`, `readTextFile`, or path arithmetic.
+- [x] Audit test in
+      `template_paths_test.ts::FR-E52 — bare ctx.node_dir / ctx.run_dir
+      restricted to template.ts` greps every non-test root-level `*.ts`
+      source for bare references and fails CI on violations outside
+      `template.ts`.
+- [x] Subprocess invocations
+      (`Deno.Command(..., { cwd: workDir })`) and template-rendered
+      shell commands NOT wrapped — their cwd already aligns with
+      workDir.
+
+## Solution
+
+### Decision
 
 Codify the contract:
 
@@ -50,7 +89,7 @@ Subprocess invocations (`Deno.Command(..., { cwd: workDir })`) and
 template-rendered shell commands do NOT need wrapping — their cwd
 already aligns with workDir.
 
-## Consequences
+### Consequences
 
 - **Positive.** One contract, one form, one audit point. Any new
   consumer that adds an unwrapped reference fails CI before merge.
@@ -62,14 +101,11 @@ already aligns with workDir.
   ctx)` inside `validate.ts`). Such cases need their own targeted
   regression tests (see `validate_test.ts::FR-E52 — file_exists under
   worktree wraps path with workDir`).
-- **Invariants.** `template.ts` is the audit allowlist. Adding a new
-  emission site requires updating the allowlist AND adding a
-  regression test for any indirect consumer it implies.
 - **Cross-link.** Implements FR-E52 (see
   `documents/requirements-engine/04b-worktree-isolation.md` §3.52).
   Closes a contract gap left by the Variant A fix `b0db7e6` (FR-E7).
 
-## Alternatives Considered
+### Alternatives Considered
 
 - **Emit absolute paths from the engine.** Rejected — subprocess
   prompts under worktree mode expect cwd-relative paths so the agent

@@ -75,14 +75,14 @@
     `AskUserQuestion`, `request_human_input`, or any other
     runtime-specific HITL tool name (the agent discovers the tool
     from its runtime catalogue).
-- **ADR:** ADR-0013.
+- **Decision:** hitl-via-engine-mcp.
 - **Acceptance criteria:**
   - **Tests:** `hitl_test.ts`, `hitl-injection_test.ts`,
     `hitl-mcp-server_test.ts` (FR-E8; regression-locked;
     `markNodeWaiting`, ask/check script wiring, poll loop, timeout,
     resume on reply, auto-resume of `waiting` nodes, observer
     capture across runtimes, MCP server NDJSON handshake).
-    See ADR-0013.
+    See hitl-via-engine-mcp.
   - [x] Workflow scripts `hitl-ask.sh` and `hitl-check.sh` exist in
     `.flowai-workflow/<wf>/scripts/`. Evidence:
     `.flowai-workflow/github-inbox/scripts/hitl-ask.sh`,
@@ -105,7 +105,7 @@
   stream. Reconstructing the human-decision trail from `runs/<id>/`
   required scraping a third-party system. The audit artefact is the
   canonical, in-tree record used by post-mortem and dashboard tooling.
-- **ADR:** ADR-0013.
+- **Decision:** hitl-via-engine-mcp.
 - **Dep:** FR-E8.
 - **Acceptance criteria:**
   - **Tests:** `hitl_test.ts` (FR-E64; regression-locked; reply-path

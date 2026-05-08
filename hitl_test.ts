@@ -1,4 +1,4 @@
-// FR-E8: agent-initiated HITL via engine-owned MCP server (ADR-0013).
+// FR-E8: agent-initiated HITL via engine-owned MCP server (hitl-via-engine-mcp).
 // Detection helpers live in hitl-injection_test.ts; this file covers
 // the runHitlLoop ask/poll/resume cycle and FR-E64 audit append.
 import { assertEquals, assertStringIncludes } from "@std/assert";
@@ -7,7 +7,7 @@ import { runHitlLoop } from "./hitl.ts";
 import type { HitlRunOptions } from "./hitl.ts";
 
 // HITL detection tests have moved to hitl-injection_test.ts (observer-based
-// detection via runtime-neutral onToolUseObserved hook; ADR-0013, FR-L35).
+// detection via runtime-neutral onToolUseObserved hook; hitl-via-engine-mcp, FR-L35).
 
 // --- runHitlLoop tests ---
 

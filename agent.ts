@@ -273,7 +273,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
   let continuations = 0;
   const validationRules = node.validate ?? [];
 
-  // FR-L35 / ADR-0013: HITL question captured by `onToolUseObserved` is the
+  // FR-L35 / hitl-via-engine-mcp: HITL question captured by `onToolUseObserved` is the
   // run's terminal state. Skip the cli_crash branch (the abort-induced
   // is_error is by design) AND skip validation/continuation: the artifact
   // is intentionally absent until the user replies, so validation would

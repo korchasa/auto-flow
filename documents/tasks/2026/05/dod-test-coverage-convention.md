@@ -1,10 +1,24 @@
-# ADR-0011: DoD acceptance items covered by regression tests collapse to a Tests pointer
+---
+date: "2026-05-01"
+status: done
+implements: []
+tags: [decision, docs, srs, convention, accepted]
+related_tasks: []
+---
+# DoD acceptance items covered by regression tests collapse to a Tests pointer
 
-## Status
+> **Status:** Accepted (decision codified in `documents/CLAUDE.md`).
 
-Accepted
+## Goal
 
-## Context
+Shrink per-FR acceptance blocks from 5–15 lines of redundant
+test-shaped checkboxes to one `**Tests:**` pointer + 0–3 manual items —
+so future readers see the FR's actual requirements, not test discovery
+prose.
+
+## Overview
+
+### Context
 
 Acceptance-criteria blocks in SRS files (`requirements-engine/*.md`,
 `requirements-sdlc/*.md`) currently list every implementation
@@ -30,7 +44,29 @@ asserts the behaviour" duplicates the test's existence in plain
 prose. Removing the prose doesn't drop coverage — the test still
 runs on every `deno task check`.
 
-## Decision
+### Constraints
+
+- New FRs MUST follow the convention — `[x]` is for manual-verification
+  items only.
+- The `**Tests:**` line MUST reference test names that exist in the
+  repo.
+- Acceptance blocks MUST NOT include `[x] deno task check passes`.
+
+## Definition of Done
+
+- [x] Convention adopted: behaviour locked by a regression test
+      collapses to a single per-FR line at the top of the acceptance
+      block: `- **Tests:** <test_file> (FR-E<N>; regression-locked).`
+- [x] Behaviour requiring manual verification stays as a `[x]` bullet
+      with `Evidence: <source-path>:<line>` exactly as before.
+- [x] `deno task check passes` dropped entirely from FR acceptance
+      blocks.
+- [x] Convention codified in [`documents/CLAUDE.md`](../CLAUDE.md)
+      §Acceptance criteria.
+
+## Solution
+
+### Decision
 
 Adopt the following convention for FR acceptance blocks across SRS
 files (engine and SDLC):
@@ -39,7 +75,7 @@ files (engine and SDLC):
   per-FR line at the top of the acceptance block. Format:
 
   ```markdown
-  - **Tests:** `<test_file>` (FR-E<N>; regression-locked). See ADR-NNNN.
+  - **Tests:** `<test_file>` (FR-E<N>; regression-locked).
   ```
 
   Rules:
@@ -52,9 +88,6 @@ files (engine and SDLC):
     anchor + status. Drop `(FR-E<N>; …)` only when the FR id has
     no embedded test names — then state where the assertions live
     in 3-5 words (e.g. `(regression-locked; verbose toggle)`).
-  - `See ADR-NNNN.` is appended ONLY when an ADR records the
-    rationale. Omit otherwise — the FR's `**Description:**` already
-    carries the why for non-ADR'd FRs.
   - Per-criterion `[x]` bullets exercised by the listed tests are
     removed. CI catches regressions; the agent doesn't re-verify.
 
@@ -76,21 +109,11 @@ actually exercise the behaviour. A test mentioned in `Evidence:`
 but unrelated to the claim is NOT a regression lock — the item
 stays as `[x]`.
 
-> **Note (same-session refinement, pre-application).** The
-> initial Decision block of this ADR enumerated test names inside
-> `**Tests:**`. During application to the first FR (FR-E53) the
-> verbosity proved counter-productive: 6 test names occupied as
-> much space as the original `[x]` bullets. The format was tightened
-> to file-list + grep anchor before any FR migration shipped. No
-> superseding ADR was issued because the policy had not yet been
-> instantiated. Future format changes after FR migration begins
-> MUST follow the supersede-via-new-ADR rule.
-
-## Consequences
+### Consequences
 
 - **Positive.** Per-FR acceptance blocks shrink from 5–15 lines to
   1 (Tests) + 0–3 (manual). Future readers see the FR's actual
-  requirements, not a rehash of test discovery. ADR cross-link
+  requirements, not a rehash of test discovery. Cross-link
   carries the "why" so the rationale isn't repeated per FR.
 - **Negative.** A test renamed without updating the `**Tests:**`
   pointer becomes a stale reference (same risk that `Evidence:`
@@ -98,14 +121,10 @@ stays as `[x]`.
   honest — no new mechanism. The collapse loses the granular
   per-criterion checkbox vibe; reviewers who used to scan the box
   list now read prose.
-- **Invariants.** New FRs MUST follow the convention — `[x]` is for
-  manual-verification items only. The `**Tests:**` line MUST
-  reference test names that exist in the repo. Acceptance blocks
-  MUST NOT include `[x] deno task check passes`.
 - **Cross-link.** Codified in
-  [documents/CLAUDE.md](../CLAUDE.md) §Acceptance criteria.
+  [`documents/CLAUDE.md`](../../CLAUDE.md) §Acceptance criteria.
 
-## Alternatives Considered
+### Alternatives Considered
 
 - **Keep listing every test-covered item as `[x]`.** Rejected — the
   bloat is the problem; preserving it preserves the cost.

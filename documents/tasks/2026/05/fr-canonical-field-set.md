@@ -1,14 +1,30 @@
-# ADR-0012: FR canonical field set
+---
+date: "2026-05-01"
+status: done
+implements: []
+tags: [decision, docs, srs, convention, accepted]
+related_tasks:
+  - 2026/05/dod-test-coverage-convention.md
+---
+# FR canonical field set
 
-## Status
+> **Status:** Accepted (decision codified in `documents/CLAUDE.md`,
+> enforced by `scripts/check.ts::validateFrFields`).
 
-Accepted
+## Goal
 
-## Context
+Adopt one allowlisted field set + fixed order for every FR in the SRS,
+so synonym drift (`Motivation` vs `Rationale`) and one-off labels stop
+proliferating across PR reviews.
 
-After the ADR-0011 sweep collapsed test-locked acceptance items, a
-second source of bloat became visible: the bold-prefixed fields
-above each FR's acceptance block diverge wildly across the SRS.
+## Overview
+
+### Context
+
+After the `2026/05/dod-test-coverage-convention.md` sweep
+collapsed test-locked acceptance items, a second source of bloat
+became visible: the bold-prefixed fields above each FR's acceptance
+block diverge wildly across the SRS.
 
 Field-frequency audit (2026-05-01) across
 `documents/requirements-engine/*.md` and
@@ -16,7 +32,7 @@ Field-frequency audit (2026-05-01) across
 
 - **Common (≥30 occurrences):** `Description`, `Acceptance criteria`,
   `Motivation`, `Tests:`.
-- **Regular (5–15):** `ADR`, `Status`, `Rationale`, `Dep`,
+- **Regular (5–15):** `Decision`, `Status`, `Rationale`, `Dep`,
   `Constraints`, `Quality metrics`, `Scope`, `Input`/`Output`,
   `Source`, `Supersedes`, `Acceptance` (typo synonym of
   `Acceptance criteria`).
@@ -37,7 +53,31 @@ The variation has three real costs:
 - **Audit cost.** No lint rejects a stray field name, so format
   drift compounds silently across PR reviews.
 
-## Decision
+### Constraints
+
+- New FRs MUST use only the allowlisted field names, in the canonical
+  order.
+- `validateFrFields` in `scripts/check.ts` is the lint gate; CI
+  rejects unknown bolded field labels.
+- Active FRs MUST NOT carry `Status`.
+
+## Definition of Done
+
+- [x] One canonical field set for every FR adopted.
+- [x] Mandatory fields (in this order): `Description`,
+      `Acceptance criteria`.
+- [x] Optional fields (in this order, only when present): `Status`,
+      `Motivation`, `Decision` (now: cross-link to decision tasks), `Dep`,
+      `Supersedes`, `Input`/`Output` (workflow-stage FRs only).
+- [x] Removed: `Rationale` (→ `Motivation`), `Acceptance` (→
+      `Acceptance criteria`), `Quality metrics` (→ NFR or SDS), all
+      one-off labels (folded into `Description`).
+- [x] Codified in [`documents/CLAUDE.md`](../../CLAUDE.md) §SRS Format
+      and enforced by `scripts/check.ts::validateFrFields`.
+
+## Solution
+
+### Decision
 
 Adopt one canonical field set for every FR in
 `documents/requirements-{engine,sdlc}/*.md`. No other bold-prefixed
@@ -53,7 +93,7 @@ nested lists as needed).
    subsections under this single field.
 2. `Acceptance criteria` — checkable conditions. Test-locked
    behaviour collapses to a `**Tests:**` line per
-   [ADR-0011](0011-dod-test-coverage-convention.md). Manual-evidence
+   `2026/05/dod-test-coverage-convention.md`. Manual-evidence
    items stay as `[x]` bullets with `Evidence: <path>:<line>`.
 
 **Optional fields (in this order, only when present):**
@@ -64,8 +104,8 @@ nested lists as needed).
 4. `Motivation` — the problem/incident/force this FR addresses. Any
    FR previously using `Rationale` is migrated to `Motivation`
    verbatim; `Rationale` is no longer accepted.
-5. `ADR` — one or more cross-links to relevant ADR-NNNN records
-   (e.g. `ADR: ADR-0003 (per-run worktree co-location)`).
+5. `Decision` — one or more cross-links to relevant decision-task records
+   under `documents/tasks/<YYYY>/<MM>/adr-*.md`.
 6. `Dep` — comma-separated FR-E<N>/FR-S<N> ids this FR depends on.
 7. `Supersedes` — comma-separated predecessor FR ids this FR
    replaces.
@@ -89,10 +129,9 @@ nested lists as needed).
   `Backward compatibility`, `Risks`, `Rollback`, `ROI analysis`,
   `Retry logic`, `Testing strategy`, `Sketch`, `Open questions`,
   `Source`, `Out of scope`, …) → fold into `Description` as labelled
-  prose subsections (`### <Topic>` or bold-leader paragraphs). The
-  information is preserved; the bolded top-level shape is dropped.
+  prose subsections.
 
-## Consequences
+### Consequences
 
 - **Positive.** Every FR has one of two shapes
   (engine-feature: 2 mandatory + up to 5 optional fields;
@@ -103,30 +142,21 @@ nested lists as needed).
   a labelled paragraph under `Description` — slightly less scan-
   friendly until readers adapt. Loss is mitigated by keeping
   sub-headings inside `Description` for the larger FRs.
-- **Invariants.** New FRs MUST use only the allowlisted field
-  names, in the canonical order. `validateFrFields` in
-  `scripts/check.ts` is the lint gate; CI rejects unknown bolded
-  field labels. Active FRs MUST NOT carry `Status`.
 - **Cross-link.** Codified in
-  [`documents/CLAUDE.md`](../CLAUDE.md) §SRS Format and enforced by
+  [`documents/CLAUDE.md`](../../CLAUDE.md) §SRS Format and enforced by
   `scripts/check.ts::validateFrFields` (called from `frFieldSet()`
   in the main check pipeline).
 
-## Alternatives Considered
+### Alternatives Considered
 
 - **Two separate templates (engine-feature vs workflow-stage).**
   Rejected — single allowlist with `Input`/`Output` flagged
   optional captures the same split with one shape, one lint, one
-  spec. Avoids the `which template?` decision at FR creation time.
+  spec.
 - **Allowlist without ordering.** Rejected — fixed order is what
-  makes scanning fast (`Status` always before `Motivation`,
-  `Tests:` always at the top of `Acceptance criteria`). Cost of
-  one extra lint rule (`fieldsAreInCanonicalOrder`) is small.
+  makes scanning fast.
 - **Keep `Quality metrics` as optional.** Rejected — observability
   targets are SDS-level concerns or NFR §4, not per-FR acceptance.
-  The 5 FRs currently using it (`FR-S2`/`S3`/`S5`/`S7`/`FR-E1`) had
-  their content folded into Description prose during sweep; no
-  data lost.
 - **Auto-derive the Description sub-structure from sidecar YAML.**
   Rejected — adds toolchain overhead. Markdown sub-headings are
   enough.

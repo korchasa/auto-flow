@@ -34,7 +34,7 @@
   - `hitl.ts` — HITL poll loop (`runHitlLoop`) and audit append
     (`appendHitlAuditRecord`, FR-E64); injectable `scriptRunner`/runtime
     runner for testing. Detection lives in `hitl-injection.ts` via the
-    runtime-neutral `onToolUseObserved` hook (FR-L35; ADR-0013) — no
+    runtime-neutral `onToolUseObserved` hook (FR-L35; hitl-via-engine-mcp) — no
     runtime-specific parsing in `hitl.ts`.
   - `hitl-injection.ts` — engine-side HITL plumbing on top of the
     library's generic primitives. `buildHitlMcpServers()` returns the
@@ -46,7 +46,7 @@
     closure capturing the first matching tool call and returns
     `"abort"`.
   - `hitl-mcp-server.ts` — stdio NDJSON MCP server (absorbed from the
-    library's deleted `hitl-mcp.ts` per ADR-0013). Exposes one tool
+    library's deleted `hitl-mcp.ts` per hitl-via-engine-mcp). Exposes one tool
     `request_human_input`. Dispatched from `cli.ts` via
     `--internal-hitl-mcp` and spawned per-invocation by every
     MCP-capable runtime adapter (Claude/OpenCode/Codex).
@@ -167,7 +167,7 @@
     `printSummary()`: builds `nodeResults` from `state.nodes[*].result`,
     passes to `summary()` for per-node result rendering.
   - `cli.ts` — CLI entry point with subcommand routing (FR-E45):
-    `--internal-hitl-mcp` → engine's HITL MCP server (ADR-0013),
+    `--internal-hitl-mcp` → engine's HITL MCP server (hitl-via-engine-mcp),
     `run` → `runEngine(args)` (DAG workflow),
     `init` → `runInit(args)` (project scaffolder),
     `--version`/`--help` → global handlers,

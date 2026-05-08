@@ -1,10 +1,27 @@
-# ADR-0003: Per-run worktree co-located under `<workflowDir>/runs/<run-id>/worktree/`
+---
+date: "2026-05-01"
+status: done
+implements: [FR-E54, FR-E57, FR-S47, FR-E53]
+tags: [decision, engine, worktree, accepted]
+related_tasks:
+  - 2026/05/per-workflow-run-lock.md
+  - 2026/05/worktree-frs-consolidation.md
+---
+# Per-run worktree co-located under `<workflowDir>/runs/<run-id>/worktree/`
 
-## Status
+> **Status:** Accepted (decision implemented in code). Recorded here as
+> a permanent task with all DoD items checked.
 
-Accepted
+## Goal
 
-## Context
+Materialize each run's worktree as a sibling to its `state.json` and
+node artifacts under one `<workflowDir>/runs/<run-id>/` umbrella so
+cross-workflow parallel runs are isolated and operational hygiene is
+single-tree.
+
+## Overview
+
+### Context
 
 Pre-FR-E57, every run's git worktree lived at a repo-global
 `.flowai-workflow/worktrees/<run-id>/` path while the run's
@@ -29,7 +46,32 @@ Two concrete problems followed:
   stale gitlink; subsequent runs hit confusing
   "fatal: '<path>' is not a working tree" failures.
 
-## Decision
+### Constraints
+
+- All path helpers in `worktree.ts` are parametrized by `workflowDir`.
+- The engine never hard-codes `.flowai-workflow/worktrees`.
+- Tests in `worktree_test.ts` cover the cross-workflow disjointness
+  invariant.
+
+## Definition of Done
+
+- [x] Each run's worktree materialized at
+      `<workflowDir>/runs/<run-id>/worktree/`, sibling to its
+      `state.json` and node-artifact directories.
+- [x] `getWorktreePath`, `createWorktree`, `worktreeExists`, and
+      `Engine.run()` take `workflowDir` as a parameter and derive the
+      path from it via `deriveWorkflowDir(options.config_path)`.
+- [x] `removeWorktree` runs `git worktree prune` after the primary
+      remove to drop stale gitlinks before the parent run dir is
+      collected.
+- [x] When `workflowDir === "."` (caller passed `workflow.yaml` without
+      a directory prefix) AND worktree mode is active, the engine fails
+      fast with a message naming FR-S47/FR-E53 — co-locating the
+      worktree under `./runs/...` is not gitignore-safe.
+
+## Solution
+
+### Decision
 
 Materialize each run's worktree at
 `<workflowDir>/runs/<run-id>/worktree/`, sibling to its `state.json`
@@ -45,7 +87,7 @@ directory prefix) AND worktree mode is active, the engine fails fast
 with a message naming FR-S47/FR-E53 — co-locating the worktree under
 `./runs/...` is not gitignore-safe.
 
-## Consequences
+### Consequences
 
 - **Positive.** A single path `<workflowDir>/runs/<run-id>/` contains
   everything tied to one run (state, artifacts, live worktree). Bulk
@@ -58,15 +100,12 @@ with a message naming FR-S47/FR-E53 — co-locating the worktree under
   up manually via `git worktree remove --force`. The fail-fast guard
   for `workflowDir === "."` is a breaking change for any caller that
   passed a bare `workflow.yaml`.
-- **Invariants.** All path helpers in `worktree.ts` are parametrized by
-  `workflowDir`. The engine never hard-codes
-  `.flowai-workflow/worktrees`. Tests in `worktree_test.ts` cover the
-  cross-workflow disjointness invariant.
 - **Cross-link.** Implements FR-E57 (see
   `documents/requirements-engine/04b-worktree-isolation.md` §3.55).
-  Builds on FR-E54 (per-workflow run lock; ADR-0006).
+  Builds on FR-E54 (per-workflow run lock; see
+  `2026/05/per-workflow-run-lock.md`).
 
-## Alternatives Considered
+### Alternatives Considered
 
 - **Keep `WORKTREE_BASE` global, namespace the runId by workflow
   hash.** Rejected — runtime-derived hash adds confusion; bulk ops
