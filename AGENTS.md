@@ -165,7 +165,7 @@ The Claude/OpenCode/Cursor CLI wrapper library
 (`@korchasa/ai-ide-cli`) lives in the sibling repo
 [`korchasa/ai-ide-cli`](https://github.com/korchasa/ai-ide-cli).
 flowai-workflow depends on it one-way via JSR
-(`jsr:@korchasa/ai-ide-cli@^0.5.6`, pinned in `deno.json`).
+(`jsr:@korchasa/ai-ide-cli@^0.8.2`, pinned in `deno.json`).
 
 For local cross-repo iteration (edit library, see effect here without a
 JSR republish), clone both repos side by side under one parent dir and
