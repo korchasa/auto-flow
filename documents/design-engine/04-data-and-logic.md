@@ -85,7 +85,10 @@
   `{{file("path")}}` (FR-E32: inline file inclusion, path relative to CWD,
   single-pass — no re-interpolation of file contents),
   `{{flow_file("path")}}` (FR-E55: same as `file()` but path resolves against
-  the current workflow directory `workDir/dirname(config_path)`).
+  the current workflow directory `workDir/dirname(config_path)`),
+  `{{bash("cmd")}}` (FR-E66: synchronous `bash -c <cmd>` with `cwd=workDir`,
+  stdout substituted with trailing `\n` trimmed; non-zero exit throws with
+  stderr; outer regex forbids `}` and newlines, inner forbids embedded `"`).
 - **After-hook conventions:** Commands run from repo root (no `cd {{run_dir}}`
   prefix needed). Use `|| true` suffix to prevent hook failure from killing
   the node.
@@ -147,6 +150,16 @@
     is populated by `Engine.buildContext` via `dirname(options.config_path)`;
     fixtures and external callers may omit it (defaults to "" → resolves
     against `workDir`).
+    **Bash Substitution Resolution (FR-E66):** When key matches
+    `/^bash\("(.+)"\)$/`: extract `cmd` → spawn
+    `new Deno.Command("bash", {args: ["-c", cmd], cwd: workDir, stdout:
+    "piped", stderr: "piped"}).outputSync()` → on `success: false` throw
+    `{{bash("${cmd}")}} — exit ${code}: ${stderr}`; on success decode
+    stdout, warn when length > `FILE_INCLUSION_SIZE_WARN_BYTES`, return
+    with single trailing `\n` stripped. No re-interpolation. Spawn
+    failure (e.g., bash missing) caught and rethrown with descriptive
+    prefix. Validation accepts any `bash("...")` payload at load time;
+    command syntax is not validated until interpolation.
     Load-time validation: `validateFileReferences(config, workDir,
     workflowDir)` in `config.ts` scans `task_template`/`prompt` /
     `system_prompt` fields for `{{(file|flow_file)("...")}}` regex, checks
@@ -161,7 +174,7 @@
     2. For each match: parse prefix. Validate against allowed set:
        `input.<id>` (id ∈ knownInputs), `env.<KEY>`, `args.<name>`,
        `loop.iteration`, `run_dir`, `run_id`, `node_dir`, `file("...")`,
-       `flow_file("...")`.
+       `flow_file("...")`, `bash("...")`.
     3. Unknown prefix or invalid `input.*` suffix → collect error string.
     4. Return all errors (batch, not fail-on-first).
     In `config.ts`: format each error with hook type + node ID, throw single

@@ -229,6 +229,36 @@
 
 
 
+### 3.66 FR-E66: `{{bash()}}` Template Function
+
+- **Description:** `template.ts` supports `{{bash("cmd")}}`. Engine spawns
+  `bash -c "<cmd>"` synchronously with `cwd = workDir` (the worktree path
+  during a run, falling back to `Deno.cwd()`), captures stdout, strips a
+  single trailing `\n`, and substitutes the result at the call site.
+  Non-zero exit throws with the captured stderr in the error message.
+  Spawn failure (e.g., `bash` missing) throws with a descriptive prefix.
+  Output is NOT re-interpolated. `validateTemplateVars` accepts any
+  `bash("...")` payload — command syntax is not validated at load time
+  (commands run at interpolation time only). Outer placeholder regex
+  (`\{\{[^}]+\}\}`) forbids `}` and newlines inside the command; the
+  inner regex (`bash\("(.+)"\)`) forbids embedded `"`. For complex
+  scripts, place them in a file and call e.g. `{{bash("scripts/x.sh")}}`.
+  Same >100 KB output warn threshold as `file()` / `flow_file()`.
+- **Motivation:** Agents that need fresh environment-derived context
+  (e.g., a QA agent reviewing the current `git diff`, file lists, or
+  worktree state) had no way to obtain it through templates — only
+  pre-staged file artefacts via `{{file()}}` / `{{flow_file()}}`.
+  Forcing a separate `prepare_command` node for every dynamic snippet
+  bloats the DAG. Inline shell substitution closes the gap with the
+  same single-pass semantics as the existing file-include functions.
+- **Dep:** FR-E32, FR-E55.
+- **Acceptance criteria:**
+  - **Tests:** `template_test.ts` (FR-E66; regression-locked;
+    stdout substitution + trailing-newline trim, multi-line stdout
+    preservation, cwd resolution, non-zero exit error path,
+    no-re-interpolation guarantee, mix with other variables, large
+    output warn threshold, validate-time pattern acceptance).
+
 ### 3.55 FR-E55: `{{flow_file()}}` Template Function
 
 - **Description:** `template.ts` supports `{{flow_file("path")}}` like `{{file()}}`

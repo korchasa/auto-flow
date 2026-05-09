@@ -3,8 +3,9 @@
  * Template interpolation engine: resolves `{{var}}` placeholders in prompt
  * and hook strings using the provided {@link TemplateContext}.
  * Supports dotted paths (input.*, args.*, env.*, loop.iteration),
- * direct keys (node_dir, run_dir, run_id), and file inclusion via
- * `{{file("path")}}`.
+ * direct keys (node_dir, run_dir, run_id), file inclusion via
+ * `{{file("path")}}` / `{{flow_file("path")}}`, and shell substitution via
+ * `{{bash("cmd")}}`.
  * Entry points: {@link interpolate}, {@link validateTemplateVars}.
  */
 
@@ -26,6 +27,9 @@ export const FILE_INCLUSION_SIZE_WARN_BYTES = 102400;
  *   path resolved against `workDir`
  * - `{{flow_file("path")}}` — same as `file()` but path resolved against the
  *   current workflow directory (`workDir/workflow_dir`)
+ * - `{{bash("cmd")}}` — execute shell command via `bash -c`, substitute stdout
+ *   (trailing newline trimmed). cwd = `workDir`. Non-zero exit throws with
+ *   stderr in the message. Outer regex forbids `}` and newlines in the command.
  *
  * Unresolved placeholders throw an error (fail fast).
  *
@@ -63,6 +67,37 @@ function readIncludedFile(
   return content;
 }
 
+function runBash(cmd: string, cwd: string): string {
+  let result;
+  try {
+    result = new Deno.Command("bash", {
+      args: ["-c", cmd],
+      cwd,
+      stdout: "piped",
+      stderr: "piped",
+    }).outputSync();
+  } catch (err) {
+    throw new Error(
+      `{{bash("${cmd}")}} — failed to spawn: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+  if (!result.success) {
+    const stderr = new TextDecoder().decode(result.stderr).trim();
+    throw new Error(
+      `{{bash("${cmd}")}} — exit ${result.code}${stderr ? `: ${stderr}` : ""}`,
+    );
+  }
+  const stdout = new TextDecoder().decode(result.stdout);
+  if (stdout.length > FILE_INCLUSION_SIZE_WARN_BYTES) {
+    console.warn(
+      `{{bash("${cmd}")}}: large output (${stdout.length} bytes, threshold ${FILE_INCLUSION_SIZE_WARN_BYTES})`,
+    );
+  }
+  return stdout.replace(/\n$/, "");
+}
+
 function resolve(
   key: string,
   ctx: TemplateContext,
@@ -96,6 +131,14 @@ function resolve(
       ? `${base}/${path}`
       : `${base}/${wfDir}/${path}`;
     return readIncludedFile("flow_file", path, resolved);
+  }
+
+  // bash() function: {{bash("cmd")}}
+  const bashMatch = key.match(/^bash\("(.+)"\)$/);
+  if (bashMatch) {
+    const cmd = bashMatch[1];
+    const cwd = workDir ?? Deno.cwd();
+    return runBash(cmd, cwd);
   }
 
   // Dotted paths
@@ -183,6 +226,7 @@ export function validateTemplateVars(
     // file() / flow_file() functions: {{file("path")}}, {{flow_file("path")}}
     if (/^file\(".*"\)$/.test(key)) continue;
     if (/^flow_file\(".*"\)$/.test(key)) continue;
+    if (/^bash\(".*"\)$/.test(key)) continue;
 
     // Dotted paths
     const dotIdx = key.indexOf(".");

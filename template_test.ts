@@ -269,6 +269,80 @@ Deno.test("interpolate — flow_file() content with {{var}} is NOT re-interpolat
   );
 });
 
+// --- bash() function tests ---
+
+Deno.test("FR-E66 interpolate — bash() substitutes stdout, trims trailing newline", () => {
+  const ctx = makeCtx();
+  assertEquals(interpolate(`{{bash("echo hello")}}`, ctx), "hello");
+});
+
+Deno.test("FR-E66 interpolate — bash() preserves internal newlines, strips only trailing", () => {
+  const ctx = makeCtx();
+  assertEquals(
+    interpolate(`{{bash("printf 'a\\nb\\n'")}}`, ctx),
+    "a\nb",
+  );
+});
+
+Deno.test("FR-E66 interpolate — bash() runs in workDir", () => {
+  const tmpDir = Deno.makeTempDirSync();
+  Deno.writeTextFileSync(`${tmpDir}/marker.txt`, "");
+  const ctx = makeCtx();
+  assertEquals(
+    interpolate(`{{bash("ls marker.txt")}}`, ctx, tmpDir),
+    "marker.txt",
+  );
+});
+
+Deno.test("FR-E66 interpolate — bash() non-zero exit throws with stderr", () => {
+  const ctx = makeCtx();
+  assertThrows(
+    () => interpolate(`{{bash("echo boom >&2; exit 7")}}`, ctx),
+    Error,
+    "exit 7",
+  );
+});
+
+Deno.test("FR-E66 interpolate — bash() output is NOT re-interpolated", () => {
+  // Note: outer regex forbids `}` inside the bash arg, so we test re-interpolation
+  // with `{{` only (closing braces would prematurely end the placeholder).
+  const ctx = makeCtx();
+  assertEquals(
+    interpolate(`{{bash("printf '{{node_dir'")}}`, ctx),
+    "{{node_dir",
+  );
+});
+
+Deno.test("FR-E66 interpolate — bash() mixed with other vars", () => {
+  const ctx = makeCtx();
+  assertEquals(
+    interpolate(`pre {{bash("echo X")}} {{args.issue}}`, ctx),
+    "pre X 42",
+  );
+});
+
+Deno.test("FR-E66 interpolate — bash() emits console.warn for large output", () => {
+  const ctx = makeCtx();
+  const n = FILE_INCLUSION_SIZE_WARN_BYTES + 1;
+  const warns: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => warns.push(args.map(String).join(" "));
+  try {
+    interpolate(`{{bash("yes x | head -c ${n}")}}`, ctx);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assertEquals(warns.length, 1);
+  assertEquals(warns[0].includes("large output"), true);
+});
+
+Deno.test("FR-E66 validateTemplateVars — bash() pattern is valid", () => {
+  assertEquals(
+    validateTemplateVars(`{{bash("git diff --stat")}}`, []),
+    [],
+  );
+});
+
 // --- validateTemplateVars tests (FR-E7) ---
 
 Deno.test("validateTemplateVars — empty string returns no errors", () => {
