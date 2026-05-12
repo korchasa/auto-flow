@@ -372,7 +372,17 @@ export async function extractConditionValue(
   );
 }
 
-/** Extract a field from YAML frontmatter (between --- delimiters). */
+/**
+ * Extract a field from YAML frontmatter (between --- delimiters).
+ *
+ * Returns `undefined` when the frontmatter block is missing or the field is
+ * absent. Throws when the frontmatter exists but is structurally invalid
+ * (malformed YAML, duplicate keys) — fail loudly rather than letting the
+ * caller report a misleading "field not found" error. The 2026-05-12
+ * `verify` regression — duplicate `verdict:` injected by a non-idempotent
+ * `sed -i` fallback — was masked for a full SDLC cycle because the previous
+ * `catch {}` returned undefined and the loop reported the field as missing.
+ */
 export function extractFrontmatterField(
   content: string,
   field: string,
@@ -380,14 +390,15 @@ export function extractFrontmatterField(
   const match = content.match(/^---\s*\n([\s\S]*?)\n---/);
   if (!match) return undefined;
 
+  let frontmatter: Record<string, unknown>;
   try {
-    const frontmatter = parseYaml(match[1]) as Record<string, unknown>;
-    if (field in frontmatter) {
-      return String(frontmatter[field]);
-    }
-  } catch {
-    // Invalid YAML frontmatter
+    frontmatter = parseYaml(match[1]) as Record<string, unknown>;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`Invalid YAML in frontmatter: ${msg}`);
   }
-
+  if (frontmatter && field in frontmatter) {
+    return String(frontmatter[field]);
+  }
   return undefined;
 }

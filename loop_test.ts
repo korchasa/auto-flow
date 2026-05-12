@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertThrows } from "@std/assert";
 import { extractConditionValue, extractFrontmatterField } from "./loop.ts";
 import type { LoopRunOptions } from "./loop.ts";
 import { OutputManager } from "./output.ts";
@@ -71,13 +71,33 @@ confidence: high
   assertEquals(extractFrontmatterField(content, "confidence"), "high");
 });
 
-Deno.test("extractFrontmatterField — handles invalid YAML gracefully", () => {
+Deno.test("extractFrontmatterField — throws on malformed YAML", () => {
   const content = `---
 : invalid yaml [
 ---
 # Broken`;
 
-  assertEquals(extractFrontmatterField(content, "verdict"), undefined);
+  assertThrows(
+    () => extractFrontmatterField(content, "verdict"),
+    Error,
+    "Invalid YAML in frontmatter",
+  );
+});
+
+Deno.test("extractFrontmatterField — throws on duplicate keys", () => {
+  const content = `---
+verdict: PASS
+qa_iteration: 1
+verdict: PASS
+qa_iteration: 1
+---
+# Body`;
+
+  assertThrows(
+    () => extractFrontmatterField(content, "verdict"),
+    Error,
+    "Invalid YAML in frontmatter",
+  );
 });
 
 Deno.test("extractFrontmatterField — handles empty frontmatter", () => {
