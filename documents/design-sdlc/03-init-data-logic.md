@@ -131,8 +131,8 @@
 - **Failure behavior:** Failed nodes produce no commits. On_error: "fail" stops
   workflow; "continue" proceeds to next nodes. Each failed `NodeState` gets
   `error_category?: ErrorCategory` — domain-agnostic enum:
-  `continuations_exhausted | timeout | cli_crash | hook_failure | hitl_timeout |
-  aborted | unknown`. Set by engine at failure point; downstream agents map
+  `continuations_exhausted | timeout | cli_crash | stream_stall |
+  hook_failure | hitl_timeout | aborted | unknown`. Set by engine at failure point; downstream agents map
   categories to domain actions.
 - **Resume:** `--resume <run-id>` skips completed nodes per state.json.
 
@@ -315,4 +315,3 @@ Engine refactoring (issue #92):
   orchestration) and `engine/post-workflow.ts` (post-workflow executor) from
   `engine/engine.ts`. Target: ≤500 LOC (from 849). Engine public interfaces
   unchanged; SDLC workflow transparent to internal restructuring.
-

@@ -149,6 +149,7 @@ Deno.test("markNodeFailed — all error categories are valid", () => {
     "continuations_exhausted",
     "timeout",
     "cli_crash",
+    "stream_stall",
     "hook_failure",
     "hitl_timeout",
     "aborted",

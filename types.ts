@@ -316,6 +316,7 @@ export type ErrorCategory =
   | "continuations_exhausted"
   | "timeout"
   | "cli_crash"
+  | "stream_stall"
   | "hook_failure"
   | "hitl_timeout"
   | "aborted"

@@ -267,3 +267,45 @@ Deno.test(
     assertEquals(result.error_category, undefined);
   },
 );
+
+Deno.test("runAgent — preserves runtime stream_stall error category", async () => {
+  const nodeDir = Deno.makeTempDirSync();
+
+  const runtimeAdapter: RuntimeAdapter = {
+    id: "opencode",
+    capabilities: {
+      permissionMode: false,
+      mcpInjection: false,
+      transcript: false,
+      interactive: false,
+      toolUseObservation: false,
+      session: false,
+      capabilityInventory: false,
+      toolFilter: false,
+      reasoningEffort: false,
+    },
+    launchInteractive() {
+      throw new Error("not implemented");
+    },
+    invoke: () =>
+      Promise.resolve({
+        error: "OpenCode aborted on stream stall: no events for 120s",
+        error_category: "stream_stall",
+      }),
+  };
+
+  const result = await runAgent({
+    node: {
+      type: "agent",
+      label: "Build",
+      prompt: "build",
+    } as NodeConfig,
+    ctx: makeCtx(nodeDir),
+    settings: makeSettings(),
+    runtime: "opencode",
+    runtimeAdapter,
+  });
+
+  assertEquals(result.success, false);
+  assertEquals(result.error_category, "stream_stall");
+});

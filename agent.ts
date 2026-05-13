@@ -305,7 +305,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       success: false,
       continuations,
       error: result.error,
-      error_category: "cli_crash",
+      error_category: mapRuntimeErrorCategory(result.error_category),
     };
   }
 
@@ -423,7 +423,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       output: result.output,
       continuations,
       error: result.error,
-      error_category: "cli_crash",
+      error_category: mapRuntimeErrorCategory(result.error_category),
     };
   }
 
@@ -455,6 +455,13 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
 }
 
 // --- Internal helpers ---
+
+function mapRuntimeErrorCategory(
+  category: string | undefined,
+): ErrorCategory {
+  if (category === "stream_stall") return "stream_stall";
+  return "cli_crash";
+}
 
 /** Run a shell command (for before/after hooks). */
 async function runShellCommand(

@@ -22,7 +22,8 @@
     `WorkflowDefaults.model` (default model for all nodes),
     `WorkflowDefaults.runtime`, `WorkflowDefaults.runtime_args`,
     `LoopNodeConfig.nodes` (inline body node definitions),
-    `LoopResult.bodyResults`, `ErrorCategory` (structured failure enum),
+    `LoopResult.bodyResults`, `ErrorCategory` (structured failure enum,
+    including runtime-propagated `stream_stall` from `@korchasa/ai-ide-cli`),
     `NodeState.error_category`, `NodeState.cost_usd` (FR-E17 per-node cost),
     `RunState.total_cost_usd` (FR-E17 aggregated run cost),
     `WorkflowDefaults.on_failure_script` (FR-E19 configurable failure hook),
@@ -218,4 +219,3 @@
     Low-level CLI invocation, stream parsing, event formatting, and
     `FileReadTracker` live in `@korchasa/ai-ide-cli` — see the sibling
     repo's `documents/design/01-modules.md` for details
-
