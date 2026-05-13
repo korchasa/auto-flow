@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.7.7](https://github.com/korchasa/flowai-workflow/compare/v0.7.6...v0.7.7) (2026-05-13)
+
+
+### Features
+
+* **engine:** add --cycles flag to repeat workflow N times (FR-E65) ([9735ecb](https://github.com/korchasa/flowai-workflow/commit/9735ecb26a73eeef71d4eb8336457a9d75f237b2))
+* **engine:** add {{bash()}} template function (FR-E66) ([60b6645](https://github.com/korchasa/flowai-workflow/commit/60b6645ddd8f901f98dfc47fb3ebdfe7551b1200))
+
+
+### Bug Fixes
+
+* **engine:** propagate ai-ide-cli stream stalls ([492a36e](https://github.com/korchasa/flowai-workflow/commit/492a36ecbb25be2e5475e3cd776e59ddc5ccda79))
+
+
+### Documentation
+
+* **adr:** record ADR-0014 removing git from engine ([d8b589d](https://github.com/korchasa/flowai-workflow/commit/d8b589d8380fb4d0682b736f895efed66cfe1809))
+* **claude:** make FR test-naming obligation explicit ([ffb32ee](https://github.com/korchasa/flowai-workflow/commit/ffb32eed4ac1e29c721a26aa23924c3e8194d85f))
+* **skill:** rewrite flowai-workflow-setup as comprehensive field reference ([0cd7108](https://github.com/korchasa/flowai-workflow/commit/0cd71085c28d5fead01cf3c53e7eb29cff47731d))
+
+
+### Code Refactoring
+
+* **docs:** replace ADRs with permanent decision-tasks (FR-E63) ([e0749dc](https://github.com/korchasa/flowai-workflow/commit/e0749dcbf6ff1ec45d95bfea06275f1467fb7086))
+* **sdlc:** consolidate PM validation into artifact.fields ([3b1d9c4](https://github.com/korchasa/flowai-workflow/commit/3b1d9c48de70e53337ffb2da6e809300ab1c0465))
+
+
+### Chores
+
+* **deps:** bump @korchasa/ai-ide-cli to ^0.8.2 ([6addddf](https://github.com/korchasa/flowai-workflow/commit/6addddf267b5e294d62cb498c5dd98e9807e471e))
+
 ### [0.7.6](https://github.com/korchasa/flowai-workflow/compare/v0.7.5...v0.7.6) (2026-05-03)
 
 
