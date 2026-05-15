@@ -71,20 +71,17 @@ confidence: high
   assertEquals(extractFrontmatterField(content, "confidence"), "high");
 });
 
-Deno.test("extractFrontmatterField — throws on malformed YAML", () => {
+Deno.test("extractFrontmatterField — ignores invalid unrelated YAML scalars", () => {
   const content = `---
-: invalid yaml [
+source: pdr-pickup: documents/pdrs/example.md
+verdict: FAIL
 ---
-# Broken`;
+# Report`;
 
-  assertThrows(
-    () => extractFrontmatterField(content, "verdict"),
-    Error,
-    "Invalid YAML in frontmatter",
-  );
+  assertEquals(extractFrontmatterField(content, "verdict"), "FAIL");
 });
 
-Deno.test("extractFrontmatterField — throws on duplicate keys", () => {
+Deno.test("extractFrontmatterField — throws on duplicate target field", () => {
   const content = `---
 verdict: PASS
 qa_iteration: 1
@@ -96,7 +93,7 @@ qa_iteration: 1
   assertThrows(
     () => extractFrontmatterField(content, "verdict"),
     Error,
-    "Invalid YAML in frontmatter",
+    "Duplicate frontmatter field 'verdict'",
   );
 });
 
