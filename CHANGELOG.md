@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.7.8](https://github.com/korchasa/flowai-workflow/compare/v0.7.7...v0.7.8) (2026-05-16)
+
+
+### Features
+
+* **engine:** add git repository validation rules ([fe689ee](https://github.com/korchasa/flowai-workflow/commit/fe689eed6fb2f99ac4b86d20a8ece4ac8033526f))
+
+
+### Bug Fixes
+
+* parse frontmatter fields without full yaml ([896140f](https://github.com/korchasa/flowai-workflow/commit/896140f4fb5fd2db2178c6e3e29fbf36e700bff9))
+
 ### [0.7.7](https://github.com/korchasa/flowai-workflow/compare/v0.7.6...v0.7.7) (2026-05-13)
 
 
