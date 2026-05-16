@@ -113,3 +113,22 @@
     aggregation, config-load rejection of bad entries).
 
 
+
+### 3.67 FR-E67: Git Repository State Validation Rules
+
+- **Description:** Workflow validation supports parameterless Git repository
+  state rules:
+  - `git_worktree_clean`: fails when the worktree has any tracked changes or
+    untracked non-ignored files relative to `HEAD`.
+  - `git_default_branch_checked_out`: fails when the current branch is not
+    the repository default branch recorded in `refs/remotes/origin/HEAD`.
+  - `git_no_unpushed_commits`: fails when the current branch is ahead of its
+    upstream.
+- **Motivation:** Workflows need concise post-stage repository gates without
+  embedding shell snippets in YAML. `.gitignore` remains the source of truth
+  for ignored files; validation does not add a second ignore mechanism.
+- **Acceptance criteria:**
+  - **Tests:** `validate_test.ts`, `config_test.ts` (FR-E67;
+    regression-locked; config accepts all three parameterless rules; runtime
+    checks clean/dirty worktree, ignored files, default/non-default branch,
+    and pushed/unpushed branch states).

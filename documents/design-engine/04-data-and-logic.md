@@ -14,10 +14,12 @@
     command executed post-config/pre-node with template interpolation
     (supports `{{run_dir}}`, `{{run_id}}`, `{{env.*}}`, `{{args.*}}` only).
   - ValidationRule: `{ type: "file_exists"|"file_not_empty"|"contains_section"|
-    "custom_script"|"frontmatter_field"|"artifact", path?, field?, allowed?,
-    sections?: string[], fields?: string[], ... }` — when `type === "artifact"`:
-    at least one of `sections` or `fields` required (FR-E33, FR-E38).
-    `fields` = frontmatter field names for presence-only checks
+    "custom_script"|"frontmatter_field"|"artifact"|"git_worktree_clean"|
+    "git_default_branch_checked_out"|"git_no_unpushed_commits", path?,
+    field?, allowed?, sections?: string[], fields?: string[], ... }` — when
+    `type === "artifact"`: at least one of `sections` or `fields` required
+    (FR-E33, FR-E38). `fields` = frontmatter field names for presence-only
+    checks. Git repository-state rules are parameterless (FR-E67)
   - LoopResult: `{ ..., bodyResults: AgentResult[] }` — accumulated per-iteration
     agent results; consumed by `executeLoopNode()` callback for log saving
   - LoopNodeConfig: `{ ..., nodes: Record<string, NodeConfig> }` — inline
@@ -79,6 +81,17 @@
     Supports `on_error: continue` (non-fatal).
   - `custom_script`: Validation via external script execution, enabling
     continuation-on-failure for check errors.
+  - Git repository-state rules (FR-E67): Parameterless validation rules run
+    Git queries in the validation working directory. `git_worktree_clean`
+    runs `git diff --name-only HEAD` for tracked changes and
+    `git ls-files --others --exclude-standard` for untracked non-ignored
+    files; any output fails the rule. `git_default_branch_checked_out` reads
+    current branch via `git symbolic-ref --short HEAD` and default branch via
+    `git symbolic-ref --short refs/remotes/origin/HEAD`, then compares the
+    local branch name to the remote default branch name. `git_no_unpushed_commits`
+    resolves `@{u}` and runs `git rev-list --count @{u}..HEAD`; any positive
+    count fails the rule. These checks do not fetch; they validate against
+    locally known Git refs.
 - **Context management:** Claude CLI auto-compression handles large input sets.
 - **Template variables:** `{{node_dir}}`, `{{input.*}}`, `{{run_dir}}`,
   `{{run_id}}`, `{{args.*}}`, `{{env.*}}`, `{{loop.iteration}}`,
@@ -431,4 +444,3 @@
   `--worktree`. Create FR per validated candidate. Already shipped:
   `--effort` (FR-E42), `--allowedTools`/`--disallowedTools` (FR-E48),
   `--permission-mode` (FR-E29).
-

@@ -2,6 +2,48 @@ import { assertEquals } from "@std/assert";
 import { allPassed, formatFailures, runValidations } from "./validate.ts";
 import type { TemplateContext, ValidationRule } from "./types.ts";
 
+async function git(cwd: string, ...args: string[]): Promise<void> {
+  const out = await new Deno.Command("git", {
+    args,
+    cwd,
+    stdout: "null",
+    stderr: "piped",
+  }).output();
+  if (!out.success) {
+    const stderr = new TextDecoder().decode(out.stderr);
+    throw new Error(`git ${args.join(" ")} failed: ${stderr}`);
+  }
+}
+
+async function setupGitRepo(): Promise<{ root: string; repo: string }> {
+  const root = await Deno.makeTempDir();
+  const repo = `${root}/repo`;
+  const remote = `${root}/remote.git`;
+  await Deno.mkdir(repo);
+  await Deno.mkdir(remote);
+  await git(remote, "init", "--bare", "--initial-branch=main");
+  await git(repo, "init", "--initial-branch=main");
+  await git(repo, "config", "user.email", "test@test.com");
+  await git(repo, "config", "user.name", "Test");
+  await Deno.mkdir(`${repo}/.flowai-workflow/memory`, { recursive: true });
+  await Deno.writeTextFile(
+    `${repo}/.flowai-workflow/memory/agent-dev.md`,
+    "initial\n",
+  );
+  await Deno.writeTextFile(`${repo}/README.md`, "initial\n");
+  await git(repo, "add", ".");
+  await git(repo, "commit", "-m", "init");
+  await git(repo, "remote", "add", "origin", remote);
+  await git(repo, "push", "-u", "origin", "main");
+  await git(
+    repo,
+    "symbolic-ref",
+    "refs/remotes/origin/HEAD",
+    "refs/remotes/origin/main",
+  );
+  return { root, repo };
+}
+
 function makeCtx(nodeDir: string): TemplateContext {
   return {
     node_dir: nodeDir,
@@ -147,6 +189,144 @@ Deno.test("custom_script — failing script", async () => {
   const results = await runValidations(rules, makeCtx("/tmp"));
 
   assertEquals(results[0].passed, false);
+});
+
+Deno.test("FR-E67 git_worktree_clean — clean worktree passes", async () => {
+  const { root, repo } = await setupGitRepo();
+  try {
+    const rules: ValidationRule[] = [
+      {
+        type: "git_worktree_clean",
+      },
+    ];
+    const ctx = { ...makeCtx("runs/test/node"), workDir: repo };
+    const results = await runValidations(rules, ctx, repo);
+
+    assertEquals(results[0].passed, true);
+    assertEquals(results[0].message, "Git worktree is clean");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("FR-E67 git_worktree_clean — modified tracked path fails", async () => {
+  const { root, repo } = await setupGitRepo();
+  try {
+    await Deno.writeTextFile(`${repo}/README.md`, "dirty\n");
+    const rules: ValidationRule[] = [
+      {
+        type: "git_worktree_clean",
+      },
+    ];
+    const ctx = { ...makeCtx("runs/test/node"), workDir: repo };
+    const results = await runValidations(rules, ctx, repo);
+
+    assertEquals(results[0].passed, false);
+    assertEquals(results[0].message.includes("README.md"), true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("FR-E67 git_worktree_clean — untracked non-ignored path fails", async () => {
+  const { root, repo } = await setupGitRepo();
+  try {
+    await Deno.writeTextFile(`${repo}/new-file.md`, "new\n");
+    const rules: ValidationRule[] = [
+      {
+        type: "git_worktree_clean",
+      },
+    ];
+    const ctx = { ...makeCtx("runs/test/node"), workDir: repo };
+    const results = await runValidations(rules, ctx, repo);
+
+    assertEquals(results[0].passed, false);
+    assertEquals(results[0].message.includes("new-file.md"), true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("FR-E67 git_worktree_clean — ignored path passes", async () => {
+  const { root, repo } = await setupGitRepo();
+  try {
+    await Deno.writeTextFile(`${repo}/.gitignore`, "ignored.tmp\n");
+    await git(repo, "add", ".gitignore");
+    await git(repo, "commit", "-m", "ignore temp");
+    await git(repo, "push");
+    await Deno.writeTextFile(`${repo}/ignored.tmp`, "ignored\n");
+    const rules: ValidationRule[] = [{ type: "git_worktree_clean" }];
+    const ctx = { ...makeCtx("runs/test/node"), workDir: repo };
+    const results = await runValidations(rules, ctx, repo);
+
+    assertEquals(results[0].passed, true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("FR-E67 git_default_branch_checked_out — default branch passes", async () => {
+  const { root, repo } = await setupGitRepo();
+  try {
+    const rules: ValidationRule[] = [
+      { type: "git_default_branch_checked_out" },
+    ];
+    const ctx = { ...makeCtx("runs/test/node"), workDir: repo };
+    const results = await runValidations(rules, ctx, repo);
+
+    assertEquals(results[0].passed, true);
+    assertEquals(results[0].message.includes("main"), true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("FR-E67 git_default_branch_checked_out — feature branch fails", async () => {
+  const { root, repo } = await setupGitRepo();
+  try {
+    await git(repo, "checkout", "-b", "feature");
+    const rules: ValidationRule[] = [
+      { type: "git_default_branch_checked_out" },
+    ];
+    const ctx = { ...makeCtx("runs/test/node"), workDir: repo };
+    const results = await runValidations(rules, ctx, repo);
+
+    assertEquals(results[0].passed, false);
+    assertEquals(results[0].message.includes("feature"), true);
+    assertEquals(results[0].message.includes("main"), true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("FR-E67 git_no_unpushed_commits — pushed branch passes", async () => {
+  const { root, repo } = await setupGitRepo();
+  try {
+    const rules: ValidationRule[] = [{ type: "git_no_unpushed_commits" }];
+    const ctx = { ...makeCtx("runs/test/node"), workDir: repo };
+    const results = await runValidations(rules, ctx, repo);
+
+    assertEquals(results[0].passed, true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("FR-E67 git_no_unpushed_commits — local ahead commit fails", async () => {
+  const { root, repo } = await setupGitRepo();
+  try {
+    await Deno.writeTextFile(`${repo}/README.md`, "local\n");
+    await git(repo, "add", "README.md");
+    await git(repo, "commit", "-m", "local");
+    const rules: ValidationRule[] = [{ type: "git_no_unpushed_commits" }];
+    const ctx = { ...makeCtx("runs/test/node"), workDir: repo };
+    const results = await runValidations(rules, ctx, repo);
+
+    assertEquals(results[0].passed, false);
+    assertEquals(results[0].message.includes("1 unpushed"), true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
 });
 
 Deno.test("template variables in path are interpolated", async () => {

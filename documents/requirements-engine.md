@@ -97,3 +97,4 @@ FR-IDs are stable — never renumber them on move.
 - FR-E61 (Signal Handler Boundary)      → 06-distribution-and-housekeeping
 - FR-E63 (Decision-Task Process)        → 06-distribution-and-housekeeping
 - FR-E66 (`{{bash()}}` Template)        → 04-runtime-and-hooks
+- FR-E67 (Git Repository State Validation) → 03-config-and-validation

@@ -601,11 +601,22 @@ function validateValidationRule(
     "custom_script",
     "frontmatter_field",
     "artifact",
+    "git_worktree_clean",
+    "git_default_branch_checked_out",
+    "git_no_unpushed_commits",
   ];
   if (!validTypes.includes(rule.type as string)) {
     throw new Error(
       `Node '${nodeId}' validation rule has invalid type '${rule.type}'`,
     );
+  }
+  if (
+    // FR-E67: Git repository-state validation rules are parameterless.
+    rule.type === "git_worktree_clean" ||
+    rule.type === "git_default_branch_checked_out" ||
+    rule.type === "git_no_unpushed_commits"
+  ) {
+    return;
   }
   if (typeof rule.path !== "string" || !rule.path) {
     throw new Error(

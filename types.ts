@@ -292,10 +292,14 @@ export interface ValidationRule {
     | "custom_script"
     | "frontmatter_field"
     | "artifact"
+    | "git_worktree_clean"
+    | "git_default_branch_checked_out"
+    | "git_no_unpushed_commits"
     | "scope_check";
   /** Relative path to the artifact file being validated.
-   * Empty string for engine-injected scope_check rules. */
-  path: string;
+   * Empty string for engine-injected scope_check rules. Optional for
+   * Git repository-state rules, which check the full Git repository. */
+  path?: string;
   /** Expected content (section header for contains_section, script path for custom_script). */
   value?: string;
   /** Target field name in YAML frontmatter (for frontmatter_field rule). */

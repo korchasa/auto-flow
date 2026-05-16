@@ -1,8 +1,7 @@
 /**
  * @module
  * Output artifact validation for workflow nodes.
- * Supports five rule types: file_exists, file_not_empty, contains_section,
- * custom_script, and frontmatter_field.
+ * Supports artifact, file, script, frontmatter, and Git repository-state rules.
  * Entry point: {@link runValidations}.
  */
 
@@ -60,6 +59,26 @@ async function runSingleValidation(
   // file than validation does. Display path stays workDir-relative so the
   // agent's error message references the path it can write to from cwd =
   // workDir.
+  const gitCwd = cwd ?? ctx.workDir;
+  // FR-E67: repository-state rules validate Git invariants without shell YAML.
+  if (rule.type === "git_worktree_clean") {
+    return await checkGitWorktreeClean(rule, gitCwd);
+  }
+  if (rule.type === "git_default_branch_checked_out") {
+    return await checkGitDefaultBranchCheckedOut(rule, gitCwd);
+  }
+  if (rule.type === "git_no_unpushed_commits") {
+    return await checkGitNoUnpushedCommits(rule, gitCwd);
+  }
+
+  if (!rule.path) {
+    return {
+      rule,
+      passed: false,
+      message: `${rule.type} rule requires 'path'`,
+    };
+  }
+
   const displayPath = interpolate(rule.path, ctx);
   const fsPath = workPath(ctx.workDir, displayPath);
 
@@ -85,6 +104,159 @@ async function runSingleValidation(
         message: `Unknown validation type: ${(rule as ValidationRule).type}`,
       };
   }
+}
+
+type GitResult =
+  | { success: true; stdout: string }
+  | { success: false; stderr: string };
+
+async function runGit(cwd: string, args: string[]): Promise<GitResult> {
+  const cmd = new Deno.Command("git", {
+    args,
+    cwd,
+    stdout: "piped",
+    stderr: "piped",
+  });
+  const out = await cmd.output();
+  const stdout = new TextDecoder().decode(out.stdout).trim();
+  const stderr = new TextDecoder().decode(out.stderr).trim();
+  return out.success ? { success: true, stdout } : { success: false, stderr };
+}
+
+function lines(output: string): string[] {
+  return output.split("\n").map((line) => line.trim()).filter(Boolean);
+}
+
+async function checkGitWorktreeClean(
+  rule: ValidationRule,
+  cwd: string,
+): Promise<ValidationResult> {
+  const tracked = await runGit(cwd, ["diff", "--name-only", "HEAD"]);
+  if (!tracked.success) {
+    return {
+      rule,
+      passed: false,
+      message: `Git worktree check failed: ${tracked.stderr}`,
+    };
+  }
+  const untracked = await runGit(cwd, [
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+  ]);
+  if (!untracked.success) {
+    return {
+      rule,
+      passed: false,
+      message: `Git worktree check failed: ${untracked.stderr}`,
+    };
+  }
+
+  const dirty = new Set<string>();
+  for (const path of [...lines(tracked.stdout), ...lines(untracked.stdout)]) {
+    dirty.add(path);
+  }
+  if (dirty.size === 0) {
+    return {
+      rule,
+      passed: true,
+      message: "Git worktree is clean",
+    };
+  }
+
+  return {
+    rule,
+    passed: false,
+    message: `Git worktree has dirty paths: ${[...dirty].sort().join(", ")}`,
+  };
+}
+
+async function checkGitDefaultBranchCheckedOut(
+  rule: ValidationRule,
+  cwd: string,
+): Promise<ValidationResult> {
+  const current = await runGit(cwd, ["symbolic-ref", "--short", "HEAD"]);
+  if (!current.success) {
+    return {
+      rule,
+      passed: false,
+      message: `Git current branch check failed: ${current.stderr}`,
+    };
+  }
+
+  const remoteDefault = await runGit(cwd, [
+    "symbolic-ref",
+    "--short",
+    "refs/remotes/origin/HEAD",
+  ]);
+  if (!remoteDefault.success) {
+    return {
+      rule,
+      passed: false,
+      message:
+        `Git default branch check failed: refs/remotes/origin/HEAD is not set`,
+    };
+  }
+
+  const defaultBranch = remoteDefault.stdout.replace(/^origin\//, "");
+  if (current.stdout === defaultBranch) {
+    return {
+      rule,
+      passed: true,
+      message: `Current branch is default branch: ${defaultBranch}`,
+    };
+  }
+
+  return {
+    rule,
+    passed: false,
+    message:
+      `Current branch is '${current.stdout}', expected default branch '${defaultBranch}'`,
+  };
+}
+
+async function checkGitNoUnpushedCommits(
+  rule: ValidationRule,
+  cwd: string,
+): Promise<ValidationResult> {
+  const upstream = await runGit(cwd, [
+    "rev-parse",
+    "--abbrev-ref",
+    "--symbolic-full-name",
+    "@{u}",
+  ]);
+  if (!upstream.success) {
+    return {
+      rule,
+      passed: false,
+      message: `Git upstream check failed: current branch has no upstream`,
+    };
+  }
+
+  const ahead = await runGit(cwd, ["rev-list", "--count", "@{u}..HEAD"]);
+  if (!ahead.success) {
+    return {
+      rule,
+      passed: false,
+      message: `Git unpushed-commit check failed: ${ahead.stderr}`,
+    };
+  }
+
+  const count = Number(ahead.stdout);
+  if (count === 0) {
+    return {
+      rule,
+      passed: true,
+      message: `No unpushed commits relative to ${upstream.stdout}`,
+    };
+  }
+
+  return {
+    rule,
+    passed: false,
+    message:
+      `Current branch has ${count} unpushed commit(s) relative to ${upstream.stdout}`,
+  };
 }
 
 async function checkFileExists(

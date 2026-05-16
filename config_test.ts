@@ -631,6 +631,29 @@ Deno.test("parseConfig — invalid validation rule type throws", () => {
   );
 });
 
+Deno.test("FR-E67 parseConfig — Git repository-state rules accepted without path", () => {
+  const config = parseConfig(`
+name: test
+version: "1"
+nodes:
+  a:
+    type: agent
+    label: A
+    prompt: x
+    validate:
+      - type: git_worktree_clean
+      - type: git_default_branch_checked_out
+      - type: git_no_unpushed_commits
+`);
+
+  assertEquals(config.nodes.a.validate![0].type, "git_worktree_clean");
+  assertEquals(
+    config.nodes.a.validate![1].type,
+    "git_default_branch_checked_out",
+  );
+  assertEquals(config.nodes.a.validate![2].type, "git_no_unpushed_commits");
+});
+
 Deno.test("parseConfig — invalid on_error throws", () => {
   assertThrows(
     () =>
