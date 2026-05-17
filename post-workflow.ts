@@ -83,6 +83,8 @@ export interface PostWorkflowOptions {
   output: OutputManager;
   /** Execute a single node by ID. Errors are swallowed by executePostWorkflow. */
   executeNode: (nodeId: string) => Promise<boolean>;
+  /** Mark a filtered post-workflow node as skipped. */
+  nodeSkipped?: (nodeId: string) => Promise<void>;
   /** Working directory for hooks (worktree path or undefined for CWD). */
   cwd?: string;
   /** Working directory for state I/O. Defaults to ".". */
@@ -108,6 +110,7 @@ export async function executePostWorkflow(
     failureScript,
     output,
     executeNode,
+    nodeSkipped: skipNode,
     cwd,
     workDir,
     workflowDir,
@@ -124,13 +127,21 @@ export async function executePostWorkflow(
 
     const nodeRunOn = nodes[nodeId].run_on;
     if (nodeRunOn === "success" && !workflowSuccess) {
-      markNodeSkipped(state, nodeId);
+      if (skipNode) {
+        await skipNode(nodeId);
+      } else {
+        markNodeSkipped(state, nodeId);
+      }
       output.nodeSkipped(nodeId, "skipped: run_on=success but workflow failed");
       await saveState(state, workDir, workflowDir);
       continue;
     }
     if (nodeRunOn === "failure" && workflowSuccess) {
-      markNodeSkipped(state, nodeId);
+      if (skipNode) {
+        await skipNode(nodeId);
+      } else {
+        markNodeSkipped(state, nodeId);
+      }
       output.nodeSkipped(
         nodeId,
         "skipped: run_on=failure but workflow succeeded",

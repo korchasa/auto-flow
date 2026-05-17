@@ -364,6 +364,47 @@ export interface NodeState {
   result?: string;
 }
 
+/** Optional metadata copied from a node state into a lifecycle event. */
+export interface NodeLifecycleMetadata {
+  /** Human-readable error message if the node failed. */
+  error?: string;
+  /** Structured failure reason for programmatic error handling. */
+  error_category?: ErrorCategory;
+  /** Elapsed wall-clock time for this node in milliseconds. */
+  duration_ms?: number;
+  /** Per-node cost from CliRunOutput.total_cost_usd. */
+  cost_usd?: number;
+  /** Excerpt of agent result text persisted for summary display. */
+  result?: string;
+  /** Runtime session ID for resume and log correlation. */
+  session_id?: string;
+  /** Serialized human-input question JSON when status is "waiting". */
+  question_json?: string;
+  /** Current loop iteration index for loop body nodes. */
+  iteration?: number;
+}
+
+/** Engine-native node lifecycle event delivered to embedding hosts. */
+export interface NodeLifecycleEvent extends NodeLifecycleMetadata {
+  /** Unique identifier for this workflow run. */
+  run_id: string;
+  /** Node ID whose lifecycle state just changed. */
+  node_id: string;
+  /** Current lifecycle status after the state mutation. */
+  status: NodeStatus;
+  /** ISO 8601 event timestamp. Running/completed/failed reuse node timestamps. */
+  timestamp: string;
+  /** Snapshot of the node state after the mutation. */
+  node: NodeState;
+  /** Optional metadata copied from the node state for stable host consumption. */
+  metadata: NodeLifecycleMetadata;
+}
+
+/** Optional callback invoked after node lifecycle state transitions. */
+export type NodeLifecycleCallback = (
+  event: NodeLifecycleEvent,
+) => void | Promise<void>;
+
 /** Persisted run state (state.json). */
 export interface RunState {
   /** Unique identifier for this workflow run (timestamp-based). */
@@ -471,4 +512,7 @@ export interface EngineOptions {
    * back to the default singleton when omitted, preserving stand-alone
    * CLI behavior. */
   processRegistry?: ProcessRegistry;
+  /** Optional embedding-host callback invoked after node lifecycle mutations.
+   * The callback is awaited. Rejection fails the run clearly. */
+  onNodeLifecycle?: NodeLifecycleCallback;
 }

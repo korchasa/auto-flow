@@ -9,6 +9,7 @@ import type {
   WorkflowConfig,
 } from "./types.ts";
 import { createRunState, markNodeCompleted, markNodeStarted } from "./state.ts";
+import { nodeStarted } from "./node-lifecycle.ts";
 
 // Note: Full integration tests for runLoop require claude CLI.
 // These tests cover the pure logic: frontmatter extraction and structure.
@@ -129,6 +130,22 @@ Deno.test("LoopRunOptions — output is optional", () => {
     loopNodeId: "exec-qa-loop",
   };
   assertEquals(opts.output, undefined);
+});
+
+Deno.test("loop body lifecycle callback covers iteration metadata", async () => {
+  const state = createRunState("loop-run", "cfg.yaml", ["build"], {}, {});
+  state.nodes.build.iteration = 2;
+
+  const events: Array<{ status: string; iteration?: number }> = [];
+  await nodeStarted(state, "build", (event) => {
+    events.push({
+      status: event.status,
+      iteration: event.metadata.iteration,
+    });
+  });
+
+  assertEquals(events, [{ status: "running", iteration: 2 }]);
+  assertEquals(state.nodes.build.iteration, 2);
 });
 
 // --- bodyResults / inline nodes tests ---

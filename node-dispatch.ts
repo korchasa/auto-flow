@@ -20,13 +20,13 @@ import { resolveRuntimeConfig } from "@korchasa/ai-ide-cli/runtime";
 import {
   getNodeDir,
   getRunDir,
-  markNodeFailed,
   markRunAborted,
   type PhaseRegistry,
   workPath,
 } from "./state.ts";
 import type {
   EngineOptions,
+  ErrorCategory,
   NodeConfig,
   NodeSettings,
   RunState,
@@ -55,6 +55,26 @@ export interface EngineContext {
    * every `getNodeDir`/`buildTaskPaths` call so two back-to-back
    * `Engine.run()` calls in one Deno process keep their mappings isolated. */
   phaseRegistry: PhaseRegistry;
+  /** Mark a node as running and publish optional lifecycle callback. */
+  nodeStarted: (nodeId: string) => Promise<void>;
+  /** Mark a node as completed and publish optional lifecycle callback. */
+  nodeCompleted: (
+    nodeId: string,
+    costUsd?: number,
+    result?: string,
+  ) => Promise<void>;
+  /** Mark a node as failed and publish optional lifecycle callback. */
+  nodeFailed: (
+    nodeId: string,
+    error: string,
+    errorCategory?: ErrorCategory,
+  ) => Promise<void>;
+  /** Mark a node as waiting and publish optional lifecycle callback. */
+  nodeWaiting: (
+    nodeId: string,
+    sessionId: string,
+    questionJson: string,
+  ) => Promise<void>;
 }
 
 /** Run an agent node: invoke Claude CLI, handle HITL if triggered, save logs. */
@@ -79,8 +99,7 @@ export async function executeAgentNode(
   // Resume path: node was waiting for human reply
   if (wasWaiting) {
     if (!hitlConfig) {
-      markNodeFailed(
-        eng.state,
+      await eng.nodeFailed(
         nodeId,
         "HITL detected but defaults.hitl not configured in workflow.yaml",
         "unknown",
@@ -108,6 +127,8 @@ export async function executeAgentNode(
       cwd,
       maxTurns: resolveBudget(node, eng.config.defaults)?.max_turns,
       processRegistry: eng.options.processRegistry,
+      nodeFailed: eng.nodeFailed,
+      nodeWaiting: eng.nodeWaiting,
     });
   }
 
@@ -153,7 +174,7 @@ export async function executeAgentNode(
   );
 
   if (leak !== undefined) {
-    markNodeFailed(eng.state, nodeId, leak.message, "scope_violation");
+    await eng.nodeFailed(nodeId, leak.message, "scope_violation");
     return {
       ...result,
       success: false,
@@ -163,8 +184,7 @@ export async function executeAgentNode(
   }
 
   if (!result.success) {
-    markNodeFailed(
-      eng.state,
+    await eng.nodeFailed(
       nodeId,
       result.error ?? "Agent failed",
       result.error_category ?? "unknown",
@@ -187,7 +207,7 @@ export async function executeAgentNode(
     if (dirtyMemory.length > 0) {
       const msg = formatMemoryViolation(nodeId, dirtyMemory);
       eng.output.warn(msg);
-      markNodeFailed(eng.state, nodeId, msg, "scope_violation");
+      await eng.nodeFailed(nodeId, msg, "scope_violation");
       return {
         ...result,
         success: false,
@@ -203,8 +223,7 @@ export async function executeAgentNode(
   // present.
   if (result.hitl_question && result.output) {
     if (!hitlConfig) {
-      markNodeFailed(
-        eng.state,
+      await eng.nodeFailed(
         nodeId,
         "Agent called request_human_input but defaults.hitl not configured in workflow.yaml",
         "unknown",
@@ -234,6 +253,8 @@ export async function executeAgentNode(
       cwd,
       maxTurns: resolveBudget(node, eng.config.defaults)?.max_turns,
       processRegistry: eng.options.processRegistry,
+      nodeFailed: eng.nodeFailed,
+      nodeWaiting: eng.nodeWaiting,
     });
   }
 
@@ -341,11 +362,19 @@ export async function executeLoopNode(
     verbosity: eng.options.verbosity,
     saveState: eng.saveState,
     cwd: eng.workDir !== "." ? eng.workDir : undefined,
+    nodeStarted: async (id) => {
+      await eng.nodeStarted(id);
+    },
+    nodeCompleted: async (id, costUsd, result) => {
+      await eng.nodeCompleted(id, costUsd, result);
+    },
+    nodeFailed: async (id, error, errorCategory) => {
+      await eng.nodeFailed(id, error, errorCategory);
+    },
   });
 
   if (!result.success) {
-    markNodeFailed(
-      eng.state,
+    await eng.nodeFailed(
       nodeId,
       result.error ?? "Loop failed",
       result.error_category ?? "unknown",
@@ -367,8 +396,7 @@ export async function executeHumanNode(
 
   if (result.aborted) {
     markRunAborted(eng.state);
-    markNodeFailed(
-      eng.state,
+    await eng.nodeFailed(
       nodeId,
       `Aborted by user (response: ${result.response})`,
       "aborted",

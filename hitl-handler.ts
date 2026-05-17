@@ -7,6 +7,7 @@
  */
 
 import type {
+  ErrorCategory,
   HitlConfig,
   NodeConfig,
   NodeSettings,
@@ -62,6 +63,18 @@ interface HitlBaseParams {
    * (FR-E60). Forwarded to the runtime adapter
    * on the resume invocation that delivers the human reply. */
   processRegistry?: ProcessRegistry;
+  /** Mark a node as failed and publish optional lifecycle callback. */
+  nodeFailed?: (
+    nodeId: string,
+    error: string,
+    errorCategory?: ErrorCategory,
+  ) => Promise<void>;
+  /** Mark a node as waiting and publish optional lifecycle callback. */
+  nodeWaiting?: (
+    nodeId: string,
+    sessionId: string,
+    questionJson: string,
+  ) => Promise<void>;
 }
 
 /** Resume-from-waiting mode: node was previously set to waiting state. */
@@ -130,8 +143,8 @@ export async function handleAgentHitl(
   if (params.mode === "resume") {
     const nodeState = state.nodes[nodeId];
     if (!nodeState.session_id || !nodeState.question_json) {
-      markNodeFailed(
-        state,
+      await failNode(
+        params,
         nodeId,
         "Waiting node missing session_id or question_json",
         "unknown",
@@ -169,8 +182,8 @@ export async function handleAgentHitl(
     );
 
     if (!hitlResult.success) {
-      markNodeFailed(
-        state,
+      await failNode(
+        params,
         nodeId,
         hitlResult.error ?? "HITL resume failed",
         hitlResult.error_category ?? "unknown",
@@ -191,7 +204,7 @@ export async function handleAgentHitl(
   const { hitlQuestion, agentSessionId } = params;
   const questionJson = JSON.stringify(hitlQuestion);
 
-  markNodeWaiting(state, nodeId, agentSessionId, questionJson);
+  await waitNode(params, nodeId, agentSessionId, questionJson);
   await saveState();
 
   const hitlResult = await runHitlLoop(
@@ -223,8 +236,8 @@ export async function handleAgentHitl(
   );
 
   if (!hitlResult.success) {
-    markNodeFailed(
-      state,
+    await failNode(
+      params,
       nodeId,
       hitlResult.error ?? "HITL failed",
       hitlResult.error_category ?? "unknown",
@@ -239,4 +252,30 @@ export async function handleAgentHitl(
     await saveAgentLog(runDir, nodeId, hitlResult.output);
   }
   return hitlResult;
+}
+
+async function failNode(
+  params: HitlHandlerParams,
+  nodeId: string,
+  error: string,
+  errorCategory?: ErrorCategory,
+): Promise<void> {
+  if (params.nodeFailed) {
+    await params.nodeFailed(nodeId, error, errorCategory);
+    return;
+  }
+  markNodeFailed(params.state, nodeId, error, errorCategory);
+}
+
+async function waitNode(
+  params: HitlHandlerParams,
+  nodeId: string,
+  sessionId: string,
+  questionJson: string,
+): Promise<void> {
+  if (params.nodeWaiting) {
+    await params.nodeWaiting(nodeId, sessionId, questionJson);
+    return;
+  }
+  markNodeWaiting(params.state, nodeId, sessionId, questionJson);
 }

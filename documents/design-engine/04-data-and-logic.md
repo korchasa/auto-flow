@@ -39,9 +39,16 @@
     `claude_cli_version` (FR-E49): captured once at run start via
     `claude --version`; `undefined` when CLI unavailable (e.g. OpenCode
     runtime)
-  - EngineOptions: `{ ..., budget_usd?: number }` — workflow-wide USD cap
-    from `--budget` CLI flag (FR-E47). When set, engine aborts after any node
-    completion if `state.total_cost_usd > budget_usd`
+  - EngineOptions: `{ ..., budget_usd?: number, onNodeLifecycle?: (event) => void|Promise<void> }`
+    — `budget_usd` is the workflow-wide USD cap from `--budget` (FR-E47).
+    `onNodeLifecycle` is an embedding-only host callback (FR-E68); no YAML or
+    CLI surface.
+  - NodeLifecycleEvent: `{ run_id, node_id, status, timestamp, node, metadata,
+    ...metadata }` — emitted after node state mutations for `running`,
+    `completed`, `failed`, `waiting`, and `skipped` transitions (FR-E68).
+    `metadata` copies optional `NodeState` fields: `error`,
+    `error_category`, `duration_ms`, `cost_usd`, `result`, `session_id`,
+    `question_json`, `iteration`.
   - WorkflowDefaults: `{ ..., budget?: { max_usd?: number; max_turns?: number } }`
     — default budget applied to all nodes via cascade merge (FR-E47)
   - NodeConfig: `{ ..., run_on?: "always"|"success"|"failure", phase?: string,
@@ -386,6 +393,17 @@
     `state.json`; budget applies to the cumulative total. Engine aborts via
     `checkWorkflowBudget("resume")` before executing any node if the loaded
     state already exceeds the cap.
+  - **Node Lifecycle Callback (FR-E68):** `node-lifecycle.ts` wraps
+    `state.ts` mutators with awaited transitions (`nodeStarted`,
+    `nodeCompleted`, `nodeFailed`, `nodeWaiting`, `nodeSkipped`). Each helper
+    mutates `RunState`, snapshots `NodeLifecycleEvent`, then awaits
+    `EngineOptions.onNodeLifecycle`. Timestamps: `running` → `started_at`;
+    `completed`/`failed` → `completed_at`; `waiting`/`skipped` → fresh ISO.
+    `Engine.executeNode` uses these helpers and passes them through
+    `EngineContext` to agent, loop, human, HITL, and post-workflow paths.
+    `runLoop()` writes `iteration` before body-node `running` emission.
+    Callback rejection becomes `NodeLifecycleCallbackError`; `executeNode()`
+    preserves that wrapper without recursively emitting a second failed event.
   - **CLI Auto-Update Prevention (FR-E49):** In `run()`, before node
     execution loop:
     1. Save original `Deno.env.get("DISABLE_AUTOUPDATER")`.

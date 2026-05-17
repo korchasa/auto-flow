@@ -2,6 +2,7 @@ import { assertEquals } from "@std/assert";
 import type {
   EngineOptions,
   NodeConfig,
+  NodeLifecycleEvent,
   NodeState,
   RunState,
   WorkflowConfig,
@@ -34,6 +35,13 @@ import type {
   RuntimeAdapter,
   RuntimeInvokeOptions,
 } from "@korchasa/ai-ide-cli/runtime/types";
+import {
+  nodeCompleted,
+  nodeFailed,
+  nodeSkipped,
+  nodeStarted,
+  nodeWaiting,
+} from "./node-lifecycle.ts";
 
 /** Capture output lines from an OutputManager. */
 function createCapture(): { lines: string[]; writer: (text: string) => void } {
@@ -91,6 +99,177 @@ Deno.test("EngineOptions — env overrides", () => {
   });
   assertEquals(opts.env_overrides.API_KEY, "test-key");
   assertEquals(opts.env_overrides.DEBUG, "true");
+});
+
+Deno.test("EngineOptions exposes node lifecycle callback", async () => {
+  const events: NodeLifecycleEvent[] = [];
+  const opts = makeOptions({
+    onNodeLifecycle: (event) => {
+      events.push(event);
+    },
+  });
+  const state = createRunState("run-1", "cfg.yaml", ["agent"], {}, {});
+
+  await nodeStarted(state, "agent", opts.onNodeLifecycle);
+
+  assertEquals(events.length, 1);
+  assertEquals(events[0].run_id, "run-1");
+  assertEquals(events[0].node_id, "agent");
+  assertEquals(events[0].status, "running");
+});
+
+Deno.test("node lifecycle callback payload mirrors node state", async () => {
+  const events: NodeLifecycleEvent[] = [];
+  const state = createRunState("run-2", "cfg.yaml", ["agent"], {}, {});
+
+  await nodeStarted(state, "agent", (event) => {
+    events.push(event);
+  });
+  await nodeCompleted(state, "agent", 0.12, "done", (event) => {
+    events.push(event);
+  });
+
+  const completed = events[1];
+  assertEquals(completed.run_id, "run-2");
+  assertEquals(completed.node_id, "agent");
+  assertEquals(completed.status, "completed");
+  assertEquals(completed.timestamp, state.nodes.agent.completed_at);
+  assertEquals(completed.node, state.nodes.agent);
+  assertEquals(completed.metadata.cost_usd, 0.12);
+  assertEquals(completed.metadata.result, "done");
+  assertEquals(completed.cost_usd, 0.12);
+  assertEquals(completed.result, "done");
+});
+
+Deno.test("node lifecycle callback order follows state updates", async () => {
+  const seen: string[] = [];
+  const state = createRunState("run-3", "cfg.yaml", ["agent"], {}, {});
+
+  await nodeStarted(state, "agent", (event) => {
+    seen.push(`${event.status}:${state.nodes.agent.status}`);
+  });
+  await nodeFailed(state, "agent", "boom", "unknown", (event) => {
+    seen.push(`${event.status}:${state.nodes.agent.status}`);
+    assertEquals(event.error, "boom");
+    assertEquals(event.metadata.error_category, "unknown");
+  });
+
+  assertEquals(seen, ["running:running", "failed:failed"]);
+});
+
+Deno.test("node lifecycle callback omitted preserves no-hook behavior", async () => {
+  const state = createRunState("run-4", "cfg.yaml", ["agent"], {}, {});
+
+  await nodeStarted(state, "agent");
+  await nodeCompleted(state, "agent", 0.01, "ok");
+
+  assertEquals(state.nodes.agent.status, "completed");
+  assertEquals(state.nodes.agent.cost_usd, 0.01);
+  assertEquals(state.nodes.agent.result, "ok");
+});
+
+Deno.test("node lifecycle callback covers top-level and special states", async () => {
+  const events: NodeLifecycleEvent[] = [];
+  const state = createRunState(
+    "run-5",
+    "cfg.yaml",
+    ["agent", "merge", "human", "skip"],
+    {},
+    {},
+  );
+  const collect = (event: NodeLifecycleEvent) => {
+    events.push(event);
+  };
+
+  await nodeStarted(state, "agent", collect);
+  await nodeCompleted(state, "agent", undefined, undefined, collect);
+  await nodeStarted(state, "merge", collect);
+  await nodeFailed(state, "merge", "merge failed", "unknown", collect);
+  await nodeWaiting(
+    state,
+    "human",
+    "sess-1",
+    '{"question":"Continue?"}',
+    collect,
+  );
+  await nodeSkipped(state, "skip", collect);
+
+  assertEquals(events.map((event) => event.status), [
+    "running",
+    "completed",
+    "running",
+    "failed",
+    "waiting",
+    "skipped",
+  ]);
+  assertEquals(events[4].metadata.session_id, "sess-1");
+  assertEquals(events[4].metadata.question_json, '{"question":"Continue?"}');
+});
+
+Deno.test("node lifecycle callback rejection fails run clearly", async () => {
+  const state = createRunState("run-6", "cfg.yaml", ["agent"], {}, {});
+
+  let thrown: Error | undefined;
+  try {
+    await nodeStarted(state, "agent", () => {
+      throw new Error("host unavailable");
+    });
+  } catch (error) {
+    thrown = error as Error;
+  }
+
+  assertEquals(state.nodes.agent.status, "running");
+  assertEquals(
+    thrown?.message,
+    "Node lifecycle callback failed for node 'agent' status 'running': host unavailable",
+  );
+});
+
+Deno.test("Engine.run() — node lifecycle callback rejection fails run clearly", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  await Deno.writeTextFile(
+    `${tmpDir}/workflow.yaml`,
+    [
+      "name: callback-failure",
+      "version: '1'",
+      "defaults:",
+      "  worktree_disabled: true",
+      "nodes:",
+      "  merge:",
+      "    type: merge",
+      "    label: Merge",
+      "    merge_strategy: copy_all",
+      "",
+    ].join("\n"),
+  );
+
+  const events: string[] = [];
+  try {
+    Deno.chdir(tmpDir);
+    const engine = new Engine(makeOptions({
+      config_path: "workflow.yaml",
+      lock_path: "test.lock",
+      onNodeLifecycle: (event) => {
+        events.push(event.status);
+        if (event.status === "completed") {
+          throw new Error("host unavailable");
+        }
+      },
+    }));
+
+    const state = await engine.run();
+    assertEquals(state.status, "failed");
+    assertEquals(state.nodes.merge.status, "failed");
+    assertEquals(
+      state.nodes.merge.error,
+      "Node lifecycle callback failed for node 'merge' status 'completed': host unavailable",
+    );
+    assertEquals(events, ["running", "completed"]);
+  } finally {
+    Deno.chdir(origCwd);
+    await Deno.remove(tmpDir, { recursive: true });
+  }
 });
 
 Deno.test("Engine — constructs without error", () => {

@@ -299,3 +299,53 @@
     above. Evidence: `cli.ts::runEngine` (mutual-exclusion guard).
   - [x] Cycle banner emitted on stderr; suppressed under `-q`. Evidence:
     `cli.ts::runEngine` (cycle loop with `verbosity !== "quiet"` guard).
+
+
+
+### 3.68 FR-E68: Node Lifecycle Callback for Embedded Hosts
+
+- **Description:** `EngineOptions.onNodeLifecycle?` lets embedded hosts observe
+  node lifecycle transitions without polling `state.json` or parsing logs.
+  The callback is optional and additive; omitting it preserves standalone CLI
+  behavior.
+- **Motivation:** Hosts such as `flowai-center` embed `Engine` in a long-lived
+  Deno process and need live node state for dashboards, queues, and operator
+  surfaces. Reading persisted state after every filesystem write is expensive
+  and loses exact transition ordering.
+- Contract:
+  - Callback payload is engine-native:
+    `{ run_id, node_id, status, timestamp, node, metadata }`.
+  - `metadata` copies optional fields from `NodeState`: `error`,
+    `error_category`, `duration_ms`, `cost_usd`, `result`, `session_id`,
+    `question_json`, `iteration`. These fields are also flattened on the event
+    for ergonomic host access.
+  - Callback fires after the in-memory `RunState` mutation and before the
+    following `saveState()` call on engine-owned paths.
+  - Covered statuses: `running`, `completed`, `failed`, `waiting`, `skipped`.
+  - Covered paths: top-level nodes, loop body nodes, post-workflow filtered
+    skips, failed nodes, and HITL waiting.
+  - Callback rejection is fail-fast: engine wraps it as
+    `Node lifecycle callback failed for node '<id>' status '<status>': <msg>`.
+    Callback-originated failures do not recursively emit another lifecycle
+    event for the wrapper failure.
+  - No workflow YAML, CLI flag, or user-facing config surface is added.
+- **Acceptance criteria:**
+  - [x] `EngineOptions` exposes optional `onNodeLifecycle`.
+    Evidence: `types.ts::EngineOptions`, `engine_test.ts::EngineOptions exposes node lifecycle callback`.
+  - [x] Payload includes run ID, node ID, status, timestamp, state snapshot,
+    metadata, and flattened optional metadata.
+    Evidence: `types.ts::NodeLifecycleEvent`, `node-lifecycle.ts::buildNodeLifecycleEvent`,
+    `engine_test.ts::node lifecycle callback payload mirrors node state`.
+  - [x] Callback ordering follows state mutation order.
+    Evidence: `engine_test.ts::node lifecycle callback order follows state updates`.
+  - [x] Omitted callback preserves no-hook behavior.
+    Evidence: `engine_test.ts::node lifecycle callback omitted preserves no-hook behavior`.
+  - [x] Lifecycle coverage includes top-level/special states, loop iteration
+    metadata, and HITL waiting.
+    Evidence: `engine_test.ts::node lifecycle callback covers top-level and special states`,
+    `loop_test.ts::loop body lifecycle callback covers iteration metadata`,
+    `hitl_test.ts::HITL waiting emits node lifecycle callback`.
+  - [x] Callback rejection fails clearly.
+    Evidence: `engine_test.ts::node lifecycle callback rejection fails run clearly`,
+    `node-lifecycle.ts::NodeLifecycleCallbackError`.
+  - [x] Full project check passes.

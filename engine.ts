@@ -43,16 +43,21 @@ import {
   getStatePath,
   isNodeCompleted,
   loadState,
-  markNodeCompleted,
   markNodeFailed,
-  markNodeSkipped,
-  markNodeStarted,
   markRunCompleted,
   markRunFailed,
   PhaseRegistry,
   saveState,
   workPath,
 } from "./state.ts";
+import {
+  isNodeLifecycleCallbackError,
+  nodeCompleted,
+  nodeFailed,
+  nodeSkipped,
+  nodeStarted,
+  nodeWaiting,
+} from "./node-lifecycle.ts";
 import { interpolate } from "./template.ts";
 import type { EngineContext } from "./node-dispatch.ts";
 import {
@@ -356,6 +361,7 @@ export class Engine {
       failureScript: this.config.defaults?.on_failure_script,
       output: this.output,
       executeNode: (nodeId) => this.executeNode(nodeId),
+      nodeSkipped: (nodeId) => this.nodeSkipped(nodeId),
       cwd,
       workDir: this.workDir,
       workflowDir: this.workflowDir,
@@ -426,23 +432,26 @@ export class Engine {
     );
 
     // Filter skip/only nodes
-    const filtered = toRun.filter((id) => {
+    const filtered: string[] = [];
+    for (const id of toRun) {
       if (this.options.skip_nodes?.includes(id)) {
-        markNodeSkipped(this.state, id);
+        await this.nodeSkipped(id);
         this.output.nodeSkipped(id, "skipped by --skip");
-        return false;
+        await saveState(this.state, this.workDir, this.workflowDir);
+        continue;
       }
       if (
         this.options.only_nodes &&
         this.options.only_nodes.length > 0 &&
         !this.options.only_nodes.includes(id)
       ) {
-        markNodeSkipped(this.state, id);
+        await this.nodeSkipped(id);
         this.output.nodeSkipped(id, "not in --only");
-        return false;
+        await saveState(this.state, this.workDir, this.workflowDir);
+        continue;
       }
-      return true;
-    });
+      filtered.push(id);
+    }
 
     if (filtered.length === 0) return true;
 
@@ -488,7 +497,7 @@ export class Engine {
     const node = this.config.nodes[nodeId];
     // Capture waiting state before markNodeStarted overwrites status
     const wasWaiting = this.state.nodes[nodeId]?.status === "waiting";
-    markNodeStarted(this.state, nodeId);
+    await this.nodeStarted(nodeId);
     await saveState(this.state, this.workDir, this.workflowDir);
 
     const extra = node.type === "loop"
@@ -514,6 +523,13 @@ export class Engine {
         workDir: this.workDir,
         workflowDir: this.workflowDir,
         phaseRegistry: this.phaseRegistry,
+        nodeFailed: (id, error, errorCategory) =>
+          this.nodeFailed(id, error, errorCategory),
+        nodeWaiting: (id, sessionId, questionJson) =>
+          this.nodeWaiting(id, sessionId, questionJson),
+        nodeStarted: (id) => this.nodeStarted(id),
+        nodeCompleted: (id, costUsd, result) =>
+          this.nodeCompleted(id, costUsd, result),
       };
 
       switch (node.type) {
@@ -541,8 +557,7 @@ export class Engine {
       }
 
       if (success) {
-        markNodeCompleted(
-          this.state,
+        await this.nodeCompleted(
           nodeId,
           lastAgentResult?.output?.total_cost_usd,
           lastAgentResult?.output
@@ -566,7 +581,7 @@ export class Engine {
           const msg = `Node budget exceeded: $${nodeCost.toFixed(4)} > $${
             resolvedBudget.max_usd.toFixed(4)
           }`;
-          markNodeFailed(this.state, nodeId, msg, "aborted");
+          await this.nodeFailed(nodeId, msg, "aborted");
           this.output.nodeFailed(nodeId, msg);
           if (lastAgentResult?.output) {
             this.output.nodeResult(nodeId, lastAgentResult.output);
@@ -602,11 +617,72 @@ export class Engine {
       await saveState(this.state, this.workDir, this.workflowDir);
       return success;
     } catch (err) {
-      markNodeFailed(this.state, nodeId, (err as Error).message, "unknown");
+      if (isNodeLifecycleCallbackError(err)) {
+        if (this.state.nodes[nodeId]?.status !== "failed") {
+          markNodeFailed(this.state, nodeId, (err as Error).message, "unknown");
+        }
+      } else {
+        await this.nodeFailed(nodeId, (err as Error).message, "unknown");
+      }
       await saveState(this.state, this.workDir, this.workflowDir);
       this.output.nodeFailed(nodeId, (err as Error).message);
       return false;
     }
+  }
+
+  /** Apply started transition and publish optional lifecycle callback. */
+  private async nodeStarted(nodeId: string): Promise<void> {
+    await nodeStarted(this.state, nodeId, this.options.onNodeLifecycle);
+  }
+
+  /** Apply completed transition and publish optional lifecycle callback. */
+  private async nodeCompleted(
+    nodeId: string,
+    costUsd?: number,
+    result?: string,
+  ): Promise<void> {
+    await nodeCompleted(
+      this.state,
+      nodeId,
+      costUsd,
+      result,
+      this.options.onNodeLifecycle,
+    );
+  }
+
+  /** Apply failed transition and publish optional lifecycle callback. */
+  private async nodeFailed(
+    nodeId: string,
+    error: string,
+    errorCategory?: RunState["nodes"][string]["error_category"],
+  ): Promise<void> {
+    await nodeFailed(
+      this.state,
+      nodeId,
+      error,
+      errorCategory,
+      this.options.onNodeLifecycle,
+    );
+  }
+
+  /** Apply waiting transition and publish optional lifecycle callback. */
+  private async nodeWaiting(
+    nodeId: string,
+    sessionId: string,
+    questionJson: string,
+  ): Promise<void> {
+    await nodeWaiting(
+      this.state,
+      nodeId,
+      sessionId,
+      questionJson,
+      this.options.onNodeLifecycle,
+    );
+  }
+
+  /** Apply skipped transition and publish optional lifecycle callback. */
+  private async nodeSkipped(nodeId: string): Promise<void> {
+    await nodeSkipped(this.state, nodeId, this.options.onNodeLifecycle);
   }
 
   /** Build template context for a node (searches top-level and loop body nodes). */

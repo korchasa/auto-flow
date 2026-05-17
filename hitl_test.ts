@@ -5,11 +5,40 @@ import { assertEquals, assertStringIncludes } from "@std/assert";
 import type { HitlConfig } from "./types.ts";
 import { runHitlLoop } from "./hitl.ts";
 import type { HitlRunOptions } from "./hitl.ts";
+import { nodeWaiting } from "./node-lifecycle.ts";
+import { createRunState } from "./state.ts";
 
 // HITL detection tests have moved to hitl-injection_test.ts (observer-based
 // detection via runtime-neutral onToolUseObserved hook; hitl-via-engine-mcp, FR-L35).
 
 // --- runHitlLoop tests ---
+
+Deno.test("HITL waiting emits node lifecycle callback", async () => {
+  const state = createRunState("hitl-run", "cfg.yaml", ["pm"], {}, {});
+  const questionJson = '{"question":"Which language?"}';
+  const events: Array<{
+    status: string;
+    sessionId?: string;
+    questionJson?: string;
+  }> = [];
+
+  await nodeWaiting(state, "pm", "sess-hitl", questionJson, (event) => {
+    events.push({
+      status: event.status,
+      sessionId: event.metadata.session_id,
+      questionJson: event.metadata.question_json,
+    });
+  });
+
+  assertEquals(events, [{
+    status: "waiting",
+    sessionId: "sess-hitl",
+    questionJson,
+  }]);
+  assertEquals(state.nodes.pm.status, "waiting");
+  assertEquals(state.nodes.pm.session_id, "sess-hitl");
+  assertEquals(state.nodes.pm.question_json, questionJson);
+});
 
 function makeHitlConfig(): HitlConfig {
   return {

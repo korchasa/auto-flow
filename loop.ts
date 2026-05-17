@@ -84,6 +84,20 @@ export interface LoopRunOptions {
   /** Workflow-wide USD cap (FR-E47). When set, enforced after each body node
    * and consulted for the pre-iteration preempt heuristic. */
   budgetUsd?: number;
+  /** Mark a body node as running and publish optional lifecycle callback. */
+  nodeStarted?: (nodeId: string) => Promise<void>;
+  /** Mark a body node as completed and publish optional lifecycle callback. */
+  nodeCompleted?: (
+    nodeId: string,
+    costUsd?: number,
+    result?: string,
+  ) => Promise<void>;
+  /** Mark a body node as failed and publish optional lifecycle callback. */
+  nodeFailed?: (
+    nodeId: string,
+    error: string,
+    errorCategory?: ErrorCategory,
+  ) => Promise<void>;
 }
 
 /**
@@ -172,8 +186,13 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         parent: loopNode,
       });
 
+      state.nodes[bodyNodeId].iteration = iteration;
       opts.onNodeStart?.(bodyNodeId, iteration);
-      markNodeStarted(state, bodyNodeId);
+      if (opts.nodeStarted) {
+        await opts.nodeStarted(bodyNodeId);
+      } else {
+        markNodeStarted(state, bodyNodeId);
+      }
 
       const streamLogPath = `${workPath(ctx.workDir, ctx.node_dir)}/stream.log`;
 
@@ -211,7 +230,28 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
       bodyResults.push(result);
 
       if (result.success) {
-        markNodeCompleted(state, bodyNodeId, result.output?.total_cost_usd);
+        const resultExcerpt = result.output
+          ? (result.output.result ?? "")
+            .split("\n")
+            .filter((l) => l.trim())
+            .slice(0, 3)
+            .join(" | ")
+            .slice(0, 400)
+          : undefined;
+        if (opts.nodeCompleted) {
+          await opts.nodeCompleted(
+            bodyNodeId,
+            result.output?.total_cost_usd,
+            resultExcerpt,
+          );
+        } else {
+          markNodeCompleted(
+            state,
+            bodyNodeId,
+            result.output?.total_cost_usd,
+            resultExcerpt,
+          );
+        }
 
         // FR-E47 per-node check: body node cost is per-iteration
         const iterNodeCost = state.nodes[bodyNodeId].cost_usd ?? 0;
@@ -223,7 +263,11 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
           const msg = `Node budget exceeded (iter ${iteration}): $${
             iterNodeCost.toFixed(4)
           } > $${resolvedBudget.max_usd.toFixed(4)}`;
-          markNodeFailed(state, bodyNodeId, msg, "aborted");
+          if (opts.nodeFailed) {
+            await opts.nodeFailed(bodyNodeId, msg, "aborted");
+          } else {
+            markNodeFailed(state, bodyNodeId, msg, "aborted");
+          }
           opts.onNodeComplete?.(bodyNodeId, iteration, {
             ...result,
             success: false,
@@ -241,12 +285,20 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
           };
         }
       } else {
-        markNodeFailed(
-          state,
-          bodyNodeId,
-          result.error ?? "Unknown error",
-          result.error_category ?? "unknown",
-        );
+        if (opts.nodeFailed) {
+          await opts.nodeFailed(
+            bodyNodeId,
+            result.error ?? "Unknown error",
+            result.error_category ?? "unknown",
+          );
+        } else {
+          markNodeFailed(
+            state,
+            bodyNodeId,
+            result.error ?? "Unknown error",
+            result.error_category ?? "unknown",
+          );
+        }
       }
 
       opts.onNodeComplete?.(bodyNodeId, iteration, result);
