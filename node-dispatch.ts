@@ -18,6 +18,11 @@ import { runLoop } from "./loop.ts";
 import type { OutputManager } from "./output.ts";
 import { resolveRuntimeConfig } from "@korchasa/ai-ide-cli/runtime";
 import {
+  appendAttemptCompleted,
+  resultExcerpt,
+  type RunJournalWriter,
+} from "./run-journal.ts";
+import {
   getNodeDir,
   getRunDir,
   markRunAborted,
@@ -43,8 +48,6 @@ export interface EngineContext {
   userInput: UserInput;
   /** Build template context for a given node (with optional loop iteration). */
   buildContext: (nodeId: string, loopIteration?: number) => TemplateContext;
-  /** Persist current run state to disk. */
-  saveState: () => Promise<void>;
   /** Working directory (worktree path or "."). All subprocesses and I/O use this. */
   workDir: string;
   /** Workflow folder (containing `workflow.yaml`). FR-S47/FR-E9: threaded into
@@ -55,6 +58,8 @@ export interface EngineContext {
    * every `getNodeDir`/`buildTaskPaths` call so two back-to-back
    * `Engine.run()` calls in one Deno process keep their mappings isolated. */
   phaseRegistry: PhaseRegistry;
+  /** Durable lifecycle journal for this run. */
+  journal?: RunJournalWriter;
   /** Mark a node as running and publish optional lifecycle callback. */
   nodeStarted: (nodeId: string) => Promise<void>;
   /** Mark a node as completed and publish optional lifecycle callback. */
@@ -98,6 +103,7 @@ export async function executeAgentNode(
 
   // Resume path: node was waiting for human reply
   if (wasWaiting) {
+    await eng.journal?.append({ kind: "attempt_started", node_id: nodeId });
     if (!hitlConfig) {
       await eng.nodeFailed(
         nodeId,
@@ -106,12 +112,11 @@ export async function executeAgentNode(
       );
       return null;
     }
-    return await handleAgentHitl({
+    const result = await handleAgentHitl({
       mode: "resume",
       nodeId,
       hitlConfig,
       state: eng.state,
-      saveState: eng.saveState,
       workflowDir: eng.workflowDir,
       node,
       ctx,
@@ -130,6 +135,8 @@ export async function executeAgentNode(
       nodeFailed: eng.nodeFailed,
       nodeWaiting: eng.nodeWaiting,
     });
+    await appendAttemptCompleted(eng.journal, nodeId, result);
+    return result;
   }
 
   // Normal path: run agent
@@ -142,6 +149,7 @@ export async function executeAgentNode(
   // FR-E50: wrap runAgent in worktree-isolation guardrail. Snapshots main
   // tree before/after; if the agent wrote files outside workDir and outside
   // node.allowed_paths, roll them back and fail the node.
+  await eng.journal?.append({ kind: "attempt_started", node_id: nodeId });
   const { result, leak } = await runWithGuardrail(
     {
       repoRoot: Deno.cwd(),
@@ -175,12 +183,14 @@ export async function executeAgentNode(
 
   if (leak !== undefined) {
     await eng.nodeFailed(nodeId, leak.message, "scope_violation");
-    return {
+    const failed: AgentResult = {
       ...result,
       success: false,
       error: leak.message,
       error_category: "scope_violation",
     };
+    await appendAttemptCompleted(eng.journal, nodeId, failed);
+    return failed;
   }
 
   if (!result.success) {
@@ -189,6 +199,7 @@ export async function executeAgentNode(
       result.error ?? "Agent failed",
       result.error_category ?? "unknown",
     );
+    await appendAttemptCompleted(eng.journal, nodeId, result);
     return result;
   }
 
@@ -208,12 +219,14 @@ export async function executeAgentNode(
       const msg = formatMemoryViolation(nodeId, dirtyMemory);
       eng.output.warn(msg);
       await eng.nodeFailed(nodeId, msg, "scope_violation");
-      return {
+      const failed: AgentResult = {
         ...result,
         success: false,
         error: msg,
         error_category: "scope_violation",
       };
+      await appendAttemptCompleted(eng.journal, nodeId, failed);
+      return failed;
     }
   }
 
@@ -230,14 +243,13 @@ export async function executeAgentNode(
       );
       return null;
     }
-    return await handleAgentHitl({
+    const hitlResult = await handleAgentHitl({
       mode: "detect",
       nodeId,
       hitlQuestion: result.hitl_question,
       agentSessionId: result.output.session_id,
       hitlConfig,
       state: eng.state,
-      saveState: eng.saveState,
       workflowDir: eng.workflowDir,
       node,
       ctx,
@@ -256,6 +268,8 @@ export async function executeAgentNode(
       nodeFailed: eng.nodeFailed,
       nodeWaiting: eng.nodeWaiting,
     });
+    await appendAttemptCompleted(eng.journal, nodeId, hitlResult);
+    return hitlResult;
   }
 
   if (result.session_id) {
@@ -272,6 +286,7 @@ export async function executeAgentNode(
     await saveAgentLog(runDir, nodeId, result.output);
   }
 
+  await appendAttemptCompleted(eng.journal, nodeId, result);
   return result;
 }
 
@@ -330,12 +345,9 @@ export async function executeLoopNode(
         if (result.output) {
           eng.output.nodeResult(id, result.output);
           if (id in eng.state.nodes) {
-            eng.state.nodes[id].result = (result.output.result ?? "")
-              .split("\n")
-              .filter((l) => l.trim())
-              .slice(0, 3)
-              .join(" | ")
-              .slice(0, 400);
+            eng.state.nodes[id].result = resultExcerpt(
+              result.output.result ?? "",
+            );
           }
         }
       } else {
@@ -360,7 +372,6 @@ export async function executeLoopNode(
       eng.output.loopIteration(nodeId, iteration, maxIterations),
     output: eng.output,
     verbosity: eng.options.verbosity,
-    saveState: eng.saveState,
     cwd: eng.workDir !== "." ? eng.workDir : undefined,
     nodeStarted: async (id) => {
       await eng.nodeStarted(id);
@@ -370,6 +381,40 @@ export async function executeLoopNode(
     },
     nodeFailed: async (id, error, errorCategory) => {
       await eng.nodeFailed(id, error, errorCategory);
+    },
+    onIterationStarted: async (iteration, maxIterations) => {
+      await eng.journal?.append({
+        kind: "loop_iteration_started",
+        loop_node_id: nodeId,
+        iteration,
+        max_iterations: maxIterations,
+      });
+    },
+    onIterationCompleted: async (iteration) => {
+      await eng.journal?.append({
+        kind: "loop_iteration_completed",
+        loop_node_id: nodeId,
+        iteration,
+      });
+    },
+    onIterationFailed: async (iteration, error, errorCategory) => {
+      await eng.journal?.append({
+        kind: "loop_iteration_failed",
+        loop_node_id: nodeId,
+        iteration,
+        error,
+        error_category: errorCategory,
+      });
+    },
+    onAttemptStarted: async (id, iteration) => {
+      await eng.journal?.append({
+        kind: "attempt_started",
+        node_id: id,
+        iteration,
+      });
+    },
+    onAttemptCompleted: async (id, iteration, result) => {
+      await appendAttemptCompleted(eng.journal, id, result, iteration);
     },
   });
 

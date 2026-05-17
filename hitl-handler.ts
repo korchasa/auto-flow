@@ -34,7 +34,6 @@ interface HitlBaseParams {
   nodeId: string;
   hitlConfig: HitlConfig;
   state: RunState;
-  saveState: () => Promise<void>;
   /** Workflow folder (e.g., `.flowai-workflow/autonomous-sdlc`). Used to
    * resolve the absolute run-dir path passed to HITL scripts, which run
    * with cwd=workDir under worktree isolation and cannot resolve a
@@ -112,7 +111,6 @@ export async function handleAgentHitl(
     nodeId,
     hitlConfig,
     state,
-    saveState,
     node,
     ctx,
     settings,
@@ -205,7 +203,6 @@ export async function handleAgentHitl(
   const questionJson = JSON.stringify(hitlQuestion);
 
   await waitNode(params, nodeId, agentSessionId, questionJson);
-  await saveState();
 
   const hitlResult = await runHitlLoop(
     {

@@ -50,15 +50,14 @@
 
 
 
-### 3.17 FR-E17: Aggregate Cost Data in state.json
+### 3.17 FR-E17: Aggregate Cost Data in Run State
 
-- **Description:** Workflow engine persists per-node cost and workflow-level total
-  cost in `state.json`, eliminating the need to read N+1 separate log files to
-  build a cost summary. Per-node `cost_usd` is sourced from
-  `CliRunOutput.total_cost_usd`; top-level `total_cost_usd` is the sum across
-  all completed nodes.
-- **Motivation:** Dashboards and external tooling currently must open one log file
-  per node to compute cost. A single `state.json` read is sufficient with this
+- **Description:** Workflow engine records per-node cost and workflow-level
+  total cost in run state, persisted through `journal.jsonl` lifecycle facts.
+  Per-node `cost_usd` is sourced from `CliRunOutput.total_cost_usd`;
+  top-level `total_cost_usd` is the sum across all completed nodes.
+- **Motivation:** Dashboards and external tooling should not open one log file
+  per node to compute cost. A single journal replay is sufficient with this
   change.
 - **Acceptance criteria:**
   - **Tests:** `state_test.ts`, `engine_test.ts`, `loop_test.ts`
@@ -122,14 +121,14 @@
   a 30+ minute run.
 - **Motivation:** Current `summary()` output (`output.ts:98-111`) renders
   only aggregate metadata. Per-node result text is available in
-  `.flowai-workflow/runs/<run-id>/logs/<node-id>.json` but not in `state.json`, forcing
+  `.flowai-workflow/runs/<run-id>/logs/<node-id>.json` but not in run state, forcing
   operators to read N log files after the run. Issue #109: "After a 30+ minute
   run, the operator has to scroll back through interleaved logs to find what
   each agent produced."
 - **Acceptance criteria:**
   - [ ] `NodeState` in `types.ts` gains `result?: string` field — first 400
-    chars of agent `CliRunOutput.result` text, persisted to `state.json`
-    at node completion.
+    chars of agent `CliRunOutput.result` text, persisted through journal
+    node completion facts.
   - [ ] `markNodeCompleted()` in `state.ts` accepts optional `result?: string`
     param; writes it to `NodeState.result` when provided.
   - [ ] Engine passes `result` text to `markNodeCompleted()` for all agent node
@@ -144,8 +143,8 @@
   - [ ] `RunSummary` interface in `types.ts` gains
     `nodeResults?: Record<string, string>` — map from nodeId → result excerpt.
     Populated by engine before calling `printSummary()`.
-  - [ ] Backward-compatible: existing `state.json` files without `result`
-    fields remain valid; missing results render as absent (not error).
+  - [ ] Backward-compatible: missing `result` fields render as absent
+    (not error).
   - [ ] Unit tests cover: result present, result absent, quiet suppression,
     mixed node types (agent + merge).
   - [ ] `deno task check` passes.
@@ -210,7 +209,7 @@
   Loop nodes additionally perform a pre-check before each iteration: if the
   running-average iteration cost exceeds remaining budget, the loop exits
   cleanly with reason `budget_preempt`. Engine already tracks per-node
-  `cost_usd` and `total_cost_usd` in `state.json` (FR-E17).
+  `cost_usd` and `total_cost_usd` in replayed run state (FR-E17).
 - **Motivation:** Cost is tracked (FR-E17) but never enforced — SRS §0
   previously stated "No budget constraints." Runaway workflows on
   misconfigured or unbounded loops can incur unbounded API cost. Users need a
@@ -319,8 +318,9 @@
     `error_category`, `duration_ms`, `cost_usd`, `result`, `session_id`,
     `question_json`, `iteration`. These fields are also flattened on the event
     for ergonomic host access.
-  - Callback fires after the in-memory `RunState` mutation and before the
-    following `saveState()` call on engine-owned paths.
+  - Callback fires after the in-memory `RunState` mutation and after the
+    matching durable journal append on engine-owned paths, so hosts do not
+    observe lifecycle facts that were not persisted.
   - Covered statuses: `running`, `completed`, `failed`, `waiting`, `skipped`.
   - Covered paths: top-level nodes, loop body nodes, post-workflow filtered
     skips, failed nodes, and HITL waiting.
@@ -349,3 +349,52 @@
     Evidence: `engine_test.ts::node lifecycle callback rejection fails run clearly`,
     `node-lifecycle.ts::NodeLifecycleCallbackError`.
   - [x] Full project check passes.
+
+
+### 3.69 FR-E69: Durable Run Journal Replay
+
+- **Description:** Each run persists a single append-only
+  `<workflow>/runs/<run-id>/journal.jsonl` lifecycle stream. Embedded hosts
+  replay this journal after restart to reconstruct engine-owned run facts
+  without polling `state.json`, scanning runtime-specific IDE directories, or
+  mixing engine state with host-owned queue data.
+- **Motivation:** `EngineOptions.onNodeLifecycle` gives live transition facts,
+  but hosts need the same facts after process restart. A single durable stream
+  avoids split-brain recovery between live callbacks, latest-state snapshots,
+  runtime transcripts, and host logs.
+- Contract:
+  - One `journal.jsonl` per run. No `state.json`, `snapshot.json`, or embedded
+    snapshot records are part of the recovery contract.
+  - Journal replay starts from an empty in-memory model. Bootstrap records
+    (`run_started`, `workflow_loaded`, `node_declared`,
+    `node_directory_declared`) establish the model before node transitions.
+  - Every record carries `schema_version`, `run_id`, monotonic `seq`,
+    deduplicatable `event_id`, `kind`, and `ts`.
+  - Durable node records mirror live `NodeLifecycleEvent` semantics for
+    `running`, `completed`, `failed`, `waiting`, and `skipped`.
+  - Replay reconstructs run status, node status, attempt metadata, loop
+    iteration metadata, session IDs, cost, errors, result excerpts, and node
+    artifact paths.
+  - Duplicate `event_id`s are ignored. A malformed partial final line is
+    ignored; a malformed non-tail record fails replay clearly.
+  - Terminal run records (`run_completed`, `run_failed`, `run_aborted`) are
+    authoritative over stale non-terminal observations.
+  - The contract is runtime-neutral across Claude, OpenCode, Cursor, and
+    Codex; replay reads only the run directory journal.
+- **Acceptance criteria:**
+  - [x] Engine writes ordered `journal.jsonl` records before the first
+    executable node transition. Evidence:
+    `lifecycle-replay_test.ts::persists ordered run and node lifecycle records`.
+  - [x] Replay deduplicates records and ignores a malformed partial tail.
+    Evidence:
+    `lifecycle-replay_test.ts::replay deduplicates records and ignores partial tail`.
+  - [x] Durable node records mirror live callback payload semantics. Evidence:
+    `lifecycle-replay_test.ts::durable node records mirror live lifecycle semantics`.
+  - [x] Replay reconstructs host recovery state from journal only. Evidence:
+    `lifecycle-replay_test.ts::replay reconstructs host recovery snapshot`,
+    `lifecycle-replay_test.ts::resume state is reconstructed from journal only`.
+  - [x] Terminal workflow facts dominate stale non-terminal observations.
+    Evidence:
+    `lifecycle-replay_test.ts::terminal workflow record wins over stale running snapshot`.
+  - [x] Dashboard reads replayed journal state. Evidence:
+    `scripts/generate-dashboard_test.ts::readRunState — replays valid journal.jsonl`.

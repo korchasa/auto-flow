@@ -17,6 +17,7 @@ import {
   renderTimeline,
 } from "./generate-dashboard.ts";
 import type { CliRunOutput, NodeState, RunState } from "../types.ts";
+import { RunJournalWriter } from "../run-journal.ts";
 
 // --- escHtml ---
 
@@ -33,19 +34,36 @@ Deno.test("escHtml — no-op on safe text", () => {
 
 // --- readRunState ---
 
-Deno.test("readRunState — parses valid state.json", async () => {
+Deno.test("readRunState — replays valid journal.jsonl", async () => {
   const dir = await Deno.makeTempDir();
   try {
-    const state: RunState = {
-      run_id: "test-123",
+    const writer = await RunJournalWriter.open(dir, "test-123");
+    await writer.append({
+      kind: "run_started",
       config_path: ".flowai-workflow/workflow.yaml",
       started_at: "2024-01-01T00:00:00.000Z",
-      status: "completed",
       args: {},
       env: {},
-      nodes: { spec: { status: "completed" } },
-    };
-    await Deno.writeTextFile(`${dir}/state.json`, JSON.stringify(state));
+    });
+    await writer.append({
+      kind: "node_declared",
+      node_id: "spec",
+      node_type: "agent",
+      label: "Spec",
+    });
+    await writer.append({
+      kind: "node_completed",
+      node_id: "spec",
+      status: "completed",
+      timestamp: "2024-01-01T00:00:01.000Z",
+      node: { status: "completed" },
+      metadata: {},
+    });
+    await writer.append({
+      kind: "run_completed",
+      status: "completed",
+      completed_at: "2024-01-01T00:00:01.000Z",
+    });
     const parsed = await readRunState(dir);
     assertEquals(parsed.run_id, "test-123");
     assertEquals(parsed.status, "completed");
@@ -54,7 +72,7 @@ Deno.test("readRunState — parses valid state.json", async () => {
   }
 });
 
-Deno.test("readRunState — throws on missing state.json", async () => {
+Deno.test("readRunState — throws on missing journal.jsonl", async () => {
   let threw = false;
   try {
     await readRunState("/nonexistent/path/does-not-exist");

@@ -40,16 +40,19 @@ import {
   generateRunId,
   getNodeDir,
   getRunDir,
-  getStatePath,
   isNodeCompleted,
-  loadState,
   markNodeFailed,
   markRunCompleted,
   markRunFailed,
   PhaseRegistry,
-  saveState,
   workPath,
 } from "./state.ts";
+import {
+  nodeDeclarationPayload,
+  replayRunJournal,
+  resultExcerpt,
+  RunJournalWriter,
+} from "./run-journal.ts";
 import {
   isNodeLifecycleCallbackError,
   nodeCompleted,
@@ -68,7 +71,6 @@ import {
 } from "./node-dispatch.ts";
 import {
   copyIgnoredIntoWorktree,
-  copyToOriginalRepo,
   createWorktree,
   pinDetachedHead,
   removeWorktree,
@@ -90,6 +92,8 @@ export class Engine {
    * every state-path call so runs land under `<workflowDir>/runs/<run-id>`
    * regardless of layout. */
   private workflowDir: string;
+  /** Durable lifecycle journal for the current run. */
+  private journal?: RunJournalWriter;
   /** Per-run phase registry (FR-E59). Built at the top
    * of `runWithLock` from the loaded config and threaded through path
    * helpers so back-to-back runs in one Deno process keep their `nodeId →
@@ -203,12 +207,11 @@ export class Engine {
 
     // Initialize or resume state
     if (this.options.resume && this.options.run_id) {
-      this.state = await loadState(
-        this.options.run_id,
-        this.workDir,
-        this.workflowDir,
-      );
+      const runDir = getRunDir(this.options.run_id, this.workflowDir);
+      this.state = (await replayRunJournal(runDir)).state;
+      this.journal = await RunJournalWriter.open(runDir, this.options.run_id);
       this.state.status = "running";
+      delete this.state.completed_at;
     } else {
       const allNodeIds = collectAllNodeIds(this.config);
       this.state = createRunState(
@@ -218,27 +221,15 @@ export class Engine {
         this.options.args,
         env,
       );
+      this.journal = await RunJournalWriter.open(
+        getRunDir(runId, this.workflowDir),
+        runId,
+      );
     }
 
     // FR-E49: prevent Claude CLI auto-update during this run.
     const origAutoupdaterVal = Deno.env.get("DISABLE_AUTOUPDATER");
     Deno.env.set("DISABLE_AUTOUPDATER", "1");
-
-    // Capture claude CLI version (non-fatal; claude may not be on PATH in non-Claude runtimes).
-    try {
-      const versionResult = await new Deno.Command("claude", {
-        args: ["--version"],
-        stdout: "piped",
-        stderr: "null",
-      }).output();
-      if (versionResult.success) {
-        this.state.claude_cli_version = new TextDecoder().decode(
-          versionResult.stdout,
-        ).trim();
-      }
-    } catch {
-      this.output.warn("claude --version failed — claude may not be on PATH");
-    }
 
     // Acquire per-workflow lock (FR-E54) — serializes runs against the same
     // workflow folder; distinct workflow folders run in parallel.
@@ -253,7 +244,7 @@ export class Engine {
       onShutdown(async () => {
         if (this.state.status === "running") {
           markRunFailed(this.state);
-          await saveState(this.state, this.workDir, this.workflowDir);
+          await this.recordRunTerminal("run_failed");
         }
       }),
     ];
@@ -285,7 +276,10 @@ export class Engine {
 
     // Create run directory structure
     await this.ensureRunDirs(levels);
-    await saveState(this.state, this.workDir, this.workflowDir);
+    if (!this.options.resume) {
+      await this.emitBootstrapJournal(levels);
+    }
+    await this.captureCliVersion();
 
     // FR-E47: pre-execution budget check (applies to fresh and resumed runs)
     this.checkWorkflowBudget("resume");
@@ -363,28 +357,21 @@ export class Engine {
       executeNode: (nodeId) => this.executeNode(nodeId),
       nodeSkipped: (nodeId) => this.nodeSkipped(nodeId),
       cwd,
-      workDir: this.workDir,
-      workflowDir: this.workflowDir,
     });
 
     // Finalize run state
     if (workflowSuccess) {
       markRunCompleted(this.state);
+      await this.recordRunTerminal("run_completed");
+    } else if (this.state.status === "aborted") {
+      await this.recordRunTerminal("run_aborted");
     } else {
       markRunFailed(this.state);
+      await this.recordRunTerminal("run_failed");
     }
-    await saveState(this.state, this.workDir, this.workflowDir);
 
-    // Worktree cleanup: copy state to original repo on success, then remove
+    // Worktree cleanup: remove on success, preserve on failure for inspection.
     if (this.workDir !== ".") {
-      const statePath = getStatePath(this.state.run_id, this.workflowDir);
-      try {
-        await copyToOriginalRepo(this.workDir, statePath);
-      } catch (err) {
-        this.output.warn(
-          `Failed to copy state to original repo: ${(err as Error).message}`,
-        );
-      }
       if (workflowSuccess) {
         // FR-E51: pin detached HEAD as rescue branch BEFORE removal so any
         // commits made during the run survive worktree teardown.
@@ -437,7 +424,6 @@ export class Engine {
       if (this.options.skip_nodes?.includes(id)) {
         await this.nodeSkipped(id);
         this.output.nodeSkipped(id, "skipped by --skip");
-        await saveState(this.state, this.workDir, this.workflowDir);
         continue;
       }
       if (
@@ -447,7 +433,6 @@ export class Engine {
       ) {
         await this.nodeSkipped(id);
         this.output.nodeSkipped(id, "not in --only");
-        await saveState(this.state, this.workDir, this.workflowDir);
         continue;
       }
       filtered.push(id);
@@ -498,7 +483,6 @@ export class Engine {
     // Capture waiting state before markNodeStarted overwrites status
     const wasWaiting = this.state.nodes[nodeId]?.status === "waiting";
     await this.nodeStarted(nodeId);
-    await saveState(this.state, this.workDir, this.workflowDir);
 
     const extra = node.type === "loop"
       ? `loop, max ${node.max_iterations ?? 3} iterations`
@@ -519,10 +503,10 @@ export class Engine {
         userInput: this.userInput,
         buildContext: (nId, loopIteration?) =>
           this.buildContext(nId, loopIteration),
-        saveState: () => saveState(this.state, this.workDir, this.workflowDir),
         workDir: this.workDir,
         workflowDir: this.workflowDir,
         phaseRegistry: this.phaseRegistry,
+        journal: this.journal,
         nodeFailed: (id, error, errorCategory) =>
           this.nodeFailed(id, error, errorCategory),
         nodeWaiting: (id, sessionId, questionJson) =>
@@ -561,12 +545,7 @@ export class Engine {
           nodeId,
           lastAgentResult?.output?.total_cost_usd,
           lastAgentResult?.output
-            ? (lastAgentResult.output.result ?? "")
-              .split("\n")
-              .filter((l) => l.trim())
-              .slice(0, 3)
-              .join(" | ")
-              .slice(0, 400)
+            ? resultExcerpt(lastAgentResult.output.result ?? "")
             : undefined,
         );
 
@@ -587,7 +566,6 @@ export class Engine {
             this.output.nodeResult(nodeId, lastAgentResult.output);
           }
           const onError = node.settings?.on_error ?? "fail";
-          await saveState(this.state, this.workDir, this.workflowDir);
           return onError === "continue";
         }
 
@@ -614,7 +592,6 @@ export class Engine {
         }
       }
 
-      await saveState(this.state, this.workDir, this.workflowDir);
       return success;
     } catch (err) {
       if (isNodeLifecycleCallbackError(err)) {
@@ -624,7 +601,6 @@ export class Engine {
       } else {
         await this.nodeFailed(nodeId, (err as Error).message, "unknown");
       }
-      await saveState(this.state, this.workDir, this.workflowDir);
       this.output.nodeFailed(nodeId, (err as Error).message);
       return false;
     }
@@ -632,7 +608,12 @@ export class Engine {
 
   /** Apply started transition and publish optional lifecycle callback. */
   private async nodeStarted(nodeId: string): Promise<void> {
-    await nodeStarted(this.state, nodeId, this.options.onNodeLifecycle);
+    await nodeStarted(
+      this.state,
+      nodeId,
+      this.options.onNodeLifecycle,
+      this.journal,
+    );
   }
 
   /** Apply completed transition and publish optional lifecycle callback. */
@@ -647,6 +628,7 @@ export class Engine {
       costUsd,
       result,
       this.options.onNodeLifecycle,
+      this.journal,
     );
   }
 
@@ -662,6 +644,7 @@ export class Engine {
       error,
       errorCategory,
       this.options.onNodeLifecycle,
+      this.journal,
     );
   }
 
@@ -677,12 +660,18 @@ export class Engine {
       sessionId,
       questionJson,
       this.options.onNodeLifecycle,
+      this.journal,
     );
   }
 
   /** Apply skipped transition and publish optional lifecycle callback. */
   private async nodeSkipped(nodeId: string): Promise<void> {
-    await nodeSkipped(this.state, nodeId, this.options.onNodeLifecycle);
+    await nodeSkipped(
+      this.state,
+      nodeId,
+      this.options.onNodeLifecycle,
+      this.journal,
+    );
   }
 
   /** Build template context for a node (searches top-level and loop body nodes). */
@@ -765,6 +754,87 @@ export class Engine {
         }
       }
     }
+  }
+
+  /** Emit ordered bootstrap facts before executable node transitions. */
+  private async emitBootstrapJournal(levels: string[][]): Promise<void> {
+    if (!this.journal) throw new Error("Run journal is not initialized");
+    await this.journal.append({
+      kind: "run_started",
+      config_path: this.state.config_path,
+      started_at: this.state.started_at,
+      ts: this.state.started_at,
+      args: this.state.args,
+      env: this.state.env,
+    });
+    await this.journal.append({
+      kind: "workflow_loaded",
+      config_path: this.state.config_path,
+      name: this.config.name,
+      version: this.config.version,
+    });
+
+    const declared = new Set<string>();
+    for (const nodeId of collectAllNodeIds(this.config)) {
+      const node = findNodeConfig(this.config, nodeId);
+      if (!node) continue;
+      declared.add(nodeId);
+      await this.journal.append(nodeDeclarationPayload(nodeId, node));
+    }
+
+    const directoryIds = new Set<string>();
+    for (const level of levels) {
+      for (const nodeId of level) directoryIds.add(nodeId);
+    }
+    for (const nodeId of declared) directoryIds.add(nodeId);
+    for (const nodeId of directoryIds) {
+      await this.journal.append({
+        kind: "node_directory_declared",
+        node_id: nodeId,
+        node_dir: getNodeDir(
+          this.state.run_id,
+          nodeId,
+          this.workflowDir,
+          this.phaseRegistry,
+        ),
+      });
+    }
+  }
+
+  /** Capture runtime version metadata after bootstrap facts are durable. */
+  private async captureCliVersion(): Promise<void> {
+    try {
+      const versionResult = await new Deno.Command("claude", {
+        args: ["--version"],
+        stdout: "piped",
+        stderr: "null",
+      }).output();
+      if (versionResult.success) {
+        this.state.claude_cli_version = new TextDecoder().decode(
+          versionResult.stdout,
+        ).trim();
+        await this.journal?.append({
+          kind: "run_metadata_updated",
+          claude_cli_version: this.state.claude_cli_version,
+        });
+      }
+    } catch {
+      this.output.warn("claude --version failed — claude may not be on PATH");
+    }
+  }
+
+  /** Persist the final authoritative run status. */
+  private async recordRunTerminal(
+    kind: "run_completed" | "run_failed" | "run_aborted",
+  ): Promise<void> {
+    if (!this.state.completed_at) {
+      this.state.completed_at = new Date().toISOString();
+    }
+    await this.journal?.append({
+      kind,
+      status: this.state.status,
+      completed_at: this.state.completed_at,
+    });
   }
 
   /**

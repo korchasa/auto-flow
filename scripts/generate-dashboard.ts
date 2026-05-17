@@ -1,13 +1,14 @@
 /**
  * @module
  * HTML dashboard generator for a workflow run.
- * Reads state.json + per-node logs/<nodeId>.json from a run directory and
+ * Replays journal.jsonl + reads per-node logs/<nodeId>.json from a run directory and
  * produces a self-contained index.html with node cards, Gantt timeline, and
  * cost chart. Entry point: {@link renderHtml}.
  * CLI: deno task dashboard --run-dir <path>
  */
 import type { CliRunOutput, NodeState, RunState } from "../types.ts";
 import { parse as parseYaml } from "@std/yaml";
+import { replayRunJournal } from "../run-journal.ts";
 
 /** Escape HTML special chars to prevent XSS. */
 export function escHtml(str: string): string {
@@ -19,10 +20,9 @@ export function escHtml(str: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/** Read and parse state.json from run directory. Throws on missing/malformed file. */
+/** Replay journal.jsonl from run directory into current run state. */
 export async function readRunState(runDir: string): Promise<RunState> {
-  const content = await Deno.readTextFile(`${runDir}/state.json`);
-  return JSON.parse(content) as RunState;
+  return (await replayRunJournal(runDir)).state;
 }
 
 /**

@@ -405,7 +405,204 @@ export type NodeLifecycleCallback = (
   event: NodeLifecycleEvent,
 ) => void | Promise<void>;
 
-/** Persisted run state (state.json). */
+/** Versioned durable lifecycle event kinds stored in `journal.jsonl`. */
+export type RunJournalEventKind =
+  | "run_started"
+  | "run_metadata_updated"
+  | "workflow_loaded"
+  | "node_declared"
+  | "node_directory_declared"
+  | "node_started"
+  | "node_completed"
+  | "node_failed"
+  | "node_waiting"
+  | "node_skipped"
+  | "attempt_started"
+  | "attempt_completed"
+  | "continuation_exhausted"
+  | "loop_iteration_started"
+  | "loop_iteration_completed"
+  | "loop_iteration_failed"
+  | "run_completed"
+  | "run_failed"
+  | "run_aborted";
+
+/** Common envelope for every line in `journal.jsonl`. */
+export interface RunJournalEventBase {
+  /** Journal schema version. */
+  schema_version: 1;
+  /** Unique identifier for this workflow run. */
+  run_id: string;
+  /** Monotonic per-run sequence number assigned by the engine. */
+  seq: number;
+  /** Stable event identity used by hosts to deduplicate replay. */
+  event_id: string;
+  /** Discriminant for event-specific payload. */
+  kind: RunJournalEventKind;
+  /** ISO 8601 timestamp for when the fact was recorded. */
+  ts: string;
+}
+
+/** Run bootstrap fact. */
+export interface RunStartedJournalEvent extends RunJournalEventBase {
+  /** Event kind. */
+  kind: "run_started";
+  /** Workflow config path used for this run. */
+  config_path: string;
+  /** Run start timestamp. */
+  started_at: string;
+  /** CLI arguments resolved for this run. */
+  args: Record<string, string>;
+  /** Environment values resolved for this run. */
+  env: Record<string, string>;
+}
+
+/** Run metadata update fact. */
+export interface RunMetadataUpdatedJournalEvent extends RunJournalEventBase {
+  /** Event kind. */
+  kind: "run_metadata_updated";
+  /** Captured Claude CLI version, when available. */
+  claude_cli_version?: string;
+}
+
+/** Workflow configuration discovery fact. */
+export interface WorkflowLoadedJournalEvent extends RunJournalEventBase {
+  /** Event kind. */
+  kind: "workflow_loaded";
+  /** Workflow config path used for this run. */
+  config_path: string;
+  /** Workflow name from config. */
+  name: string;
+  /** Workflow config schema version. */
+  version: string;
+}
+
+/** Node discovery fact. */
+export interface NodeDeclaredJournalEvent extends RunJournalEventBase {
+  /** Event kind. */
+  kind: "node_declared";
+  /** Declared workflow node ID. */
+  node_id: string;
+  /** Declared workflow node type. */
+  node_type: NodeConfig["type"];
+  /** Human-readable node label. */
+  label: string;
+  /** Optional artifact phase for this node. */
+  phase?: string;
+}
+
+/** Node output directory discovery fact. */
+export interface NodeDirectoryDeclaredJournalEvent extends RunJournalEventBase {
+  /** Event kind. */
+  kind: "node_directory_declared";
+  /** Node ID whose output directory was declared. */
+  node_id: string;
+  /** WorkDir-relative node output directory path. */
+  node_dir: string;
+}
+
+/** Durable node transition fact aligned with `NodeLifecycleEvent`. */
+export interface NodeLifecycleJournalEvent
+  extends RunJournalEventBase, NodeLifecycleMetadata {
+  /** Event kind. */
+  kind:
+    | "node_started"
+    | "node_completed"
+    | "node_failed"
+    | "node_waiting"
+    | "node_skipped";
+  /** Node ID whose lifecycle changed. */
+  node_id: string;
+  /** Node status after the transition. */
+  status: NodeStatus;
+  /** Lifecycle timestamp matching the live callback semantics. */
+  timestamp: string;
+  /** Node state snapshot after the transition. */
+  node: NodeState;
+  /** Optional metadata copied from the node state. */
+  metadata: NodeLifecycleMetadata;
+}
+
+/** Runtime invocation attempt fact. */
+export interface AttemptJournalEvent extends RunJournalEventBase {
+  /** Event kind. */
+  kind: "attempt_started" | "attempt_completed" | "continuation_exhausted";
+  /** Node ID whose runtime attempt changed. */
+  node_id: string;
+  /** Loop iteration for body-node attempts. */
+  iteration?: number;
+  /** Runtime session ID, when reported. */
+  session_id?: string;
+  /** Number of continuations used by the attempt. */
+  continuations?: number;
+  /** Attempt cost in USD, when reported. */
+  cost_usd?: number;
+  /** Compact result excerpt, when available. */
+  result?: string;
+  /** Whether the attempt ended successfully. */
+  success?: boolean;
+  /** Attempt error message, when failed. */
+  error?: string;
+  /** Structured attempt failure category. */
+  error_category?: ErrorCategory;
+}
+
+/** Loop iteration lifecycle fact. */
+export interface LoopIterationJournalEvent extends RunJournalEventBase {
+  /** Event kind. */
+  kind:
+    | "loop_iteration_started"
+    | "loop_iteration_completed"
+    | "loop_iteration_failed";
+  /** Loop node ID whose iteration changed. */
+  loop_node_id: string;
+  /** One-based loop iteration number. */
+  iteration: number;
+  /** Configured maximum iteration count, when known. */
+  max_iterations?: number;
+  /** Iteration error message, when failed. */
+  error?: string;
+  /** Structured iteration failure category. */
+  error_category?: ErrorCategory;
+}
+
+/** Terminal workflow fact. */
+export interface RunTerminalJournalEvent extends RunJournalEventBase {
+  /** Event kind. */
+  kind: "run_completed" | "run_failed" | "run_aborted";
+  /** Terminal run status. */
+  status: RunState["status"];
+  /** Terminal timestamp. */
+  completed_at: string;
+  /** Optional terminal error message. */
+  error?: string;
+}
+
+/** Any durable lifecycle event stored in `journal.jsonl`. */
+export type RunJournalEvent =
+  | RunStartedJournalEvent
+  | RunMetadataUpdatedJournalEvent
+  | WorkflowLoadedJournalEvent
+  | NodeDeclaredJournalEvent
+  | NodeDirectoryDeclaredJournalEvent
+  | NodeLifecycleJournalEvent
+  | AttemptJournalEvent
+  | LoopIterationJournalEvent
+  | RunTerminalJournalEvent;
+
+/** Result of replaying a run journal from disk. */
+export interface RunJournalReplayResult {
+  /** Reconstructed current run state. */
+  state: RunState;
+  /** Unique events applied during replay, in file order. */
+  events: RunJournalEvent[];
+  /** Number of duplicate event IDs ignored. */
+  ignored_duplicate_event_ids: number;
+  /** Whether a malformed partial final line was ignored. */
+  ignored_partial_tail: boolean;
+}
+
+/** In-memory run state derived live or by replaying `journal.jsonl`. */
 export interface RunState {
   /** Unique identifier for this workflow run (timestamp-based). */
   run_id: string;

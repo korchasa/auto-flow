@@ -1,7 +1,8 @@
 /**
  * @module
- * Run-state management: create, persist, load, and update RunState across a
- * workflow execution. Also defines {@link PhaseRegistry}, the per-run
+ * Run-state management: create and update in-memory RunState across a
+ * workflow execution. Durable recovery is owned by `journal.jsonl`
+ * replay. Also defines {@link PhaseRegistry}, the per-run
  * `nodeId → phase` mapping used for computing node output directory paths.
  */
 
@@ -138,12 +139,12 @@ export function getNodeDir(
   return `${getRunDir(runId, workflowDir)}/${nodeId}`;
 }
 
-/** Get the state.json file path for a run. */
-export function getStatePath(
+/** Get the journal.jsonl file path for a run. */
+export function getJournalFilePath(
   runId: string,
   workflowDir: string = DEFAULT_WORKFLOW_DIR,
 ): string {
-  return `${getRunDir(runId, workflowDir)}/state.json`;
+  return `${getRunDir(runId, workflowDir)}/journal.jsonl`;
 }
 
 /** Get the logs directory for a run. */
@@ -195,34 +196,7 @@ export function buildTaskPaths(
   };
 }
 
-/** Save RunState to state.json.
- * @param workDir — base directory prefix for file I/O. Defaults to "." (CWD).
- * @param workflowDir — workflow folder under which `runs/<run-id>` lives. */
-export async function saveState(
-  state: RunState,
-  workDir = ".",
-  workflowDir: string = DEFAULT_WORKFLOW_DIR,
-): Promise<void> {
-  const path = `${workDir}/${getStatePath(state.run_id, workflowDir)}`;
-  const dir = `${workDir}/${getRunDir(state.run_id, workflowDir)}`;
-  await Deno.mkdir(dir, { recursive: true });
-  await Deno.writeTextFile(path, JSON.stringify(state, null, 2) + "\n");
-}
-
-/** Load RunState from state.json.
- * @param workDir — base directory prefix for file I/O. Defaults to "." (CWD).
- * @param workflowDir — workflow folder under which `runs/<run-id>` lives. */
-export async function loadState(
-  runId: string,
-  workDir = ".",
-  workflowDir: string = DEFAULT_WORKFLOW_DIR,
-): Promise<RunState> {
-  const path = `${workDir}/${getStatePath(runId, workflowDir)}`;
-  const text = await Deno.readTextFile(path);
-  return JSON.parse(text) as RunState;
-}
-
-/** Update a single node's state and persist. */
+/** Update a single node's in-memory state. */
 export function updateNodeState(
   state: RunState,
   nodeId: string,

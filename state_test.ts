@@ -2,11 +2,11 @@ import { assertEquals, assertThrows } from "@std/assert";
 import {
   createRunState,
   generateRunId,
+  getJournalFilePath,
   getNodeDir,
   getNodesByStatus,
   getResumableNodes,
   getRunDir,
-  getStatePath,
   isNodeCompleted,
   markNodeCompleted,
   markNodeFailed,
@@ -21,6 +21,8 @@ import {
   updateRunCost,
 } from "./state.ts";
 import type { WorkflowConfig } from "./types.ts";
+import { nodeCompleted, nodeStarted } from "./node-lifecycle.ts";
+import { replayRunJournal, RunJournalWriter } from "./run-journal.ts";
 
 Deno.test("generateRunId — format YYYYMMDDTHHMMSS without label", () => {
   const id = generateRunId();
@@ -69,7 +71,7 @@ Deno.test("createRunState — initializes all nodes as pending", () => {
   assertEquals(state.nodes.developer.status, "pending");
 });
 
-Deno.test("getRunDir / getNodeDir / getStatePath — defaults preserved (back-compat)", () => {
+Deno.test("getRunDir / getNodeDir / getJournalFilePath — defaults preserved", () => {
   assertEquals(
     getRunDir("20260308T143022"),
     ".flowai-workflow/runs/20260308T143022",
@@ -79,8 +81,8 @@ Deno.test("getRunDir / getNodeDir / getStatePath — defaults preserved (back-co
     ".flowai-workflow/runs/20260308T143022/spec",
   );
   assertEquals(
-    getStatePath("20260308T143022"),
-    ".flowai-workflow/runs/20260308T143022/state.json",
+    getJournalFilePath("20260308T143022"),
+    ".flowai-workflow/runs/20260308T143022/journal.jsonl",
   );
 });
 
@@ -99,10 +101,10 @@ Deno.test("getNodeDir — workflow-aware: nests under <workflowDir>/runs/", () =
   );
 });
 
-Deno.test("getStatePath — workflow-aware: state.json under explicit workflowDir", () => {
+Deno.test("getJournalFilePath — workflow-aware: journal.jsonl under explicit workflowDir", () => {
   assertEquals(
-    getStatePath("X", ".flowai-workflow/foo"),
-    ".flowai-workflow/foo/runs/X/state.json",
+    getJournalFilePath("X", ".flowai-workflow/foo"),
+    ".flowai-workflow/foo/runs/X/journal.jsonl",
   );
 });
 
@@ -247,7 +249,7 @@ Deno.test("getResumableNodes — returns non-completed, non-skipped", () => {
   assertEquals(resumable.sort(), ["c", "d"]);
 });
 
-Deno.test("saveState + loadState — roundtrip", async () => {
+Deno.test("journal replay — run state roundtrip", async () => {
   const tmpRunId = `test-${Date.now()}`;
   const state = createRunState(
     tmpRunId,
@@ -259,19 +261,39 @@ Deno.test("saveState + loadState — roundtrip", async () => {
   markNodeStarted(state, "a");
   markNodeCompleted(state, "a");
 
-  // Override getRunDir path to use temp location
   const tmpDir = await Deno.makeTempDir();
-  const statePath = `${tmpDir}/state.json`;
-  await Deno.writeTextFile(statePath, JSON.stringify(state, null, 2) + "\n");
+  try {
+    const writer = await RunJournalWriter.open(tmpDir, tmpRunId);
+    await writer.append({
+      kind: "run_started",
+      config_path: "cfg.yaml",
+      started_at: state.started_at,
+      args: state.args,
+      env: state.env,
+    });
+    await writer.append({
+      kind: "node_declared",
+      node_id: "a",
+      node_type: "agent",
+      label: "A",
+    });
+    await writer.append({
+      kind: "node_declared",
+      node_id: "b",
+      node_type: "agent",
+      label: "B",
+    });
+    await nodeStarted(state, "a", undefined, writer);
+    await nodeCompleted(state, "a", undefined, undefined, undefined, writer);
+    const loaded = (await replayRunJournal(tmpDir)).state;
 
-  const loaded = JSON.parse(await Deno.readTextFile(statePath));
-
-  assertEquals(loaded.run_id, tmpRunId);
-  assertEquals(loaded.nodes.a.status, "completed");
-  assertEquals(loaded.nodes.b.status, "pending");
-  assertEquals(loaded.args.issue, "1");
-
-  await Deno.remove(tmpDir, { recursive: true });
+    assertEquals(loaded.run_id, tmpRunId);
+    assertEquals(loaded.nodes.a.status, "completed");
+    assertEquals(loaded.nodes.b.status, "pending");
+    assertEquals(loaded.args.issue, "1");
+  } finally {
+    await Deno.remove(tmpDir, { recursive: true });
+  }
 });
 
 Deno.test("markNodeWaiting — sets status, session_id, question_json", () => {
@@ -494,16 +516,34 @@ Deno.test("markNodeCompleted — without result leaves result undefined", () => 
   assertEquals(state.nodes.a.result, undefined);
 });
 
-Deno.test("markNodeCompleted — result round-trip via state JSON", async () => {
+Deno.test("markNodeCompleted — result round-trip via journal replay", async () => {
   const state = createRunState("test-result", "cfg.yaml", ["a"], {}, {});
-  markNodeStarted(state, "a");
-  markNodeCompleted(state, "a", 0.005, "Line one | Line two | Line three");
-
   const tmpDir = await Deno.makeTempDir();
   try {
-    const statePath = `${tmpDir}/state.json`;
-    await Deno.writeTextFile(statePath, JSON.stringify(state, null, 2) + "\n");
-    const loaded = JSON.parse(await Deno.readTextFile(statePath));
+    const writer = await RunJournalWriter.open(tmpDir, "test-result");
+    await writer.append({
+      kind: "run_started",
+      config_path: "cfg.yaml",
+      started_at: state.started_at,
+      args: {},
+      env: {},
+    });
+    await writer.append({
+      kind: "node_declared",
+      node_id: "a",
+      node_type: "agent",
+      label: "A",
+    });
+    await nodeStarted(state, "a", undefined, writer);
+    await nodeCompleted(
+      state,
+      "a",
+      0.005,
+      "Line one | Line two | Line three",
+      undefined,
+      writer,
+    );
+    const loaded = (await replayRunJournal(tmpDir)).state;
     assertEquals(loaded.nodes.a.result, "Line one | Line two | Line three");
   } finally {
     await Deno.remove(tmpDir, { recursive: true });
@@ -520,17 +560,26 @@ Deno.test("markNodeCompleted — backward compat: no result param still works", 
   assertEquals(state.nodes.a.cost_usd, undefined);
 });
 
-// --- FR-E49: claude_cli_version state roundtrip ---
+// --- FR-E49: claude_cli_version journal roundtrip ---
 
-Deno.test("RunState — claude_cli_version roundtrip via state JSON (FR-E49)", async () => {
+Deno.test("RunState — claude_cli_version roundtrip via journal replay (FR-E49)", async () => {
   const state = createRunState("test-version", "cfg.yaml", ["a"], {}, {});
-  state.claude_cli_version = "claude 1.2.3";
 
   const tmpDir = await Deno.makeTempDir();
   try {
-    const statePath = `${tmpDir}/state.json`;
-    await Deno.writeTextFile(statePath, JSON.stringify(state, null, 2) + "\n");
-    const loaded = JSON.parse(await Deno.readTextFile(statePath));
+    const writer = await RunJournalWriter.open(tmpDir, "test-version");
+    await writer.append({
+      kind: "run_started",
+      config_path: "cfg.yaml",
+      started_at: state.started_at,
+      args: {},
+      env: {},
+    });
+    await writer.append({
+      kind: "run_metadata_updated",
+      claude_cli_version: "claude 1.2.3",
+    });
+    const loaded = (await replayRunJournal(tmpDir)).state;
     assertEquals(loaded.claude_cli_version, "claude 1.2.3");
   } finally {
     await Deno.remove(tmpDir, { recursive: true });

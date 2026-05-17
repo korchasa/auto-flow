@@ -6,7 +6,8 @@
 ## 4. Data
 
 - **Entities:**
-  - Run State: JSON (`.flowai-workflow/runs/<run-id>/state.json`)
+  - Run Journal: JSONL (`<workflow>/runs/<run-id>/journal.jsonl`). Append-only
+    recovery contract; replay derives `RunState` from empty memory (FR-E69).
   - Pipeline Config: YAML (`.flowai-workflow/workflow.yaml`). Top-level keys: `name`,
     `version`, `defaults`, `phases`, `nodes`. `phases` key declares
     named phase groups with member stage IDs. Engine treats `phases` as opaque
@@ -49,6 +50,9 @@
     `metadata` copies optional `NodeState` fields: `error`,
     `error_category`, `duration_ms`, `cost_usd`, `result`, `session_id`,
     `question_json`, `iteration`.
+  - RunJournalEvent: `{ schema_version, run_id, seq, event_id, kind, ts,
+    ...payload }` — bootstrap, node lifecycle, attempt, loop, and terminal
+    run facts, one JSONL record per fact (FR-E69).
   - WorkflowDefaults: `{ ..., budget?: { max_usd?: number; max_turns?: number } }`
     — default budget applied to all nodes via cascade merge (FR-E47)
   - NodeConfig: `{ ..., run_on?: "always"|"success"|"failure", phase?: string,
@@ -135,18 +139,11 @@
     break loop execution. `runDir` resolved via `getRunDir(this.state.run_id)`
     (already in engine scope).
   - **Node Result Summary** (FR-E15, FR-E22): After agent node completion,
-    engine displays multi-line result via `OutputManager.nodeResult()`.
-    `nodeResult()` renders: RESULT header on its own line, each non-empty
-    result line indented 2 spaces (preserving original line breaks), footer
-    line with cost/duration/turns. `extractResultExcerpt()` removed from
-    `output.ts`. Excerpt logic for state persistence inlined at 2 call sites:
-    (1) `executeNode()` in `engine.ts` — inline lambda computes compact
-    excerpt (filter empty → take 3 → join ` | ` → truncate 400) passed to
-    `markNodeCompleted()`. (2) `executeLoopNode()` `onNodeComplete` callback
-    in `node-dispatch.ts` — same inline lambda.
-    Suppressed in quiet mode. Shown in default and verbose modes.
-    `printSummary()` builds `nodeResults` from persisted `state.nodes[*].result`
-    and passes to `summary()` for per-node result lines in final summary block.
+    `OutputManager.nodeResult()` prints a RESULT header, non-empty result lines
+    indented by two spaces, and a cost/duration/turn footer. Compact excerpts
+    (first 3 non-empty lines joined with ` | `, capped at 400 chars) are
+    stored on `NodeState.result` for final summary rendering. Suppressed in
+    quiet mode; shown in default and verbose modes.
   - **Verbose Edge Cases** (behavioral contracts verified by tests):
     - **Default mode (no `-v`):** All 4 verbose methods produce zero stderr
       output. `OutputManager` constructed with `verbose=false` suppresses all
@@ -305,7 +302,7 @@
         timeout: 7200
     ```
   - **Pipeline Prepare Command (FR-E30):** In `runWithLock()`, after
-    `ensureRunDirs()` + `saveState()`, before level loop: if
+    `ensureRunDirs()` + journal bootstrap, before level loop: if
     `!options.resume && defaults.prepare_command` is non-empty, calls
     `runPrepareCommand()`. Flow: build workflow-level `TemplateContext`
     (`node_dir: ""`, `input: {}`, real `run_dir`/`run_id`/`env`/`args`) →
@@ -341,7 +338,7 @@
       (hook must not crash engine). Called before post-workflow nodes when
       `workflowSuccess === false`. Script is workflow-specific — engine treats
       as opaque invocation (domain-agnostic). Failed node IDs available via
-      `state.json` (`nodes[*].status === "failed"`).
+         replayed run state (`nodes[*].status === "failed"`).
   - **Semi-verbose filtering (FR-E21):** `formatEventForOutput(event,
     verbosity?)` accepts optional `Verbosity` param. When
     `verbosity === "semi-verbose"`, skips `tool_use` content blocks in
@@ -389,21 +386,28 @@
     `hitl.ts`. Pre-run warnings emitted by `engine.ts:warnBudgetCaveats`:
     (1) per non-Claude node with `budget.max_turns`; (2) when `--budget` is
     set while the default runtime is non-Claude (possible silent no-op).
-    **Resume (`--resume`):** `state.total_cost_usd` loaded from
-    `state.json`; budget applies to the cumulative total. Engine aborts via
+    **Resume (`--resume`):** `state.total_cost_usd` loaded by journal replay;
+    budget applies to the cumulative total. Engine aborts via
     `checkWorkflowBudget("resume")` before executing any node if the loaded
     state already exceeds the cap.
   - **Node Lifecycle Callback (FR-E68):** `node-lifecycle.ts` wraps
     `state.ts` mutators with awaited transitions (`nodeStarted`,
     `nodeCompleted`, `nodeFailed`, `nodeWaiting`, `nodeSkipped`). Each helper
-    mutates `RunState`, snapshots `NodeLifecycleEvent`, then awaits
-    `EngineOptions.onNodeLifecycle`. Timestamps: `running` → `started_at`;
-    `completed`/`failed` → `completed_at`; `waiting`/`skipped` → fresh ISO.
-    `Engine.executeNode` uses these helpers and passes them through
-    `EngineContext` to agent, loop, human, HITL, and post-workflow paths.
-    `runLoop()` writes `iteration` before body-node `running` emission.
-    Callback rejection becomes `NodeLifecycleCallbackError`; `executeNode()`
-    preserves that wrapper without recursively emitting a second failed event.
+    mutates `RunState`, snapshots `NodeLifecycleEvent`, appends the journal
+    node fact, then awaits `EngineOptions.onNodeLifecycle`; append failure
+    prevents publishing an unpersisted live fact. Timestamps reuse node
+    timestamps where available. `EngineContext` threads helpers through all
+    node paths; callback rejection becomes `NodeLifecycleCallbackError`
+    without recursive failed-event emission.
+  - **Durable Lifecycle Replay (FR-E69):** `run-journal.ts` owns the
+    recovery surface. Writer appends enveloped JSON lines with monotonic `seq`
+    and deterministic `event_id`, continuing after existing valid records on
+    resume. Fresh runs write ordinary bootstrap facts, not a snapshot blob.
+    Replay reads only the run directory, ignores duplicate `event_id`s and a
+    malformed partial tail, fails on malformed non-tail lines, and derives
+    `RunState`. Terminal records beat stale non-terminal run facts; later
+    terminal facts can supersede earlier ones. Dashboard and resume replay the
+    journal rather than `state.json`.
   - **CLI Auto-Update Prevention (FR-E49):** In `run()`, before node
     execution loop:
     1. Save original `Deno.env.get("DISABLE_AUTOUPDATER")`.
@@ -437,9 +441,10 @@
 
 - **Scale:** Single workflow per run. Sequential stages (no parallel agents).
 - **Fault:** Node failure stops workflow (unless `on_error: continue`). Failure
-  reported via state.json. `on_error: continue` emits info log per suppressed
-  node (FR-E34). Configurable `on_failure_script` hook runs before post-workflow
-  nodes only when `workflowSuccess === false` (not when all failures suppressed).
+  reported via `journal.jsonl` replay. `on_error: continue` emits info log per
+  suppressed node (FR-E34). Configurable `on_failure_script` hook runs before
+  post-workflow nodes only when `workflowSuccess === false` (not when all
+  failures suppressed).
 - **Logs:** Full transcripts per node in `.flowai-workflow/runs/<run-id>/logs/`.
 
 ## 7. Constraints
@@ -447,18 +452,10 @@
 - **Simplified:** Pipeline runs sequentially (no parallel stages in v1).
 - **Deferred:** Multi-repo support. Parallel workflows for multiple issues.
   Issue size/complexity limits. Budget alerts/notifications (FR-E47 covers
-  enforcement; alerts deferred). Binary smoke
-  tests in CI matrix (FR-E39 Variant B — deferred until base release workflow
-  proven). Package manager distribution (brew, npm). Windows binary targets.
-  Auto-update mechanism. Windows
-  binary target (FR-E39). Package manager distribution (brew, npm). Auto-update
-  mechanism. SHA256 checksums for release assets.
-- **Deferred CLI flags per node (ex ADR-001 C5):** Candidates for
-  `-p --output-format stream-json` validation:
-  `--max-budget-usd` (spend cap),
-  `--json-schema` (structured output), `--fallback-model`
-  (overload resilience). Also:
+  enforcement only). Binary smoke tests in CI matrix. Package manager
+  distribution. Windows binaries. Auto-update. SHA256 release checksums.
+- **Deferred CLI flags per node:** Candidate flags need separate FRs after
+  validation (`--max-budget-usd`, `--json-schema`, `--fallback-model`,
   `--name`, `--no-session-persistence`, `--settings`, `--mcp-config`,
-  `--worktree`. Create FR per validated candidate. Already shipped:
-  `--effort` (FR-E42), `--allowedTools`/`--disallowedTools` (FR-E48),
-  `--permission-mode` (FR-E29).
+  `--worktree`). Shipped: `--effort` (FR-E42),
+  `--allowedTools`/`--disallowedTools` (FR-E48), `--permission-mode` (FR-E29).

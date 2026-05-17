@@ -42,6 +42,7 @@ import {
   nodeStarted,
   nodeWaiting,
 } from "./node-lifecycle.ts";
+import { replayRunJournal, RunJournalWriter } from "./run-journal.ts";
 
 /** Capture output lines from an OutputManager. */
 function createCapture(): { lines: string[]; writer: (text: string) => void } {
@@ -540,7 +541,7 @@ Deno.test("NodeConfig — env field undefined when not set", () => {
   assertEquals(node.env, undefined);
 });
 
-// --- state.json failed node tracking tests ---
+// --- failed node tracking tests ---
 
 Deno.test("getNodesByStatus — extracts failed node IDs from run state", () => {
   const state: RunState = {
@@ -562,8 +563,7 @@ Deno.test("getNodesByStatus — extracts failed node IDs from run state", () => 
   assertEquals(failed[0], "developer");
 });
 
-Deno.test("state.json — records status: failed for failed node (meta-agent reads state.json)", () => {
-  // Meta-agent identifies failed nodes via state.json nodes[*].status === "failed"
+Deno.test("RunState — records status: failed for failed node", () => {
   const state = createRunState(
     "test-run",
     "config.yaml",
@@ -582,7 +582,7 @@ Deno.test("state.json — records status: failed for failed node (meta-agent rea
   assertEquals(state.nodes.pm.status, "completed");
 });
 
-Deno.test("state.json — no failed nodes when all complete successfully", () => {
+Deno.test("RunState — no failed nodes when all complete successfully", () => {
   const state = createRunState(
     "test-run",
     "config.yaml",
@@ -1019,18 +1019,36 @@ Deno.test("NodeState — cost_usd undefined when no cost passed to markNodeCompl
   assertEquals(state.total_cost_usd, undefined);
 });
 
-Deno.test("RunState — total_cost_usd in state.json roundtrip", async () => {
+Deno.test("RunState — total_cost_usd in journal replay roundtrip", async () => {
   const state = createRunState("test-cost", "cfg.yaml", ["a", "b"], {}, {});
-  markNodeStarted(state, "a");
-  markNodeCompleted(state, "a", 0.007);
-  markNodeStarted(state, "b");
-  markNodeCompleted(state, "b", 0.003);
 
   const tmpDir = await Deno.makeTempDir();
   try {
-    const statePath = `${tmpDir}/state.json`;
-    await Deno.writeTextFile(statePath, JSON.stringify(state, null, 2) + "\n");
-    const loaded = JSON.parse(await Deno.readTextFile(statePath)) as RunState;
+    const writer = await RunJournalWriter.open(tmpDir, "test-cost");
+    await writer.append({
+      kind: "run_started",
+      config_path: "cfg.yaml",
+      started_at: state.started_at,
+      args: {},
+      env: {},
+    });
+    await writer.append({
+      kind: "node_declared",
+      node_id: "a",
+      node_type: "agent",
+      label: "A",
+    });
+    await writer.append({
+      kind: "node_declared",
+      node_id: "b",
+      node_type: "agent",
+      label: "B",
+    });
+    await nodeStarted(state, "a", undefined, writer);
+    await nodeCompleted(state, "a", 0.007, undefined, undefined, writer);
+    await nodeStarted(state, "b", undefined, writer);
+    await nodeCompleted(state, "b", 0.003, undefined, undefined, writer);
+    const loaded = (await replayRunJournal(tmpDir)).state;
 
     assertEquals(loaded.total_cost_usd, 0.01);
     assertEquals(loaded.nodes.a.cost_usd, 0.007);

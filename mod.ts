@@ -4,16 +4,21 @@
  */
 
 export type {
+  AttemptJournalEvent,
   CliRunOutput,
   EngineOptions,
   ErrorCategory,
   HitlConfig,
   HumanInputOption,
   HumanInputRequest,
+  LoopIterationJournalEvent,
   NodeBudget,
   NodeConfig,
+  NodeDeclaredJournalEvent,
+  NodeDirectoryDeclaredJournalEvent,
   NodeLifecycleCallback,
   NodeLifecycleEvent,
+  NodeLifecycleJournalEvent,
   NodeLifecycleMetadata,
   NodeSettings,
   NodeState,
@@ -21,13 +26,21 @@ export type {
   PermissionDenial,
   PermissionMode,
   ReasoningEffort,
+  RunJournalEvent,
+  RunJournalEventBase,
+  RunJournalEventKind,
+  RunJournalReplayResult,
+  RunMetadataUpdatedJournalEvent,
+  RunStartedJournalEvent,
   RunState,
+  RunTerminalJournalEvent,
   RuntimeId,
   TemplateContext,
   ValidationRule,
   Verbosity,
   WorkflowConfig,
   WorkflowDefaults,
+  WorkflowLoadedJournalEvent,
 } from "./types.ts";
 export { REASONING_EFFORT_VALUES } from "./types.ts";
 
@@ -45,13 +58,19 @@ export type { ValidationResult } from "./validate.ts";
 export {
   createRunState,
   generateRunId,
+  getJournalFilePath,
   getNodeDir,
   getRunDir,
-  getStatePath,
-  loadState,
   PhaseRegistry,
-  saveState,
 } from "./state.ts";
+export {
+  getJournalPath,
+  loadStateFromJournal,
+  replayRunJournal,
+  resultExcerpt,
+  RunJournalWriter,
+} from "./run-journal.ts";
+export type { NewRunJournalEvent } from "./run-journal.ts";
 export { installSignalHandlers, ProcessRegistry } from "./process-registry.ts";
 export { runAgent } from "./agent.ts";
 export type { AgentResult, AgentRunOptions } from "./agent.ts";

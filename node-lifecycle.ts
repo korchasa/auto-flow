@@ -4,7 +4,7 @@
  *
  * The synchronous state mutators in `state.ts` remain the low-level source of
  * truth. This layer applies one state transition, snapshots the updated node,
- * then awaits the optional host callback.
+ * persists the durable journal fact, then awaits the optional host callback.
  */
 
 import {
@@ -23,6 +23,7 @@ import type {
   NodeStatus,
   RunState,
 } from "./types.ts";
+import type { RunJournalWriter } from "./run-journal.ts";
 
 /** Error thrown when an embedding host's lifecycle callback fails. */
 export class NodeLifecycleCallbackError extends Error {
@@ -55,9 +56,10 @@ export async function nodeStarted(
   state: RunState,
   nodeId: string,
   callback?: NodeLifecycleCallback,
+  journal?: RunJournalWriter,
 ): Promise<void> {
   markNodeStarted(state, nodeId);
-  await emitNodeLifecycle(state, nodeId, callback);
+  await emitNodeLifecycle(state, nodeId, callback, journal);
 }
 
 /** Mark a node as completed, then emit the optional lifecycle callback. */
@@ -67,9 +69,10 @@ export async function nodeCompleted(
   costUsd?: number,
   result?: string,
   callback?: NodeLifecycleCallback,
+  journal?: RunJournalWriter,
 ): Promise<void> {
   markNodeCompleted(state, nodeId, costUsd, result);
-  await emitNodeLifecycle(state, nodeId, callback);
+  await emitNodeLifecycle(state, nodeId, callback, journal);
 }
 
 /** Mark a node as failed, then emit the optional lifecycle callback. */
@@ -79,9 +82,10 @@ export async function nodeFailed(
   error: string,
   errorCategory?: ErrorCategory,
   callback?: NodeLifecycleCallback,
+  journal?: RunJournalWriter,
 ): Promise<void> {
   markNodeFailed(state, nodeId, error, errorCategory);
-  await emitNodeLifecycle(state, nodeId, callback);
+  await emitNodeLifecycle(state, nodeId, callback, journal);
 }
 
 /** Mark a node as waiting for human input, then emit the optional callback. */
@@ -91,9 +95,10 @@ export async function nodeWaiting(
   sessionId: string,
   questionJson: string,
   callback?: NodeLifecycleCallback,
+  journal?: RunJournalWriter,
 ): Promise<void> {
   markNodeWaiting(state, nodeId, sessionId, questionJson);
-  await emitNodeLifecycle(state, nodeId, callback);
+  await emitNodeLifecycle(state, nodeId, callback, journal);
 }
 
 /** Mark a node as skipped, then emit the optional lifecycle callback. */
@@ -101,19 +106,22 @@ export async function nodeSkipped(
   state: RunState,
   nodeId: string,
   callback?: NodeLifecycleCallback,
+  journal?: RunJournalWriter,
 ): Promise<void> {
   markNodeSkipped(state, nodeId);
-  await emitNodeLifecycle(state, nodeId, callback);
+  await emitNodeLifecycle(state, nodeId, callback, journal);
 }
 
-/** Emit a snapshot of the current node state to the optional host callback. */
+/** Persist and emit a snapshot of the current node state. */
 export async function emitNodeLifecycle(
   state: RunState,
   nodeId: string,
   callback?: NodeLifecycleCallback,
+  journal?: RunJournalWriter,
 ): Promise<void> {
-  if (!callback) return;
   const event = buildNodeLifecycleEvent(state, nodeId);
+  await journal?.appendNodeLifecycle(event);
+  if (!callback) return;
   try {
     await callback(event);
   } catch (error) {

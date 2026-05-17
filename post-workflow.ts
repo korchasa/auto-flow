@@ -8,7 +8,7 @@
 import type { NodeConfig, RunState } from "./types.ts";
 import type { OutputManager } from "./output.ts";
 import { topoSort } from "./dag.ts";
-import { isNodeCompleted, markNodeSkipped, saveState } from "./state.ts";
+import { isNodeCompleted, markNodeSkipped } from "./state.ts";
 
 /**
  * Collect node IDs with `run_on` set from workflow config.
@@ -87,11 +87,6 @@ export interface PostWorkflowOptions {
   nodeSkipped?: (nodeId: string) => Promise<void>;
   /** Working directory for hooks (worktree path or undefined for CWD). */
   cwd?: string;
-  /** Working directory for state I/O. Defaults to ".". */
-  workDir?: string;
-  /** Workflow folder hosting `runs/<run-id>` (FR-S47/FR-E9). When omitted,
-   * defaults via `saveState` to `.flowai-workflow` for backward compatibility. */
-  workflowDir?: string;
 }
 
 /**
@@ -112,8 +107,6 @@ export async function executePostWorkflow(
     executeNode,
     nodeSkipped: skipNode,
     cwd,
-    workDir,
-    workflowDir,
   } = opts;
 
   if (nodeIds.length === 0) return;
@@ -133,7 +126,6 @@ export async function executePostWorkflow(
         markNodeSkipped(state, nodeId);
       }
       output.nodeSkipped(nodeId, "skipped: run_on=success but workflow failed");
-      await saveState(state, workDir, workflowDir);
       continue;
     }
     if (nodeRunOn === "failure" && workflowSuccess) {
@@ -146,7 +138,6 @@ export async function executePostWorkflow(
         nodeId,
         "skipped: run_on=failure but workflow succeeded",
       );
-      await saveState(state, workDir, workflowDir);
       continue;
     }
 

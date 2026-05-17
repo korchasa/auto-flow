@@ -73,12 +73,31 @@ export interface LoopRunOptions {
   ) => void;
   /** Called at the start of each loop iteration. */
   onIteration?: (iteration: number, maxIterations: number) => void;
+  /** Persisted lifecycle hook for iteration start. */
+  onIterationStarted?: (
+    iteration: number,
+    maxIterations: number,
+  ) => Promise<void>;
+  /** Persisted lifecycle hook for iteration completion. */
+  onIterationCompleted?: (iteration: number) => Promise<void>;
+  /** Persisted lifecycle hook for iteration failure. */
+  onIterationFailed?: (
+    iteration: number,
+    error: string,
+    errorCategory?: ErrorCategory,
+  ) => Promise<void>;
+  /** Persisted lifecycle hook for body-node runtime attempt start. */
+  onAttemptStarted?: (nodeId: string, iteration: number) => Promise<void>;
+  /** Persisted lifecycle hook for body-node runtime attempt completion. */
+  onAttemptCompleted?: (
+    nodeId: string,
+    iteration: number,
+    result: AgentResult,
+  ) => Promise<void>;
   /** OutputManager for verbose diagnostics (forwarded to runAgent). */
   output?: OutputManager;
   /** Verbosity level for terminal output filtering (forwarded to runAgent). */
   verbosity?: Verbosity;
-  /** Persist run state to disk after node completion. */
-  saveState?: () => Promise<void>;
   /** Working directory for subprocesses (worktree path or undefined for CWD). */
   cwd?: string;
   /** Workflow-wide USD cap (FR-E47). When set, enforced after each body node
@@ -173,6 +192,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
     }
 
     opts.onIteration?.(iteration, maxIterations);
+    await opts.onIterationStarted?.(iteration, maxIterations);
     let iterCost = 0;
 
     // Run each body node in order (from inline nodes sub-object)
@@ -193,6 +213,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
       } else {
         markNodeStarted(state, bodyNodeId);
       }
+      await opts.onAttemptStarted?.(bodyNodeId, iteration);
 
       const streamLogPath = `${workPath(ctx.workDir, ctx.node_dir)}/stream.log`;
 
@@ -228,6 +249,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
       });
 
       bodyResults.push(result);
+      await opts.onAttemptCompleted?.(bodyNodeId, iteration, result);
 
       if (result.success) {
         const resultExcerpt = result.output
@@ -274,7 +296,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
             error: msg,
             error_category: "aborted",
           });
-          await opts.saveState?.();
+          await opts.onIterationFailed?.(iteration, msg, "aborted");
           return {
             success: false,
             iterations: iteration,
@@ -302,9 +324,12 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
       }
 
       opts.onNodeComplete?.(bodyNodeId, iteration, result);
-      await opts.saveState?.();
-
       if (!result.success) {
+        await opts.onIterationFailed?.(
+          iteration,
+          `Body node '${bodyNodeId}' failed on iteration ${iteration}: ${result.error}`,
+          result.error_category ?? "unknown",
+        );
         return {
           success: false,
           iterations: iteration,
@@ -345,6 +370,10 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         conditionNode,
       );
     } catch (e) {
+      await opts.onIterationFailed?.(
+        iteration,
+        e instanceof Error ? e.message : String(e),
+      );
       return {
         success: false,
         iterations: iteration,
@@ -356,6 +385,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
     lastConditionValue = conditionValue;
 
     if (conditionValue === exitValue) {
+      await opts.onIterationCompleted?.(iteration);
       return {
         success: true,
         iterations: iteration,
@@ -364,8 +394,14 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         exit_reason: "exit_value",
       };
     }
+    await opts.onIterationCompleted?.(iteration);
   }
 
+  await opts.onIterationFailed?.(
+    maxIterations,
+    `Loop '${loopNodeId}' reached max iterations (${maxIterations}) without exit condition. Last ${conditionField}=${lastConditionValue}, expected ${exitValue}`,
+    "continuations_exhausted",
+  );
   return {
     success: false,
     iterations: maxIterations,
