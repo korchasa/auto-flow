@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.7.9](https://github.com/korchasa/flowai-workflow/compare/v0.7.8...v0.7.9) (2026-05-17)
+
+
+### Features
+
+* **engine:** add node lifecycle callback ([41c94de](https://github.com/korchasa/flowai-workflow/commit/41c94de5607759ea529c433fca02cce2d80578de))
+
 ### [0.7.8](https://github.com/korchasa/flowai-workflow/compare/v0.7.7...v0.7.8) (2026-05-16)
 
 
