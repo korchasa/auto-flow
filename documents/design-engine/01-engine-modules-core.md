@@ -179,9 +179,12 @@
     `links` field in the root `deno.json`. See the sibling repo's
     `documents/design.md` for full module descriptions.
   - `agent.ts` — runtime-agnostic agent invocation, continuation loop, retry.
-    Agent context injected via `--agent` + `--append-system-prompt` (native
-    Claude Code subagents in `.claude/agents/*.md`). Pipeline-specific context
-    via `task_template` `{{file(...)}}` (FR-S38). Base system prompt preserved.
+    Agent context injected via `--agent`; Claude `system_prompt` is
+    interpolated once, persisted at `<node-dir>/system-prompt.md`, and passed
+    to `@korchasa/ai-ide-cli` through the typed `systemPromptFile` invoke
+    option so the Claude adapter renders `--append-system-prompt-file <path>`
+    instead of inline argv text. Pipeline-specific context via `task_template`
+    `{{file(...)}}` (FR-S38). Base system prompt preserved.
     Runtime resolution centralized in `@korchasa/ai-ide-cli/runtime`;
     `runAgent()` resolves the adapter once and keeps continuation semantics
     unchanged across runtimes. **HITL injection (FR-E8, hitl-via-engine-mcp):**

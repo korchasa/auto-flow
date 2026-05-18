@@ -1,7 +1,7 @@
 {
   "version": "5",
   "specifiers": {
-    "jsr:@korchasa/ai-ide-cli@~0.8.4": "0.8.4",
+    "jsr:@korchasa/ai-ide-cli@~0.8.7": "0.8.7",
     "jsr:@std/assert@^1.0.19": "1.0.19",
     "jsr:@std/cli@1": "1.0.29",
     "jsr:@std/fmt@^1.0.10": "1.0.10",
@@ -13,8 +13,8 @@
     "jsr:@std/yaml@^1.0.12": "1.1.0"
   },
   "jsr": {
-    "@korchasa/ai-ide-cli@0.8.4": {
-      "integrity": "770f858b333ea8dd2daff297ae9305be1e22021e7a8f1aeb55131a77f8f19f01",
+    "@korchasa/ai-ide-cli@0.8.7": {
+      "integrity": "19a9551accb9b599654c5758a6518fc3fb4af6c34a8ddcd52947eea7a9adaba7",
       "dependencies": [
         "jsr:@std/fs",
         "jsr:@std/path",
@@ -62,7 +62,7 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@korchasa/ai-ide-cli@~0.8.4",
+      "jsr:@korchasa/ai-ide-cli@~0.8.7",
       "jsr:@std/assert@^1.0.19",
       "jsr:@std/cli@1",
       "jsr:@std/fs@1",

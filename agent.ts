@@ -245,11 +245,16 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
   }
 
   // Initial invocation
-  let result = await adapter.invoke({
+  const systemPromptDelivery = await prepareSystemPromptDelivery({
+    nodeId,
+    runtime,
+    systemPromptTemplate: node.system_prompt,
+    ctx,
+    cwd,
+  });
+  const initialInvokeOptions: Parameters<RuntimeAdapter["invoke"]>[0] = {
     agent: node.agent,
-    systemPrompt: node.system_prompt
-      ? interpolate(node.system_prompt, ctx, cwd)
-      : undefined,
+    ...systemPromptDelivery,
     taskPrompt,
     extraArgs,
     permissionMode,
@@ -268,7 +273,8 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     verbosity,
     cwd,
     processRegistry: processRegistry ?? defaultRegistry,
-  });
+  };
+  let result = await adapter.invoke(initialInvokeOptions);
 
   let continuations = 0;
   const validationRules = node.validate ?? [];
@@ -455,6 +461,42 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
 }
 
 // --- Internal helpers ---
+
+async function prepareSystemPromptDelivery(
+  opts: {
+    nodeId?: string;
+    runtime: RuntimeId;
+    systemPromptTemplate?: string;
+    ctx: TemplateContext;
+    cwd?: string;
+  },
+): Promise<{ systemPrompt?: string; systemPromptFile?: string }> {
+  const { nodeId, runtime, systemPromptTemplate, ctx, cwd } = opts;
+  if (!systemPromptTemplate) return {};
+
+  const systemPrompt = interpolate(systemPromptTemplate, ctx, cwd);
+  if (runtime !== "claude") {
+    return { systemPrompt };
+  }
+
+  const childPath = interpolate("{{node_dir}}/system-prompt.md", ctx, cwd);
+  const workDir = cwd ?? ctx.workDir;
+  const fsNodeDir = workPath(workDir, ctx.node_dir);
+  const fsPath = `${fsNodeDir}/system-prompt.md`;
+  try {
+    await Deno.mkdir(fsNodeDir, { recursive: true });
+    await Deno.writeTextFile(fsPath, systemPrompt);
+  } catch (err) {
+    const label = nodeId ?? "<unknown>";
+    throw new Error(
+      `Failed to write system prompt artifact for node '${label}' at '${fsPath}': ${
+        (err as Error).message
+      }`,
+    );
+  }
+
+  return { systemPromptFile: childPath };
+}
 
 function mapRuntimeErrorCategory(
   category: string | undefined,

@@ -78,6 +78,11 @@
   - **Tests:** `state_test.ts`, `template_test.ts` (FR-E9; regression-locked;
     `getRunDir` workflow-aware, `getNodeDir` phase-aware path
     composition, `{{node_dir}}` / `{{input.<id>}}` resolution).
+  - [x] Claude system prompt interpolation is persisted as a per-node
+    runtime artifact at `<node-dir>/system-prompt.md` before the fresh
+    invocation, while resume invocations do not rewrite or resend it.
+    Evidence: `agent.ts::prepareSystemPromptDelivery`,
+    `agent_test.ts::runAgent writes interpolated system prompt artifact`.
 
 
 
@@ -163,5 +168,4 @@
 - **Acceptance criteria:**
   - **Tests:** `engine_test.ts` (FR-E34; regression-locked; 5 cases
     cover the 4 interaction rules + log-message format).
-
 

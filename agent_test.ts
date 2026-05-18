@@ -1,5 +1,5 @@
-import { assertEquals } from "@std/assert";
-import type { AgentRunOptions } from "./agent.ts";
+import { assertEquals, assertRejects } from "@std/assert";
+import { type AgentRunOptions, runAgent } from "./agent.ts";
 import { buildClaudeArgs } from "@korchasa/ai-ide-cli/claude/process";
 import type { ClaudeInvokeOptions } from "@korchasa/ai-ide-cli/claude/process";
 import { defaultRegistry } from "@korchasa/ai-ide-cli/process-registry";
@@ -25,6 +25,7 @@ import type {
   ValidationRule,
 } from "./types.ts";
 import type { ValidationResult } from "./validate.ts";
+import type { RuntimeAdapter } from "@korchasa/ai-ide-cli/runtime/types";
 
 // Note: Full integration tests for runAgent require a real claude CLI.
 // These tests verify the module's helpers and data structures.
@@ -144,6 +145,42 @@ function makeInvokeOpts(
   };
 }
 
+function fakeAdapter(
+  seen: Record<string, unknown>[],
+  id: "claude" | "opencode" = "claude",
+): RuntimeAdapter {
+  return {
+    id,
+    capabilities: {
+      permissionMode: id === "claude",
+      transcript: true,
+      interactive: false,
+      toolUseObservation: true,
+      session: false,
+      capabilityInventory: false,
+      toolFilter: id === "claude",
+      reasoningEffort: id === "claude",
+      mcpInjection: false,
+      sessionFidelity: "native",
+    },
+    invoke(opts) {
+      seen.push(opts as unknown as Record<string, unknown>);
+      return Promise.resolve({
+        output: {
+          result: "ok",
+          session_id: "session-1",
+          duration_ms: 1,
+          num_turns: 1,
+          is_error: false,
+        },
+      });
+    },
+    launchInteractive() {
+      throw new Error("not used");
+    },
+  };
+}
+
 Deno.test("buildClaudeArgs — includes extra claudeArgs", () => {
   const args = buildClaudeArgs(
     makeInvokeOpts({
@@ -210,6 +247,103 @@ Deno.test("buildClaudeArgs — agent + systemPrompt omitted on resume", () => {
   );
   assertEquals(args.includes("--agent"), false);
   assertEquals(args.includes("--append-system-prompt"), false);
+});
+
+Deno.test("runAgent writes interpolated system prompt artifact", async () => {
+  const dir = await Deno.makeTempDir();
+  const seen: Record<string, unknown>[] = [];
+  const adapter = fakeAdapter(seen);
+  const ctx: TemplateContext = {
+    ...makeCtx(),
+    node_dir: "runs/test-node",
+    workDir: dir,
+    args: { issue: "42" },
+  };
+
+  await runAgent({
+    node: {
+      type: "agent",
+      label: "Test",
+      prompt: "Do issue {{args.issue}}",
+      system_prompt: "System for {{args.issue}}",
+    },
+    ctx,
+    settings: makeSettings(),
+    runtime: "claude",
+    runtimeAdapter: adapter,
+    cwd: dir,
+  });
+
+  const artifactPath = `${dir}/runs/test-node/system-prompt.md`;
+  assertEquals(await Deno.readTextFile(artifactPath), "System for 42");
+  assertEquals(seen[0].systemPrompt, undefined);
+  assertEquals(seen[0].systemPromptFile, "runs/test-node/system-prompt.md");
+});
+
+Deno.test("runAgent keeps inline system prompt for non-Claude runtimes", async () => {
+  const dir = await Deno.makeTempDir();
+  const seen: Record<string, unknown>[] = [];
+  const adapter = fakeAdapter(seen, "opencode");
+  const ctx: TemplateContext = {
+    ...makeCtx(),
+    node_dir: "runs/test-node",
+    workDir: dir,
+    args: { issue: "42" },
+  };
+
+  await runAgent({
+    node: {
+      type: "agent",
+      label: "Test",
+      prompt: "Do issue {{args.issue}}",
+      system_prompt: "System for {{args.issue}}",
+    },
+    ctx,
+    settings: makeSettings(),
+    runtime: "opencode",
+    runtimeAdapter: adapter,
+    cwd: dir,
+  });
+
+  assertEquals(seen[0].systemPrompt, "System for 42");
+  assertEquals(seen[0].systemPromptFile, undefined);
+  await assertRejects(
+    () => Deno.stat(`${dir}/runs/test-node/system-prompt.md`),
+    Deno.errors.NotFound,
+  );
+});
+
+Deno.test("runAgent fails clearly when system prompt artifact cannot be written", async () => {
+  const dir = await Deno.makeTempDir();
+  await Deno.writeTextFile(`${dir}/runs-file`, "not a dir");
+  const seen: Record<string, unknown>[] = [];
+  const adapter = fakeAdapter(seen);
+  const ctx: TemplateContext = {
+    ...makeCtx(),
+    node_dir: "runs-file/test-node",
+    workDir: dir,
+  };
+
+  await assertRejects(
+    () =>
+      runAgent({
+        node: {
+          type: "agent",
+          label: "Test",
+          prompt: "Do it",
+          system_prompt: "System",
+        },
+        ctx,
+        settings: makeSettings(),
+        runtime: "claude",
+        runtimeAdapter: adapter,
+        cwd: dir,
+        nodeId: "developer",
+      }),
+    Error,
+    "Failed to write system prompt artifact for node 'developer'",
+  );
+  assertEquals(seen.length, 0);
 });
 
 Deno.test("settings — default values", () => {
