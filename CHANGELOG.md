@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.7.11](https://github.com/korchasa/flowai-workflow/compare/v0.7.10...v0.7.11) (2026-05-18)
+
+
+### Bug Fixes
+
+* **engine:** persist Claude system prompts as files ([d5fc7ec](https://github.com/korchasa/flowai-workflow/commit/d5fc7ec486ff9f43b4a004ff10c53f4d53f26baf))
+
 ### [0.7.10](https://github.com/korchasa/flowai-workflow/compare/v0.7.9...v0.7.10) (2026-05-17)
 
 
