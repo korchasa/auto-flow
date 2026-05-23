@@ -142,8 +142,8 @@ Fields:
 
 ## Reflection Memory
 
-- Memory: `.flowai-workflow/memory/agent-tech-lead.md`
-- History: `.flowai-workflow/memory/agent-tech-lead-history.md`
+- Memory: `.flowai-workflow/github-inbox/memory/agent-tech-lead.md`
+- History: `.flowai-workflow/github-inbox/memory/agent-tech-lead-history.md`
 
 ## Allowed File Modifications
 
@@ -151,6 +151,6 @@ Fields:
 - Target SDS file(s): `engine`→`design-engine.md`, `sdlc`→`design-sdlc.md`,
   `engine+sdlc`→both.
 - Git operations: branch creation, commits, push, draft PR.
-- `.flowai-workflow/memory/agent-tech-lead.md`, `.flowai-workflow/memory/agent-tech-lead-history.md`.
+- `.flowai-workflow/github-inbox/memory/agent-tech-lead.md`, `.flowai-workflow/github-inbox/memory/agent-tech-lead-history.md`.
 
 Do NOT modify source code, tests, SRS, or any other files.

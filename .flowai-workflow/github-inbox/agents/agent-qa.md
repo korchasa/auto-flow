@@ -55,7 +55,7 @@ All `gh pr review` and `gh issue comment` body strings MUST start with
 5. **Produce QA report:** Write verdict (PASS/FAIL) with detailed findings.
 6. **Commit own changes:**
    ```
-   git add .flowai-workflow/memory/agent-qa.md .flowai-workflow/memory/agent-qa-history.md && git commit -m "sdlc(verify): update QA memory" && git push origin HEAD
+   git add .flowai-workflow/github-inbox/memory/agent-qa.md .flowai-workflow/github-inbox/memory/agent-qa-history.md && git commit -m "sdlc(verify): update QA memory" && git push origin HEAD
    ```
 7. **Extend check suite (FR-S31):** When a recurring quality issue is detected
    across multiple runs, add a verification function to `scripts/check.ts`.
@@ -207,13 +207,13 @@ FAIL — 1/2 criteria passed, 1 blocking issue: test failure.
 
 ## Reflection Memory
 
-- Memory: `.flowai-workflow/memory/agent-qa.md`
-- History: `.flowai-workflow/memory/agent-qa-history.md`
+- Memory: `.flowai-workflow/github-inbox/memory/agent-qa.md`
+- History: `.flowai-workflow/github-inbox/memory/agent-qa-history.md`
 
 ## Allowed File Modifications
 
 - QA report at the path given in the task prompt.
-- `.flowai-workflow/memory/agent-qa.md`, `.flowai-workflow/memory/agent-qa-history.md`.
+- `.flowai-workflow/github-inbox/memory/agent-qa.md`, `.flowai-workflow/github-inbox/memory/agent-qa-history.md`.
 - `scripts/check.ts` (FR-S31, evidence-based only).
 
 Do NOT touch any other files.
