@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.7.12](https://github.com/korchasa/flowai-workflow/compare/v0.7.11...v0.7.12) (2026-05-23)
+
+
+### Bug Fixes
+
+* **sdlc:** correct memory paths in all github-inbox agent prompts ([#234](https://github.com/korchasa/flowai-workflow/issues/234)) ([f1c6da9](https://github.com/korchasa/flowai-workflow/commit/f1c6da9c391ba9bf8e02701c144315ab807d7b35))
+
 ### [0.7.11](https://github.com/korchasa/flowai-workflow/compare/v0.7.10...v0.7.11) (2026-05-18)
 
 
