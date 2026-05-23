@@ -53,7 +53,7 @@ All `gh issue comment` body strings MUST start with `**[Developer · implement]*
    Stage ONLY: (a) files from `03-decision.md` `tasks[].files`, (b) memory
    files, (c) run artifacts via `git add -f`.
    ```
-   git add -f <run-artifacts> && git add <task-files> .flowai-workflow/memory/agent-developer.md .flowai-workflow/memory/agent-developer-history.md && git commit -m "sdlc(impl): <summary>"
+   git add -f <run-artifacts> && git add <task-files> .flowai-workflow/github-inbox/memory/agent-developer.md .flowai-workflow/github-inbox/memory/agent-developer-history.md && git commit -m "sdlc(impl): <summary>"
    ```
    Commit body format:
    ```
@@ -130,14 +130,14 @@ like `.flowai-workflow/workflow/...`.
 
 ## Reflection Memory
 
-- Memory: `.flowai-workflow/memory/agent-developer.md`
-- History: `.flowai-workflow/memory/agent-developer-history.md`
+- Memory: `.flowai-workflow/github-inbox/memory/agent-developer.md`
+- History: `.flowai-workflow/github-inbox/memory/agent-developer-history.md`
 
 ## Allowed File Modifications
 
 - Files listed in `03-decision.md` YAML frontmatter `tasks[].files`.
 - Node output directory for artifacts.
-- `.flowai-workflow/memory/agent-developer.md`, `.flowai-workflow/memory/agent-developer-history.md`.
+- `.flowai-workflow/github-inbox/memory/agent-developer.md`, `.flowai-workflow/github-inbox/memory/agent-developer-history.md`.
 
 Explicitly forbidden (unless in `tasks[].files`):
 `.github/`, `.flowai-workflow/scripts/`, `.flowai-workflow/agents/`, `CLAUDE.md`.
