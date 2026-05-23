@@ -424,6 +424,35 @@
     future per-subprocess env needs; currently unused (child processes
     inherit parent env via `Deno.Command` default). Sequential-only
     `Engine.run()` contract (FR-E60) makes `Deno.env` mutation race-free.
+  - **Embedded MCP Server (FR-E70):** `mcp-server.ts` implements a
+    `@modelcontextprotocol/sdk`-based server with 7 tool registrations.
+    `runMcpServer(workflowDir)` flow:
+    1. Create `McpServer` instance with server name + version.
+    2. Register 7 tools via `server.tool(name, schema, handler)`:
+       - `get_workflow`: `loadConfig(join(workflowDir, "workflow.yaml"))` →
+         return stringified `WorkflowConfig`.
+       - `get_state({run_id})`: derive `runDir` from `workflowDir + /runs/ +
+         run_id` → `replayRunJournal(runDir)` → return `RunState` JSON.
+       - `list_runs`: iterate `Deno.readDir(workflowDir + /runs/)`, filter
+         directories (skip `.lock`, non-dir), replay each → return array of
+         `{run_id, status, total_cost_usd, node_count}`.
+       - `tail_artifacts({run_id, node_id, filename, lines?})`: resolve path
+         via `getNodeDir()` → read file → split lines → return last N
+         (default 50).
+       - `resume_node({run_id})`: construct `Engine({resume: true,
+         config_path, run_id})`, call `.run()`. Returns final state status.
+       - `cancel_run({run_id})`: `readLockInfo(defaultLockPath(workflowDir))`
+         → verify `lockInfo.run_id === run_id` → `Deno.kill(lockInfo.pid,
+         "SIGTERM")`. Returns confirmation or "no matching lock" error.
+       - `apply_workflow_patch({operations})`: read `workflow.yaml` → parse
+         YAML → apply JSON Patch operations (RFC 6902) → serialize YAML →
+         write back. Operations validated before apply.
+    3. Create `StdioServerTransport`.
+    4. `await server.connect(transport)`.
+    No signal handlers installed (FR-E61). No `Engine` state mutation except
+    through `resume_node` (which creates its own `Engine` instance). Read-only
+    tools (`get_workflow`, `get_state`, `list_runs`, `tail_artifacts`) do not
+    acquire run lock. `cancel_run` reads lock but does not acquire/release it.
   - **Binary Compile Flow (FR-E39):** `scripts/compile.ts` iterates
     `TARGETS` array. Per target: construct `deno compile --allow-all --target
     <denoTarget> --output dist/flowai-workflow-<os>-<arch> cli.ts`. If
@@ -454,6 +483,9 @@
   Issue size/complexity limits. Budget alerts/notifications (FR-E47 covers
   enforcement only). Binary smoke tests in CI matrix. Package manager
   distribution. Windows binaries. Auto-update. SHA256 release checksums.
+  MCP server HTTP/SSE transport (FR-E70 ships stdio only). MCP server
+  `createMcpServer()` library-first factory API. HITL MCP server migration
+  to SDK.
 - **Deferred CLI flags per node:** Candidate flags need separate FRs after
   validation (`--max-budget-usd`, `--json-schema`, `--fallback-model`,
   `--name`, `--no-session-persistence`, `--settings`, `--mcp-config`,

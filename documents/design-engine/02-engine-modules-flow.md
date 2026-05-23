@@ -166,10 +166,30 @@
     `executeLoopNode()`: passes result excerpt in `onNodeComplete` callback.
     `printSummary()`: builds `nodeResults` from `state.nodes[*].result`,
     passes to `summary()` for per-node result rendering.
+  - `mcp-server.ts` — embedded MCP server exposing 7 tools over engine state
+    (FR-E70). Built on `npm:@modelcontextprotocol/sdk`. Exports
+    `runMcpServer(workflowDir: string): Promise<void>` — creates `McpServer`
+    instance, registers 7 tools via `server.tool()`, connects via
+    `StdioServerTransport`. Tools:
+    - `get_workflow` — `loadConfig(path)` → `WorkflowConfig` JSON.
+    - `get_state` — `replayRunJournal(runDir)` → `RunState` JSON.
+    - `list_runs` — `Deno.readDir(<workflowDir>/runs/)` + replay per run →
+      array of run summaries (id, status, cost, node count).
+    - `tail_artifacts` — read artifact file from `getNodeDir()`, return last
+      N lines (default 50).
+    - `resume_node` — spawn `Engine({resume: true, run_id}).run()`.
+    - `cancel_run` — `readLockInfo(lockPath)` → `Deno.kill(pid, "SIGTERM")`.
+    - `apply_workflow_patch` — read YAML → apply JSON patch operations →
+      write YAML back.
+    No signal handler installation inside server (FR-E61 — CLI owns handlers).
+    Transport-agnostic server core — stdio transport attached by CLI
+    subcommand; future HTTP/SSE transport requires only a new transport
+    constructor, zero server code changes.
   - `cli.ts` — CLI entry point with subcommand routing (FR-E45):
     `--internal-hitl-mcp` → engine's HITL MCP server (hitl-via-engine-mcp),
     `run` → `runEngine(args)` (DAG workflow),
     `init` → `runInit(args)` (project scaffolder),
+    `mcp` → `runMcpServer(workflowDir)` (embedded MCP server, FR-E70),
     `--version`/`--help` → global handlers,
     bare `--` flags → backward-compat shim (deprecated, delegates to `run`),
     default (no args or unknown subcommand) → print usage, exit 1.
@@ -192,7 +212,8 @@
     scaffolding stays available via the `init` subcommand.
   - `mod.ts` — barrel re-export serving as `deno doc --lint` entry point
     (not a runtime public API; sole non-redundant consumer is
-    `scripts/check.ts` JSDoc validation)
+    `scripts/check.ts` JSDoc validation). Re-exports `runMcpServer` from
+    `mcp-server.ts` for embedded host use (FR-E70)
 - **Module JSDoc and Why-Comments (FR-E30):** All 6 engine modules require
   module-level `/** @module */` JSDoc (purpose, responsibility, deps) and
   function-level JSDoc on exported functions. 4 complex functions require
@@ -224,6 +245,8 @@
     [--env KEY=VAL] [--skip nodes] [--only nodes] [--budget <USD>]
     [--cycles <N>]`,
     `flowai-workflow init [--workflow <name>] [--dry-run] [--allow-dirty]`,
+    `flowai-workflow mcp <workflow>` (FR-E70: start embedded MCP server
+    over stdio, exposing 7 tools for workflow inspection and control),
     `--version|-V`, `--help`. `<workflow>` is a mandatory positional
     pointing at the workflow folder (FR-E53; FR-S47).
   - Config: `<workflow>/workflow.yaml` (YAML, version "1")
@@ -285,6 +308,7 @@
     `Deno.Command()` on workflow failure. Swallows errors (failure hook must
     not crash engine). Replaces hard-wired `rollbackUncommitted()`.
   - All existing callers pass no `output` arg — zero behavioral change.
-- **Deps:** `claude` CLI, `deno`, `git`, `jsr:@std/yaml`.
+- **Deps:** `claude` CLI, `deno`, `git`, `jsr:@std/yaml`,
+  `npm:@modelcontextprotocol/sdk` (FR-E70: MCP server).
 
 
