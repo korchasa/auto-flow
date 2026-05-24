@@ -418,3 +418,44 @@ Deno.test("FR-E73 applyJsonPointerOp removes existing key", () => {
   assertEquals("foo" in doc, false);
   assertEquals(doc.bar, 2);
 });
+
+Deno.test(
+  "FR-E74 server starts in no-workflow mode and surfaces missing-workflow error on tool call",
+  async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport
+      .createLinkedPair();
+    await runMcpServer(undefined, {
+      transport: serverTransport,
+      noWorkflow: true,
+    });
+    const client = new Client({ name: "fr-e74-test-client", version: "0" });
+    await client.connect(clientTransport);
+    try {
+      // All seven tools must still be advertised so the MCP handshake
+      // completes; otherwise Claude Code shows an opaque "server crashed"
+      // diagnostic instead of the missing-workflow message.
+      const tools = await client.listTools();
+      assertEquals(tools.tools.length, 7);
+
+      const result = await client.callTool({
+        name: "get_workflow",
+        arguments: {},
+      });
+      // Tool call surfaces the structured no-workflow error.
+      const r = result as {
+        isError?: boolean;
+        content: Array<{ text: string }>;
+      };
+      assertEquals(r.isError, true);
+      const text = r.content[0].text;
+      // Must point the user at the actionable next step.
+      if (!/init/i.test(text) || !/flowai-workflow/i.test(text)) {
+        throw new Error(
+          `expected missing-workflow error mentioning init+flowai-workflow; got: ${text}`,
+        );
+      }
+    } finally {
+      await client.close();
+    }
+  },
+);

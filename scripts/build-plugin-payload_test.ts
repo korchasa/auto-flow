@@ -355,6 +355,99 @@ Deno.test("FR-E70 buildPluginPayload — version lockstep verified across both m
   }
 });
 
+Deno.test("FR-E74 payload includes launcher with executable bit", async () => {
+  const engineRoot = await tempEngine();
+  // Seed a launcher script in the source tree so the build can copy it.
+  await Deno.mkdir(
+    join(engineRoot, "claude-plugin/plugins/flowai-workflow/bin"),
+    { recursive: true },
+  );
+  await Deno.writeTextFile(
+    join(engineRoot, "claude-plugin/plugins/flowai-workflow/bin/launch.sh"),
+    "#!/usr/bin/env bash\necho stub\n",
+  );
+  const outDir = await Deno.makeTempDir({ prefix: "build-payload-out-" });
+  try {
+    await buildPluginPayload({
+      engineRoot,
+      outDir,
+      version: "0.1.0",
+      enumerateFiles: () =>
+        Promise.resolve([
+          "claude-plugin/.claude-plugin/marketplace.json",
+          "claude-plugin/plugins/flowai-workflow/.claude-plugin/plugin.json",
+          "claude-plugin/plugins/flowai-workflow/bin/launch.sh",
+        ]),
+    });
+    const dst = join(outDir, "plugins/flowai-workflow/bin/launch.sh");
+    const body = await Deno.readTextFile(dst);
+    assertStringIncludes(body, "#!/usr/bin/env bash");
+    // Executable bit set (POSIX hosts only — skip mode check on Windows).
+    if (Deno.build.os !== "windows") {
+      const stat = await Deno.stat(dst);
+      // mode bits: 0o100 = owner-execute.
+      const mode = stat.mode ?? 0;
+      assertEquals(
+        (mode & 0o100) === 0o100,
+        true,
+        `expected owner-execute bit; mode=${mode.toString(8)}`,
+      );
+    }
+  } finally {
+    await Deno.remove(engineRoot, { recursive: true });
+    await Deno.remove(outDir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E74 payload includes .mcp.json with launcher wiring", async () => {
+  const engineRoot = await tempEngine();
+  await Deno.writeTextFile(
+    join(engineRoot, "claude-plugin/plugins/flowai-workflow/.mcp.json"),
+    JSON.stringify(
+      {
+        mcpServers: {
+          "flowai-workflow": {
+            command: "bash",
+            args: ["${CLAUDE_PLUGIN_ROOT}/bin/launch.sh", "mcp"],
+          },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  const outDir = await Deno.makeTempDir({ prefix: "build-payload-out-" });
+  try {
+    await buildPluginPayload({
+      engineRoot,
+      outDir,
+      version: "0.1.0",
+      enumerateFiles: () =>
+        Promise.resolve([
+          "claude-plugin/.claude-plugin/marketplace.json",
+          "claude-plugin/plugins/flowai-workflow/.claude-plugin/plugin.json",
+          "claude-plugin/plugins/flowai-workflow/.mcp.json",
+        ]),
+    });
+    const mcpConfig = JSON.parse(
+      await Deno.readTextFile(
+        join(outDir, "plugins/flowai-workflow/.mcp.json"),
+      ),
+    );
+    assertEquals(
+      mcpConfig.mcpServers["flowai-workflow"].command,
+      "bash",
+    );
+    assertEquals(
+      mcpConfig.mcpServers["flowai-workflow"].args,
+      ["${CLAUDE_PLUGIN_ROOT}/bin/launch.sh", "mcp"],
+    );
+  } finally {
+    await Deno.remove(engineRoot, { recursive: true });
+    await Deno.remove(outDir, { recursive: true });
+  }
+});
+
 Deno.test("FR-E70 buildPluginPayload — excludes per-run dirt even when enumerator returns it", async () => {
   const engineRoot = await tempEngine();
   const outDir = await Deno.makeTempDir({ prefix: "build-payload-out-" });

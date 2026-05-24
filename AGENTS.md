@@ -90,7 +90,7 @@ example of engine usage.
   check before the worktree is even created.
 - **Observability:** 3 verbosity levels (`-q`/default/`-v`); status lines with
   timestamps; final summary
-- **Plugin payload cross-repo sync (FR-E70/E72):** The engine ships
+- **Plugin payload cross-repo sync (FR-E70/E72/E74):** The engine ships
   to end users as a Claude Code / Codex plugin. The plugin source tree
   lives in this repo at `claude-plugin/` (top-level `marketplace.json`
   + `plugins/flowai-workflow/` payload with launcher skills
@@ -102,8 +102,21 @@ example of engine usage.
   pinned to engine `deno.json#version`) and pushes it into
   `korchasa/flowai-workflow-plugins` with a matching `vX.Y.Z` tag.
   Idempotent — a byte-equal payload is a no-op. Hand-edits to the
-  downstream repo are overwritten by the next sync. The launcher
-  skills wrap engine invocations as
+  downstream repo are overwritten by the next sync.
+  **Self-contained runtime (FR-E74).** The payload also ships a bash
+  launcher `bin/launch.sh` and a sibling `.mcp.json`. On first call
+  the launcher compiles `engine/cli.ts` to
+  `${CLAUDE_PLUGIN_DATA}/bin/flowai-workflow-<version>` (atomic
+  tmp→mv) and `exec`s the cached binary; subsequent calls skip Deno
+  entirely. `.mcp.json` registers the embedded MCP server (FR-E73's
+  seven tools) via `command: "bash"`, `args:
+  ["${CLAUDE_PLUGIN_ROOT}/bin/launch.sh", "mcp"]`. The launcher
+  resolves the active workflow from `$FLOWAI_WORKFLOW` →
+  `$CLAUDE_PROJECT_DIR/.flowai-workflow/<single-or-default>` →
+  `--no-workflow` flag (server then surfaces a missing-workflow
+  diagnostic through tool-error responses so the handshake still
+  completes).
+  The launcher skills wrap engine invocations as
   `FLOWAI_SUPPRESS_DEPRECATION=1 deno run -A "$CLAUDE_PLUGIN_ROOT/engine/cli.ts" …`
   so plugin-installed users never see the JSR deprecation banner. The
   banner itself (`cli.ts:maybePrintDeprecationBanner`) fires only for

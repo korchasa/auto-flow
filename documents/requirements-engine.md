@@ -32,6 +32,9 @@ FR-IDs are stable — never renumber them on move.
 - [06-distribution-and-housekeeping.md](requirements-engine/06-distribution-and-housekeeping.md)
   — Housekeeping, test suite integrity, shared backoff, legacy test task
   removal, standalone binary, auto-update, IDE CLI wrapper split.
+- [07-mcp-and-plugin-runtime.md](requirements-engine/07-mcp-and-plugin-runtime.md)
+  — Embedded MCP server (FR-E73) and the plugin's self-contained runtime
+  with lazy binary compile + auto-MCP registration (FR-E74).
 
 ## FR-E ID → Section File
 
@@ -103,4 +106,5 @@ FR-IDs are stable — never renumber them on move.
 - FR-E70 (Claude Code Plugin Distribution) → 06-distribution-and-housekeeping
 - FR-E71 (Codex Plugin Install Path)      → 06-distribution-and-housekeeping
 - FR-E72 (Cross-Repo Plugin Payload Sync) → 06-distribution-and-housekeeping
-- FR-E73 (Embedded MCP Server Over Engine) → 06-distribution-and-housekeeping
+- FR-E73 (Embedded MCP Server Over Engine) → 07-mcp-and-plugin-runtime
+- FR-E74 (Plugin Self-Contained Runtime)   → 07-mcp-and-plugin-runtime

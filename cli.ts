@@ -429,19 +429,28 @@ if (import.meta.main) {
     Deno.exit(exitCode);
   }
 
-  // Subcommand: `mcp <workflow>` → embedded MCP server (FR-E73).
+  // Subcommand: `mcp <workflow>` or `mcp --no-workflow` (FR-E73, FR-E74).
   // Dynamic import keeps the SDK off the cold-start path for `run` / `init`.
   if (subcommand === "mcp") {
-    const positional = Deno.args[1];
+    const rest = Deno.args.slice(1);
+    const { runMcpServer } = await import("./mcp-server.ts");
+    if (rest.includes("--no-workflow")) {
+      // Plugin launcher passes this when no .flowai-workflow/<name>/
+      // folder is resolvable in the current project (FR-E74). The
+      // server still completes the MCP handshake; tool calls return a
+      // structured missing-workflow error.
+      await runMcpServer(undefined, { noWorkflow: true });
+      Deno.exit(0);
+    }
+    const positional = rest[0];
     if (!positional) {
       console.error(
         "Error: missing workflow argument. " +
-          "Usage: flowai-workflow mcp <workflow>",
+          "Usage: flowai-workflow mcp <workflow> | --no-workflow",
       );
       Deno.exit(1);
     }
     const workflowDir = normalizeWorkflowDir(positional);
-    const { runMcpServer } = await import("./mcp-server.ts");
     await runMcpServer(workflowDir);
     Deno.exit(0);
   }

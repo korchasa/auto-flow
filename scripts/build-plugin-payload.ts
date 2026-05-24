@@ -273,6 +273,17 @@ export async function buildPluginPayload(
     } else {
       await Deno.copyFile(srcAbs, dstAbs);
     }
+    // Preserve executable bit for launcher shell scripts under bin/. The
+    // payload's `.mcp.json` invokes `bash <path>/launch.sh ...` which
+    // does NOT strictly require the bit, but skill SKILL.md bodies may
+    // call the launcher directly and downstream tooling tends to honour
+    // mode bits when bundling tarballs (FR-E74).
+    if (
+      Deno.build.os !== "windows" &&
+      /\/bin\/[^/]+\.sh$/.test(destRel)
+    ) {
+      await Deno.chmod(dstAbs, 0o755);
+    }
     filesWritten.push(dstAbs);
   }
 

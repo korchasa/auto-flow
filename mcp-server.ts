@@ -42,7 +42,22 @@ import { VERSION } from "./version.ts";
 export interface RunMcpServerOptions {
   /** Transport to attach. Defaults to `StdioServerTransport`. */
   transport?: Transport;
+  /**
+   * No-workflow mode (FR-E74). Set true when the plugin launcher cannot
+   * resolve a `.flowai-workflow/<name>/` folder in the project; the
+   * server still completes the MCP handshake and advertises all seven
+   * tools so Claude Code shows the server as up, but every tool handler
+   * short-circuits with a structured missing-workflow diagnostic so the
+   * user sees an actionable "run init" error rather than an opaque
+   * spawn failure. When true, `workflowDir` is ignored.
+   */
+  noWorkflow?: boolean;
 }
+
+/** Sentinel error text surfaced by every tool in no-workflow mode. */
+const NO_WORKFLOW_ERROR = "No flowai-workflow folder found in this project. " +
+  "Run /flowai-workflow:init <name> to scaffold one, or set " +
+  "FLOWAI_WORKFLOW=<path> to point at an existing workflow.";
 
 /** Shape of a single response to an MCP tool call. */
 type ToolResponse = {
@@ -59,7 +74,7 @@ type ToolResponse = {
  * @param options Transport override; defaults to stdio.
  */
 export async function runMcpServer(
-  workflowDir: string,
+  workflowDir: string | undefined,
   options: RunMcpServerOptions = {},
 ): Promise<void> {
   const server = new McpServer({
@@ -67,13 +82,22 @@ export async function runMcpServer(
     version: VERSION,
   });
 
-  registerGetWorkflow(server, workflowDir);
-  registerGetState(server, workflowDir);
-  registerListRuns(server, workflowDir);
-  registerTailArtifacts(server, workflowDir);
-  registerResumeNode(server, workflowDir);
-  registerCancelRun(server, workflowDir);
-  registerApplyWorkflowPatch(server, workflowDir);
+  if (options.noWorkflow) {
+    registerAllToolsNoWorkflow(server);
+  } else {
+    if (workflowDir === undefined) {
+      throw new Error(
+        "runMcpServer: workflowDir is required unless options.noWorkflow is true",
+      );
+    }
+    registerGetWorkflow(server, workflowDir);
+    registerGetState(server, workflowDir);
+    registerListRuns(server, workflowDir);
+    registerTailArtifacts(server, workflowDir);
+    registerResumeNode(server, workflowDir);
+    registerCancelRun(server, workflowDir);
+    registerApplyWorkflowPatch(server, workflowDir);
+  }
 
   if (options.transport) {
     // Caller owns the transport lifecycle (e.g. tests using
@@ -114,6 +138,33 @@ function err(message: string): ToolResponse {
 
 function configPathOf(workflowDir: string): string {
   return join(workflowDir, "workflow.yaml");
+}
+
+/**
+ * No-workflow mode (FR-E74): register the same seven tool names so
+ * `tools/list` matches the full surface, but every handler returns the
+ * structured missing-workflow diagnostic. The MCP handshake completes
+ * normally so Claude Code reports the server as up; the user sees the
+ * actionable error only when they actually invoke a tool.
+ */
+function registerAllToolsNoWorkflow(server: McpServer): void {
+  const names = [
+    "get_workflow",
+    "get_state",
+    "list_runs",
+    "tail_artifacts",
+    "resume_node",
+    "cancel_run",
+    "apply_workflow_patch",
+  ] as const;
+  for (const name of names) {
+    server.tool(
+      name,
+      "Unavailable: no flowai-workflow folder resolved at server startup.",
+      {},
+      () => Promise.resolve(err(NO_WORKFLOW_ERROR)),
+    );
+  }
 }
 
 function registerGetWorkflow(server: McpServer, workflowDir: string): void {
