@@ -5,6 +5,7 @@ import { assertEquals, assertThrows } from "@std/assert";
 import {
   extractCliFlags,
   getVersionString,
+  normalizeWorkflowDir,
   parseArgs,
   VERSION,
 } from "./cli.ts";
@@ -272,4 +273,30 @@ Deno.test("parseArgs — --budget non-numeric rejects", () => {
     Error,
     "Invalid --budget",
   );
+});
+
+Deno.test("FR-E73 normalizeWorkflowDir strips trailing slashes", () => {
+  assertEquals(
+    normalizeWorkflowDir(".flowai-workflow/x"),
+    ".flowai-workflow/x",
+  );
+  assertEquals(
+    normalizeWorkflowDir(".flowai-workflow/x/"),
+    ".flowai-workflow/x",
+  );
+  assertEquals(
+    normalizeWorkflowDir(".flowai-workflow/x///"),
+    ".flowai-workflow/x",
+  );
+});
+
+Deno.test("FR-E73 mcp subcommand parses the same workflow path shape as run", () => {
+  // `run <workflow>` resolves the positional to `<workflow>/workflow.yaml`
+  // via parseArgs; `mcp <workflow>` only normalises the trailing slash and
+  // passes the directory through. Both code paths must agree on the
+  // normalisation rule so `mcp` and `run` see the same workflow folder.
+  const runWorkflowYaml =
+    parseArgs([".flowai-workflow/github-inbox/"]).config_path;
+  const mcpWorkflowDir = normalizeWorkflowDir(".flowai-workflow/github-inbox/");
+  assertEquals(runWorkflowYaml, `${mcpWorkflowDir}/workflow.yaml`);
 });

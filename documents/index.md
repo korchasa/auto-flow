@@ -9,4 +9,5 @@
 - [FR-E70](requirements-engine/06-distribution-and-housekeeping.md#370-fr-e70-claude-code--codex-plugin-distribution) — Claude Code / Codex plugin distribution (plugin-first; downstream `flowai-workflow-plugins` repo) — [x]
 - [FR-E71](requirements-engine/06-distribution-and-housekeeping.md#371-fr-e71-codex-plugin-install-path) — Codex plugin install path (skill-only payload, no `~/.codex/config.toml` patch) — [ ]
 - [FR-E72](requirements-engine/06-distribution-and-housekeeping.md#372-fr-e72-cross-repo-plugin-payload-sync) — Cross-repo plugin payload sync from engine repo to `korchasa/flowai-workflow-plugins` — [x]
+- [FR-E73](requirements-engine/06-distribution-and-housekeeping.md#373-fr-e73-embedded-mcp-server-over-engine) — Embedded MCP server over engine (7 tools, MCP SDK) — [ ]
 - [FR-E9](requirements-engine/01-execution-model.md#39-fr-e9-run-artifacts-folder-structure) — Run artifacts live under the selected workflow run directory — [x]

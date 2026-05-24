@@ -238,6 +238,67 @@ Options:
   -v                     Verbose output (detailed agent diagnostics)
 ```
 
+## Embedded MCP Server
+
+`flowai-workflow mcp <workflow>` starts an embedded Model Context Protocol
+server (FR-E73) exposing seven engine-control tools over stdio. Any
+MCP-capable agent (Claude Code / Codex / Cursor) can inspect workflows,
+tail artifacts, and drive runs without spawning a CLI subprocess per call.
+Built on `npm:@modelcontextprotocol/sdk`; the server core is
+transport-agnostic.
+
+### Tools
+
+- `get_workflow()` — parsed `workflow.yaml` as JSON.
+- `get_state({ run_id })` — replays the run journal into `RunState`.
+- `list_runs()` — `[{ run_id, status, total_cost_usd, node_count }]`
+  per run subdirectory.
+- `tail_artifacts({ run_id, node_id, filename, lines? })` — last N
+  lines of a node artifact (default 50).
+- `resume_node({ run_id })` — runs `Engine({ resume: true, run_id })`
+  to completion. Blocking — the MCP request stays open for the
+  entire engine run, which may take minutes.
+- `cancel_run({ run_id })` — SIGTERM to the lock holder; rejects when
+  the lock's `run_id` mismatches the request.
+- `apply_workflow_patch({ operations: [{ op, path, value? }, ...] })`
+  — applies add/replace/remove JSON-Pointer ops (RFC 6901) to
+  `workflow.yaml`. Rejects ops on the root or `version` key.
+  Caveat: `@std/yaml` round-trip drops comments and may normalise
+  quoting.
+
+### Wiring
+
+Standalone (JSR-installed or compiled-binary on `PATH`):
+
+```jsonc
+{
+  "mcpServers": {
+    "flowai-workflow": {
+      "command": "flowai-workflow",
+      "args": ["mcp", ".flowai-workflow/github-inbox"]
+    }
+  }
+}
+```
+
+Claude Code / Codex plugin install (no `flowai-workflow` on `PATH`):
+
+```jsonc
+{
+  "mcpServers": {
+    "flowai-workflow": {
+      "command": "deno",
+      "args": [
+        "run", "-A", "--no-check",
+        "${CLAUDE_PLUGIN_ROOT}/engine/cli.ts",
+        "mcp", ".flowai-workflow/github-inbox"
+      ],
+      "env": { "FLOWAI_SUPPRESS_DEPRECATION": "1" }
+    }
+  }
+}
+```
+
 ## Configuration
 
 Workflow behavior is defined in a YAML config file. Key settings under `defaults:`:

@@ -448,3 +448,67 @@
     GH Actions run URL in the release PR body.
 
 
+
+### 3.73 FR-E73: Embedded MCP Server Over Engine
+
+- **Description:** The engine exposes an embedded Model Context Protocol
+  (MCP) server with seven engine-control tools, accessible via the
+  `flowai-workflow mcp <workflow>` subcommand. Default transport is stdio;
+  the server core is transport-agnostic so future HTTP/SSE consumers swap
+  transports without touching tool handlers. Built on
+  `npm:@modelcontextprotocol/sdk`. The server is domain-agnostic — every
+  tool operates on generic workflow primitives (config, run state,
+  artifacts, lock) and contains no git, GitHub, or PR awareness.
+
+  **Tool surface** (each tool returns JSON-serialised payloads inside an
+  MCP `text` content block; errors are MCP tool-level errors with
+  `isError: true`, never transport-level errors):
+
+  - `get_workflow()` — return the parsed `workflow.yaml` as JSON.
+  - `get_state({ run_id })` — replay the run journal and return `RunState`.
+  - `list_runs()` — enumerate `<workflowDir>/runs/`, replay each, return
+    `{ run_id, status, total_cost_usd, node_count }` per entry. Per-run
+    replay failures degrade to `{ run_id, error }`; the call never aborts.
+  - `tail_artifacts({ run_id, node_id, filename, lines? })` — read the
+    artifact file under the node directory and return the last N lines
+    (default 50).
+  - `resume_node({ run_id })` — construct `new Engine({ resume: true,
+    run_id, ... }).run()` and return the final `RunState` summary. Blocks
+    until the engine completes (may take minutes).
+  - `cancel_run({ run_id })` — read the workflow lock, send SIGTERM to the
+    holder. Rejects when `lockInfo.run_id !== run_id`. Treats
+    `Deno.errors.NotFound` and `PermissionDenied` from `Deno.kill` as a
+    benign no-op (process already gone between read and kill).
+  - `apply_workflow_patch({ operations })` — apply add/replace/remove ops
+    (JSON Pointer paths per RFC 6901) to `workflow.yaml`. Rejects ops
+    targeting the root or the `version` key. Caveat: `@std/yaml` round-
+    trip drops comments and may normalise quoting.
+
+  **Process model invariants** (carried from FR-E59/E60/E61):
+
+  - `runMcpServer()` never installs OS signal handlers — the CLI installs
+    them once at top-of-`if (import.meta.main)` for all subcommands.
+  - Per-run `PhaseRegistry`: each `resume_node` call builds its own
+    `Engine` instance.
+  - Sequential `Engine.run()`: concurrent `resume_node` calls for the same
+    workflow folder are serialised by the existing per-workflow run lock;
+    the tool never adds a second lock layer.
+  - Read-only tools (`get_workflow`, `get_state`, `list_runs`,
+    `tail_artifacts`) do not acquire the run lock.
+
+- **Tasks:** [embedded-mcp-server](tasks/2026/05/embedded-mcp-server.md)
+- **Motivation:** Unlocks agent-driven engine control without spawning a
+  CLI subprocess (idea #3 in `documents/ideas.md`, top-priority
+  shortlist). Aligns with FR-E59/E60/E61 host-embedding direction.
+- **Acceptance criteria:**
+  - **Tests:** `mcp-server_test.ts`, `cli_test.ts`, `mod_test.ts`
+    (FR-E73; regression-locked).
+  - [ ] `flowai-workflow mcp <workflow>` starts a server that advertises
+    exactly the seven tools above via `tools/list`. Evidence:
+    `mcp-server_test.ts::FR-E73 mcp-server registers all seven tools…`.
+  - [ ] Integration smoke (manual — korchasa): `npx
+    @modelcontextprotocol/inspector` against the running server lists
+    tools, calls `list_runs`, calls `tail_artifacts` against a known
+    artifact, and returns success on each.
+
+

@@ -24,3 +24,6 @@ across section files in [design-engine/](design-engine/) to fit within the
   (entities, inter-node data flow, validation rules), §5 Logic (all
   algorithms, template resolution, error-handling precedence), §6
   Non-Functional, §7 Constraints.
+- [05-mcp-server.md](design-engine/05-mcp-server.md) — §5 Logic for the
+  embedded MCP server (FR-E73): bootstrap, seven tool handlers, transport
+  selection, error mapping.

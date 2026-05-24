@@ -103,3 +103,4 @@ FR-IDs are stable — never renumber them on move.
 - FR-E70 (Claude Code Plugin Distribution) → 06-distribution-and-housekeeping
 - FR-E71 (Codex Plugin Install Path)      → 06-distribution-and-housekeeping
 - FR-E72 (Cross-Repo Plugin Payload Sync) → 06-distribution-and-housekeeping
+- FR-E73 (Embedded MCP Server Over Engine) → 06-distribution-and-housekeeping

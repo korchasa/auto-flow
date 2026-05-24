@@ -166,13 +166,37 @@
     `executeLoopNode()`: passes result excerpt in `onNodeComplete` callback.
     `printSummary()`: builds `nodeResults` from `state.nodes[*].result`,
     passes to `summary()` for per-node result rendering.
+  - `mcp-server.ts` — embedded MCP server (FR-E73). Exports
+    `runMcpServer(workflowDir, options?)`; registers seven tools
+    (`get_workflow`, `get_state`, `list_runs`, `tail_artifacts`,
+    `resume_node`, `cancel_run`, `apply_workflow_patch`) on the
+    SDK's `McpServer`. Transport-agnostic — `cli.ts mcp` wires
+    `StdioServerTransport`; tests wire `InMemoryTransport`.
+    Per-tool envelope: `try { … } catch { return { isError: true, …} }`
+    so transport stays up on tool failure. Read-only tools never
+    acquire the run lock; `resume_node` builds its own `Engine`
+    instance per call (per-run `PhaseRegistry`, FR-E59); `cancel_run`
+    treats `NotFound`/`PermissionDenied` from `Deno.kill` as a benign
+    no-op (race with lock holder releasing). Internal helper
+    `applyJsonPointerOp(doc, op)` implements RFC 6901 walk for
+    add/replace/remove (rejects root and `/version`). See
+    [05-mcp-server.md](05-mcp-server.md) for the full algorithm.
   - `cli.ts` — CLI entry point with subcommand routing (FR-E45):
     `--internal-hitl-mcp` → engine's HITL MCP server (hitl-via-engine-mcp),
     `run` → `runEngine(args)` (DAG workflow),
     `init` → `runInit(args)` (project scaffolder),
+    `mcp <workflow>` → `runMcpServer(workflowDir)` (FR-E73: embedded
+    MCP server over stdio, seven tools for workflow inspection and
+    control; dynamic-imported to keep SDK off the `run` cold-start
+    path),
     `--version`/`--help` → global handlers,
     bare `--` flags → backward-compat shim (deprecated, delegates to `run`),
     default (no args or unknown subcommand) → print usage, exit 1.
+    `installSignalHandlers()` is hoisted to the top of
+    `if (import.meta.main)` so every subcommand shares one install
+    (FR-E61). Helper `normalizeWorkflowDir(arg)` strips trailing
+    slashes off the workflow positional and is reused by both `run`
+    (via `parseArgs`) and `mcp`.
     `runEngine()` extracted as named function shared by `run` and compat shim.
     `parseArgs()`: parses `--budget <USD>` flag (FR-E47). Converts to float,
     validates positive. Maps to `EngineOptions.budget_usd`. Added to `--help`
@@ -192,7 +216,10 @@
     scaffolding stays available via the `init` subcommand.
   - `mod.ts` — barrel re-export serving as `deno doc --lint` entry point
     (not a runtime public API; sole non-redundant consumer is
-    `scripts/check.ts` JSDoc validation)
+    `scripts/check.ts` JSDoc validation). Statically re-exports
+    `runMcpServer` and `applyJsonPointerOp` (FR-E73) so JSR
+    slow-types analysis reaches the SDK-typed surface even though
+    `cli.ts` dynamic-imports `mcp-server.ts`.
 - **Module JSDoc and Why-Comments (FR-E30):** All 6 engine modules require
   module-level `/** @module */` JSDoc (purpose, responsibility, deps) and
   function-level JSDoc on exported functions. 4 complex functions require
@@ -285,6 +312,7 @@
     `Deno.Command()` on workflow failure. Swallows errors (failure hook must
     not crash engine). Replaces hard-wired `rollbackUncommitted()`.
   - All existing callers pass no `output` arg — zero behavioral change.
-- **Deps:** `claude` CLI, `deno`, `git`, `jsr:@std/yaml`.
+- **Deps:** `claude` CLI, `deno`, `git`, `jsr:@std/yaml`,
+  `npm:@modelcontextprotocol/sdk` + `npm:zod` (FR-E73: MCP server).
 
 
