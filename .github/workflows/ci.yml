@@ -114,6 +114,23 @@ jobs:
             echo "released=false" >> $GITHUB_OUTPUT
           fi
 
+      # Inline sync of the plugin payload to korchasa/flowai-workflow-plugins.
+      # GITHUB_TOKEN-pushed tags don't trigger downstream workflows (recursion
+      # guard), so sync-plugins.yml's `push: tags: ['v*']` trigger never fires
+      # for CI-created releases — we publish directly in the same job instead.
+      # The workflow_dispatch trigger on sync-plugins.yml remains for manual
+      # re-runs. Step-output interpolation is routed via env: per the
+      # workflow-injection guidance (no `${{ steps.* }}` inside `run:`).
+      - name: Sync plugin payload to flowai-workflow-plugins
+        if: steps.create-release.outputs.released == 'true'
+        env:
+          PLUGINS_REPO_TOKEN: ${{ secrets.PLUGINS_REPO_TOKEN }}
+          RELEASE_VERSION: ${{ steps.create-release.outputs.version }}
+        run: |
+          deno run -A scripts/sync-plugins-repo.ts \
+            --mode publish \
+            --version "$RELEASE_VERSION"
+
   # Reads scripts/targets.json (single source of truth, also consumed by
   # scripts/compile.ts) and emits a GitHub Actions matrix. Keeping the list
   # in one file prevents drift between the local compile script and CI.
