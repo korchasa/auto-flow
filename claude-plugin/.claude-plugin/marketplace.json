@@ -1,15 +1,15 @@
 {
-  "name": "flowai-workflow-local",
+  "name": "flowai-workflow",
   "owner": {
     "name": "korchasa"
   },
-  "description": "Local marketplace for the flowai-workflow Claude Code plugin (dogfood install).",
+  "description": "Marketplace for the flowai-workflow Claude Code plugin — DAG-based engine for orchestrating AI agents.",
   "plugins": [
     {
       "name": "flowai-workflow",
       "source": "./plugins/flowai-workflow",
-      "description": "Scaffold, supervise, and orchestrate flowai-workflow DAGs from inside Claude Code.",
-      "version": "0.7.11",
+      "description": "Run, scaffold, supervise, and orchestrate flowai-workflow DAGs from inside Claude Code. Bundles the engine source — requires Deno 2.x on the host.",
+      "version": "0.7.12",
       "keywords": [
         "ai",
         "workflow",

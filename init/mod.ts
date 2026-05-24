@@ -61,7 +61,7 @@ export interface RunInitOptions {
 /** Result of flag parsing — one of four shapes. */
 export type ParsedInitArgs =
   | { kind: "help" }
-  | { kind: "list" }
+  | { kind: "list"; bundleDir?: string }
   | { kind: "error"; message: string }
   | {
     kind: "run";
@@ -74,6 +74,18 @@ export type ParsedInitArgs =
     workflowExplicit: boolean;
     dryRun: boolean;
     allowDirty: boolean;
+    /**
+     * Override for the bundled-workflows lookup root (FR-E70). When
+     * set, `listAvailableWorkflows` and the per-workflow source
+     * resolution use `<bundleDir>/<name>/` instead of the package-
+     * relative `../.flowai-workflow/<name>/`. The plugin launcher
+     * skill (`init/SKILL.md`) passes
+     * `--bundle-dir "$CLAUDE_PLUGIN_ROOT/.flowai-workflow"` so the
+     * plugin-installed engine can find its bundled workflows even
+     * though the engine TS source lives elsewhere in the plugin
+     * payload. Unset → default behaviour preserved.
+     */
+    bundleDir?: string;
   };
 
 /**
@@ -85,6 +97,8 @@ export function parseInitArgs(args: string[]): ParsedInitArgs {
   let workflowExplicit = false;
   let dryRun = false;
   let allowDirty = false;
+  let bundleDir: string | undefined;
+  let listRequested = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -94,7 +108,8 @@ export function parseInitArgs(args: string[]): ParsedInitArgs {
         return { kind: "help" };
       case "--list":
       case "-l":
-        return { kind: "list" };
+        listRequested = true;
+        break;
       case "--workflow": {
         const value = args[++i];
         if (value === undefined) {
@@ -105,6 +120,17 @@ export function parseInitArgs(args: string[]): ParsedInitArgs {
         }
         workflow = value;
         workflowExplicit = true;
+        break;
+      }
+      case "--bundle-dir": {
+        const value = args[++i];
+        if (value === undefined) {
+          return {
+            kind: "error",
+            message: "--bundle-dir requires a directory path",
+          };
+        }
+        bundleDir = value;
         break;
       }
       case "--dry-run":
@@ -122,7 +148,15 @@ export function parseInitArgs(args: string[]): ParsedInitArgs {
     }
   }
 
-  return { kind: "run", workflow, workflowExplicit, dryRun, allowDirty };
+  if (listRequested) return { kind: "list", bundleDir };
+  return {
+    kind: "run",
+    workflow,
+    workflowExplicit,
+    dryRun,
+    allowDirty,
+    bundleDir,
+  };
 }
 
 /** Help text printed by `flowai-workflow init --help`. */
@@ -136,6 +170,10 @@ Options:
   --workflow <name>        Workflow folder under <package>/.flowai-workflow/
                            (default: ${DEFAULT_WORKFLOW}). Omit to be
                            prompted interactively (TTY only).
+  --bundle-dir <path>      Override bundled-workflows lookup root
+                           (FR-E70). Used by the Claude Code / Codex
+                           plugin launcher to pass
+                           \`$CLAUDE_PLUGIN_ROOT/.flowai-workflow\`.
   -l, --list               List workflows bundled with this build, exit 0
   --allow-dirty            Skip the clean-git-tree preflight check
   --dry-run                Print files that would be created, exit 0
@@ -174,13 +212,19 @@ Examples:
  * `import.meta.url`-relative URLs and `Deno.readDir` traverses both
  * on-disk and embedded virtual filesystems.
  */
-export async function listAvailableWorkflows(): Promise<string[]> {
-  const rootUrl = new URL("../.flowai-workflow/", import.meta.url);
+export async function listAvailableWorkflows(
+  bundleDir?: string,
+): Promise<string[]> {
   let rootPath: string;
-  try {
-    rootPath = fromFileUrlCompat(rootUrl);
-  } catch {
-    return [];
+  if (bundleDir !== undefined) {
+    rootPath = bundleDir;
+  } else {
+    const rootUrl = new URL("../.flowai-workflow/", import.meta.url);
+    try {
+      rootPath = fromFileUrlCompat(rootUrl);
+    } catch {
+      return [];
+    }
   }
 
   const names: string[] = [];
@@ -398,7 +442,7 @@ export async function runInit(
     return 0;
   }
   if (parsed.kind === "list") {
-    const workflows = await listAvailableWorkflows();
+    const workflows = await listAvailableWorkflows(parsed.bundleDir);
     if (workflows.length === 0) {
       console.error(
         "No bundled workflows found. This build is missing the " +
@@ -424,7 +468,7 @@ export async function runInit(
   // --- Resolve workflow: explicit flag wins; otherwise prompt on TTY ---
   let workflow = parsed.workflow;
   if (!parsed.workflowExplicit && Deno.stdin.isTerminal()) {
-    const available = await listAvailableWorkflows();
+    const available = await listAvailableWorkflows(parsed.bundleDir);
     if (available.length === 0) {
       console.error(
         "No bundled workflows found. This build is missing the " +
@@ -448,14 +492,17 @@ export async function runInit(
   const targetWorkflowDir = join(cwd, ".flowai-workflow", workflow);
 
   // --- Resolve workflow source from the package's bundled tree ----------
-  const sourceUrl = resolveWorkflowSource(workflow);
   let sourceDir: string;
   try {
-    sourceDir = fromFileUrlCompat(sourceUrl);
+    if (parsed.bundleDir !== undefined) {
+      sourceDir = join(parsed.bundleDir, workflow);
+    } else {
+      sourceDir = fromFileUrlCompat(resolveWorkflowSource(workflow));
+    }
     const stat = await Deno.stat(sourceDir);
     if (!stat.isDirectory) throw new Error("not a directory");
   } catch (_err) {
-    const available = await listAvailableWorkflows();
+    const available = await listAvailableWorkflows(parsed.bundleDir);
     const list = available.length > 0
       ? `Available workflows: ${available.join(", ")}.`
       : `This build has no bundled workflows.`;

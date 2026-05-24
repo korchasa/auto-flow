@@ -86,6 +86,50 @@ Deno.test("parseInitArgs — combined flags", () => {
   assertEquals(parsed.dryRun, true);
 });
 
+// FR-E70 — Plugin-bundled workflows live outside the package's
+// import-relative tree; `--bundle-dir <path>` overrides discovery so
+// the plugin launcher skill can point `init` at
+// `$CLAUDE_PLUGIN_ROOT/.flowai-workflow`.
+Deno.test("FR-E70 parseInitArgs — --bundle-dir <path> captured", () => {
+  const parsed = parseInitArgs([
+    "--bundle-dir",
+    "/plugin-root/.flowai-workflow",
+  ]);
+  assertEquals(parsed.kind, "run");
+  if (parsed.kind !== "run") throw new Error("unreachable");
+  assertEquals(parsed.bundleDir, "/plugin-root/.flowai-workflow");
+});
+
+Deno.test("FR-E70 parseInitArgs — --bundle-dir without value is an error", () => {
+  const parsed = parseInitArgs(["--bundle-dir"]);
+  assertEquals(parsed.kind, "error");
+  if (parsed.kind !== "error") throw new Error("unreachable");
+  if (!parsed.message.includes("--bundle-dir")) {
+    throw new Error(`expected '--bundle-dir' in error: ${parsed.message}`);
+  }
+});
+
+Deno.test("FR-E70 parseInitArgs — default bundleDir is undefined (built-in lookup)", () => {
+  const parsed = parseInitArgs([]);
+  assertEquals(parsed.kind, "run");
+  if (parsed.kind !== "run") throw new Error("unreachable");
+  assertEquals(parsed.bundleDir, undefined);
+});
+
+Deno.test("FR-E70 parseInitArgs — --bundle-dir composes with --list and --workflow", () => {
+  const parsed = parseInitArgs([
+    "--bundle-dir",
+    "/p/.flowai-workflow",
+    "--workflow",
+    "github-inbox",
+  ]);
+  assertEquals(parsed.kind, "run");
+  if (parsed.kind !== "run") throw new Error("unreachable");
+  assertEquals(parsed.bundleDir, "/p/.flowai-workflow");
+  assertEquals(parsed.workflow, "github-inbox");
+  assertEquals(parsed.workflowExplicit, true);
+});
+
 // ---------------------------------------------------------------------------
 // resolveWorkflowChoice — pure picker dispatch.
 // ---------------------------------------------------------------------------

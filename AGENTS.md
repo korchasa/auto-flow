@@ -53,6 +53,13 @@ example of engine usage.
 - Claude Code CLI (`claude`) (AI agent runtime)
 - `gh` CLI (GitHub API interaction: PRs, issue comments)
 - Git (version control, branch management, diff-based safety checks)
+- **Distribution:** Claude Code / Codex plugin via the public
+  marketplace repo `korchasa/flowai-workflow-plugins` (FR-E70). The
+  engine repo is the source of truth; CI (`.github/workflows/sync-plugins.yml`,
+  FR-E72) rebuilds and pushes the plugin payload on every `v*` tag.
+  Local payload inspection: `deno task sync-plugins -- --dry-run`.
+  Local dogfood install: `deno task sync-plugins -- --install-local`
+  (replaces the retired `deno task sync-claude-plugin`).
 
 ## Architecture
 
@@ -78,6 +85,25 @@ example of engine usage.
   check before the worktree is even created.
 - **Observability:** 3 verbosity levels (`-q`/default/`-v`); status lines with
   timestamps; final summary
+- **Plugin payload cross-repo sync (FR-E70/E72):** The engine ships
+  to end users as a Claude Code / Codex plugin. The plugin source tree
+  lives in this repo at `claude-plugin/` (top-level `marketplace.json`
+  + `plugins/flowai-workflow/` payload with launcher skills
+  `run/SKILL.md` and `init/SKILL.md`). On every `v*` tag, CI runs
+  `scripts/sync-plugins-repo.ts` (FR-E72) which uses
+  `scripts/build-plugin-payload.ts` (FR-E70) to assemble the full
+  payload (engine TS sources under `plugins/flowai-workflow/engine/`,
+  bundled `.flowai-workflow/<name>/` workflows, manifests with version
+  pinned to engine `deno.json#version`) and pushes it into
+  `korchasa/flowai-workflow-plugins` with a matching `vX.Y.Z` tag.
+  Idempotent — a byte-equal payload is a no-op. Hand-edits to the
+  downstream repo are overwritten by the next sync. The launcher
+  skills wrap engine invocations as
+  `FLOWAI_SUPPRESS_DEPRECATION=1 deno run -A "$CLAUDE_PLUGIN_ROOT/engine/cli.ts" …`
+  so plugin-installed users never see the JSR deprecation banner. The
+  banner itself (`cli.ts:maybePrintDeprecationBanner`) fires only for
+  standalone JSR / binary installs (`VERSION !== "dev"` and env var
+  unset).
 - **Library-embedding readiness (FR-E59/E60/E61):** Engine is safe to embed in
   a host Deno process that runs sequential `Engine.run()` calls alongside
   other long-lived subsystems. Phase registry is per-run (no module-level

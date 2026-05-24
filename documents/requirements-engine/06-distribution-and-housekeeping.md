@@ -56,6 +56,7 @@
   runner, and publishes them as GitHub Release assets. The `VERSION` env var is embedded at
   compile time; leading `v` prefix is stripped before embedding (e.g., tag `v1.2.3` embeds
   as `1.2.3`).
+- **Tasks:** [plugin-first-distribution](../tasks/2026/05/plugin-first-distribution.md)
 - **Motivation:** Lowers adoption barrier — users run
   `flowai-workflow run <workflow>` without installing Deno,
   eliminating runtime dependency friction.
@@ -77,6 +78,7 @@
 - **Description:** Automated CI pipeline on `main` push detects releasable
   conventional commits, bumps version via `standard-version`, tags, and triggers
   the release workflow. Version source of truth: `deno.json` `version` field.
+- **Tasks:** [plugin-first-distribution](../tasks/2026/05/plugin-first-distribution.md)
 - **Motivation:** Eliminates manual version management and release process.
 - **Acceptance criteria:**
   - [x] AC1: `deno.json` has `version` field. Evidence: `deno.json:2`.
@@ -244,39 +246,205 @@
 
 
 
-### 3.70 FR-E70: Claude Code Plugin Distribution
+### 3.70 FR-E70: Claude Code / Codex Plugin Distribution
 
-- **Description:** The repo bundles a self-contained Claude Code plugin
-  marketplace at `claude-plugin/` mirroring the `flowai/framework/workflow`
-  skills (`scaffold`, `supervise`, `orchestrate`) and agents (`orchestrator`,
-  `supervisor`) used to drive `flowai-workflow` from inside an AI IDE.
-  Layout: `claude-plugin/.claude-plugin/marketplace.json` declares a single
-  `flowai-workflow-local` marketplace; `claude-plugin/plugins/flowai-workflow/`
-  carries `plugin.json`, `skills/`, `agents/`. Frontmatter is normalised for
-  Claude Code: OpenCode-only keys (`mode`, `opencode_tools`) stripped, model
-  tier `smart` mapped to `sonnet`. Install path is `deno task
-  sync-claude-plugin` (scripts/sync-claude-plugin.ts), which re-points the
-  marketplace at the local checkout and runs `claude plugin install`/`update`
-  at user scope; existing user-scope `enabled=false` is preserved. Missing
-  `claude` CLI degrades to a soft skip, not a fatal error. The marketplace is
-  excluded from the JSR tarball (`publish.exclude`) — clients install through
-  the plugin marketplace channel from git, not via JSR.
-- **Motivation:** Workflow skills must reach the AI IDE that runs the engine
-  with one command, mirroring `flowai`'s `sync-plugins-local` dogfood loop.
-  Avoids hand-editing user-scope plugin state and prevents tarball leakage of
-  IDE-only artefacts into JSR installs.
+- **Description:** The Claude Code / Codex plugin is the primary
+  distribution channel for `flowai-workflow`. The downstream marketplace
+  lives in a dedicated public repo `korchasa/flowai-workflow-plugins`
+  (see FR-E72 for the cross-repo sync mechanism) and is consumed via:
+
+  ```
+  /plugin marketplace add korchasa/flowai-workflow-plugins
+  /plugin install flowai-workflow@korchasa
+  ```
+
+  The engine source repo holds the plugin's source tree at
+  `claude-plugin/` (top-level `.claude-plugin/marketplace.json`
+  declaring a single `flowai-workflow` marketplace; plugin payload at
+  `plugins/flowai-workflow/` with `.claude-plugin/plugin.json`,
+  `agents/`, `skills/`). Two launcher skills — `run/SKILL.md` and
+  `init/SKILL.md` — wrap the engine's `cli.ts run` and `cli.ts init`
+  commands via
+  `FLOWAI_SUPPRESS_DEPRECATION=1 deno run -A "$CLAUDE_PLUGIN_ROOT/engine/cli.ts" …`,
+  passing `--bundle-dir "$CLAUDE_PLUGIN_ROOT/.flowai-workflow"` so
+  `init` finds the plugin-bundled workflows. Pre-flight: each launcher
+  asserts `deno --version` and fails fast with a README link when Deno
+  is absent (no silent fallback, per AGENTS.md).
+
+  The build-time payload (committed to `flowai-workflow-plugins`) is
+  assembled by `scripts/build-plugin-payload.ts` from the engine repo:
+  `claude-plugin/**` verbatim, plus engine TS sources under
+  `plugins/flowai-workflow/engine/`, the bundled
+  `.flowai-workflow/<name>/` workflows under
+  `plugins/flowai-workflow/.flowai-workflow/`, and a patched
+  `engine/deno.json` with the `publish` stanza and dev tasks stripped.
+  `marketplace.json#plugins[0].version` and `plugin.json#version` are
+  pinned to the engine's `deno.json#version` on every build, so plugin
+  version is byte-equal to the engine version that produced it
+  (version-lockstep contract). Per-run dirt
+  (`.flowai-workflow/*/runs/`, `memory/agent-*.md`, `.template.json`)
+  is excluded by `classifyPayloadFile`.
+
+  **Predecessor design (historical).** Before the plugin-first
+  migration the marketplace was named `flowai-workflow-local` and
+  installed via `deno task sync-claude-plugin`
+  (`scripts/sync-claude-plugin.ts`) which re-pointed the local
+  marketplace at the checkout and ran `claude plugin install`/`update`
+  at user scope. That dogfood UX is replaced by
+  `deno task sync-plugins -- --install-local` (FR-E72) and the
+  CI-driven downstream-repo push for public consumption.
+- **Tasks:** [plugin-first-distribution](../tasks/2026/05/plugin-first-distribution.md)
+- **Motivation:** Lower install friction to two slash-commands inside
+  the AI IDE: no separate `deno install`, no per-IDE binary download,
+  no manual `~/.codex/config.toml` patch. Mirrors the foxcode reference
+  pattern but ships the engine itself rather than only skill files.
 - **Acceptance criteria:**
-  - **Tests:** `scripts/sync-claude-plugin_test.ts`
-    (FR-E70; regression-locked; covers `decidePluginAction` for
-    install/update/skip).
-  - [x] AC1: `claude-plugin/.claude-plugin/marketplace.json` declares one
-    plugin (`flowai-workflow`) sourced from `./plugins/flowai-workflow`.
-    Evidence: `claude-plugin/.claude-plugin/marketplace.json:1-22`.
-  - [x] AC2: Plugin manifest carries name, version, MIT licence.
-    Evidence: `claude-plugin/plugins/flowai-workflow/.claude-plugin/plugin.json:1-11`.
-  - [x] AC3: `deno task sync-claude-plugin` defined.
-    Evidence: `deno.json#tasks.sync-claude-plugin`.
-  - [x] AC4: `claude-plugin/**` excluded from JSR tarball.
-    Evidence: `deno.json#publish.exclude`.
+  - **Tests:** `scripts/build-plugin-payload_test.ts`,
+    `init/mod_test.ts` (FR-E70; regression-locked; covers payload
+    shape, version lockstep, per-run-dirt exclusion, `--bundle-dir`
+    flag).
+  - [x] Marketplace renamed to `flowai-workflow` (was
+    `flowai-workflow-local`); plugin manifest version pinned to
+    engine `deno.json#version`.
+    Evidence: `claude-plugin/.claude-plugin/marketplace.json:1-22`,
+    `claude-plugin/plugins/flowai-workflow/.claude-plugin/plugin.json:1-11`.
+  - [x] Launcher skills `run/` and `init/` exist with `deno --version`
+    preflight + `FLOWAI_SUPPRESS_DEPRECATION=1` env wrap.
+    Evidence:
+    `claude-plugin/plugins/flowai-workflow/skills/run/SKILL.md`,
+    `claude-plugin/plugins/flowai-workflow/skills/init/SKILL.md`.
+  - [x] `cli.ts init` accepts `--bundle-dir <path>` to override the
+    package-relative bundled-workflows lookup.
+    Evidence: `init/mod.ts`.
+  - [ ] Full plugin install smoke: in a fresh Claude Code session,
+    `/plugin marketplace add korchasa/flowai-workflow-plugins` and
+    `/plugin install flowai-workflow@korchasa` succeed; `/flowai-workflow:run
+    --help` returns the engine help text. Manual — korchasa; Evidence:
+    transcript pasted in release PR body.
+  - [ ] Full plugin install smoke on Codex: `codex plugin marketplace
+    add korchasa/flowai-workflow-plugins` + `codex plugin install
+    flowai-workflow@korchasa` succeed; invoking the run skill returns
+    engine help. Manual — korchasa; Evidence: transcript pasted in
+    release PR body.
+
+
+
+### 3.71 FR-E71: Codex Plugin Install Path
+
+- **Description:** Codex installs the `flowai-workflow` plugin via its
+  native plugin manager — no `[mcp_servers.*]` block in
+  `~/.codex/config.toml` is required. Install path:
+
+  ```
+  codex plugin marketplace add korchasa/flowai-workflow-plugins
+  codex plugin install flowai-workflow@korchasa
+  ```
+
+  After install, Codex's native skill dispatcher invokes the plugin's
+  launcher skills (`run`, `init`, `scaffold`, `supervise`,
+  `orchestrate`) directly. Each skill body executes
+  `deno run -A "$CLAUDE_PLUGIN_ROOT/engine/cli.ts" …` — Deno spawning
+  is a plain subprocess that Codex's skill runner handles like any
+  other shell command.
+
+  Contrast with foxcode (which DOES require a manual
+  `~/.codex/config.toml` `[mcp_servers.foxcode]` block, upstream
+  `openai/codex#19372`): foxcode's job IS to be an MCP server, so
+  Codex must wire it as such. `flowai-workflow` is not an MCP server
+  — the engine spawns its own HITL MCP server on demand inside a
+  workflow run (FR-L35), entirely transparent to Codex's plugin
+  manager. Documenting this explicitly prevents users from
+  cargo-culting a foxcode-style config patch.
+
+  Exact Codex skill-invocation syntax (`$flowai-workflow:run` vs
+  `$flowai-workflow-run` vs other) is verified at release time against
+  the actual Codex build and documented in README; this FR commits to
+  the contract that the launcher skills are callable from inside Codex
+  after `codex plugin install`, not to a specific prefix shape.
+- **Tasks:** [plugin-first-distribution](../tasks/2026/05/plugin-first-distribution.md)
+- **Motivation:** Match the foxcode reference UX while clarifying
+  where the two products' Codex install procedures legitimately
+  diverge. Eliminates the "do I need a config.toml block?" question
+  for every new user.
+- **Dep:** FR-E70, FR-E72
+- **Acceptance criteria:**
+  - [ ] Full Codex install smoke per FR-E70 (manual — korchasa).
+  - [ ] README's Codex install section documents the two commands
+    AND explicitly states no `config.toml` patch is required, with
+    a one-sentence contrast to foxcode's `openai/codex#19372`
+    requirement. Manual — korchasa; Evidence:
+    `grep -n "codex plugin marketplace add" README.md`.
+
+
+
+### 3.72 FR-E72: Cross-Repo Plugin Payload Sync
+
+- **Description:** On every engine version tag (`v*` push to the source
+  repo), the GH Actions workflow `.github/workflows/sync-plugins.yml`
+  builds the plugin payload (via FR-E70's
+  `scripts/build-plugin-payload.ts`) and pushes it into the public
+  downstream repo `korchasa/flowai-workflow-plugins` via
+  `scripts/sync-plugins-repo.ts`. The downstream repo is autogenerated
+  — manual edits are overwritten by the next sync.
+
+  **Sync contract:**
+
+  1. Clone `korchasa/flowai-workflow-plugins` (depth=1) using a PAT
+     stored as the engine-repo secret `PLUGINS_REPO_TOKEN`
+     (required `contents:write` scope on the target repo).
+  2. Build the new payload into a staging tempdir (or directly into
+     the clone after wiping its contents except `.git/`).
+  3. `git status --porcelain` — if empty, exit clean without commit,
+     tag, or push (idempotency: byte-equal payload is a no-op).
+  4. Otherwise commit with message
+     `release: vX.Y.Z (synced from engine@<short-sha>)`, tag `vX.Y.Z`,
+     push `HEAD:main` + tag.
+
+  **Modes** (`--mode publish | dry-run | install-local`):
+
+  - `publish` (CI default): full clone → build → commit → push.
+  - `dry-run`: build into `--out-dir dist/plugin-payload` (or any
+    `--out-dir <path>`), no git ops. Replaces `deno task sync-claude-plugin`
+    for local payload inspection.
+  - `install-local`: build into a tempdir, register that tempdir as a
+    Claude Code user-scope marketplace, run
+    `claude plugin install`/`update`. Restores the dogfood UX the
+    legacy `sync-claude-plugin` task provided; missing `claude` CLI
+    is a soft skip, not a fatal error.
+
+  Prerequisites (one-time, manual): downstream repo must exist; PAT
+  must be issued and stored as `PLUGINS_REPO_TOKEN`; both surfaced in
+  the workflow file's top-of-file comment.
+- **Tasks:** [plugin-first-distribution](../tasks/2026/05/plugin-first-distribution.md)
+- **Motivation:** Single source of truth (engine repo) with isolated
+  release cadence for the plugin payload. Atomic per-tag publish:
+  same CI run that tags the engine pushes the matching plugin
+  version. No two-repo divergence; no manual sync step in the
+  release checklist.
+- **Dep:** FR-E70
+- **Acceptance criteria:**
+  - **Tests:** `scripts/sync-plugins-repo_test.ts`
+    (FR-E72; regression-locked; covers idempotent no-op, commit + tag
+    + push on diff, dry-run produces tree without push,
+    install-local registers marketplace + soft-skips without claude
+    CLI).
+  - [x] `.github/workflows/sync-plugins.yml` triggers on
+    `push: tags: ['v*']` and on `workflow_dispatch`; runs the sync
+    script with `--mode publish`. Untrusted inputs routed via `env:`
+    block (no `${{ inputs.* }}` interpolation inside `run:` shell
+    bodies). Evidence: `.github/workflows/sync-plugins.yml`.
+  - [x] `deno task sync-plugins` wired in `deno.json#tasks` and
+    forwards CLI args. Evidence: `deno.json#tasks.sync-plugins`.
+  - [ ] Public repo `korchasa/flowai-workflow-plugins` created (MIT,
+    public, empty `main`). Manual — korchasa; Evidence:
+    `gh repo view korchasa/flowai-workflow-plugins --json visibility,licenseInfo`.
+  - [ ] `PLUGINS_REPO_TOKEN` secret configured in engine-repo
+    Actions with `contents:write` on target repo. Manual — korchasa;
+    Evidence: `gh secret list --repo korchasa/flowai-workflow | grep PLUGINS_REPO_TOKEN`.
+  - [ ] First end-to-end sync (manual `workflow_dispatch` run after
+    prerequisites) produces a tag and a commit in the downstream
+    repo; payload-integrity smoke step passes (deno-run --version
+    against the synced engine). Manual — korchasa; Evidence:
+    GH Actions run URL in the release PR body.
 
 
