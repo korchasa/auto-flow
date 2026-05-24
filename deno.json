@@ -1,6 +1,6 @@
 {
   "name": "@korchasa/flowai-workflow",
-  "version": "0.7.12",
+  "version": "0.7.13",
   "license": "MIT",
   "exports": {
     ".": "./cli.ts",

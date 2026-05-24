@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.7.13](https://github.com/korchasa/flowai-workflow/compare/v0.7.12...v0.7.13) (2026-05-24)
+
+
+### Features
+
+* **engine+sdlc:** plugin-first distribution via flowai-workflow-plugins (FR-E70/E71/E72) ([#235](https://github.com/korchasa/flowai-workflow/issues/235)) ([d98435d](https://github.com/korchasa/flowai-workflow/commit/d98435de0dfb38e110a76edcd3114bf239f63012))
+
 ### [0.7.12](https://github.com/korchasa/flowai-workflow/compare/v0.7.11...v0.7.12) (2026-05-23)
 
 
