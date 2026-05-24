@@ -74,26 +74,30 @@ shape) but are kept here to fit within the per-file token budget.
 ### 3.74 FR-E74: Plugin Self-Contained Runtime (Lazy Compile + Auto-MCP)
 
 - **Description:** The Claude Code / Codex plugin ships engine
-  TypeScript sources plus a bash launcher
-  (`claude-plugin/plugins/flowai-workflow/bin/launch.sh`). On first
+  TypeScript sources plus a Deno-runtime launcher
+  (`claude-plugin/plugins/flowai-workflow/bin/launch.ts`). On first
   invocation the launcher compiles `engine/cli.ts` via `deno compile`
   into `${CLAUDE_PLUGIN_DATA}/bin/flowai-workflow-<version>` (atomic
-  via `mv` from a `.tmp.<pid>` sibling) and `exec`s the cached binary
-  with forwarded args. Subsequent invocations skip Deno entirely.
+  via `Deno.rename` from a `.tmp.<pid>` sibling) and spawns the
+  cached binary with forwarded stdio + SIGINT/SIGTERM. Subsequent
+  invocations stat-check the cached binary and skip compile.
   Plugin payload also contains a sibling
   `claude-plugin/plugins/flowai-workflow/.mcp.json` declaring an
   `mcpServers.flowai-workflow` entry that registers the embedded MCP
   server (FR-E73 seven-tool surface) via the same launcher: `command =
-  "bash"`, `args = ["${CLAUDE_PLUGIN_ROOT}/bin/launch.sh", "mcp"]`.
-  Launcher resolves the active workflow at spawn time via
-  `$FLOWAI_WORKFLOW` → `$CLAUDE_PROJECT_DIR/.flowai-workflow/<single-or-default>`
-  → `--no-workflow` (`cli.ts mcp --no-workflow` starts the server in
+  "deno"`, `args = ["run", "-A", "${CLAUDE_PLUGIN_ROOT}/bin/launch.ts",
+  "mcp"]`. The host needs Deno on PATH (the same dependency the rest
+  of the engine already requires) — no separate POSIX-shell or
+  Python tooling. Launcher resolves the active workflow at spawn
+  time via `$FLOWAI_WORKFLOW` →
+  `$CLAUDE_PROJECT_DIR/.flowai-workflow/<single-or-default>` →
+  `--no-workflow` (`cli.ts mcp --no-workflow` starts the server in
   no-workflow mode where every tool handler returns a structured
   missing-workflow diagnostic so the MCP handshake still completes
   and Claude Code surfaces the actionable "run /flowai-workflow:init"
   message via the standard tool-error path rather than an opaque
   spawn failure).
-- **Tasks:** [plugin-self-contained-runtime](../tasks/2026/05/plugin-self-contained-runtime.md)
+- **Tasks:** [plugin-self-contained-runtime](../tasks/2026/05/plugin-self-contained-runtime.md), [ts-launcher](../tasks/2026/05/ts-launcher.md)
 - **Motivation:** Closes the "everything in the plugin" gap left by
   FR-E70 (sources only) and FR-E73 (no auto-registration). The user
   installs the plugin once and the IDE wires both CLI invocations
@@ -108,16 +112,18 @@ shape) but are kept here to fit within the per-file token budget.
     `${CLAUDE_PLUGIN_DATA}/bin/flowai-workflow-<version>`; first call
     invokes `deno compile`, second call skips it. Evidence:
     `scripts/launch_test.ts::FR-E74 launcher compiles on first call and caches by version`.
-  - [x] Launcher exits 127 with install-link error when binary is
-    missing AND Deno is not on PATH. Evidence:
-    `scripts/launch_test.ts::FR-E74 launcher fails fast without Deno when binary is missing`.
-  - [x] Plugin payload includes the launcher with the owner-execute
-    mode bit set on POSIX hosts. Evidence:
-    `scripts/build-plugin-payload_test.ts::FR-E74 payload includes launcher with executable bit`.
+  - [x] Plugin payload includes the launcher `bin/launch.ts`.
+    Evidence:
+    `scripts/build-plugin-payload_test.ts::FR-E74 payload includes launcher`.
   - [x] Plugin payload includes a sibling `.mcp.json` declaring
-    `mcpServers.flowai-workflow.command = "bash"` and `args =
-    ["${CLAUDE_PLUGIN_ROOT}/bin/launch.sh", "mcp"]`. Evidence:
+    `mcpServers.flowai-workflow.command = "deno"` and `args =
+    ["run", "-A", "${CLAUDE_PLUGIN_ROOT}/bin/launch.ts", "mcp"]`.
+    Evidence:
     `scripts/build-plugin-payload_test.ts::FR-E74 payload includes .mcp.json with launcher wiring`.
+  - [x] Launcher forwards SIGTERM/SIGINT to the spawned engine
+    binary (installed before any `await` to close the cold-start
+    race). Evidence:
+    `scripts/launch_test.ts::FR-E74 launcher forwards SIGTERM to child binary`.
   - [x] `cli.ts mcp --no-workflow` dispatches the MCP server in
     no-workflow mode; the server registers all seven tool names but
     every handler returns a structured missing-workflow diagnostic

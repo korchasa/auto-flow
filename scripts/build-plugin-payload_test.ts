@@ -355,16 +355,16 @@ Deno.test("FR-E70 buildPluginPayload — version lockstep verified across both m
   }
 });
 
-Deno.test("FR-E74 payload includes launcher with executable bit", async () => {
+Deno.test("FR-E74 payload includes launcher", async () => {
   const engineRoot = await tempEngine();
-  // Seed a launcher script in the source tree so the build can copy it.
+  // Seed the Deno/TS launcher in the source tree so the build can copy it.
   await Deno.mkdir(
     join(engineRoot, "claude-plugin/plugins/flowai-workflow/bin"),
     { recursive: true },
   );
   await Deno.writeTextFile(
-    join(engineRoot, "claude-plugin/plugins/flowai-workflow/bin/launch.sh"),
-    "#!/usr/bin/env bash\necho stub\n",
+    join(engineRoot, "claude-plugin/plugins/flowai-workflow/bin/launch.ts"),
+    "#!/usr/bin/env -S deno run -A\nconsole.log('stub');\n",
   );
   const outDir = await Deno.makeTempDir({ prefix: "build-payload-out-" });
   try {
@@ -376,23 +376,15 @@ Deno.test("FR-E74 payload includes launcher with executable bit", async () => {
         Promise.resolve([
           "claude-plugin/.claude-plugin/marketplace.json",
           "claude-plugin/plugins/flowai-workflow/.claude-plugin/plugin.json",
-          "claude-plugin/plugins/flowai-workflow/bin/launch.sh",
+          "claude-plugin/plugins/flowai-workflow/bin/launch.ts",
         ]),
     });
-    const dst = join(outDir, "plugins/flowai-workflow/bin/launch.sh");
+    const dst = join(outDir, "plugins/flowai-workflow/bin/launch.ts");
     const body = await Deno.readTextFile(dst);
-    assertStringIncludes(body, "#!/usr/bin/env bash");
-    // Executable bit set (POSIX hosts only — skip mode check on Windows).
-    if (Deno.build.os !== "windows") {
-      const stat = await Deno.stat(dst);
-      // mode bits: 0o100 = owner-execute.
-      const mode = stat.mode ?? 0;
-      assertEquals(
-        (mode & 0o100) === 0o100,
-        true,
-        `expected owner-execute bit; mode=${mode.toString(8)}`,
-      );
-    }
+    assertStringIncludes(body, "deno run -A");
+    // No exec-bit assertion — the .mcp.json invokes `deno run …
+    // launch.ts`, which does not require the launcher itself to be
+    // executable.
   } finally {
     await Deno.remove(engineRoot, { recursive: true });
     await Deno.remove(outDir, { recursive: true });
@@ -407,8 +399,13 @@ Deno.test("FR-E74 payload includes .mcp.json with launcher wiring", async () => 
       {
         mcpServers: {
           "flowai-workflow": {
-            command: "bash",
-            args: ["${CLAUDE_PLUGIN_ROOT}/bin/launch.sh", "mcp"],
+            command: "deno",
+            args: [
+              "run",
+              "-A",
+              "${CLAUDE_PLUGIN_ROOT}/bin/launch.ts",
+              "mcp",
+            ],
           },
         },
       },
@@ -436,11 +433,16 @@ Deno.test("FR-E74 payload includes .mcp.json with launcher wiring", async () => 
     );
     assertEquals(
       mcpConfig.mcpServers["flowai-workflow"].command,
-      "bash",
+      "deno",
     );
     assertEquals(
       mcpConfig.mcpServers["flowai-workflow"].args,
-      ["${CLAUDE_PLUGIN_ROOT}/bin/launch.sh", "mcp"],
+      [
+        "run",
+        "-A",
+        "${CLAUDE_PLUGIN_ROOT}/bin/launch.ts",
+        "mcp",
+      ],
     );
   } finally {
     await Deno.remove(engineRoot, { recursive: true });

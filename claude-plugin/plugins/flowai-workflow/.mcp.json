@@ -1,8 +1,13 @@
 {
   "mcpServers": {
     "flowai-workflow": {
-      "command": "bash",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/launch.sh", "mcp"]
+      "command": "deno",
+      "args": [
+        "run",
+        "-A",
+        "${CLAUDE_PLUGIN_ROOT}/bin/launch.ts",
+        "mcp"
+      ]
     }
   }
 }

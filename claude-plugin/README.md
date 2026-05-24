@@ -88,19 +88,21 @@ launches the pipeline against it.
 plugins/flowai-workflow/
   .claude-plugin/plugin.json
   .mcp.json                          <- auto-registers the MCP server (FR-E74)
-  bin/launch.sh                      <- lazy-compile launcher (FR-E74)
+  bin/launch.ts                      <- lazy-compile launcher (FR-E74, Deno/TS)
   skills/                            <- launcher skills (run, init, scaffold, ...)
   agents/                            <- supervisor, orchestrator
   engine/                            <- bundled engine TypeScript
   .flowai-workflow/<name>/           <- bundled workflows
 ```
 
-`$CLAUDE_PLUGIN_ROOT/bin/launch.sh` is the plugin's entry point: on
-first call it compiles `engine/cli.ts` to
-`${CLAUDE_PLUGIN_DATA}/bin/flowai-workflow-<version>`, then `exec`s
-the cached binary. The MCP server (registered via `.mcp.json`) and
-the launcher skills both go through this path. Don't edit files
-here — they're regenerated on every release.
+`$CLAUDE_PLUGIN_ROOT/bin/launch.ts` is the plugin's entry point,
+invoked as `deno run -A …/bin/launch.ts …`. On first call it
+compiles `engine/cli.ts` to
+`${CLAUDE_PLUGIN_DATA}/bin/flowai-workflow-<version>`, then spawns
+the cached binary with forwarded stdio + signals. The MCP server
+(registered via `.mcp.json`) and the launcher skills both go
+through this path. Don't edit files here — they're regenerated on
+every release.
 
 ## Versioning
 

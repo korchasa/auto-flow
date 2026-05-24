@@ -103,19 +103,22 @@ example of engine usage.
   `korchasa/flowai-workflow-plugins` with a matching `vX.Y.Z` tag.
   Idempotent — a byte-equal payload is a no-op. Hand-edits to the
   downstream repo are overwritten by the next sync.
-  **Self-contained runtime (FR-E74).** The payload also ships a bash
-  launcher `bin/launch.sh` and a sibling `.mcp.json`. On first call
-  the launcher compiles `engine/cli.ts` to
+  **Self-contained runtime (FR-E74).** The payload also ships a
+  Deno/TS launcher `bin/launch.ts` and a sibling `.mcp.json`. On
+  first call the launcher compiles `engine/cli.ts` to
   `${CLAUDE_PLUGIN_DATA}/bin/flowai-workflow-<version>` (atomic
-  tmp→mv) and `exec`s the cached binary; subsequent calls skip Deno
-  entirely. `.mcp.json` registers the embedded MCP server (FR-E73's
-  seven tools) via `command: "bash"`, `args:
-  ["${CLAUDE_PLUGIN_ROOT}/bin/launch.sh", "mcp"]`. The launcher
-  resolves the active workflow from `$FLOWAI_WORKFLOW` →
+  tmp→`Deno.rename`) and spawns the cached binary with forwarded
+  stdio + SIGINT/SIGTERM; subsequent calls stat-check the cache
+  and skip compile. `.mcp.json` registers the embedded MCP server
+  (FR-E73's seven tools) via `command: "deno"`, `args: ["run",
+  "-A", "${CLAUDE_PLUGIN_ROOT}/bin/launch.ts", "mcp"]` — Deno is
+  the only host dependency (no POSIX shell, no Python). The
+  launcher resolves the active workflow from `$FLOWAI_WORKFLOW` →
   `$CLAUDE_PROJECT_DIR/.flowai-workflow/<single-or-default>` →
   `--no-workflow` flag (server then surfaces a missing-workflow
   diagnostic through tool-error responses so the handshake still
-  completes).
+  completes). Signal handlers are registered before any `await`
+  to close the cold-start race window.
   The launcher skills wrap engine invocations as
   `FLOWAI_SUPPRESS_DEPRECATION=1 deno run -A "$CLAUDE_PLUGIN_ROOT/engine/cli.ts" …`
   so plugin-installed users never see the JSR deprecation banner. The

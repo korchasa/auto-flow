@@ -499,6 +499,13 @@ deno task sync-plugins-local
 
 ## Follow-ups
 
+- **Superseded by [ts-launcher](ts-launcher.md) (2026-05-25).** The bash
+  launcher `bin/launch.sh` referenced throughout this task was rewritten
+  in Deno/TypeScript (`bin/launch.ts`) and `.mcp.json` now invokes
+  `deno run -A …/bin/launch.ts mcp` instead of `bash …/bin/launch.sh
+  mcp`. The chmod carve-out in `build-plugin-payload.ts` was removed.
+  See the new task for rationale (Windows compatibility, drop POSIX
+  shell dependency, unit-testable pure helpers).
 - **Verify `$CLAUDE_PROJECT_DIR` semantics during develop.** Claude Code
   documents `${CLAUDE_PLUGIN_ROOT}` substitution in `plugin.json` but
   `$CLAUDE_PROJECT_DIR` may or may not be exported into the
