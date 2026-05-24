@@ -322,6 +322,23 @@ async function publishMode(
       throw new Error(`git clone ${targetRepo} failed: ${clone.stderr.trim()}`);
     }
 
+    // Pin a deterministic identity for `commit` AND `tag -a` in the
+    // freshly-cloned repo. Setting it via per-invocation `-c` covers
+    // `commit` but NOT `tag -a` (tag uses TAGGER_* env or git config;
+    // there is no `-c` overlay for the tagger). One-shot `git config`
+    // inside the clone is scoped to the clone — no side effect on the
+    // CI runner's other git work.
+    await mustGit(
+      deps.runGit,
+      ["config", "user.email", "github-actions[bot]@users.noreply.github.com"],
+      cloneDir,
+    );
+    await mustGit(
+      deps.runGit,
+      ["config", "user.name", "github-actions[bot]"],
+      cloneDir,
+    );
+
     // Find the engine SHA before any working-tree mutation so the
     // commit message records exactly what produced the payload.
     const shaOut = await deps.runGit(
@@ -370,20 +387,12 @@ async function publishMode(
       };
     }
 
-    // Commit + tag + push. Identity is set per-invocation so CI runners
-    // do not need a global git config.
+    // Commit + tag + push. Identity is pinned via `git config` above so
+    // both `commit` and `tag -a` pick up the same tagger.
     await mustGit(deps.runGit, ["add", "-A"], cloneDir);
     await mustGit(
       deps.runGit,
-      [
-        "-c",
-        "user.email=github-actions[bot]@users.noreply.github.com",
-        "-c",
-        "user.name=github-actions[bot]",
-        "commit",
-        "-m",
-        commitMessage(opts.version, engineSha),
-      ],
+      ["commit", "-m", commitMessage(opts.version, engineSha)],
       cloneDir,
     );
     const tag = `v${opts.version}`;
