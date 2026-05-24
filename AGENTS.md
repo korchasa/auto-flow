@@ -393,6 +393,28 @@ for full context, alternatives, and consequences.
 - When a test fails, fix the source code — not the test. Do not modify a failing test to make it pass, do not add error swallowing or skip logic.
 - Do not create source files with guessed or fabricated data to satisfy imports — if the data source is missing, that is a blocker (see Diagnosing Failures).
 
+## Commit Hygiene
+
+### Mixed-file `git add -p` audit
+
+Before piping pre-canned answers (`printf 'n\ny\n' | git add -p <file>`)
+on a file modified by multiple concerns (your session-introduced hunk +
+pre-existing, untracked, parallel work), audit hunk count and ownership
+first — otherwise the canned input silently stages someone else's hunk
+in your group.
+
+1. `git diff <file> | grep -c '^@@'` — confirm hunk count matches the
+   length of your intended `y`/`n` sequence.
+2. `git diff <file>` — eyeball each hunk header; tag which are yours
+   (introduced this session) vs. pre-existing (visible in the
+   session-start `git status` snapshot).
+3. Only then pipe answers. The sequence must have exactly one entry per
+   hunk and must classify each one explicitly.
+
+If you guess wrong, `git reset HEAD <file>` and retry from step 1.
+NEVER `git commit --amend` to "fix" a wrong-hunk stage — that hides the
+bug instead of correcting it.
+
 ## Diagnosing Failures
 
 The goal is to identify the root cause, not to suppress the symptom. A quick workaround that hides the root cause is worse than an unresolved issue with a correct diagnosis.

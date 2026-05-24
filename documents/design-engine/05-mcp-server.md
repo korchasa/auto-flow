@@ -37,6 +37,16 @@ subcommand (`flowai-workflow mcp <workflow>`).
 
 ### 5.2 Tool handlers
 
+**Handler typing constraint.** `server.tool(name, schema, handler)`
+relies on conditional inference over the zod schema to type `handler`'s
+args. The inference does NOT propagate through a generic wrapper
+(`safe<T>(fn: (args: T) => …)`) — wrapping erases the arg type and
+TypeScript falls back to `any`, surfacing as TS7006 under `deno check`.
+Required pattern: inline `try { … } catch (e) { return err(...) }` per
+handler, with explicit per-handler arg annotation
+(`async ({ run_id }: { run_id: string }) => { … }`). Cost: ~3 lines of
+boilerplate per handler; benefit: full type checking + IDE assist.
+
 All handlers share a common envelope: `try { … } catch (e) { return
 err((e as Error).message) }`. `ok(payload)` returns
 `{ content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] }`;
