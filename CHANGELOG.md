@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.7.14](https://github.com/korchasa/flowai-workflow/compare/v0.7.13...v0.7.14) (2026-05-24)
+
+
+### Bug Fixes
+
+* **sync-plugins:** pin git identity on the clone so `tag -a` succeeds ([#236](https://github.com/korchasa/flowai-workflow/issues/236)) ([128bd32](https://github.com/korchasa/flowai-workflow/commit/128bd32fcde87a16866be0135e604bf1df37ba0a))
+
 ### [0.7.13](https://github.com/korchasa/flowai-workflow/compare/v0.7.12...v0.7.13) (2026-05-24)
 
 
