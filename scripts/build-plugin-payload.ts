@@ -43,6 +43,15 @@ export interface BuildPayloadOptions {
   /** Absolute path to the output directory. Created/cleared if necessary. */
   outDir: string;
   /**
+   * Override the marketplace `name` field written into
+   * `.claude-plugin/marketplace.json`. Defaults to the verbatim source
+   * value (`flowai-workflow`). The local dogfood pipeline
+   * (`scripts/sync-plugins-local.ts`) passes `flowai-workflow-local` so
+   * `claude plugin list` separates dev-loop and official installs.
+   * Plugin-level `name` fields inside `plugins[]` are not touched.
+   */
+  marketplaceName?: string;
+  /**
    * Override the file-enumeration callback. Production code calls
    * {@link gitLsFiles}; tests inject a synthetic file list to avoid
    * depending on a git working tree.
@@ -75,6 +84,24 @@ export function substituteVersion(
   const re = /("version"\s*:\s*)"[^"]*"/;
   if (!re.test(json)) return { text: json, replaced: false };
   return { text: json.replace(re, `$1"${version}"`), replaced: true };
+}
+
+/**
+ * Substitute the top-level `name` field of a marketplace.json document.
+ * Only the FIRST `"name"` field is replaced so plugin-level `name`s
+ * inside `plugins[]` stay intact (the local dogfood path renames the
+ * marketplace but keeps plugin names so install IDs read
+ * `<plugin>@<marketplace>` like the published flow).
+ *
+ * Pure — text in, text out; round-trip-safe formatting.
+ */
+export function substituteMarketplaceName(
+  json: string,
+  name: string,
+): { text: string; replaced: boolean } {
+  const re = /("name"\s*:\s*)"[^"]*"/;
+  if (!re.test(json)) return { text: json, replaced: false };
+  return { text: json.replace(re, `$1"${name}"`), replaced: true };
 }
 
 /**
@@ -213,11 +240,30 @@ export async function buildPluginPayload(
       destRel === "plugins/flowai-workflow/.claude-plugin/plugin.json"
     ) {
       const src = await Deno.readTextFile(srcAbs);
-      const { text, replaced } = substituteVersion(src, opts.version);
-      if (!replaced) {
+      const versionResult = substituteVersion(src, opts.version);
+      if (!versionResult.replaced) {
         throw new Error(
           `${relPath}: expected a top-level "version" field; manifest is malformed.`,
         );
+      }
+      let text = versionResult.text;
+      // Marketplace name override applies only to marketplace.json;
+      // plugin.json's name (the plugin id) stays stable across the
+      // published and local-dev pipelines.
+      if (
+        destRel === ".claude-plugin/marketplace.json" &&
+        opts.marketplaceName !== undefined
+      ) {
+        const nameResult = substituteMarketplaceName(
+          text,
+          opts.marketplaceName,
+        );
+        if (!nameResult.replaced) {
+          throw new Error(
+            `${relPath}: expected a top-level "name" field; manifest is malformed.`,
+          );
+        }
+        text = nameResult.text;
       }
       await Deno.writeTextFile(dstAbs, text);
       manifestsUpdated.push(dstAbs);

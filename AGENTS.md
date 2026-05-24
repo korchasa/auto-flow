@@ -58,8 +58,13 @@ example of engine usage.
   engine repo is the source of truth; CI (`.github/workflows/sync-plugins.yml`,
   FR-E72) rebuilds and pushes the plugin payload on every `v*` tag.
   Local payload inspection: `deno task sync-plugins -- --dry-run`.
-  Local dogfood install: `deno task sync-plugins -- --install-local`
-  (replaces the retired `deno task sync-claude-plugin`).
+  Local dogfood install: `deno task sync-plugins-local` — rebuilds the
+  payload and re-points the `flowai-workflow-local` marketplace in
+  Claude Code + Codex at user scope (preserves per-plugin
+  `enabled = false`; soft-skips missing CLIs). Opt-in auto-run after
+  `deno task check` via `AUTO_INSTALL_PLUGINS=true` (literal `true`
+  only). Both retired predecessors are gone: `deno task
+  sync-claude-plugin` and `deno task sync-plugins -- --install-local`.
 
 ## Architecture
 

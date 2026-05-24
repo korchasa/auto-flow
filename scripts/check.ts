@@ -877,4 +877,11 @@ if (import.meta.main) {
   await commentScan();
 
   console.log("\n=== All checks passed! ===");
+
+  // Opt-in dev hook (FR-E72): when AUTO_INSTALL_PLUGINS=true in env or
+  // .env, rebuild the plugin payload and reinstall it into Claude Code /
+  // Codex at user scope. Absent flag is a no-op so CI and casual local
+  // runs never touch IDE state.
+  const { runIfAutoInstallEnabled } = await import("./sync-plugins-local.ts");
+  await runIfAutoInstallEnabled();
 }

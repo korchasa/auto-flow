@@ -55,6 +55,39 @@ deno uninstall flowai-workflow            # remove the JSR install
 # then, in your AI IDE, follow the plugin install instructions above
 ```
 
+### Local plugin dogfood
+
+Framework developers iterating on `flowai-workflow` can rebuild the
+plugin payload from the local checkout and reinstall it into Claude
+Code AND Codex at user scope with a single command:
+
+```bash
+deno task sync-plugins-local             # rebuild + reinstall both IDEs
+deno task sync-plugins-local --no-build  # reuse the previous build
+```
+
+The local install registers the marketplace under the distinct name
+`flowai-workflow-local` (the official release uses `flowai-workflow`),
+so `claude plugin list` and Codex `config.toml` clearly separate
+dev-loop installs (`<plugin>@flowai-workflow-local`) from the official
+release (`<plugin>@flowai-workflow`). Both can coexist; the local one
+is rebuilt on every sync.
+
+The script captures `claude plugin list --json` BEFORE removing the
+marketplace, so plugins previously toggled to `enabled = false` stay
+disabled after reinstall. It reconciles
+`~/.codex/config.toml` `[plugins."<name>@flowai-workflow-local"]` tables
+on the Codex side, preserving prior `enabled` flags; official-marketplace
+entries (`@flowai-workflow`) are left untouched. Missing `claude` or
+`codex` CLIs (or Codex CLI older than 0.130, which lacks
+`plugin marketplace`) are reported and skipped — never fatal.
+
+To wire the rebuild + reinstall into the every-commit dev loop, opt in
+with `AUTO_INSTALL_PLUGINS=true` in `.env` or the environment:
+`deno task check` will then run `sync-plugins-local` at the end of the
+pipeline. Only the literal string `true` enables the hook; `1` / `yes`
+/ `True` are intentionally rejected.
+
 ## Engine Architecture
 
 ```mermaid

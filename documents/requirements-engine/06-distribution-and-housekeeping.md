@@ -400,22 +400,22 @@
      `release: vX.Y.Z (synced from engine@<short-sha>)`, tag `vX.Y.Z`,
      push `HEAD:main` + tag.
 
-  **Modes** (`--mode publish | dry-run | install-local`):
+  **Modes** (`--mode publish | dry-run`):
 
   - `publish` (CI default): full clone → build → commit → push.
   - `dry-run`: build into `--out-dir dist/plugin-payload` (or any
     `--out-dir <path>`), no git ops. Replaces `deno task sync-claude-plugin`
     for local payload inspection.
-  - `install-local`: build into a tempdir, register that tempdir as a
-    Claude Code user-scope marketplace, run
-    `claude plugin install`/`update`. Restores the dogfood UX the
-    legacy `sync-claude-plugin` task provided; missing `claude` CLI
-    is a soft skip, not a fatal error.
+
+  Local-dev install lives in `scripts/sync-plugins-local.ts`
+  (`deno task sync-plugins-local`) — see this FR's acceptance criteria
+  for its contract (Codex reconcile, `enabled=false` preservation,
+  `AUTO_INSTALL_PLUGINS` gate).
 
   Prerequisites (one-time, manual): downstream repo must exist; PAT
   must be issued and stored as `PLUGINS_REPO_TOKEN`; both surfaced in
   the workflow file's top-of-file comment.
-- **Tasks:** [plugin-first-distribution](../tasks/2026/05/plugin-first-distribution.md)
+- **Tasks:** [plugin-first-distribution](../tasks/2026/05/plugin-first-distribution.md), [local-plugin-install-script](../tasks/2026/05/local-plugin-install-script.md)
 - **Motivation:** Single source of truth (engine repo) with isolated
   release cadence for the plugin payload. Atomic per-tag publish:
   same CI run that tags the engine pushes the matching plugin
@@ -423,11 +423,12 @@
   release checklist.
 - **Dep:** FR-E70
 - **Acceptance criteria:**
-  - **Tests:** `scripts/sync-plugins-repo_test.ts`
+  - **Tests:** `scripts/sync-plugins-repo_test.ts`, `scripts/sync-plugins-local_test.ts`
     (FR-E72; regression-locked; covers idempotent no-op, commit + tag
-    + push on diff, dry-run produces tree without push,
-    install-local registers marketplace + soft-skips without claude
-    CLI).
+    + push on diff, dry-run produces tree without push, `enabled=false`
+    preserved through reinstall, Codex `config.toml` reconcile + idempotency,
+    `AUTO_INSTALL_PLUGINS` literal-true gate, fail-fast arg parsing,
+    removed `install-local` mode rejected).
   - [x] `.github/workflows/sync-plugins.yml` triggers on
     `push: tags: ['v*']` and on `workflow_dispatch`; runs the sync
     script with `--mode publish`. Untrusted inputs routed via `env:`
@@ -435,6 +436,28 @@
     bodies). Evidence: `.github/workflows/sync-plugins.yml`.
   - [x] `deno task sync-plugins` wired in `deno.json#tasks` and
     forwards CLI args. Evidence: `deno.json#tasks.sync-plugins`.
+  - [x] `deno task sync-plugins-local` wired in `deno.json#tasks` for
+    the local dogfood loop (rebuild payload + reinstall into Claude
+    Code + reconcile Codex). Evidence: `deno.json#tasks.sync-plugins-local`.
+  - [x] Local-install AC (moved from `sync-plugins-repo.ts`, not
+    deleted): missing `claude` CLI is a soft skip, marketplace is
+    re-registered against a fresh build, and `claude plugin install`
+    is invoked at user scope for every emitted plugin. Evidence:
+    `scripts/sync-plugins-local.ts:syncClaude`.
+  - [x] Codex soft-skip: missing `codex` binary OR Codex CLI without
+    the `plugin marketplace` subcommand (<0.130) logs a precise skip
+    message and exits the Codex path cleanly; the Claude path still
+    runs. Evidence: `scripts/sync-plugins-local.ts:syncCodex`.
+  - [x] User-scope `enabled = false` is preserved through
+    install/reinstall: `claude plugin list --json` is captured BEFORE
+    `marketplace remove`, then disabled plugins route to a `skipped`
+    bucket on reinstall. Evidence:
+    `scripts/sync-plugins-local.ts:planClaudeActions`.
+  - [x] `AUTO_INSTALL_PLUGINS` opt-in gate accepts only literal `true`
+    (env var OR `.env`) and is wired into `deno task check`; absence
+    is a no-op. Evidence:
+    `scripts/sync-plugins-local.ts:shouldAutoInstall`,
+    `scripts/check.ts` (`runIfAutoInstallEnabled` invocation).
   - [ ] Public repo `korchasa/flowai-workflow-plugins` created (MIT,
     public, empty `main`). Manual — korchasa; Evidence:
     `gh repo view korchasa/flowai-workflow-plugins --json visibility,licenseInfo`.

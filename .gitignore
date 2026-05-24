@@ -7,3 +7,4 @@
 # documents/tasks/ — committed since task migration to permanent layout
 tmp/
 documents/visualization/
+dist/

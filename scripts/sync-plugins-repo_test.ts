@@ -7,7 +7,7 @@ import {
   TARGET_REPO,
   workingTreeIsDirty,
 } from "./sync-plugins-repo.ts";
-import type { ClaudeOutput, GitOutput } from "./sync-plugins-repo.ts";
+import type { GitOutput } from "./sync-plugins-repo.ts";
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -51,10 +51,17 @@ Deno.test("FR-E72 parseSyncCliArgs — --dry-run shortcut", () => {
   assertEquals(parsed.mode, "dry-run");
 });
 
-Deno.test("FR-E72 parseSyncCliArgs — --install-local shortcut", () => {
-  const parsed = parseSyncCliArgs(["--version", "1.0.0", "--install-local"]);
-  if ("help" in parsed) throw new Error("unexpected help");
-  assertEquals(parsed.mode, "install-local");
+Deno.test("FR-E72 parseSyncCliArgs — rejects removed install-local mode", () => {
+  let threw = false;
+  try {
+    parseSyncCliArgs(["--version", "1.0.0", "--mode", "install-local"]);
+  } catch (err) {
+    threw = true;
+    if (!(err instanceof Error) || !err.message.includes("publish, dry-run")) {
+      throw new Error(`unexpected error: ${err}`);
+    }
+  }
+  if (!threw) throw new Error("expected parseSyncCliArgs to throw");
 });
 
 // ---------------------------------------------------------------------------
@@ -69,23 +76,17 @@ interface GitCall {
 function makeMocks(opts: {
   porcelain?: string;
   shaHead?: string;
-  noClaude?: boolean;
 }) {
   const gitCalls: GitCall[] = [];
-  const claudeCalls: string[][] = [];
-  // Track temp dirs we actually create so the integration parts of the
-  // sync flow (readDir / copyFile / status) have real bytes to read.
   const createdDirs: string[] = [];
   return {
     gitCalls,
-    claudeCalls,
     createdDirs,
     runGit: (
       args: string[],
       gitOpts?: { cwd?: string },
     ): Promise<GitOutput> => {
       gitCalls.push({ args: [...args], cwd: gitOpts?.cwd });
-      // Stub out the specific commands the publish flow needs.
       if (args[0] === "status" && args[1] === "--porcelain") {
         return Promise.resolve({
           success: true,
@@ -103,19 +104,9 @@ function makeMocks(opts: {
       }
       return Promise.resolve({ success: true, stdout: "", stderr: "" });
     },
-    runClaude: opts.noClaude
-      ? () => Promise.resolve(null)
-      : (args: string[]): Promise<ClaudeOutput | null> => {
-        claudeCalls.push([...args]);
-        return Promise.resolve({ success: true, stdout: "", stderr: "" });
-      },
     buildPayload: async (
       { outDir }: { outDir: string; version: string },
     ) => {
-      // Drop a sentinel file so syncDirectoryContents has something to
-      // copy and `git status --porcelain` would naturally report dirt
-      // (we stub the porcelain output above; this just keeps the real
-      // copy path happy).
       await Deno.mkdir(outDir, { recursive: true });
       await Deno.writeTextFile(`${outDir}/sentinel.txt`, "x");
       return {
@@ -153,9 +144,7 @@ Deno.test("FR-E72 idempotent no-op — clean working tree skips commit/push", as
   );
   assertEquals(result.changed, false);
   assertEquals(result.tag, null);
-  // No commit / tag / push must have been issued.
   const gitVerbs = mocks.gitCalls.map((c) => c.args[0]);
-  // commit may appear with -c options earlier; check by full args.
   const issued = mocks.gitCalls.map((c) => c.args.join(" "));
   if (issued.some((s) => s.includes("commit"))) {
     throw new Error(`commit issued on clean tree: ${issued.join(" | ")}`);
@@ -166,7 +155,6 @@ Deno.test("FR-E72 idempotent no-op — clean working tree skips commit/push", as
   if (issued.some((s) => s.startsWith("push "))) {
     throw new Error(`push issued on clean tree: ${issued.join(" | ")}`);
   }
-  // Clone + status + rev-parse are expected.
   if (!gitVerbs.includes("clone")) {
     throw new Error("expected clone to happen");
   }
@@ -241,52 +229,6 @@ Deno.test("FR-E72 dry-run mode — builds payload, issues no git ops", async () 
   assertEquals(result.mode, "dry-run");
   assertEquals(result.filesWritten, 2);
   assertEquals(mocks.gitCalls.length, 0);
-});
-
-Deno.test("FR-E72 --install-local — registers marketplace + installs via claude", async () => {
-  const mocks = makeMocks({});
-  const result = await syncPluginsRepo(
-    { engineRoot: "/eng", version: "1.0.0", mode: "install-local" },
-    mocks,
-  );
-  assertEquals(result.mode, "install-local");
-  assertEquals(result.claudeMissing, false);
-  // Expect: marketplace remove + marketplace add + install (and possibly
-  // update fallback). Compare verb-prefixes by joining the first two args.
-  const verbs = mocks.claudeCalls.map((c) => c.slice(0, 2).join(" "));
-  if (!verbs.includes("plugin marketplace")) {
-    throw new Error(`missing 'plugin marketplace': ${verbs.join(" | ")}`);
-  }
-  // Look for plugin install <id> shape.
-  if (
-    !mocks.claudeCalls.some((c) => c[0] === "plugin" && c[1] === "install")
-  ) {
-    throw new Error(`missing 'plugin install': ${verbs.join(" | ")}`);
-  }
-  // remove + add both came through.
-  const marketplaceVerbs = mocks.claudeCalls
-    .filter((c) => c[0] === "plugin" && c[1] === "marketplace")
-    .map((c) => c[2]);
-  if (!marketplaceVerbs.includes("remove")) {
-    throw new Error(
-      `missing marketplace remove: ${JSON.stringify(marketplaceVerbs)}`,
-    );
-  }
-  if (!marketplaceVerbs.includes("add")) {
-    throw new Error(
-      `missing marketplace add: ${JSON.stringify(marketplaceVerbs)}`,
-    );
-  }
-});
-
-Deno.test("FR-E72 --install-local soft-skips without claude CLI", async () => {
-  const mocks = makeMocks({ noClaude: true });
-  const result = await syncPluginsRepo(
-    { engineRoot: "/eng", version: "1.0.0", mode: "install-local" },
-    mocks,
-  );
-  assertEquals(result.claudeMissing, true);
-  assertEquals(result.changed, false);
 });
 
 Deno.test("FR-E72 publish uses correct target repo default", () => {

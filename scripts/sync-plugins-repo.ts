@@ -4,24 +4,22 @@
  * Sync the plugin payload built by {@link buildPluginPayload} into the
  * downstream `korchasa/flowai-workflow-plugins` repo (FR-E72).
  *
- * Three modes (selected by `--mode`):
+ * Two modes (selected by `--mode`):
  *
  * - **publish** (CI default): clone the target repo, build the payload
  *   into it via {@link buildPluginPayload}, commit + tag + push. The
  *   commit is idempotent — if the working tree is byte-equal to HEAD,
  *   no commit/tag/push happens (FR-E72 idempotency contract).
  * - **dry-run** (local default): build the payload into `--out-dir`
- *   for human inspection. No git ops. Replaces the legacy
- *   `deno task sync-claude-plugin` build step.
- * - **install-local**: build to a temp dir, then register that dir as
- *   a Claude Code marketplace at user scope and install / update the
- *   plugin. Restores the dogfood UX that `deno task sync-claude-plugin`
- *   used to provide. Missing `claude` CLI is a soft skip, not a fatal
- *   error, mirroring the previous tool's behaviour.
+ *   for human inspection. No git ops.
+ *
+ * Local dogfood install (rebuild + reinstall into Claude Code / Codex
+ * at user scope) lives in `scripts/sync-plugins-local.ts` — see
+ * `deno task sync-plugins-local`.
  *
  * The script is structured around an injection-point `SyncDeps` object so
- * the test suite can mock `git` and `claude` invocations without spawning
- * subprocesses. Production callers leave `deps` unset.
+ * the test suite can mock `git` invocations without spawning subprocesses.
+ * Production callers leave `deps` unset.
  */
 
 import { dirname, isAbsolute, join, resolve } from "@std/path";
@@ -31,7 +29,7 @@ import { buildPluginPayload } from "./build-plugin-payload.ts";
 export const TARGET_REPO = "korchasa/flowai-workflow-plugins";
 
 /** Modes supported by the script. */
-export type SyncMode = "publish" | "dry-run" | "install-local";
+export type SyncMode = "publish" | "dry-run";
 
 /** Required inputs for a sync run. */
 export interface SyncOptions {
@@ -43,7 +41,7 @@ export interface SyncOptions {
   mode: SyncMode;
   /**
    * Output directory for `dry-run` mode (`dist/plugin-payload` by
-   * default). Ignored in other modes.
+   * default). Ignored in `publish` mode.
    */
   outDir?: string;
   /**
@@ -64,13 +62,6 @@ export interface GitOutput {
   stderr: string;
 }
 
-/** Captured outcome of a single claude invocation. */
-export interface ClaudeOutput {
-  success: boolean;
-  stdout: string;
-  stderr: string;
-}
-
 /** Injection points for testing. Production code uses real subprocesses. */
 export interface SyncDeps {
   /**
@@ -78,11 +69,6 @@ export interface SyncDeps {
    * (used for ops inside the clone of the target repo).
    */
   runGit?: (args: string[], opts?: { cwd?: string }) => Promise<GitOutput>;
-  /**
-   * Run `claude <args>`. Optional — used only in `install-local` mode.
-   * When `null` is returned (mocked-absent CLI), the caller soft-skips.
-   */
-  runClaude?: (args: string[]) => Promise<ClaudeOutput | null>;
   /** Build the payload. Tests inject a fake to avoid file I/O. */
   buildPayload?: typeof buildPluginPayload;
   /** Return an empty temp dir. Tests inject deterministic paths. */
@@ -105,8 +91,6 @@ export interface SyncResult {
   changed: boolean;
   /** Tag pushed in `publish` mode; `null` otherwise. */
   tag: string | null;
-  /** True when an install-local run had to soft-skip (missing claude). */
-  claudeMissing: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -164,26 +148,6 @@ async function defaultRunGit(
   };
 }
 
-async function defaultRunClaude(
-  args: string[],
-): Promise<ClaudeOutput | null> {
-  try {
-    const out = await new Deno.Command("claude", {
-      args,
-      stdout: "piped",
-      stderr: "piped",
-    }).output();
-    return {
-      success: out.success,
-      stdout: new TextDecoder().decode(out.stdout),
-      stderr: new TextDecoder().decode(out.stderr),
-    };
-  } catch (err) {
-    if (err instanceof Deno.errors.NotFound) return null;
-    throw err;
-  }
-}
-
 const defaultMakeTempDir = (prefix: string) => Deno.makeTempDir({ prefix });
 
 async function defaultRemoveDir(path: string): Promise<void> {
@@ -212,84 +176,6 @@ async function dryRunMode(
     filesWritten: result.filesWritten.length,
     changed: false,
     tag: null,
-    claudeMissing: false,
-  };
-}
-
-async function installLocalMode(
-  opts: SyncOptions,
-  deps: Required<
-    Pick<SyncDeps, "buildPayload" | "runClaude" | "makeTempDir">
-  >,
-): Promise<SyncResult> {
-  const payloadDir = await deps.makeTempDir("flowai-plugin-payload-");
-  const buildResult = await deps.buildPayload({
-    engineRoot: opts.engineRoot,
-    version: opts.version,
-    outDir: payloadDir,
-  });
-  // marketplace add expects the directory that holds .claude-plugin/.
-  const marketplaceName = "flowai-workflow";
-  // Remove any prior marketplace with the same name so updates re-resolve
-  // against the freshly-built tree. Failure (no such marketplace) is
-  // expected on first install; ignore the exit code.
-  await deps.runClaude([
-    "plugin",
-    "marketplace",
-    "remove",
-    marketplaceName,
-  ]);
-  const addResult = await deps.runClaude([
-    "plugin",
-    "marketplace",
-    "add",
-    payloadDir,
-  ]);
-  if (addResult === null) {
-    // claude CLI not present — soft skip per FR-E72 install-local contract.
-    return {
-      mode: "install-local",
-      payloadDir,
-      filesWritten: buildResult.filesWritten.length,
-      changed: false,
-      tag: null,
-      claudeMissing: true,
-    };
-  }
-  if (!addResult.success) {
-    throw new Error(
-      `claude plugin marketplace add failed: ${addResult.stderr.trim()}`,
-    );
-  }
-  const installResult = await deps.runClaude([
-    "plugin",
-    "install",
-    `flowai-workflow@${marketplaceName}`,
-    "--scope",
-    "user",
-  ]);
-  if (installResult && !installResult.success) {
-    // install may fail when already installed; try update instead.
-    const updateResult = await deps.runClaude([
-      "plugin",
-      "update",
-      `flowai-workflow@${marketplaceName}`,
-      "--scope",
-      "user",
-    ]);
-    if (updateResult && !updateResult.success) {
-      throw new Error(
-        `claude plugin install/update failed: ${updateResult.stderr.trim()}`,
-      );
-    }
-  }
-  return {
-    mode: "install-local",
-    payloadDir,
-    filesWritten: buildResult.filesWritten.length,
-    changed: true,
-    tag: null,
-    claudeMissing: false,
   };
 }
 
@@ -383,7 +269,6 @@ async function publishMode(
         filesWritten: buildResult.filesWritten.length,
         changed: false,
         tag: null,
-        claudeMissing: false,
       };
     }
 
@@ -413,7 +298,6 @@ async function publishMode(
       filesWritten: buildResult.filesWritten.length,
       changed: true,
       tag,
-      claudeMissing: false,
     };
   } finally {
     // Always try to clean up the clone; failures here are noise.
@@ -483,7 +367,6 @@ export function syncPluginsRepo(
 ): Promise<SyncResult> {
   const wired: Required<SyncDeps> = {
     runGit: deps.runGit ?? defaultRunGit,
-    runClaude: deps.runClaude ?? defaultRunClaude,
     buildPayload: deps.buildPayload ?? buildPluginPayload,
     makeTempDir: deps.makeTempDir ?? defaultMakeTempDir,
     removeDir: deps.removeDir ?? defaultRemoveDir,
@@ -491,8 +374,6 @@ export function syncPluginsRepo(
   switch (opts.mode) {
     case "dry-run":
       return dryRunMode(opts, wired);
-    case "install-local":
-      return installLocalMode(opts, wired);
     case "publish":
       return publishMode(opts, wired);
   }
@@ -530,9 +411,9 @@ export function parseSyncCliArgs(argv: string[]): CliArgs | { help: string } {
         break;
       case "--mode": {
         const m = argv[++i] ?? "";
-        if (m !== "publish" && m !== "dry-run" && m !== "install-local") {
+        if (m !== "publish" && m !== "dry-run") {
           throw new Error(
-            `--mode must be one of: publish, dry-run, install-local (got '${m}')`,
+            `--mode must be one of: publish, dry-run (got '${m}')`,
           );
         }
         mode = m;
@@ -540,9 +421,6 @@ export function parseSyncCliArgs(argv: string[]): CliArgs | { help: string } {
       }
       case "--dry-run":
         mode = "dry-run";
-        break;
-      case "--install-local":
-        mode = "install-local";
         break;
       case "--out-dir":
         outDir = argv[++i];
@@ -557,12 +435,15 @@ export function parseSyncCliArgs(argv: string[]): CliArgs | { help: string } {
       case "--help":
         return {
           help: [
-            "Usage: sync-plugins-repo --version <semver> [--mode <publish|dry-run|install-local>]",
+            "Usage: sync-plugins-repo --version <semver> [--mode <publish|dry-run>]",
             "                         [--out-dir <dir>] [--token <pat>] [--target-repo <owner/repo>]",
             "                         [--engine-root <dir>]",
             "Defaults: --mode publish, --engine-root .,",
             "          --target-repo korchasa/flowai-workflow-plugins.",
             "publish mode also reads $PLUGINS_REPO_TOKEN.",
+            "",
+            "For local dogfood install (Claude Code + Codex), see",
+            "  deno task sync-plugins-local",
           ].join("\n"),
         };
       default:
@@ -609,19 +490,6 @@ if (import.meta.main) {
             : resolve(result.payloadDir)
         }.`,
       );
-      break;
-    case "install-local":
-      if (result.claudeMissing) {
-        console.log(
-          `[install-local] claude CLI not found; built payload at ${result.payloadDir} ` +
-            `but skipped marketplace registration.`,
-        );
-      } else {
-        console.log(
-          `[install-local] Built ${result.filesWritten} files; registered ` +
-            `marketplace + installed plugin from ${result.payloadDir}.`,
-        );
-      }
       break;
     case "publish":
       if (result.changed) {

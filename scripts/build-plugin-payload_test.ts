@@ -4,6 +4,7 @@ import {
   buildPluginPayload,
   classifyPayloadFile,
   patchEngineDenoJson,
+  substituteMarketplaceName,
   substituteVersion,
 } from "./build-plugin-payload.ts";
 
@@ -30,6 +31,26 @@ Deno.test("FR-E70 substituteVersion — preserves surrounding whitespace and com
   const { text } = substituteVersion(json, "9.9.9");
   assertStringIncludes(text, '"version": "9.9.9",');
   assertStringIncludes(text, '"name": "x"');
+});
+
+Deno.test("FR-E70 substituteMarketplaceName — rewrites top-level name only", () => {
+  const json =
+    '{\n  "name": "flowai-workflow",\n  "plugins": [\n    { "name": "flowai-workflow" }\n  ]\n}\n';
+  const { text, replaced } = substituteMarketplaceName(
+    json,
+    "flowai-workflow-local",
+  );
+  assertEquals(replaced, true);
+  assertStringIncludes(text, '"name": "flowai-workflow-local"');
+  // Plugin-level name is left intact (only the FIRST "name" matches).
+  assertStringIncludes(text, '{ "name": "flowai-workflow" }');
+});
+
+Deno.test("FR-E70 substituteMarketplaceName — no field present returns input unchanged", () => {
+  const json = '{\n  "version": "0.1.0"\n}\n';
+  const { text, replaced } = substituteMarketplaceName(json, "anything");
+  assertEquals(replaced, false);
+  assertEquals(text, json);
 });
 
 // ---------------------------------------------------------------------------
