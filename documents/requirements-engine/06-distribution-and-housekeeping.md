@@ -243,3 +243,40 @@
     `04b-worktree-isolation.md`, `05-cli-and-observability.md`.
 
 
+
+### 3.70 FR-E70: Claude Code Plugin Distribution
+
+- **Description:** The repo bundles a self-contained Claude Code plugin
+  marketplace at `claude-plugin/` mirroring the `flowai/framework/workflow`
+  skills (`scaffold`, `supervise`, `orchestrate`) and agents (`orchestrator`,
+  `supervisor`) used to drive `flowai-workflow` from inside an AI IDE.
+  Layout: `claude-plugin/.claude-plugin/marketplace.json` declares a single
+  `flowai-workflow-local` marketplace; `claude-plugin/plugins/flowai-workflow/`
+  carries `plugin.json`, `skills/`, `agents/`. Frontmatter is normalised for
+  Claude Code: OpenCode-only keys (`mode`, `opencode_tools`) stripped, model
+  tier `smart` mapped to `sonnet`. Install path is `deno task
+  sync-claude-plugin` (scripts/sync-claude-plugin.ts), which re-points the
+  marketplace at the local checkout and runs `claude plugin install`/`update`
+  at user scope; existing user-scope `enabled=false` is preserved. Missing
+  `claude` CLI degrades to a soft skip, not a fatal error. The marketplace is
+  excluded from the JSR tarball (`publish.exclude`) — clients install through
+  the plugin marketplace channel from git, not via JSR.
+- **Motivation:** Workflow skills must reach the AI IDE that runs the engine
+  with one command, mirroring `flowai`'s `sync-plugins-local` dogfood loop.
+  Avoids hand-editing user-scope plugin state and prevents tarball leakage of
+  IDE-only artefacts into JSR installs.
+- **Acceptance criteria:**
+  - **Tests:** `scripts/sync-claude-plugin_test.ts`
+    (FR-E70; regression-locked; covers `decidePluginAction` for
+    install/update/skip).
+  - [x] AC1: `claude-plugin/.claude-plugin/marketplace.json` declares one
+    plugin (`flowai-workflow`) sourced from `./plugins/flowai-workflow`.
+    Evidence: `claude-plugin/.claude-plugin/marketplace.json:1-22`.
+  - [x] AC2: Plugin manifest carries name, version, MIT licence.
+    Evidence: `claude-plugin/plugins/flowai-workflow/.claude-plugin/plugin.json:1-11`.
+  - [x] AC3: `deno task sync-claude-plugin` defined.
+    Evidence: `deno.json#tasks.sync-claude-plugin`.
+  - [x] AC4: `claude-plugin/**` excluded from JSR tarball.
+    Evidence: `deno.json#publish.exclude`.
+
+

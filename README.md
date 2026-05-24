@@ -330,6 +330,21 @@ chmod +x flowai-workflow-darwin-arm64 && mv flowai-workflow-darwin-arm64 flowai-
 
 Alternatively, run directly with Deno (see Prerequisites below).
 
+### Claude Code Plugin (optional)
+
+A bundled Claude Code plugin exposes the `scaffold`, `supervise`, and
+`orchestrate` skills (and their `orchestrator` / `supervisor` agents) for
+driving `flowai-workflow` from inside Claude Code. From a checkout:
+
+```bash
+deno task sync-claude-plugin
+```
+
+This re-points the `flowai-workflow-local` marketplace at `./claude-plugin`
+and installs (or updates) the plugin at user scope. See
+[`claude-plugin/plugins/flowai-workflow/README.md`](claude-plugin/plugins/flowai-workflow/README.md)
+for details.
+
 ## Prerequisites
 
 - [Deno](https://deno.land/) runtime (required only if not using a pre-built binary)

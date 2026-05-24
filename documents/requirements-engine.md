@@ -100,3 +100,4 @@ FR-IDs are stable — never renumber them on move.
 - FR-E67 (Git Repository State Validation) → 03-config-and-validation
 - FR-E68 (Node Lifecycle Callback)      → 05-cli-and-observability
 - FR-E69 (Durable Run Journal Replay)   → 05-cli-and-observability
+- FR-E70 (Claude Code Plugin Distribution) → 06-distribution-and-housekeeping

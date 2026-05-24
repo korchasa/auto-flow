@@ -1,0 +1,22 @@
+{
+  "name": "flowai-workflow-local",
+  "owner": {
+    "name": "korchasa"
+  },
+  "description": "Local marketplace for the flowai-workflow Claude Code plugin (dogfood install).",
+  "plugins": [
+    {
+      "name": "flowai-workflow",
+      "source": "./plugins/flowai-workflow",
+      "description": "Scaffold, supervise, and orchestrate flowai-workflow DAGs from inside Claude Code.",
+      "version": "0.7.11",
+      "keywords": [
+        "ai",
+        "workflow",
+        "dag",
+        "flowai"
+      ],
+      "category": "development-workflows"
+    }
+  ]
+}

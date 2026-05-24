@@ -23,7 +23,8 @@
     "dashboard": "deno run --allow-read --allow-write scripts/generate-dashboard.ts",
     "compile": "deno run -A scripts/compile.ts",
     "release": "deno run -A npm:standard-version --skip.tag",
-    "fmt": "deno fmt"
+    "fmt": "deno fmt",
+    "sync-claude-plugin": "deno run -A scripts/sync-claude-plugin.ts"
   },
   "fmt": {
     "proseWrap": "preserve",
@@ -53,6 +54,7 @@
       ".flowai-workflow/.template.json",
       ".flowai-workflow/*/.template.json",
       ".github/**",
+      "claude-plugin",
       "documents/**",
       "scripts/**",
       "AGENTS.md",
