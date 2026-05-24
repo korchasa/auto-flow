@@ -211,6 +211,14 @@ Publish gotchas honored in `deno.json#publish`:
   `deno publish --dry-run` — the file list should mention only the
   workflow's tracked `.gitignore`, `workflow.yaml`, `agents/`, `scripts/`,
   and `memory/reflection-protocol.md`.
+- **`publish.exclude` glob `dir/**` does NOT match `dir/.dotchild/...`.**
+  To exclude a directory whose tracked descendants include dotfile
+  subdirectories (e.g. `claude-plugin/.claude-plugin/marketplace.json`,
+  FR-E70), use the bare directory name (`claude-plugin`) instead of
+  `claude-plugin/**`. Gitignored content is already excluded upstream by
+  JSR's `git ls-files`-driven inclusion, so the caveat bites only for
+  TRACKED dotfile descendants. Always verify with `deno publish
+  --dry-run` after touching `publish.exclude`.
 - **JSR slow-types rules (`no-slow-types`, `missing-jsdoc`,
   `private-type-ref`) fire ONLY on `deno publish --dry-run`** — not on
   `deno check` or `deno lint`. Always run `deno task check` before commit
