@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.7.15](https://github.com/korchasa/flowai-workflow/compare/v0.7.14...v0.7.15) (2026-05-24)
+
+
+### Features
+
+* **engine:** embedded MCP server over engine (FR-E73) ([0441fa9](https://github.com/korchasa/flowai-workflow/commit/0441fa9c903250c9cf42a831d110cc1f9cb1312a)), closes [#233](https://github.com/korchasa/flowai-workflow/issues/233)
+* **engine:** sync-plugins-local for Claude+Codex dogfood (FR-E72) ([a4ae1b6](https://github.com/korchasa/flowai-workflow/commit/a4ae1b667bcdd2efca55a66f2d46c93d489650ad))
+* **plugin+engine:** self-contained runtime with lazy compile + auto-MCP (FR-E74) ([2ffef0a](https://github.com/korchasa/flowai-workflow/commit/2ffef0a2bda853ddcf8de5d291915926c186f125))
+
+
+### Bug Fixes
+
+* **plugin:** supervisor must launch engine in background ([e6039c8](https://github.com/korchasa/flowai-workflow/commit/e6039c87a251c7b6a8d1f2752a06f72829955d56))
+
+
+### Continuous Integration
+
+* inline plugin sync after release tag ([#238](https://github.com/korchasa/flowai-workflow/issues/238)) ([63ddb8e](https://github.com/korchasa/flowai-workflow/commit/63ddb8e6fba268d56541bf28298d58459f7b4267))
+
+
+### Documentation
+
+* capture mixed-file commit audit + MCP handler typing lessons ([fe969e0](https://github.com/korchasa/flowai-workflow/commit/fe969e03c2a5873682217abca36d41e9b9d9703a))
+* **ideas:** backlog of cross-pollination ideas from cc-wf-studio ([e43f5ef](https://github.com/korchasa/flowai-workflow/commit/e43f5ef05713e6587dd0301094a9c56d867906a6))
+* **plugin:** add downstream-root README for korchasa/flowai-workflow-plugins ([#237](https://github.com/korchasa/flowai-workflow/issues/237)) ([083064d](https://github.com/korchasa/flowai-workflow/commit/083064d6217d29056d58d3418ef328b7223ac6fa))
+* **tasks:** plan workflow-triggers (periodic + polling invocation) ([9b51e58](https://github.com/korchasa/flowai-workflow/commit/9b51e5879e3dcef38c05fed8d47baa35881f5f9f))
+
 ### [0.7.14](https://github.com/korchasa/flowai-workflow/compare/v0.7.13...v0.7.14) (2026-05-24)
 
 
