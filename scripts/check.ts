@@ -466,6 +466,12 @@ async function docsTokenBudget(): Promise<void> {
  */
 export const FR_CANONICAL_ORDER = [
   "Description",
+  // `Tasks` is a navigation-only back-link to permanent task records
+  // under `documents/tasks/<YYYY>/<MM>/<slug>.md`. Placed immediately
+  // after `Description` because the plan-exp-permanent-tasks skill
+  // inserts it there. Empty `Tasks` is acceptable (kept for future
+  // edits); the lint here only enforces order and uniqueness.
+  "Tasks",
   "Status",
   "Motivation",
   "Decision",
