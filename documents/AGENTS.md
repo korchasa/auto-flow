@@ -129,17 +129,21 @@ list mirrors that constant — if they ever drift, the constant wins
    voice. Inline any FR-specific structure (config schema, engine
    behaviour, variables, rules, …) as prose subsections under this
    field.
-2. `Status` — only when superseded/deprecated. Active FRs MUST NOT
+2. `Tasks` — back-link(s) to permanent task record(s) under
+   `documents/tasks/<YYYY>/<MM>/<slug>.md` that introduced or amended
+   the FR. Inserted by the plan-exp-permanent-tasks skill; accumulates
+   multiple comma-separated links over time.
+3. `Status` — only when superseded/deprecated. Active FRs MUST NOT
    carry a `Status` field; absence implies "in force".
-3. `Motivation` — problem/incident/force. `Rationale` is the same
+4. `Motivation` — problem/incident/force. `Rationale` is the same
    role and is no longer accepted — migrate to `Motivation`.
-4. `Decision` — cross-links to relevant decision-task records (paths to
+5. `Decision` — cross-links to relevant decision-task records (paths to
    `documents/tasks/<YYYY>/<MM>/adr-NNNN-<slug>.md`).
-5. `Dep` — comma-separated dependency FR ids.
-6. `Supersedes` — comma-separated predecessor FR ids.
-7. `Input` / `Output` — workflow-stage FRs only (`FR-S2..S9` and
+6. `Dep` — comma-separated dependency FR ids.
+7. `Supersedes` — comma-separated predecessor FR ids.
+8. `Input` / `Output` — workflow-stage FRs only (`FR-S2..S9` and
    peers); engine-feature FRs MUST NOT use these.
-8. `Acceptance criteria` (mandatory; ALWAYS LAST) — checkable
+9. `Acceptance criteria` (mandatory; ALWAYS LAST) — checkable
    conditions; test-locked behaviour collapses to a `**Tests:**`
    line per dod-test-coverage-convention; manual-evidence items stay as `[x]` bullets
    with `Evidence: <path>:<line>`.

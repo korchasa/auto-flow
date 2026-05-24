@@ -4,20 +4,56 @@ Universal DAG-based engine for orchestrating AI agents. Define agent workflows a
 
 ## Install
 
-### Via Deno (recommended)
+`flowai-workflow` ships as a Claude Code / Codex plugin. Both install
+paths bundle the engine source and the canonical workflows; the host
+runs them via locally-installed Deno 2.x.
 
-Requires [Deno](https://deno.com/) 2.x.
+Prerequisite (all paths): [Deno](https://deno.com/) 2.x on `$PATH`.
 
-```bash
-deno install -g -A -n flowai-workflow jsr:@korchasa/flowai-workflow
+### Claude Code
+
+```
+/plugin marketplace add korchasa/flowai-workflow-plugins
+/plugin install flowai-workflow@korchasa
 ```
 
-The CLI checks JSR for newer versions on startup (fail-open, non-blocking).
-Pass `--skip-update-check` to suppress the check.
+Then invoke the launcher skills from inside Claude Code:
 
-### Pre-built binary
+- `/flowai-workflow:run <workflow-name>` — execute a bundled or
+  project-local DAG (forwards `--prompt`, `--dry-run`, `--cycles`,
+  `-v`/`-s`/`-q`, etc.).
+- `/flowai-workflow:init` — scaffold a bundled workflow into the
+  current project under `.flowai-workflow/<name>/`. Combine with
+  `--list` to enumerate the bundled workflows first.
 
-Grab the binary for your platform from [GitHub Releases](https://github.com/korchasa/flowai-workflow/releases/latest).
+### Codex
+
+```
+codex plugin marketplace add korchasa/flowai-workflow-plugins
+codex plugin install flowai-workflow@korchasa
+```
+
+No `~/.codex/config.toml` `[mcp_servers.*]` block is required —
+`flowai-workflow` is not an MCP server, so Codex's plugin manager
+wires the launcher skills directly. (Contrast with foxcode, which
+needs a manual `~/.codex/config.toml` block specifically because it
+IS an MCP server, upstream `openai/codex#19372`.)
+
+### Migrating from JSR / standalone binary
+
+`@korchasa/flowai-workflow` on JSR and the prebuilt binaries on GitHub
+Releases are being retired in favor of the plugin install above. The
+final JSR release (`0.7.12`) prints a deprecation banner on every
+startup to remind users to migrate; set
+`FLOWAI_SUPPRESS_DEPRECATION=1` to silence it (the plugin launcher
+skills already do this).
+
+To migrate:
+
+```bash
+deno uninstall flowai-workflow            # remove the JSR install
+# then, in your AI IDE, follow the plugin install instructions above
+```
 
 ## Engine Architecture
 
@@ -310,25 +346,34 @@ scripts/
 
 ## Installation
 
-Download a pre-built binary from the [latest release](../../releases/latest) — no Deno required:
+See the [Install](#install) section at the top — the supported path is
+the Claude Code / Codex plugin via the `korchasa/flowai-workflow-plugins`
+marketplace. The legacy "download a prebuilt binary" / "`deno install
+jsr:…`" routes are retired (FR-E70 plugin-first distribution); the
+final JSR release `0.7.12` carries a deprecation banner.
+
+### Local plugin development (dogfood)
+
+Working on the plugin payload itself (skills, agents, launcher
+scripts)? Build and install it from the local checkout without going
+through the downstream marketplace:
 
 ```bash
-# Linux x86_64
-gh release download --repo <owner>/flowai-workflow --pattern flowai-workflow-linux-x86_64
-chmod +x flowai-workflow-linux-x86_64 && mv flowai-workflow-linux-x86_64 flowai-workflow
+# Inspect the payload that would ship to korchasa/flowai-workflow-plugins
+deno task sync-plugins -- --dry-run --out-dir dist/plugin-payload
 
-# macOS Apple Silicon
-gh release download --repo <owner>/flowai-workflow --pattern flowai-workflow-darwin-arm64
-chmod +x flowai-workflow-darwin-arm64 && mv flowai-workflow-darwin-arm64 flowai-workflow
-
-# Verify
-./flowai-workflow --version
-
-# Run a workflow
-./flowai-workflow run .flowai-workflow/<workflow-name>
+# Build it AND install into Claude Code at user scope (registers a
+# temp-dir marketplace pointing at the freshly-built payload). Missing
+# `claude` CLI degrades to a soft skip.
+deno task sync-plugins -- --install-local
 ```
 
-Alternatively, run directly with Deno (see Prerequisites below).
+The plugin source tree lives at `claude-plugin/` (top-level
+`.claude-plugin/marketplace.json` + `plugins/flowai-workflow/` payload).
+`scripts/build-plugin-payload.ts` assembles the full tree (engine
+sources, bundled workflows, manifests with version pinned) that
+`scripts/sync-plugins-repo.ts` then either dry-runs, install-locals, or
+publishes to the downstream repo (FR-E72).
 
 ## Prerequisites
 
@@ -350,6 +395,7 @@ deno task dashboard        # Render an HTML run dashboard
 deno task compile          # Build standalone binaries
 deno task loop             # Iterative SDLC self-runner (advanced)
 deno task release          # Cut a standard-version bump (CI-driven)
+deno task sync-plugins     # Build + (dry-run | install-local | publish) the plugin payload (FR-E70/E72)
 ```
 
 ## Authentication

@@ -350,6 +350,34 @@ async function runEngine(args: string[]): Promise<never> {
   }
 }
 
+/**
+ * Print a one-line deprecation banner for users who installed the engine
+ * via JSR or a prebuilt binary (FR-E70 plugin-first distribution). The
+ * banner is suppressed when:
+ *
+ *  - `FLOWAI_SUPPRESS_DEPRECATION=1` is set (CI, plugin launcher,
+ *    long-running embeddings),
+ *  - the engine is invoked as the HITL MCP server (internal subprocess,
+ *    `INTERNAL_HITL_MCP_ARG`),
+ *  - or `VERSION === "dev"` (local `deno run` against source — no JSR
+ *    install to migrate from).
+ *
+ * The plugin launcher skills (`run/SKILL.md`, `init/SKILL.md`) export
+ * `FLOWAI_SUPPRESS_DEPRECATION=1` before invoking the bundled engine so
+ * plugin-installed users do not see it — only standalone JSR/binary
+ * users do, telling them to migrate.
+ */
+function maybePrintDeprecationBanner(): void {
+  if (Deno.env.get("FLOWAI_SUPPRESS_DEPRECATION") === "1") return;
+  if (VERSION === "dev") return;
+  console.error(
+    "[DEPRECATION] Standalone JSR / binary distribution of flowai-workflow " +
+      "is being retired. Migrate to the Claude Code / Codex plugin: " +
+      "see https://github.com/korchasa/flowai-workflow#install. " +
+      "Set FLOWAI_SUPPRESS_DEPRECATION=1 to silence this notice.",
+  );
+}
+
 if (import.meta.main) {
   // Internal dispatch: engine-owned HITL MCP server. Every MCP-capable
   // runtime adapter (Claude / OpenCode / Codex) spawns the engine binary
@@ -358,6 +386,8 @@ if (import.meta.main) {
     await runFlowaiHitlMcpServer();
     Deno.exit(0);
   }
+
+  maybePrintDeprecationBanner();
 
   const subcommand = Deno.args[0];
 
