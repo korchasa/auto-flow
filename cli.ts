@@ -37,6 +37,7 @@ import {
 } from "./hitl-mcp-server.ts";
 import { installSignalHandlers } from "./process-registry.ts";
 import { checkForUpdate } from "./version.ts";
+import { runMcpServer } from "./mcp-server.ts";
 
 /** Version string embedded at compile time via VERSION env var. Defaults to "dev". */
 export const VERSION: string = Deno.env.get("VERSION") ?? "dev";
@@ -430,10 +431,12 @@ if (import.meta.main) {
   }
 
   // Subcommand: `mcp <workflow>` or `mcp --no-workflow` (FR-E73, FR-E74).
-  // Dynamic import keeps the SDK off the cold-start path for `run` / `init`.
+  // `runMcpServer` is imported statically: a dynamic `await import()` here
+  // deadlocks in Deno 2.8 when the static graph (Engine → ai-ide-cli) already
+  // pulled @modelcontextprotocol/sdk + zod, leaving the MCP handshake stuck
+  // and Claude Code reporting the server as "connecting".
   if (subcommand === "mcp") {
     const rest = Deno.args.slice(1);
-    const { runMcpServer } = await import("./mcp-server.ts");
     if (rest.includes("--no-workflow")) {
       // Plugin launcher passes this when no .flowai-workflow/<name>/
       // folder is resolvable in the current project (FR-E74). The

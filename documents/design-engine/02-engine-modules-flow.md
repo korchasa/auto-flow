@@ -187,8 +187,11 @@
     `init` → `runInit(args)` (project scaffolder),
     `mcp <workflow>` → `runMcpServer(workflowDir)` (FR-E73: embedded
     MCP server over stdio, seven tools for workflow inspection and
-    control; dynamic-imported to keep SDK off the `run` cold-start
-    path),
+    control; statically imported — a dynamic `await import()` of
+    `mcp-server.ts` deadlocks in Deno 2.8 once the cli.ts static
+    graph has pulled `@modelcontextprotocol/sdk` via `Engine →
+    @korchasa/ai-ide-cli`, leaving the MCP handshake stuck and
+    Claude Code reporting the server as "connecting"),
     `--version`/`--help` → global handlers,
     bare `--` flags → backward-compat shim (deprecated, delegates to `run`),
     default (no args or unknown subcommand) → print usage, exit 1.
@@ -218,8 +221,10 @@
     (not a runtime public API; sole non-redundant consumer is
     `scripts/check.ts` JSDoc validation). Statically re-exports
     `runMcpServer` and `applyJsonPointerOp` (FR-E73) so JSR
-    slow-types analysis reaches the SDK-typed surface even though
-    `cli.ts` dynamic-imports `mcp-server.ts`.
+    slow-types analysis reaches the SDK-typed surface (kept after
+    `cli.ts` switched from dynamic to static import of
+    `mcp-server.ts` — the barrel remains the canonical public
+    re-export entry for non-CLI consumers).
 - **Module JSDoc and Why-Comments (FR-E30):** All 6 engine modules require
   module-level `/** @module */` JSDoc (purpose, responsibility, deps) and
   function-level JSDoc on exported functions. 4 complex functions require
