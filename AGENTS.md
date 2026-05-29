@@ -47,7 +47,11 @@ example of engine usage.
 
 ## Project tooling Stack
 
-- Deno (scripting, utilities, validation, task runner, workflow engine)
+- Deno (scripting, utilities, validation, task runner, workflow engine).
+  Run via `deno task <name>` exclusively — bare `deno test`,
+  `deno lint`, `deno fmt` are hook-blocked
+  (see `.claude/hooks/guard-deno-direct.ts`). For ad-hoc subset
+  checking on one file, filter with `deno task check 2>&1 | grep <pattern>`.
 - Shell/Bash (legacy stage orchestration scripts)
 - Docker (devcontainer runtime environment)
 - Claude Code CLI (`claude`) (AI agent runtime)
@@ -482,6 +486,21 @@ The goal is to identify the root cause, not to suppress the symptom. A quick wor
 
 Before drawing a conclusion from a single signal:
 
+- **Hierarchy of hypotheses for "X doesn't work" reports on
+  RPC/IPC subsystems (MCP, HITL, engine subprocess)**. Validate
+  cheapest layers first: (1) is the target process alive?
+  (`ps`/`pgrep`/`pgrep -P <host-pid>`); (2) was it ever spawned by
+  the host CLI? — absent child means the spawn step failed, not
+  the protocol; (3) is the transport endpoint reachable? (port
+  open, FIFO present, lock file present and readable); (4) does
+  the handshake complete? — read the live log under
+  `~/Library/Caches/claude-cli-nodejs/<project>/mcp-logs-*/` or
+  the equivalent host-CLI log. Only after (1)–(4) pass is it
+  worth investigating schema, SDK internals, or protocol-level
+  filtering. `claude mcp list` runs a fresh probe with a clean
+  spawn and does NOT reflect the long-lived connection inside the
+  active session — never trust it for "is the connection in
+  *this* session working".
 - **Re-run a transient check before labeling failures "pre-existing" or
   "out of scope"**. Deno's typecheck cache occasionally serves stale errors;
   a single failing run is one data point, not ground truth. The retry costs
