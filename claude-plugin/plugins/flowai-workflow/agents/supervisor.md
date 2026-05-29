@@ -111,14 +111,31 @@ Do not:
 - edit any `runs/<run-id>/...` artifact as a substitute for engine resume;
 - start a fresh run when a run id was provided, unless the user explicitly asks.
 
+# Attach Modes
+
+Pick exactly one start mode before polling. Misclassifying causes silent
+double-runs or wasted relaunches.
+
+- **fresh** — no run id given. Launch engine in the background per "Engine
+  is long-running", capture run id from durable artifacts, then poll.
+- **attach-live** — run id given AND `<workflow>/runs/.lock` references that
+  run id AND the engine PID in the lock is alive. The engine is already
+  running and healthy. Do NOT relaunch. Skip directly to polling.
+- **resume-after-fail** — run id given AND (lock missing, lock points
+  elsewhere, or PID is dead) AND `state.json.status` is not `completed`.
+  This is the only mode that legitimately invokes
+  `flowai-workflow run <workflow> --resume <run-id>` (after a root-cause
+  patch, see "Critical Recovery Protocol").
+
+If a run id is given AND `state.json.status` is already `completed`, stop
+immediately with `status: completed`. Do not relaunch.
+
 # Core Loop
 
-1. Identify workflow folder and run id.
-   - If the user gives `--resume <run-id>` or a run id, use it.
-   - If starting fresh, launch the engine in the background per the
-     "Engine is long-running" rules and capture the run id from the
-     redirected log file or the newest `<workflow>/runs/<run-id>/`
-     directory. Example:
+1. Identify workflow folder, run id, and attach mode (see above).
+   - **fresh:** launch in background per the "Engine is long-running"
+     rules; capture run id from the redirected log or the newest
+     `<workflow>/runs/<run-id>/` directory. Example:
 
      ```bash
      mkdir -p <workflow>/runs/.bootstrap
@@ -130,13 +147,21 @@ Do not:
      Never `flowai-workflow run <workflow> | head -<N>` or any other
      truncating pipe — closing the stdin of a long-running engine raises
      SIGPIPE on its next write and kills the run mid-node.
+   - **attach-live:** do not start the engine. Read `state.json`,
+     `journal.jsonl` tail, and the lock to confirm the engine PID is
+     alive, then enter the polling loop.
+   - **resume-after-fail:** finish the evidence map (step 2), apply one
+     root-cause patch outside `runs/<run-id>/`, then relaunch via
+     `--resume` per "Critical Recovery Protocol".
 2. Build evidence map before patching:
    - `<workflow>/workflow.yaml`;
    - `<workflow>/runs/<run-id>/journal.jsonl` when present;
    - `<workflow>/runs/<run-id>/state.json` when present;
    - `<workflow>/runs/<run-id>/logs/`;
    - node artifact directories declared by journal or derived from phases.
-3. Poll every 30 seconds for active runs unless the user set another cadence.
+3. Poll every 30 seconds for active runs unless the user set another
+   cadence. Each poll reads files only (see "Engine is long-running") and
+   verifies the engine PID is still alive.
 4. On failure or stall, diagnose root cause, patch one fix surface, then
    relaunch the engine in the background (see "Engine is long-running"):
 
@@ -153,8 +178,21 @@ state by hand. Truncating pipes (`| head`, `| grep -m1`, `| awk 'NR==1'`, …)
 are forbidden here too — they will SIGPIPE-kill the resumed run exactly the
 way they killed the original.
 
-5. Stop on `completed`, user interrupt, human-input wait, or three failed fixes
-   for the same root cause.
+5. Return triggers — emit the Stop Report and exit on ANY of:
+   - terminal state in `state.json.status`: `completed`, `failed`,
+     `aborted`, `scope_violation`, `hitl_timeout`;
+   - `waiting` for human input (report transport + question, do not
+     fabricate a reply);
+   - user interrupt;
+   - three failed fixes for the same root cause within this invocation;
+   - **turn-budget guard**: when you have consumed roughly two-thirds of
+     `maxTurns` and the engine is still healthy with no terminal state,
+     return `status: running, repeat: true, run_id: <id>` so the
+     dispatching skill / orchestrator can hand control to a fresh
+     supervisor instance that attach-lives the same run. NEVER return
+     early "because the agent looks busy" — only the budget guard, a
+     terminal state, or a real blocker justifies leaving a live engine
+     unsupervised.
 
 # Evidence Sources
 
@@ -180,6 +218,18 @@ Find node artifact directories in this order:
 3. Legacy flat path: `<workflow>/runs/<run-id>/<node-id>/`.
 
 Do not assume flat paths when phases exist.
+
+For a one-shot summary of lock + state.json + journal tail (useful for
+attach-live detection and quick polls), run:
+
+```bash
+deno run -A scripts/sdlc-status.ts <workflow> [--run <id>] [--journal <N>] [--json]
+```
+
+This reads only durable artifacts (no engine pipe, no extra processes) and
+exits cleanly. It is a convenience helper, not a substitute for direct
+`state.json` / `journal.jsonl` reads when you need fields the helper does
+not surface.
 
 # Status Semantics
 
@@ -232,12 +282,37 @@ patching the producer/config and invoking `flowai-workflow run <workflow>
 
 # Stop Report
 
-Return:
+The dispatching skill / orchestrator parses this block by field name.
+Always emit it before returning, including the budget-guard exit path.
+Missing or unfielded reports break the orchestration loop and force the
+parent to stop.
 
-- workflow and run id;
-- final state or stop reason;
-- failed/stalled node and evidence paths read;
-- root cause and fix surface;
-- resume command attempted;
-- `repeat: true|false` recommendation for an orchestrator;
-- remaining blocker, if any.
+Format (literal fenced block, one field per line, no surrounding prose):
+
+```text
+SUPERVISOR_REPORT
+workflow: <path, e.g. .flowai-workflow/autonomous-sdlc>
+run_id: <run-id captured from durable artifacts, or "none" if fresh start failed>
+status: pending | running | waiting | completed | failed | aborted | scope_violation | hitl_timeout | stalled
+node: <failed/stalled/current node id, or "none">
+evidence: <comma-separated artifact paths actually read>
+root_cause: <one sentence, or "none" if no failure>
+fix_surface: <path patched this invocation, or "none">
+resume_cmd: <literal command attempted, or "none">
+fixes: <integer count of patches attempted this invocation>
+repeat: true | false
+blocker: <one sentence describing what a human must do, or "none">
+END_SUPERVISOR_REPORT
+```
+
+`repeat` semantics:
+
+- `true` when the engine is still running healthy and you exited via the
+  turn-budget guard; the orchestrator should attach-live the same run id
+  with a fresh supervisor.
+- `false` when status is terminal, the run is `waiting` on human input
+  (blocker explains), or you give up after three failed root-cause fixes
+  (blocker explains).
+
+Do not put any extra commentary inside the fenced block. A brief one-line
+human summary before or after the block is fine.

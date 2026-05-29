@@ -61,6 +61,22 @@ Interpret the policy text literally. Common policy forms:
 If the policy cannot be resolved from text plus available workflow folders, stop
 and ask for clarification.
 
+## Continuation override (status=running, repeat=true)
+
+If the prior supervisor result has `status: running` AND `repeat: true` AND
+a non-empty `run_id`, the run is healthy but the previous supervisor hit its
+turn-budget guard. In this case you MUST short-circuit policy selection:
+
+- emit a SUPERVISOR_DELEGATION reusing the same `workflow` and `run_id`;
+- set `reason: "continuation of run <run_id> after supervisor budget guard"`;
+- DO NOT increment the maintenance counter (this is the same iteration);
+- append the history record with `status: "delegated"` and the same run_id.
+
+Continuation overrides every other selection rule except a hard stop
+condition or an explicit supervisor blocker. Do not consult
+`ORCHESTRATION.md` policy for continuations — the prior decision already
+locked the workflow.
+
 # Delegation Contract
 
 Subagents in some hosts cannot launch nested subagents. Therefore your primary
