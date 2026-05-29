@@ -326,8 +326,8 @@
     --help` returns the engine help text. Manual — korchasa; Evidence:
     transcript pasted in release PR body.
   - [ ] Full plugin install smoke on Codex: `codex plugin marketplace
-    add korchasa/flowai-workflow-plugins` + `codex plugin install
-    flowai-workflow@korchasa` succeed; invoking the run skill returns
+    add korchasa/flowai-workflow-plugins` + `codex plugin add
+    flowai-workflow@flowai-workflow` succeed; invoking the run skill returns
     engine help. Manual — korchasa; Evidence: transcript pasted in
     release PR body.
 
@@ -341,7 +341,7 @@
 
   ```
   codex plugin marketplace add korchasa/flowai-workflow-plugins
-  codex plugin install flowai-workflow@korchasa
+  codex plugin add flowai-workflow@flowai-workflow
   ```
 
   After install, Codex's native skill dispatcher invokes the plugin's
@@ -364,7 +364,7 @@
   `$flowai-workflow-run` vs other) is verified at release time against
   the actual Codex build and documented in README; this FR commits to
   the contract that the launcher skills are callable from inside Codex
-  after `codex plugin install`, not to a specific prefix shape.
+  after `codex plugin add`, not to a specific prefix shape.
 - **Tasks:** [plugin-first-distribution](../tasks/2026/05/plugin-first-distribution.md)
 - **Motivation:** Match the foxcode reference UX while clarifying
   where the two products' Codex install procedures legitimately
@@ -452,6 +452,11 @@
     the `plugin marketplace` subcommand (<0.130) logs a precise skip
     message and exits the Codex path cleanly; the Claude path still
     runs. Evidence: `scripts/sync-plugins-local.ts:syncCodex`.
+  - [x] Codex local install runs `codex plugin add
+    flowai-workflow@flowai-workflow-local` after marketplace
+    registration so the payload cache exists and `codex plugin list`
+    reports the plugin as installed. Evidence:
+    `scripts/sync-plugins-local.ts:planCodexPluginAdds`.
   - [x] User-scope `enabled = false` is preserved through
     install/reinstall: `claude plugin list --json` is captured BEFORE
     `marketplace remove`, then disabled plugins route to a `skipped`
@@ -473,6 +478,5 @@
     repo; payload-integrity smoke step passes (deno-run --version
     against the synced engine). Manual — korchasa; Evidence:
     GH Actions run URL in the release PR body.
-
 
 

@@ -31,7 +31,7 @@ skip Deno entirely and exec the cached binary directly.
 
 ```
 codex plugin marketplace add korchasa/flowai-workflow-plugins
-codex plugin install flowai-workflow@flowai-workflow
+codex plugin add flowai-workflow@flowai-workflow
 ```
 
 No `~/.codex/config.toml` `[mcp_servers.*]` block is required — the

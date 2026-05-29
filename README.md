@@ -30,7 +30,7 @@ Then invoke the launcher skills from inside Claude Code:
 
 ```
 codex plugin marketplace add korchasa/flowai-workflow-plugins
-codex plugin install flowai-workflow@korchasa
+codex plugin add flowai-workflow@flowai-workflow
 ```
 
 No `~/.codex/config.toml` `[mcp_servers.*]` block is required —
@@ -75,12 +75,15 @@ is rebuilt on every sync.
 
 The script captures `claude plugin list --json` BEFORE removing the
 marketplace, so plugins previously toggled to `enabled = false` stay
-disabled after reinstall. It reconciles
-`~/.codex/config.toml` `[plugins."<name>@flowai-workflow-local"]` tables
-on the Codex side, preserving prior `enabled` flags; official-marketplace
-entries (`@flowai-workflow`) are left untouched. Missing `claude` or
-`codex` CLIs (or Codex CLI older than 0.130, which lacks
-`plugin marketplace`) are reported and skipped — never fatal.
+disabled after reinstall. On Codex it runs `codex plugin add
+flowai-workflow@flowai-workflow-local` after marketplace registration so
+the payload cache exists and the plugin is actually installed, then
+reconciles `~/.codex/config.toml`
+`[plugins."<name>@flowai-workflow-local"]` tables while preserving prior
+`enabled` flags; official-marketplace entries (`@flowai-workflow`) are
+left untouched. Missing `claude` or `codex` CLIs (or Codex CLI older than
+0.130, which lacks `plugin marketplace`) are reported and skipped —
+never fatal.
 
 To wire the rebuild + reinstall into the every-commit dev loop, opt in
 with `AUTO_INSTALL_PLUGINS=true` in `.env` or the environment:

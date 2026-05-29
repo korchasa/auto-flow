@@ -5,6 +5,7 @@ import {
   parseAndStripFlowaiTables,
   parseArgs,
   planClaudeActions,
+  planCodexPluginAdds,
   readMarketplacePluginNames,
   reconcileCodexFlowaiPluginEntries,
   shouldAutoInstall,
@@ -197,6 +198,26 @@ Deno.test("FR-E72 reconcileCodexFlowaiPluginEntries leaves published marketplace
   }
 });
 
+Deno.test("FR-E72 reconcileCodexFlowaiPluginEntries preserved enabled map wins after codex plugin add", () => {
+  const afterCodexAdd = [
+    '[plugins."flowai-workflow@flowai-workflow-local"]',
+    "enabled = true",
+    "",
+  ].join("\n");
+  const result = reconcileCodexFlowaiPluginEntries(
+    afterCodexAdd,
+    ["flowai-workflow"],
+    "flowai-workflow-local",
+    new Map([["flowai-workflow", false]]),
+  );
+  if (!result.includes('[plugins."flowai-workflow@flowai-workflow-local"]')) {
+    throw new Error(`expected table re-emitted: ${result}`);
+  }
+  if (!/enabled = false/.test(result)) {
+    throw new Error(`expected preserved enabled = false: ${result}`);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // readMarketplacePluginNames
 // ---------------------------------------------------------------------------
@@ -285,6 +306,16 @@ Deno.test("FR-E72 planClaudeActions ignores official-marketplace disable", () =>
   );
   assertEquals(plan.install, ["flowai-workflow@flowai-workflow-local"]);
   assertEquals(plan.skipped, []);
+});
+
+// ---------------------------------------------------------------------------
+// planCodexPluginAdds
+// ---------------------------------------------------------------------------
+
+Deno.test("FR-E72 planCodexPluginAdds installs every emitted plugin", () => {
+  assertEquals(planCodexPluginAdds(["flowai-workflow"]), [
+    "flowai-workflow@flowai-workflow-local",
+  ]);
 });
 
 // ---------------------------------------------------------------------------

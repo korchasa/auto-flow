@@ -12,9 +12,10 @@
  * Behaviour:
  * - Captures `claude plugin list --json` BEFORE marketplace removal so
  *   previously-`enabled=false` plugins stay disabled on reinstall.
- * - Reconciles `~/.codex/config.toml` `[plugins."<x>@<marketplace>"]`
- *   tables — strips stale entries, re-emits one per plugin advertised
- *   in `marketplace.json`, preserves prior `enabled` per plugin.
+ * - Runs `codex plugin add <name>@flowai-workflow-local` for every
+ *   emitted plugin so Codex materializes the payload cache, then
+ *   reconciles `~/.codex/config.toml` `[plugins."<x>@<marketplace>"]`
+ *   tables while preserving prior `enabled` per plugin.
  * - Missing `claude` / `codex` CLIs (or older Codex without `plugin
  *   marketplace`) are reported and skipped, not fatal.
  * - `AUTO_INSTALL_PLUGINS=true` (env var OR `.env`) opts the dev hook
@@ -167,6 +168,7 @@ export function reconcileCodexFlowaiPluginEntries(
   configText: string,
   emittedNames: string[],
   marketplaceName: string = MARKETPLACE_NAME,
+  preservedEnabled: Map<string, boolean> = new Map(),
 ): string {
   if (emittedNames.length === 0) {
     throw new Error(
@@ -181,11 +183,19 @@ export function reconcileCodexFlowaiPluginEntries(
   const trimmed = stripped.replace(/\n+$/, "");
   const blocks = emittedNames
     .map((name) => {
-      const enabled = previousEnabled.get(name) ?? true;
+      const enabled = preservedEnabled.get(name) ?? previousEnabled.get(name) ??
+        true;
       return `[plugins."${name}@${marketplaceName}"]\nenabled = ${enabled}\n`;
     })
     .join("\n");
   return `${trimmed}\n\n${blocks}`;
+}
+
+export function planCodexPluginAdds(
+  emittedNames: string[],
+  marketplaceName: string = MARKETPLACE_NAME,
+): string[] {
+  return emittedNames.map((name) => `${name}@${marketplaceName}`);
 }
 
 type CommandOutput = {
@@ -483,6 +493,7 @@ async function syncClaude(absoluteOutDir: string): Promise<void> {
 
 async function rewriteCodexPluginEntries(
   emittedNames: string[],
+  preservedEnabled: Map<string, boolean> = new Map(),
 ): Promise<void> {
   if (emittedNames.length === 0) {
     throw new Error(
@@ -504,7 +515,12 @@ async function rewriteCodexPluginEntries(
     }
     throw error;
   }
-  const next = reconcileCodexFlowaiPluginEntries(original, emittedNames);
+  const next = reconcileCodexFlowaiPluginEntries(
+    original,
+    emittedNames,
+    MARKETPLACE_NAME,
+    preservedEnabled,
+  );
   if (next === original) return;
   await Deno.writeTextFile(configPath, next);
   console.log(
@@ -529,6 +545,15 @@ async function syncCodex(absoluteOutDir: string): Promise<void> {
   console.log(
     `[sync-plugins-local] Re-pointing Codex marketplace ${MARKETPLACE_NAME} at ${absoluteOutDir}`,
   );
+  const codexHome = Deno.env.get("CODEX_HOME") ??
+    `${Deno.env.get("HOME")}/.codex`;
+  const configText = await Deno.readTextFile(join(codexHome, "config.toml"))
+    .catch((error) => {
+      if (error instanceof Deno.errors.NotFound) return "";
+      throw error;
+    });
+  const preservedEnabled = parseAndStripFlowaiTables(configText)
+    .previousEnabled;
   await runInheritedAllowFail("codex", [
     "plugin",
     "marketplace",
@@ -546,7 +571,11 @@ async function syncCodex(absoluteOutDir: string): Promise<void> {
     join(absoluteOutDir, ".claude-plugin", "marketplace.json"),
   );
   const emitted = readMarketplacePluginNames(marketplaceJson);
-  await rewriteCodexPluginEntries(emitted);
+  for (const id of planCodexPluginAdds(emitted)) {
+    console.log(`[sync-plugins-local] Installing Codex ${id}`);
+    await runInherited("codex", ["plugin", "add", id]);
+  }
+  await rewriteCodexPluginEntries(emitted, preservedEnabled);
 }
 
 /**
