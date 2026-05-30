@@ -89,6 +89,34 @@ Deno.test("CI workflow — every push runs build and real plugin host smoke", as
   assertEquals(smokeJob.includes("--host claude"), true);
   assertEquals(smokeJob.includes("--host codex"), true);
 
+  const agentSmokeJob = workflowJobBlock(workflow, "plugin-real-agent-smoke");
+  assertEquals(
+    agentSmokeJob.includes("Plugin real agent smoke (Claude Code + Codex)"),
+    true,
+  );
+  assertEquals(
+    agentSmokeJob.includes(
+      "ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}",
+    ),
+    true,
+  );
+  assertEquals(
+    agentSmokeJob.includes("OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}"),
+    true,
+  );
+  assertEquals(
+    agentSmokeJob.includes("Run real Claude Code agent plugin smoke"),
+    true,
+  );
+  assertEquals(
+    agentSmokeJob.includes("Run real Codex agent plugin smoke"),
+    true,
+  );
+  assertEquals(
+    agentSmokeJob.includes("scripts/plugin-agent-smoke.ts"),
+    true,
+  );
+
   const setupMatrixJob = workflowJobBlock(workflow, "setup-matrix");
   const buildJob = workflowJobBlock(workflow, "build");
   assertEquals(

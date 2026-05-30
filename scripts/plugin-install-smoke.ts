@@ -79,6 +79,8 @@ export type SmokeReporter = (message: string) => void;
 export interface HostSmokeResult {
   host: HostKind;
   status: "passed" | "skipped";
+  hostHome?: string;
+  pluginDataDir?: string;
   pluginRoot?: string;
   reason?: string;
 }
@@ -859,7 +861,13 @@ export async function installPluginForHost(
     reporter: opts.reporter,
   });
   report(opts.reporter, `${opts.host}: smoke passed with ${pluginRoot}`);
-  return { host: opts.host, status: "passed", pluginRoot };
+  return {
+    host: opts.host,
+    status: "passed",
+    hostHome,
+    pluginDataDir,
+    pluginRoot,
+  };
 }
 
 export async function runPluginInstallSmoke(
