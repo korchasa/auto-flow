@@ -13,7 +13,7 @@ Prerequisite (all paths): [Deno](https://deno.com/) 2.x on `$PATH`.
 ### Claude Code
 
 ```
-/plugin marketplace add korchasa/flowai-workflow-plugins
+/plugin marketplace add korchasa/flowai-workflow-plugins --sparse claude
 /plugin install flowai-workflow@korchasa
 ```
 
@@ -29,15 +29,14 @@ Then invoke the launcher skills from inside Claude Code:
 ### Codex
 
 ```
-codex plugin marketplace add korchasa/flowai-workflow-plugins
+codex plugin marketplace add korchasa/flowai-workflow-plugins --sparse codex
 codex plugin add flowai-workflow@flowai-workflow
 ```
 
-No `~/.codex/config.toml` `[mcp_servers.*]` block is required —
-`flowai-workflow` is not an MCP server, so Codex's plugin manager
-wires the launcher skills directly. (Contrast with foxcode, which
-needs a manual `~/.codex/config.toml` block specifically because it
-IS an MCP server, upstream `openai/codex#19372`.)
+No `~/.codex/config.toml` `[mcp_servers.*]` block is required. The
+Codex payload ships host-native plugin metadata plus an embedded MCP
+config, so plugin install wires both launcher skills and
+`flowai-workflow` MCP startup.
 
 ### Migrating from JSR / standalone binary
 
@@ -317,23 +316,10 @@ Standalone (JSR-installed or compiled-binary on `PATH`):
 }
 ```
 
-Claude Code / Codex plugin install (no `flowai-workflow` on `PATH`):
-
-```jsonc
-{
-  "mcpServers": {
-    "flowai-workflow": {
-      "command": "deno",
-      "args": [
-        "run", "-A", "--no-check",
-        "${CLAUDE_PLUGIN_ROOT}/engine/cli.ts",
-        "mcp", ".flowai-workflow/github-inbox"
-      ],
-      "env": { "FLOWAI_SUPPRESS_DEPRECATION": "1" }
-    }
-  }
-}
-```
+Claude Code / Codex plugin install needs no manual MCP block. The
+Claude payload ships `.mcp.json` with
+`${CLAUDE_PLUGIN_ROOT}/bin/launch.ts`; the Codex payload ships
+plugin-root `.mcp.json` with `cwd = "."` and `./bin/launch.ts`.
 
 ## Configuration
 
@@ -459,18 +445,18 @@ through the downstream marketplace:
 # Inspect the payload that would ship to korchasa/flowai-workflow-plugins
 deno task sync-plugins -- --dry-run --out-dir dist/plugin-payload
 
-# Build it AND install into Claude Code at user scope (registers a
-# temp-dir marketplace pointing at the freshly-built payload). Missing
-# `claude` CLI degrades to a soft skip.
-deno task sync-plugins -- --install-local
+# Build it AND install into Claude Code and Codex at user scope.
+deno task sync-plugins-local
 ```
 
-The plugin source tree lives at `claude-plugin/` (top-level
-`.claude-plugin/marketplace.json` + `plugins/flowai-workflow/` payload).
-`scripts/build-plugin-payload.ts` assembles the full tree (engine
-sources, bundled workflows, manifests with version pinned) that
-`scripts/sync-plugins-repo.ts` then either dry-runs, install-locals, or
-publishes to the downstream repo (FR-E72).
+The plugin source tree lives at `plugin-src/`: shared runtime files
+under `plugin-src/shared/`, Claude wiring under `plugin-src/claude/`,
+and Codex wiring under `plugin-src/codex/`. Codex uses
+`.agents/plugins/marketplace.json` at the marketplace root and
+`.codex-plugin/plugin.json` inside the plugin root.
+`scripts/build-plugin-payload.ts`
+emits separate `dist/plugin-payload/claude` and
+`dist/plugin-payload/codex` roots with version-pinned manifests.
 
 ## Prerequisites
 
@@ -492,7 +478,8 @@ deno task dashboard        # Render an HTML run dashboard
 deno task compile          # Build standalone binaries
 deno task loop             # Iterative SDLC self-runner (advanced)
 deno task release          # Cut a standard-version bump (CI-driven)
-deno task sync-plugins     # Build + (dry-run | install-local | publish) the plugin payload (FR-E70/E72)
+deno task sync-plugins     # Build + dry-run/publish the plugin payload (FR-E70/E72)
+deno task sync-plugins-local # Rebuild + install local Claude/Codex payloads
 ```
 
 ## Authentication

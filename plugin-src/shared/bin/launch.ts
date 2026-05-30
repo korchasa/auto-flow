@@ -3,8 +3,9 @@
  * @module
  * flowai-workflow plugin launcher (FR-E74).
  *
- * Invoked by `.mcp.json` as:
- *   `deno run -A "$CLAUDE_PLUGIN_ROOT/bin/launch.ts" mcp`
+ * Invoked by host-specific MCP config as:
+ *   `deno run -A "<plugin-root>/bin/launch.ts" mcp`
+ *   `deno run -A "./bin/launch.ts" mcp`
  *
  * Bootstraps the engine binary into `$CLAUDE_PLUGIN_DATA/bin/` on first
  * call (via `deno compile`, atomic via tmp→rename), then spawns the
@@ -22,7 +23,7 @@
  * public plugin API — downstream code MUST NOT depend on this module.
  */
 
-// Inline `join` (no `@std/path` import) so launch.ts resolves stand-
+// Inline tiny path helpers (no `@std/path` import) so launch.ts resolves stand-
 // alone without a sibling `deno.json`. The plugin payload puts
 // `engine/deno.json` alongside this file but Deno walks UP for config
 // and finds nothing useful from `bin/`. Our path inputs are always
@@ -33,18 +34,52 @@ function join(...parts: string[]): string {
   return parts.join("/");
 }
 
+function dirname(path: string): string {
+  const trimmed = path.replace(/\/+$/, "");
+  const idx = trimmed.lastIndexOf("/");
+  return idx <= 0 ? "/" : trimmed.slice(0, idx);
+}
+
+function fromFileUrl(url: string): string {
+  const parsed = new URL(url);
+  if (parsed.protocol !== "file:") {
+    throw new Error(`Expected file: URL for launcher import, got ${url}`);
+  }
+  return decodeURIComponent(parsed.pathname);
+}
+
+const HOST_PLUGIN_ROOT_ENV = ["CLAUDE", "PLUGIN", "ROOT"].join("_");
+
 // ---------------------------------------------------------------------------
 // Pure helpers (exported for tests).
 // ---------------------------------------------------------------------------
 
 /**
- * Read the `version` field from `<pluginRoot>/.claude-plugin/plugin.json`.
+ * Read the `version` field from the host-specific plugin manifest.
  * Throws on missing file, malformed JSON, or missing `version` field —
  * these all indicate a broken plugin install, never a user error.
  */
 export async function readPluginVersion(pluginRoot: string): Promise<string> {
-  const path = join(pluginRoot, ".claude-plugin", "plugin.json");
-  const text = await Deno.readTextFile(path);
+  const candidates = [
+    join(pluginRoot, ".claude-plugin", "plugin.json"),
+    join(pluginRoot, ".codex-plugin", "plugin.json"),
+  ];
+  let path = "";
+  let text = "";
+  for (const candidate of candidates) {
+    try {
+      text = await Deno.readTextFile(candidate);
+      path = candidate;
+      break;
+    } catch (error) {
+      if (!(error instanceof Deno.errors.NotFound)) throw error;
+    }
+  }
+  if (!path) {
+    throw new Error(
+      `Missing plugin manifest. Tried: ${candidates.join(", ")}`,
+    );
+  }
   const obj = JSON.parse(text) as { version?: unknown };
   if (typeof obj.version !== "string" || obj.version.length === 0) {
     throw new Error(
@@ -155,22 +190,38 @@ export function buildCompileArgs(
   return args;
 }
 
+/** Resolve the plugin root from host env or this launcher's import URL. */
+export function resolvePluginRoot(
+  env: Record<string, string | undefined>,
+  importMetaUrl: string,
+): string {
+  return env[HOST_PLUGIN_ROOT_ENV] ??
+    dirname(dirname(fromFileUrl(importMetaUrl)));
+}
+
+/** Deterministic writable data dir used when Claude-specific env is absent. */
+export function codexDataDir(env: Record<string, string | undefined>): string {
+  if (env.FLOWAI_PLUGIN_DATA) return env.FLOWAI_PLUGIN_DATA;
+  if (env.CODEX_HOME) {
+    return join(env.CODEX_HOME, "plugins/data/flowai-workflow");
+  }
+  if (env.HOME) return join(env.HOME, ".codex/plugins/data/flowai-workflow");
+  throw new Error(
+    "Cannot resolve flowai-workflow plugin data directory: set " +
+      "FLOWAI_PLUGIN_DATA, CODEX_HOME, or HOME.",
+  );
+}
+
+/** Resolve host data dir while preserving Claude Code's explicit location. */
+export function resolvePluginData(
+  env: Record<string, string | undefined>,
+): string {
+  return env.CLAUDE_PLUGIN_DATA ?? codexDataDir(env);
+}
+
 // ---------------------------------------------------------------------------
 // Main launcher (entry point).
 // ---------------------------------------------------------------------------
-
-function requireEnv(name: string): string {
-  const v = Deno.env.get(name);
-  if (!v) {
-    console.error(
-      `Error: ${name} is not set. The flowai-workflow launcher is invoked ` +
-        `by the Claude Code plugin manager and expects ${name} in the ` +
-        `environment.`,
-    );
-    Deno.exit(2);
-  }
-  return v;
-}
 
 async function ensureBinary(
   pluginRoot: string,
@@ -242,8 +293,21 @@ async function main(): Promise<never> {
     }
   }
 
-  const pluginRoot = requireEnv("CLAUDE_PLUGIN_ROOT");
-  const pluginData = requireEnv("CLAUDE_PLUGIN_DATA");
+  const env = Deno.env.toObject();
+  const pluginRoot = resolvePluginRoot(env, import.meta.url);
+  const pluginData = resolvePluginData(env);
+  try {
+    const stat = await Deno.stat(pluginRoot);
+    if (!stat.isDirectory) {
+      throw new Error(`${pluginRoot} is not a directory`);
+    }
+  } catch (error) {
+    console.error(
+      `Error: flowai-workflow plugin root is missing (${pluginRoot}) ` +
+        `resolved from ${import.meta.url}: ${(error as Error).message}`,
+    );
+    Deno.exit(2);
+  }
   const version = await readPluginVersion(pluginRoot);
   const bin = await ensureBinary(pluginRoot, pluginData, version);
 

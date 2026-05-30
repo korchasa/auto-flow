@@ -20,7 +20,7 @@ and GitHub-Release standalone-binary channels are deprecated and removed.
 
 The change mirrors the foxcode reference
 (`/Users/korchasa/www/tools/foxcode`): `/plugin marketplace add
-korchasa/flowai-workflow-plugins`, `/plugin install flowai-workflow@korchasa`,
+korchasa/flowai-workflow-plugins --sparse claude`, `/plugin install flowai-workflow@korchasa`,
 done. No `deno install`, no binary download, no per-IDE bootstrap.
 
 ## Overview
@@ -205,11 +205,11 @@ Selected design (already confirmed by the user):
       `deno run -A jsr:@korchasa/flowai-workflow@0.7.12 --help 2>&1 | grep -qi deprecat`,
       pasted in PR body.)
 - [ ] README install section rewritten: plugin install (`/plugin marketplace
-      add korchasa/flowai-workflow-plugins` + `/plugin install
+      add korchasa/flowai-workflow-plugins --sparse claude` + `/plugin install
       flowai-workflow@korchasa`) is the only documented path; Codex
       sibling commands listed; `## Migrating from JSR` subsection added.
       (FR-E70; manual — korchasa; Evidence:
-      `grep -n "/plugin marketplace add korchasa/flowai-workflow-plugins" README.md`.)
+      `grep -n "/plugin marketplace add korchasa/flowai-workflow-plugins --sparse claude" README.md`.)
 - [ ] AGENTS.md updated: "Project tooling Stack" lists plugin install only;
       "Architecture" section names the `flowai-workflow-plugins` target
       repo and the CI sync contract. (FR-E70 + FR-E72; manual — korchasa;
@@ -409,7 +409,7 @@ In a separate PR (sequenced AFTER phase 5 publish completes):
   patch — explicitly state this and contrast with foxcode's MCP-server
   requirement). Add `## Migrating from JSR` subsection: tell users to
   `deno uninstall flowai-workflow`, then `/plugin marketplace add
-  korchasa/flowai-workflow-plugins` + `/plugin install
+  korchasa/flowai-workflow-plugins --sparse claude` + `/plugin install
   flowai-workflow@korchasa`. Remove `## Installation` block (lines
   311–329 of current README).
 - `AGENTS.md` "Project tooling Stack": drop "JSR (`@korchasa/flowai-workflow`)";
@@ -467,11 +467,11 @@ deno test -A cli_test.ts
 # Phase 7 — manual smoke (paste into PR body)
 gh repo view korchasa/flowai-workflow-plugins --json visibility,licenseInfo
 # In a fresh Claude Code session:
-#   /plugin marketplace add korchasa/flowai-workflow-plugins
+#   /plugin marketplace add korchasa/flowai-workflow-plugins --sparse claude
 #   /plugin install flowai-workflow@korchasa
 #   /flowai-workflow:run --help
 # In a fresh Codex session:
-#   codex plugin marketplace add korchasa/flowai-workflow-plugins
+#   codex plugin marketplace add korchasa/flowai-workflow-plugins --sparse codex
 #   codex plugin install flowai-workflow@korchasa
 #   $flowai-workflow:run --help
 ```

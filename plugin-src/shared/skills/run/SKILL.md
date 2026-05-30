@@ -1,6 +1,6 @@
 ---
 name: run
-description: Execute a bundled or project-local flowai-workflow DAG. Use to launch a workflow run from inside Claude Code without installing the CLI separately.
+description: Execute a bundled or project-local flowai-workflow DAG. Use to launch a workflow run from inside the host IDE without installing the CLI separately.
 argument-hint: workflow name or path (e.g. github-inbox or .flowai-workflow/<name>)
 effort: low
 ---
@@ -8,9 +8,9 @@ effort: low
 # Run flowai-workflow
 
 Execute a flowai-workflow DAG via the plugin-bundled engine. The plugin
-ships the engine TypeScript source under `$CLAUDE_PLUGIN_ROOT/engine/`
+ships the engine TypeScript source under `{{FLOWAI_PLUGIN_ROOT}}/engine/`
 and the canonical bundled workflows under
-`$CLAUDE_PLUGIN_ROOT/.flowai-workflow/<name>/`. Runs use the host's
+`{{FLOWAI_PLUGIN_ROOT}}/.flowai-workflow/<name>/`. Runs use the host's
 locally-installed Deno 2.x.
 
 ## Preflight
@@ -32,7 +32,7 @@ order:
 1. If the argument is an existing directory containing `workflow.yaml`,
    use it as-is.
 2. If the argument matches a sibling under
-   `$CLAUDE_PLUGIN_ROOT/.flowai-workflow/`, use that bundled folder.
+   `{{FLOWAI_PLUGIN_ROOT}}/.flowai-workflow/`, use that bundled folder.
 3. If the argument matches a sibling under
    `<project-root>/.flowai-workflow/`, use the project-local copy.
 4. Otherwise, list available workflows and ask the user which one to
@@ -42,7 +42,7 @@ order:
 
 ```bash
 FLOWAI_SUPPRESS_DEPRECATION=1 \
-  deno run -A "$CLAUDE_PLUGIN_ROOT/engine/cli.ts" run "<resolved-workflow-path>" [extra args]
+  deno run -A "{{FLOWAI_PLUGIN_ROOT}}/bin/launch.ts" run "<resolved-workflow-path>" [extra args]
 ```
 
 `FLOWAI_SUPPRESS_DEPRECATION=1` silences the legacy JSR/binary
@@ -68,7 +68,7 @@ verbosity unless they asked for `-v` / `-q`.
   point the user at `scaffold` to adapt the config.
 - "Permission denied: …" — the engine writes under
   `<workflow>/runs/<run-id>/` and the per-run worktree; if the
-  workflow lives under `$CLAUDE_PLUGIN_ROOT/.flowai-workflow/` (which
+  workflow lives under `{{FLOWAI_PLUGIN_ROOT}}/.flowai-workflow/` (which
   is read-only by convention), instruct the user to first
   `flowai-workflow:init` into their project so runs can write into
   the project-local copy.

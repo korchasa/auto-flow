@@ -3,6 +3,7 @@ import {
   buildCloneUrl,
   commitMessage,
   parseSyncCliArgs,
+  pluginPayloadRoots,
   syncPluginsRepo,
   TARGET_REPO,
   workingTreeIsDirty,
@@ -47,6 +48,17 @@ Deno.test("FR-E72 parseSyncCliArgs — explicit publish mode is the default", ()
 
 Deno.test("FR-E72 parseSyncCliArgs — --dry-run shortcut", () => {
   const parsed = parseSyncCliArgs(["--version", "1.0.0", "--dry-run"]);
+  if ("help" in parsed) throw new Error("unexpected help");
+  assertEquals(parsed.mode, "dry-run");
+});
+
+Deno.test("FR-E72 parseSyncCliArgs — ignores deno task separator", () => {
+  const parsed = parseSyncCliArgs([
+    "--",
+    "--version",
+    "1.0.0",
+    "--dry-run",
+  ]);
   if ("help" in parsed) throw new Error("unexpected help");
   assertEquals(parsed.mode, "dry-run");
 });
@@ -229,6 +241,24 @@ Deno.test("FR-E72 dry-run mode — builds payload, issues no git ops", async () 
   assertEquals(result.mode, "dry-run");
   assertEquals(result.filesWritten, 2);
   assertEquals(mocks.gitCalls.length, 0);
+});
+
+Deno.test("FR-E70 dry-run emits host-specific marketplace roots", async () => {
+  const roots = pluginPayloadRoots("/tmp/payload");
+  assertEquals(roots.claude, "/tmp/payload/claude");
+  assertEquals(roots.codex, "/tmp/payload/codex");
+
+  const mocks = makeMocks({ porcelain: "" });
+  const result = await syncPluginsRepo(
+    {
+      engineRoot: "/eng",
+      version: "1.0.0",
+      mode: "dry-run",
+      outDir: "/tmp/payload",
+    },
+    mocks,
+  );
+  assertEquals(result.payloadRoots, roots);
 });
 
 Deno.test("FR-E72 publish uses correct target repo default", () => {

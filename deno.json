@@ -26,7 +26,6 @@
     "compile": "deno run -A scripts/compile.ts",
     "release": "deno run -A npm:standard-version --skip.tag",
     "fmt": "deno fmt",
-    "sync-claude-plugin": "deno run -A scripts/sync-claude-plugin.ts",
     "sync-plugins": "deno run -A scripts/sync-plugins-repo.ts",
     "sync-plugins-local": "deno run -A scripts/sync-plugins-local.ts"
   },
@@ -58,7 +57,7 @@
       ".flowai-workflow/.template.json",
       ".flowai-workflow/*/.template.json",
       ".github/**",
-      "claude-plugin",
+      "plugin-src",
       "dist/**",
       "documents/**",
       "scripts/**",

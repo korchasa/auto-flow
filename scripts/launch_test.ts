@@ -1,6 +1,6 @@
 /**
  * Tests for the plugin launcher script
- * (`claude-plugin/plugins/flowai-workflow/bin/launch.ts`, FR-E74).
+ * (`plugin-src/shared/bin/launch.ts`, FR-E74).
  *
  * Two layers:
  *
@@ -21,13 +21,16 @@ import { join, resolve } from "@std/path";
 
 import {
   buildCompileArgs,
+  codexDataDir,
   enumerateBundledWorkflowFiles,
   readPluginVersion,
+  resolvePluginData,
+  resolvePluginRoot,
   resolveWorkflowDir,
-} from "../claude-plugin/plugins/flowai-workflow/bin/launch.ts";
+} from "../plugin-src/shared/bin/launch.ts";
 
 const LAUNCHER_SRC = resolve(
-  "claude-plugin/plugins/flowai-workflow/bin/launch.ts",
+  "plugin-src/shared/bin/launch.ts",
 );
 
 // ---------------------------------------------------------------------------
@@ -66,6 +69,46 @@ Deno.test("FR-E74 readPluginVersion throws on missing version", async () => {
   } finally {
     await Deno.remove(tmp, { recursive: true });
   }
+});
+
+Deno.test("FR-E74 readPluginVersion supports Codex plugin manifest", async () => {
+  const tmp = await Deno.makeTempDir({ prefix: "launch-test-" });
+  try {
+    await Deno.mkdir(join(tmp, ".codex-plugin"));
+    await Deno.writeTextFile(
+      join(tmp, ".codex-plugin", "plugin.json"),
+      JSON.stringify({ name: "x", version: "4.5.6" }),
+    );
+    assertEquals(await readPluginVersion(tmp), "4.5.6");
+  } finally {
+    await Deno.remove(tmp, { recursive: true });
+  }
+});
+
+Deno.test("FR-E74 launcher pure helpers resolve Codex defaults", () => {
+  assertEquals(
+    codexDataDir({ CODEX_HOME: "/tmp/codex-home", HOME: "/tmp/home" }),
+    "/tmp/codex-home/plugins/data/flowai-workflow",
+  );
+  assertEquals(
+    codexDataDir({ HOME: "/tmp/home" }),
+    "/tmp/home/.codex/plugins/data/flowai-workflow",
+  );
+  assertEquals(
+    resolvePluginData({ CODEX_HOME: "/tmp/codex-home" }),
+    "/tmp/codex-home/plugins/data/flowai-workflow",
+  );
+  assertEquals(
+    resolvePluginRoot(
+      { CLAUDE_PLUGIN_ROOT: "/plugin" },
+      "file:///ignored/bin/launch.ts",
+    ),
+    "/plugin",
+  );
+  assertEquals(
+    resolvePluginRoot({}, "file:///plugin/bin/launch.ts"),
+    "/plugin",
+  );
 });
 
 Deno.test(
@@ -344,7 +387,7 @@ exec "${realDeno}" "$@"
 
 interface RunOpts {
   args: string[];
-  env?: Record<string, string>;
+  env?: Record<string, string | undefined>;
   /** When set, scrub the shim from PATH and use this PATH instead. */
   pathOverride?: string;
   fx: IntFixture;
@@ -362,8 +405,11 @@ async function runLauncher(opts: RunOpts): Promise<RunResult> {
     CLAUDE_PLUGIN_DATA: opts.fx.pluginData,
     PATH: opts.pathOverride ?? `${opts.fx.shimDir}:/usr/bin:/bin`,
     HOME: opts.fx.pluginRoot,
-    ...opts.env,
   };
+  for (const [key, value] of Object.entries(opts.env ?? {})) {
+    if (value === undefined) delete env[key];
+    else env[key] = value;
+  }
   // We spawn via the shim's `deno` (which delegates `run` to the real
   // Deno) so the launcher's own `deno compile` call hits the shim.
   const cmd = new Deno.Command(join(opts.fx.shimDir, "deno"), {
@@ -446,6 +492,32 @@ Deno.test(
       assertEquals(r.code, 0, `stderr: ${r.stderr}`);
       const denoLog = await readDenoLog(fx);
       assertEquals(denoLog.length, 0, "expected NO compile call");
+      const binLog = await readBinLog(fx);
+      assertEquals(binLog, [["--help"]]);
+    } finally {
+      await fx.cleanup();
+    }
+  },
+);
+
+Deno.test(
+  "FR-E74 launcher resolves plugin root from import meta without Claude env",
+  async () => {
+    const fx = await setupIntFixture({
+      version: "0.6.0",
+      prePopulateBinary: true,
+    });
+    try {
+      const r = await runLauncher({
+        fx,
+        args: ["--help"],
+        env: {
+          CLAUDE_PLUGIN_ROOT: undefined,
+          CLAUDE_PLUGIN_DATA: undefined,
+          FLOWAI_PLUGIN_DATA: fx.pluginData,
+        },
+      });
+      assertEquals(r.code, 0, `stderr: ${r.stderr}`);
       const binLog = await readBinLog(fx);
       assertEquals(binLog, [["--help"]]);
     } finally {

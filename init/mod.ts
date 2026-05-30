@@ -79,11 +79,11 @@ export type ParsedInitArgs =
      * set, `listAvailableWorkflows` and the per-workflow source
      * resolution use `<bundleDir>/<name>/` instead of the package-
      * relative `../.flowai-workflow/<name>/`. The plugin launcher
-     * skill (`init/SKILL.md`) passes
-     * `--bundle-dir "$CLAUDE_PLUGIN_ROOT/.flowai-workflow"` so the
-     * plugin-installed engine can find its bundled workflows even
-     * though the engine TS source lives elsewhere in the plugin
-     * payload. Unset → default behaviour preserved.
+     * skill (`init/SKILL.md`) passes the host plugin root's
+     * `.flowai-workflow` path so the plugin-installed engine can find
+     * its bundled workflows even though the engine TS source lives
+     * elsewhere in the plugin payload. Unset → default behaviour
+     * preserved.
      */
     bundleDir?: string;
   };
@@ -172,8 +172,8 @@ Options:
                            prompted interactively (TTY only).
   --bundle-dir <path>      Override bundled-workflows lookup root
                            (FR-E70). Used by the Claude Code / Codex
-                           plugin launcher to pass
-                           \`$CLAUDE_PLUGIN_ROOT/.flowai-workflow\`.
+                           plugin launcher to pass the host plugin
+                           root's .flowai-workflow directory.
   -l, --list               List workflows bundled with this build, exit 0
   --allow-dirty            Skip the clean-git-tree preflight check
   --dry-run                Print files that would be created, exit 0

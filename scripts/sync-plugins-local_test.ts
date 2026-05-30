@@ -1,7 +1,9 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import {
   autoInstallEnabled,
+  detectCodexPluginMcpNameCollisions,
   ENV_AUTO_INSTALL_PLUGINS,
+  localPayloadRoots,
   parseAndStripFlowaiTables,
   parseArgs,
   planClaudeActions,
@@ -216,6 +218,65 @@ Deno.test("FR-E72 reconcileCodexFlowaiPluginEntries preserved enabled map wins a
   if (!/enabled = false/.test(result)) {
     throw new Error(`expected preserved enabled = false: ${result}`);
   }
+});
+
+Deno.test("FR-E71 local sync reconciles Codex plugin entries without duplicate MCP servers", () => {
+  const input = [
+    "[mcp_servers.flowai-workflow]",
+    'command = "manual"',
+    "",
+    '[plugins."flowai-workflow@flowai-workflow-local"]',
+    "enabled = false",
+    "",
+  ].join("\n");
+  const result = reconcileCodexFlowaiPluginEntries(input, ["flowai-workflow"]);
+  assertEquals(result.includes("[mcp_servers.flowai-workflow]"), true);
+  assertEquals(
+    result.match(/\[mcp_servers\.flowai-workflow\]/g)?.length ?? 0,
+    1,
+  );
+  assertEquals(
+    result.includes('[plugins."flowai-workflow@flowai-workflow-local"]'),
+    true,
+  );
+  assertEquals(result.includes("enabled = false"), true);
+});
+
+Deno.test("FR-E71 local sync detects official and local MCP name collision", () => {
+  const config = [
+    '[plugins."flowai-workflow@flowai-workflow"]',
+    "enabled = true",
+    "",
+    '[plugins."flowai-workflow@flowai-workflow-local"]',
+    "enabled = true",
+    "",
+    '[plugins."other@flowai-workflow-local"]',
+    "enabled = true",
+    "",
+  ].join("\n");
+  assertEquals(
+    detectCodexPluginMcpNameCollisions(config, ["flowai-workflow"]),
+    [
+      "flowai-workflow",
+    ],
+  );
+  const disabledLocal = config.replace(
+    '[plugins."flowai-workflow@flowai-workflow-local"]\nenabled = true',
+    '[plugins."flowai-workflow@flowai-workflow-local"]\nenabled = false',
+  );
+  assertEquals(
+    detectCodexPluginMcpNameCollisions(disabledLocal, [
+      "flowai-workflow",
+    ]),
+    [],
+  );
+});
+
+Deno.test("FR-E71 local sync uses host-specific payload roots", () => {
+  assertEquals(localPayloadRoots("dist/plugin-payload"), {
+    claude: "dist/plugin-payload/claude",
+    codex: "dist/plugin-payload/codex",
+  });
 });
 
 // ---------------------------------------------------------------------------

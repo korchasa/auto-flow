@@ -40,6 +40,15 @@ const MARKETPLACE_NAME = "flowai-workflow-local";
 /** Env var (and dotenv key) that gates the auto-install dev hook. */
 export const ENV_AUTO_INSTALL_PLUGINS = "AUTO_INSTALL_PLUGINS";
 
+export function localPayloadRoots(
+  outDir: string,
+): { claude: string; codex: string } {
+  return {
+    claude: join(outDir, "claude"),
+    codex: join(outDir, "codex"),
+  };
+}
+
 function parseDotenv(content: string): Record<string, string> {
   const result: Record<string, string> = {};
   for (const rawLine of content.split(/\r?\n/)) {
@@ -189,6 +198,30 @@ export function reconcileCodexFlowaiPluginEntries(
     })
     .join("\n");
   return `${trimmed}\n\n${blocks}`;
+}
+
+function codexPluginEnabled(
+  configText: string,
+  pluginName: string,
+  marketplaceName: string,
+): boolean {
+  const { previousEnabled } = parseAndStripFlowaiTables(
+    configText,
+    marketplaceName,
+  );
+  return previousEnabled.get(pluginName) ?? false;
+}
+
+export function detectCodexPluginMcpNameCollisions(
+  configText: string,
+  emittedNames: string[],
+  localMarketplaceName: string = MARKETPLACE_NAME,
+  officialMarketplaceName = "flowai-workflow",
+): string[] {
+  return emittedNames.filter((name) =>
+    codexPluginEnabled(configText, name, localMarketplaceName) &&
+    codexPluginEnabled(configText, name, officialMarketplaceName)
+  );
 }
 
 export function planCodexPluginAdds(
@@ -412,18 +445,24 @@ function readEngineVersion(root: string): string {
 
 async function ensureBuild(outDir: string, skipBuild: boolean): Promise<void> {
   if (skipBuild) {
-    const marketplacePath = join(outDir, ".claude-plugin", "marketplace.json");
-    try {
-      await Deno.stat(marketplacePath);
-    } catch (error) {
-      if (error instanceof Deno.errors.NotFound) {
-        throw new Error(
-          `--no-build was set but ${marketplacePath} does not exist. ` +
-            `Run \`deno run -A scripts/build-plugin-payload.ts --out-dir ${outDir} ` +
-            `--version <ver>\` first.`,
-        );
+    const roots = localPayloadRoots(outDir);
+    const marketplacePaths = [
+      join(roots.claude, ".claude-plugin", "marketplace.json"),
+      join(roots.codex, ".agents", "plugins", "marketplace.json"),
+    ];
+    for (const marketplacePath of marketplacePaths) {
+      try {
+        await Deno.stat(marketplacePath);
+      } catch (error) {
+        if (error instanceof Deno.errors.NotFound) {
+          throw new Error(
+            `--no-build was set but ${marketplacePath} does not exist. ` +
+              `Run \`deno run -A scripts/build-plugin-payload.ts --out-dir ${outDir} ` +
+              `--version <ver>\` first.`,
+          );
+        }
+        throw error;
       }
-      throw error;
     }
     return;
   }
@@ -568,9 +607,15 @@ async function syncCodex(absoluteOutDir: string): Promise<void> {
   ]);
 
   const marketplaceJson = await Deno.readTextFile(
-    join(absoluteOutDir, ".claude-plugin", "marketplace.json"),
+    join(absoluteOutDir, ".agents", "plugins", "marketplace.json"),
   );
   const emitted = readMarketplacePluginNames(marketplaceJson);
+  const collisions = detectCodexPluginMcpNameCollisions(configText, emitted);
+  for (const name of collisions) {
+    console.log(
+      `[sync-plugins-local] Warning: Codex has both official and local ${name} plugins enabled; disable one install before MCP smoke testing to avoid duplicate flowai-workflow MCP startup.`,
+    );
+  }
   for (const id of planCodexPluginAdds(emitted)) {
     console.log(`[sync-plugins-local] Installing Codex ${id}`);
     await runInherited("codex", ["plugin", "add", id]);
@@ -621,8 +666,9 @@ async function main(): Promise<void> {
   const { outDir, skipBuild } = parseArgs(Deno.args);
   await ensureBuild(outDir, skipBuild);
   const absoluteOutDir = isAbsolute(outDir) ? outDir : resolve(outDir);
-  await syncClaude(absoluteOutDir);
-  await syncCodex(absoluteOutDir);
+  const roots = localPayloadRoots(absoluteOutDir);
+  await syncClaude(roots.claude);
+  await syncCodex(roots.codex);
   console.log("[sync-plugins-local] Done.");
 }
 

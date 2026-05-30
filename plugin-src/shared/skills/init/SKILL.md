@@ -22,8 +22,8 @@ command -v deno >/dev/null 2>&1 || { echo "Error: Deno 2.x is required — insta
 
 ```bash
 FLOWAI_SUPPRESS_DEPRECATION=1 \
-  deno run -A "$CLAUDE_PLUGIN_ROOT/engine/cli.ts" init \
-    --bundle-dir "$CLAUDE_PLUGIN_ROOT/.flowai-workflow" --list
+  deno run -A "{{FLOWAI_PLUGIN_ROOT}}/bin/launch.ts" init \
+    --bundle-dir "{{FLOWAI_PLUGIN_ROOT}}/.flowai-workflow" --list
 ```
 
 This enumerates the workflows shipped in the plugin payload. Pick one
@@ -34,8 +34,8 @@ by intent (issue-driven SDLC → `github-inbox`; autonomous local SDLC →
 
 ```bash
 FLOWAI_SUPPRESS_DEPRECATION=1 \
-  deno run -A "$CLAUDE_PLUGIN_ROOT/engine/cli.ts" init \
-    --bundle-dir "$CLAUDE_PLUGIN_ROOT/.flowai-workflow" \
+  deno run -A "{{FLOWAI_PLUGIN_ROOT}}/bin/launch.ts" init \
+    --bundle-dir "{{FLOWAI_PLUGIN_ROOT}}/.flowai-workflow" \
     --workflow <name>
 ```
 

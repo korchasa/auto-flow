@@ -12,17 +12,28 @@
  *
  * ```
  * <outDir>/
- *   .claude-plugin/marketplace.json    # version pinned to <opts.version>
- *   plugins/flowai-workflow/
- *     .claude-plugin/plugin.json       # version pinned to <opts.version>
- *     README.md, agents/, skills/      # verbatim copy of claude-plugin/
- *     engine/<engine TS sources>       # cli.ts, engine.ts, init/, ...
- *     engine/deno.json                 # patched: no publish, no version
- *     .flowai-workflow/<name>/         # bundled workflows (no per-run dirt)
+ *   claude/
+ *     .claude-plugin/marketplace.json
+ *     plugins/flowai-workflow/
+ *       .claude-plugin/plugin.json
+ *       .mcp.json
+ *       README.md, agents/, skills/, bin/
+ *       engine/<engine TS sources>
+ *       .flowai-workflow/<name>/
+ *   codex/
+ *     .agents/plugins/marketplace.json
+ *     plugins/flowai-workflow/
+ *       .codex-plugin/plugin.json
+ *       .mcp.json
+ *       README.md, agents/, skills/, bin/
+ *       engine/<engine TS sources>
+ *       .flowai-workflow/<name>/
  * ```
  *
- * File enumeration uses `git ls-files` from `<engineRoot>` so the payload
- * tracks the repo's source-of-truth file set: gitignored content
+ * File enumeration uses `git ls-files --cached --others --exclude-standard`
+ * from `<engineRoot>` so the payload tracks the repo's source-of-truth file
+ * set while local pre-commit payload checks can see newly-added plugin files:
+ * gitignored content
  * (`.flowai-workflow/<name>/runs/`, `.flowai-workflow/<name>/memory/agent-*.md`,
  * `.template.json`, build artefacts) is excluded for free.
  *
@@ -33,6 +44,10 @@
  */
 
 import { dirname, join, relative, resolve } from "@std/path";
+
+export type HostKind = "claude" | "codex";
+
+const HOSTS: HostKind[] = ["claude", "codex"];
 
 /** Options accepted by {@link buildPluginPayload}. */
 export interface BuildPayloadOptions {
@@ -111,12 +126,29 @@ export function substituteMarketplaceName(
  *
  * Pure — drives the test matrix for payload-shape regressions.
  */
-export function classifyPayloadFile(relPath: string): string | null {
+export function classifyPayloadFile(
+  host: HostKind,
+  relPath: string,
+): string | null {
   // Tests never ship in the payload.
   if (relPath.endsWith("_test.ts")) return null;
-  // The plugin source tree is copied verbatim to the payload root.
-  if (relPath.startsWith("claude-plugin/")) {
-    return relPath.slice("claude-plugin/".length);
+
+  // Shared plugin runtime files are copied into every host-specific
+  // plugin root. Host discovery files are handled by the host branches
+  // below, keeping Claude and Codex MCP wiring isolated from each other.
+  const sharedPrefix = "plugin-src/shared/";
+  if (relPath.startsWith(sharedPrefix)) {
+    return join(
+      host,
+      "plugins/flowai-workflow",
+      relPath.slice(sharedPrefix.length),
+    );
+  }
+
+  const hostPrefix = `plugin-src/${host}/`;
+  if (relPath.startsWith("plugin-src/")) {
+    if (!relPath.startsWith(hostPrefix)) return null;
+    return join(host, relPath.slice(hostPrefix.length));
   }
   // Bundled workflows live alongside the engine source, preserving the
   // `.flowai-workflow/` prefix so agent-prompt relative paths keep
@@ -127,7 +159,7 @@ export function classifyPayloadFile(relPath: string): string | null {
     if (/\/memory\/agent-[^/]+\.md$/.test(relPath)) return null;
     if (relPath.endsWith("/.template.json")) return null;
     if (relPath.endsWith(".template.json")) return null;
-    return join("plugins/flowai-workflow", relPath);
+    return join(host, "plugins/flowai-workflow", relPath);
   }
   // Engine source: root *.ts plus init/*.ts. Tests already filtered above.
   if (relPath.endsWith(".ts")) {
@@ -136,13 +168,13 @@ export function classifyPayloadFile(relPath: string): string | null {
     if (relPath.startsWith("scripts/")) return null;
     if (relPath.startsWith(".claude/")) return null;
     if (relPath.startsWith("documents/")) return null;
-    if (relPath.startsWith("claude-plugin/")) return null; // unreachable, already handled
-    return join("plugins/flowai-workflow/engine", relPath);
+    if (relPath.startsWith("claude-plugin/")) return null;
+    return join(host, "plugins/flowai-workflow/engine", relPath);
   }
   // deno.json travels with the engine so JSR import-map resolves
   // inside the plugin install.
   if (relPath === "deno.json") {
-    return "plugins/flowai-workflow/engine/deno.json";
+    return join(host, "plugins/flowai-workflow/engine/deno.json");
   }
   // Everything else (README at repo root, AGENTS.md, CI configs, docs,
   // scripts, etc.) is not part of the runtime payload.
@@ -177,8 +209,9 @@ export function patchEngineDenoJson(json: string): string {
 }
 
 /**
- * Default file enumerator: shells out to `git ls-files` from
- * `<engineRoot>`. Returns sorted paths relative to that root.
+ * Default file enumerator: shells out to `git ls-files --cached --others
+ * --exclude-standard` from `<engineRoot>`. Returns sorted paths relative
+ * to that root.
  *
  * Production callers leave `enumerateFiles` unset; this function is
  * still exported so callers that need to inspect the file set without
@@ -187,7 +220,14 @@ export function patchEngineDenoJson(json: string): string {
  */
 export async function gitLsFiles(engineRoot: string): Promise<string[]> {
   const output = await new Deno.Command("git", {
-    args: ["-C", engineRoot, "ls-files"],
+    args: [
+      "-C",
+      engineRoot,
+      "ls-files",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+    ],
     stdout: "piped",
     stderr: "piped",
   }).output();
@@ -199,7 +239,31 @@ export async function gitLsFiles(engineRoot: string): Promise<string[]> {
     );
   }
   const text = new TextDecoder().decode(output.stdout);
-  return text.split("\n").filter((s) => s.length > 0).sort();
+  return [...new Set(text.split("\n").filter((s) => s.length > 0))].sort();
+}
+
+function isVersionedManifest(destRel: string): boolean {
+  return destRel === "claude/.claude-plugin/marketplace.json" ||
+    destRel ===
+      "claude/plugins/flowai-workflow/.claude-plugin/plugin.json" ||
+    destRel === "codex/.agents/plugins/marketplace.json" ||
+    destRel === "codex/plugins/flowai-workflow/.codex-plugin/plugin.json";
+}
+
+function isMarketplaceManifest(destRel: string): boolean {
+  return destRel === "claude/.claude-plugin/marketplace.json" ||
+    destRel === "codex/.agents/plugins/marketplace.json";
+}
+
+function isTextFile(relPath: string): boolean {
+  return relPath.endsWith(".md") || relPath.endsWith(".json") ||
+    relPath.endsWith(".ts") || relPath.endsWith(".yaml") ||
+    relPath.endsWith(".yml");
+}
+
+function renderSharedRuntimeText(host: HostKind, text: string): string {
+  const pluginRoot = host === "claude" ? "${CLAUDE_PLUGIN_ROOT}" : ".";
+  return text.replaceAll("{{FLOWAI_PLUGIN_ROOT}}", pluginRoot);
 }
 
 /**
@@ -226,59 +290,64 @@ export async function buildPluginPayload(
   const manifestsUpdated: string[] = [];
 
   for (const relPath of files) {
-    const destRel = classifyPayloadFile(relPath);
-    if (destRel === null) continue;
-    const srcAbs = join(engineRoot, relPath);
-    const dstAbs = join(outDir, destRel);
-    await Deno.mkdir(dirname(dstAbs), { recursive: true });
+    for (const host of HOSTS) {
+      const destRel = classifyPayloadFile(host, relPath);
+      if (destRel === null) continue;
+      const srcAbs = join(engineRoot, relPath);
+      const dstAbs = join(outDir, destRel);
+      await Deno.mkdir(dirname(dstAbs), { recursive: true });
 
-    // Manifest files get the version substituted; the engine's deno.json
-    // gets the publish stanza stripped; everything else is a verbatim
-    // byte-copy.
-    if (
-      destRel === ".claude-plugin/marketplace.json" ||
-      destRel === "plugins/flowai-workflow/.claude-plugin/plugin.json"
-    ) {
-      const src = await Deno.readTextFile(srcAbs);
-      const versionResult = substituteVersion(src, opts.version);
-      if (!versionResult.replaced) {
-        throw new Error(
-          `${relPath}: expected a top-level "version" field; manifest is malformed.`,
-        );
-      }
-      let text = versionResult.text;
-      // Marketplace name override applies only to marketplace.json;
-      // plugin.json's name (the plugin id) stays stable across the
-      // published and local-dev pipelines.
-      if (
-        destRel === ".claude-plugin/marketplace.json" &&
-        opts.marketplaceName !== undefined
-      ) {
-        const nameResult = substituteMarketplaceName(
-          text,
-          opts.marketplaceName,
-        );
-        if (!nameResult.replaced) {
+      // Manifest files get the version substituted; the engine's deno.json
+      // gets the publish stanza stripped; everything else is a verbatim
+      // byte-copy.
+      if (isVersionedManifest(destRel)) {
+        const src = await Deno.readTextFile(srcAbs);
+        const versionResult = substituteVersion(src, opts.version);
+        if (!versionResult.replaced) {
           throw new Error(
-            `${relPath}: expected a top-level "name" field; manifest is malformed.`,
+            `${relPath}: expected a top-level "version" field; manifest is malformed.`,
           );
         }
-        text = nameResult.text;
+        let text = versionResult.text;
+        // Marketplace name override applies only to marketplace.json;
+        // plugin.json's name (the plugin id) stays stable across the
+        // published and local-dev pipelines.
+        if (
+          isMarketplaceManifest(destRel) && opts.marketplaceName !== undefined
+        ) {
+          const nameResult = substituteMarketplaceName(
+            text,
+            opts.marketplaceName,
+          );
+          if (!nameResult.replaced) {
+            throw new Error(
+              `${relPath}: expected a top-level "name" field; manifest is malformed.`,
+            );
+          }
+          text = nameResult.text;
+        }
+        await Deno.writeTextFile(dstAbs, text);
+        manifestsUpdated.push(dstAbs);
+      } else if (
+        destRel === join(host, "plugins/flowai-workflow/engine/deno.json")
+      ) {
+        const src = await Deno.readTextFile(srcAbs);
+        await Deno.writeTextFile(dstAbs, patchEngineDenoJson(src));
+      } else if (
+        relPath.startsWith("plugin-src/shared/") && isTextFile(relPath)
+      ) {
+        const src = await Deno.readTextFile(srcAbs);
+        await Deno.writeTextFile(dstAbs, renderSharedRuntimeText(host, src));
+      } else {
+        await Deno.copyFile(srcAbs, dstAbs);
       }
-      await Deno.writeTextFile(dstAbs, text);
-      manifestsUpdated.push(dstAbs);
-    } else if (destRel === "plugins/flowai-workflow/engine/deno.json") {
-      const src = await Deno.readTextFile(srcAbs);
-      await Deno.writeTextFile(dstAbs, patchEngineDenoJson(src));
-    } else {
-      await Deno.copyFile(srcAbs, dstAbs);
+      filesWritten.push(dstAbs);
     }
-    filesWritten.push(dstAbs);
   }
 
-  if (manifestsUpdated.length !== 2) {
+  if (manifestsUpdated.length !== 4) {
     throw new Error(
-      `Expected to update 2 manifests (marketplace.json + plugin.json); ` +
+      `Expected to update 4 manifests (Claude/Codex marketplace.json + plugin.json); ` +
         `got ${manifestsUpdated.length}. Source tree is missing one of them.`,
     );
   }

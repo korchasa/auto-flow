@@ -85,6 +85,8 @@ export interface SyncResult {
   mode: SyncMode;
   /** Path that was populated with the payload. */
   payloadDir: string;
+  /** Host-specific marketplace roots under {@link payloadDir}. */
+  payloadRoots: { claude: string; codex: string };
   /** Number of files written by the build step. */
   filesWritten: number;
   /** True when the target repo's working tree changed (commit issued). */
@@ -125,6 +127,16 @@ export function workingTreeIsDirty(porcelain: string): boolean {
  */
 export function commitMessage(version: string, engineSha: string): string {
   return `release: v${version} (synced from engine@${engineSha.slice(0, 12)})`;
+}
+
+/** Host-specific marketplace roots emitted by the payload builder. */
+export function pluginPayloadRoots(
+  payloadDir: string,
+): { claude: string; codex: string } {
+  return {
+    claude: join(payloadDir, "claude"),
+    codex: join(payloadDir, "codex"),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -173,6 +185,7 @@ async function dryRunMode(
   return {
     mode: "dry-run",
     payloadDir,
+    payloadRoots: pluginPayloadRoots(payloadDir),
     filesWritten: result.filesWritten.length,
     changed: false,
     tag: null,
@@ -266,6 +279,7 @@ async function publishMode(
       return {
         mode: "publish",
         payloadDir: cloneDir,
+        payloadRoots: pluginPayloadRoots(cloneDir),
         filesWritten: buildResult.filesWritten.length,
         changed: false,
         tag: null,
@@ -295,6 +309,7 @@ async function publishMode(
     return {
       mode: "publish",
       payloadDir: cloneDir,
+      payloadRoots: pluginPayloadRoots(cloneDir),
       filesWritten: buildResult.filesWritten.length,
       changed: true,
       tag,
@@ -403,6 +418,8 @@ export function parseSyncCliArgs(argv: string[]): CliArgs | { help: string } {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     switch (arg) {
+      case "--":
+        break;
       case "--engine-root":
         engineRoot = argv[++i] ?? "";
         break;
