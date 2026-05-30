@@ -75,10 +75,15 @@ Deno.test("CI workflow — every push runs build and plugin install acceptance p
   const workflow = await Deno.readTextFile(".github/workflows/ci.yml");
   assertEquals(workflow.includes('branches: ["**"]'), true);
 
+  const checkJob = workflowJobBlock(workflow, "check");
+  assertEquals(checkJob.includes("Create release and push tags"), false);
+  assertEquals(checkJob.includes("scripts/sync-plugins-repo.ts"), false);
+
   const claudeJob = workflowJobBlock(
     workflow,
     "plugin-install-acceptance-claude",
   );
+  assertEquals(claudeJob.includes("needs: check"), true);
   assertEquals(
     claudeJob.includes("Plugin install acceptance (Claude Code)"),
     true,
@@ -114,6 +119,7 @@ Deno.test("CI workflow — every push runs build and plugin install acceptance p
     workflow,
     "plugin-install-acceptance-codex",
   );
+  assertEquals(codexJob.includes("needs: check"), true);
   assertEquals(
     codexJob.includes("Plugin install acceptance (Codex)"),
     true,
@@ -146,16 +152,70 @@ Deno.test("CI workflow — every push runs build and plugin install acceptance p
   assertEquals(workflow.includes("plugin-real-agent-smoke"), false);
   assertEquals(workflow.includes("plugin-install-smoke"), false);
 
+  const releaseJob = workflowJobBlock(workflow, "release");
+  assertEquals(releaseJob.includes("needs:"), true);
+  assertEquals(releaseJob.includes("check"), true);
+  assertEquals(releaseJob.includes("plugin-install-acceptance-claude"), true);
+  assertEquals(releaseJob.includes("plugin-install-acceptance-codex"), true);
+  assertEquals(releaseJob.includes("Create release and push tags"), true);
+  assertEquals(
+    releaseJob.includes("Sync plugin payload to flowai-workflow-plugins"),
+    false,
+  );
+
+  const syncPluginsJob = workflowJobBlock(workflow, "sync-plugins");
+  assertEquals(syncPluginsJob.includes("needs: [release, build]"), true);
+  assertEquals(
+    syncPluginsJob.includes("if: needs.release.outputs.released == 'true'"),
+    true,
+  );
+  assertEquals(
+    syncPluginsJob.includes("Sync plugin payload to flowai-workflow-plugins"),
+    true,
+  );
+
   const setupMatrixJob = workflowJobBlock(workflow, "setup-matrix");
   const buildJob = workflowJobBlock(workflow, "build");
+  assertEquals(setupMatrixJob.includes("needs: release"), true);
   assertEquals(
-    setupMatrixJob.includes("if: needs.check.outputs.released == 'true'"),
+    setupMatrixJob.includes("if: needs.release.outputs.released == 'true'"),
     false,
   );
+  assertEquals(buildJob.includes("needs: [release, setup-matrix]"), true);
   assertEquals(
-    buildJob.includes("\n    if: needs.check.outputs.released == 'true'"),
+    buildJob.includes("\n    if: needs.release.outputs.released == 'true'"),
     false,
   );
+
+  const publishGithubJob = workflowJobBlock(workflow, "publish-github");
+  assertEquals(
+    publishGithubJob.includes("needs: [release, build, sync-plugins]"),
+    true,
+  );
+  assertEquals(
+    publishGithubJob.includes("if: needs.release.outputs.released == 'true'"),
+    true,
+  );
+
+  const publishJsrJob = workflowJobBlock(workflow, "publish-jsr");
+  assertEquals(
+    publishJsrJob.includes("needs: [release, build, sync-plugins]"),
+    true,
+  );
+  assertEquals(
+    publishJsrJob.includes("if: needs.release.outputs.released == 'true'"),
+    true,
+  );
+});
+
+Deno.test("Sync plugins workflow — uses real acceptance without smoke probes", async () => {
+  const workflow = await Deno.readTextFile(
+    ".github/workflows/sync-plugins.yml",
+  );
+  assertEquals(workflow.includes("scripts/plugin-payload-smoke.ts"), false);
+  assertEquals(workflow.includes("scripts/plugin-install-acceptance.ts"), true);
+  assertEquals(workflow.includes("--host all"), true);
+  assertEquals(workflow.includes("--codex-provider openrouter"), true);
 });
 
 // --- validateAgentListContent ---

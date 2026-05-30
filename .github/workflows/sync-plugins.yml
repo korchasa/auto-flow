@@ -79,7 +79,6 @@ jobs:
             --engine-root . \
             --version "$VERSION" \
             --out-dir "$TMP_DIR"
-          deno run -A scripts/plugin-payload-smoke.ts "$TMP_DIR"
           deno run -A scripts/plugin-install-acceptance.ts \
             --payload-dir "$TMP_DIR" \
             --host all \
@@ -105,7 +104,6 @@ jobs:
           git clone --depth=1 \
             "https://x-access-token:${PLUGINS_REPO_TOKEN}@github.com/korchasa/flowai-workflow-plugins.git" \
             "$TMP_DIR"
-          deno run -A scripts/plugin-payload-smoke.ts "$TMP_DIR"
           deno run -A scripts/plugin-install-acceptance.ts \
             --payload-dir "$TMP_DIR" \
             --host all \

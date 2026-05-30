@@ -16,9 +16,6 @@ jobs:
   check:
     name: Check
     runs-on: ubuntu-latest
-    outputs:
-      released: ${{ steps.create-release.outputs.released }}
-      tag: ${{ steps.create-release.outputs.tag }}
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -48,6 +45,102 @@ jobs:
             git diff --stat
             exit 1
           fi
+
+  plugin-install-acceptance-claude:
+    name: Plugin install acceptance (Claude Code)
+    needs: check
+    runs-on: ubuntu-latest
+    env:
+      CLAUDE_CODE_VERSION: 2.1.158
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
+        with:
+          deno-version: v2.x
+
+      - name: Verify Claude Code auth secret
+        run: |
+          set -euo pipefail
+          if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN}" ]]; then
+            echo "::error title=Missing CLAUDE_CODE_OAUTH_TOKEN::Configure CLAUDE_CODE_OAUTH_TOKEN to run Claude Code install acceptance with subscription auth."
+            exit 1
+          fi
+
+      - name: Install Claude Code CLI
+        run: |
+          set -euo pipefail
+          npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          claude --version
+
+      - name: Run Claude Code install acceptance
+        run: |
+          deno run -A scripts/plugin-install-acceptance.ts \
+            --host claude
+
+  plugin-install-acceptance-codex:
+    name: Plugin install acceptance (Codex)
+    needs: check
+    runs-on: ubuntu-latest
+    env:
+      CODEX_CLI_VERSION: 0.135.0
+      CODEX_INSTALL_ACCEPTANCE_MODEL: openai/gpt-4.1
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
+        with:
+          deno-version: v2.x
+
+      - name: Verify Codex OpenRouter auth secret
+        run: |
+          set -euo pipefail
+          if [[ -z "${OPENROUTER_API_KEY}" ]]; then
+            echo "::error title=Missing OPENROUTER_API_KEY::Configure OPENROUTER_API_KEY to run Codex install acceptance."
+            exit 1
+          fi
+
+      - name: Install Codex CLI
+        run: |
+          set -euo pipefail
+          npm install -g "@openai/codex@${CODEX_CLI_VERSION}"
+          codex --version
+
+      - name: Run Codex install acceptance
+        run: |
+          deno run -A scripts/plugin-install-acceptance.ts \
+            --host codex \
+            --codex-provider openrouter
+
+  release:
+    name: Release
+    needs: [
+      check,
+      plugin-install-acceptance-claude,
+      plugin-install-acceptance-codex,
+    ]
+    runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.create-release.outputs.released }}
+      tag: ${{ steps.create-release.outputs.tag }}
+      version: ${{ steps.create-release.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
+        with:
+          deno-version: v2.x
 
       - name: Create release and push tags
         id: create-release
@@ -114,108 +207,19 @@ jobs:
             echo "released=false" >> $GITHUB_OUTPUT
           fi
 
-      # Inline sync of the plugin payload to korchasa/flowai-workflow-plugins.
-      # GITHUB_TOKEN-pushed tags don't trigger downstream workflows (recursion
-      # guard), so sync-plugins.yml's `push: tags: ['v*']` trigger never fires
-      # for CI-created releases — we publish directly in the same job instead.
-      # The workflow_dispatch trigger on sync-plugins.yml remains for manual
-      # re-runs. Step-output interpolation is routed via env: per the
-      # workflow-injection guidance (no `${{ steps.* }}` inside `run:`).
-      - name: Sync plugin payload to flowai-workflow-plugins
-        if: steps.create-release.outputs.released == 'true'
-        env:
-          PLUGINS_REPO_TOKEN: ${{ secrets.PLUGINS_REPO_TOKEN }}
-          RELEASE_VERSION: ${{ steps.create-release.outputs.version }}
-        run: |
-          deno run -A scripts/sync-plugins-repo.ts \
-            --mode publish \
-            --version "$RELEASE_VERSION"
-
-  plugin-install-acceptance-claude:
-    name: Plugin install acceptance (Claude Code)
-    runs-on: ubuntu-latest
-    env:
-      CLAUDE_CODE_VERSION: 2.1.158
-      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
-
-      - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
-        with:
-          deno-version: v2.x
-
-      - name: Verify Claude Code auth secret
-        run: |
-          set -euo pipefail
-          if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN}" ]]; then
-            echo "::error title=Missing CLAUDE_CODE_OAUTH_TOKEN::Configure CLAUDE_CODE_OAUTH_TOKEN to run Claude Code install acceptance with subscription auth."
-            exit 1
-          fi
-
-      - name: Install Claude Code CLI
-        run: |
-          set -euo pipefail
-          npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
-          claude --version
-
-      - name: Run Claude Code install acceptance
-        run: |
-          deno run -A scripts/plugin-install-acceptance.ts \
-            --host claude
-
-  plugin-install-acceptance-codex:
-    name: Plugin install acceptance (Codex)
-    runs-on: ubuntu-latest
-    env:
-      CODEX_CLI_VERSION: 0.135.0
-      CODEX_INSTALL_ACCEPTANCE_MODEL: openai/gpt-4.1
-      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
-
-      - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
-        with:
-          deno-version: v2.x
-
-      - name: Verify Codex OpenRouter auth secret
-        run: |
-          set -euo pipefail
-          if [[ -z "${OPENROUTER_API_KEY}" ]]; then
-            echo "::error title=Missing OPENROUTER_API_KEY::Configure OPENROUTER_API_KEY to run Codex install acceptance."
-            exit 1
-          fi
-
-      - name: Install Codex CLI
-        run: |
-          set -euo pipefail
-          npm install -g "@openai/codex@${CODEX_CLI_VERSION}"
-          codex --version
-
-      - name: Run Codex install acceptance
-        run: |
-          deno run -A scripts/plugin-install-acceptance.ts \
-            --host codex \
-            --codex-provider openrouter
-
   # Reads scripts/targets.json (single source of truth, also consumed by
   # scripts/compile.ts) and emits a GitHub Actions matrix. Keeping the list
   # in one file prevents drift between the local compile script and CI.
   setup-matrix:
     name: Resolve build matrix
-    needs: check
+    needs: release
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.targets.outputs.matrix }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ needs.check.outputs.released == 'true' && needs.check.outputs.tag || github.sha }}
+          ref: ${{ needs.release.outputs.released == 'true' && needs.release.outputs.tag || github.sha }}
 
       - name: Build matrix from scripts/targets.json
         id: targets
@@ -223,7 +227,7 @@ jobs:
 
   build:
     name: Build ${{ matrix.target }}
-    needs: [check, setup-matrix]
+    needs: [release, setup-matrix]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -232,7 +236,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ needs.check.outputs.released == 'true' && needs.check.outputs.tag || github.sha }}
+          ref: ${{ needs.release.outputs.released == 'true' && needs.release.outputs.tag || github.sha }}
 
       - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
         with:
@@ -240,21 +244,54 @@ jobs:
 
       - name: Compile
         env:
-          VERSION: ${{ needs.check.outputs.released == 'true' && needs.check.outputs.tag || 'dev' }}
+          VERSION: ${{ needs.release.outputs.released == 'true' && needs.release.outputs.tag || 'dev' }}
         run: deno task compile --target ${{ matrix.target }}
 
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        if: needs.check.outputs.released == 'true'
+        if: needs.release.outputs.released == 'true'
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}
 
+  # Inline sync of the plugin payload to korchasa/flowai-workflow-plugins.
+  # GITHUB_TOKEN-pushed tags don't trigger downstream workflows (recursion
+  # guard), so sync-plugins.yml's `push: tags: ['v*']` trigger never fires
+  # for CI-created releases — we publish directly in this workflow instead.
+  # The workflow_dispatch trigger on sync-plugins.yml remains for manual
+  # re-runs. Step-output interpolation is routed via env: per the
+  # workflow-injection guidance (no `${{ needs.* }}` inside `run:`).
+  sync-plugins:
+    name: Sync plugin payload
+    needs: [release, build]
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+          fetch-depth: 0
+
+      - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
+        with:
+          deno-version: v2.x
+
+      - name: Sync plugin payload to flowai-workflow-plugins
+        env:
+          PLUGINS_REPO_TOKEN: ${{ secrets.PLUGINS_REPO_TOKEN }}
+          RELEASE_VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          deno run -A scripts/sync-plugins-repo.ts \
+            --mode publish \
+            --version "$RELEASE_VERSION"
+
   # Creates the GitHub Release with cross-compiled binaries attached.
-  # Waits for the build matrix because it needs the compiled artifacts.
+  # Waits for the build matrix and plugin sync because it needs the compiled
+  # artifacts and should not publish a release when the plugin sync failed.
   publish-github:
     name: Publish GitHub Release
-    needs: [check, build]
-    if: needs.check.outputs.released == 'true'
+    needs: [release, build, sync-plugins]
+    if: needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -262,7 +299,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ needs.check.outputs.tag }}
+          ref: ${{ needs.release.outputs.tag }}
           fetch-depth: 0
 
       - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
@@ -277,7 +314,7 @@ jobs:
       - name: Generate release notes
         id: notes
         run: |
-          CURRENT_TAG="${{ needs.check.outputs.tag }}"
+          CURRENT_TAG="${{ needs.release.outputs.tag }}"
           PREV_TAG=$(git describe --tags --abbrev=0 "${CURRENT_TAG}^" 2>/dev/null || echo "")
           NOTES_FILE=$(mktemp)
           if [ -n "$PREV_TAG" ]; then
@@ -296,20 +333,17 @@ jobs:
         # dist/). Using a glob removes the last hardcoded copy of the
         # target list — the matrix itself is derived from targets.json.
         run: |
-          gh release create "${{ needs.check.outputs.tag }}" \
-            --title "flowai-workflow ${{ needs.check.outputs.tag }}" \
+          gh release create "${{ needs.release.outputs.tag }}" \
+            --title "flowai-workflow ${{ needs.release.outputs.tag }}" \
             --notes-file "${{ steps.notes.outputs.notes_file }}" \
             dist/*
 
-  # Publishes the TypeScript package to JSR. Depends only on `check`
-  # (which creates the tag), NOT on `build` — JSR ships source files,
-  # not cross-compiled binaries, so this runs in parallel with the
-  # build matrix and shaves ~15s off end-to-end release time.
-  # A JSR publish failure does not block the GitHub release.
+  # Publishes the TypeScript package to JSR after the real plugin acceptance
+  # checks, cross-platform build, and plugin sync have passed.
   publish-jsr:
     name: Publish to JSR
-    needs: check
-    if: needs.check.outputs.released == 'true'
+    needs: [release, build, sync-plugins]
+    if: needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
     permissions:
       # Only id-token is needed for OIDC trusted publishing.
@@ -320,7 +354,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ needs.check.outputs.tag }}
+          ref: ${{ needs.release.outputs.tag }}
 
       - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
         with:
