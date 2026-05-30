@@ -88,7 +88,7 @@ async function listRunDirs(runsDir: string): Promise<string[]> {
     if (e instanceof Deno.errors.NotFound) return [];
     throw e;
   }
-  entries.sort((a, b) => b.mtime - a.mtime);
+  entries.sort((a, b) => (b.mtime - a.mtime) || b.name.localeCompare(a.name));
   return entries.map((e) => e.name);
 }
 
