@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.7.16](https://github.com/korchasa/flowai-workflow/compare/v0.7.15...v0.7.16) (2026-05-30)
+
+
+### Features
+
+* **plugin:** supervisor attach modes + turn-budget guard + SUPERVISOR_REPORT contract ([c21168d](https://github.com/korchasa/flowai-workflow/commit/c21168d16d929e232e1f0dfb24a811c55ed69d5d))
+
+
+### Bug Fixes
+
+* **ci:** stabilize sdlc status run ordering ([a73c384](https://github.com/korchasa/flowai-workflow/commit/a73c38400ade4f0d38ffd3a27258ca044d2c63f3))
+* **engine:** import runMcpServer statically to unstick MCP handshake (FR-E73/E74) ([70c8177](https://github.com/korchasa/flowai-workflow/commit/70c8177683162d89fd24b4a7c568d0f6110dbfc6))
+* **plugins:** install codex dogfood plugin ([b37f96c](https://github.com/korchasa/flowai-workflow/commit/b37f96c7f7fac9076af484bf9a4474fba2eaa0af))
+* **plugins:** split host-specific plugin payloads ([b0d4528](https://github.com/korchasa/flowai-workflow/commit/b0d4528cb9d944d51649b6a701677b456c68a995))
+
+
+### Code Refactoring
+
+* **plugin:** rewrite launcher in Deno/TypeScript (FR-E74) ([d0907ce](https://github.com/korchasa/flowai-workflow/commit/d0907ce0541f5a386c1442cc1405b5e25f62d43c))
+
 ### [0.7.15](https://github.com/korchasa/flowai-workflow/compare/v0.7.14...v0.7.15) (2026-05-24)
 
 
