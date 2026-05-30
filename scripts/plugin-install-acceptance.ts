@@ -43,8 +43,10 @@ const MCP_TOOLS_LIST_TIMEOUT_MS = 10_000;
 const DEFAULT_TIMEOUT_MS = 180_000;
 const AGENT_PASS_MARKER = "FLOWAI_INSTALL_ACCEPTANCE_PASS";
 const TOOL_EVIDENCE_PATTERN =
-  /get_workflow|mcp__flowai[-_]workflow__get_workflow/;
+  /^(?:mcp__flowai[-_]workflow__get_workflow|mcp__plugin_flowai-workflow_flowai-workflow__get_workflow)$/;
 const ACCEPTANCE_WORKFLOW = "github-inbox-opencode-test";
+const CLAUDE_GET_WORKFLOW_TOOL_NAME =
+  "mcp__plugin_flowai-workflow_flowai-workflow__get_workflow";
 
 export type CodexProvider = "openai" | "openrouter";
 
@@ -950,7 +952,7 @@ function claudeArgs(pluginRoot: string, prompt: string): string[] {
     "--permission-mode",
     "bypassPermissions",
     "--allowedTools",
-    "mcp__flowai-workflow__get_workflow",
+    CLAUDE_GET_WORKFLOW_TOOL_NAME,
     "--output-format",
     "stream-json",
     "--verbose",
@@ -1018,6 +1020,26 @@ function hasInstalledPluginToolEvidence(output: string): boolean {
       TOOL_EVIDENCE_PATTERN.test(record.name)
     ) {
       return true;
+    }
+    if (record.type === "assistant") {
+      const message = record.message;
+      if (message && typeof message === "object") {
+        const content = (message as Record<string, unknown>).content;
+        if (
+          Array.isArray(content) &&
+          content.some((entry) =>
+            entry &&
+            typeof entry === "object" &&
+            (entry as Record<string, unknown>).type === "tool_use" &&
+            typeof (entry as Record<string, unknown>).name === "string" &&
+            TOOL_EVIDENCE_PATTERN.test(
+              (entry as Record<string, unknown>).name as string,
+            )
+          )
+        ) {
+          return true;
+        }
+      }
     }
     const item = record.item;
     if (!item || typeof item !== "object") continue;

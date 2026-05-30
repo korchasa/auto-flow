@@ -358,7 +358,7 @@ Deno.test("install acceptance — claude installs plugin and invokes get_workflo
         if (args.includes("--plugin-dir")) {
           return Promise.resolve(
             ok(
-              '{"type":"tool_use","name":"mcp__flowai-workflow__get_workflow"}\n' +
+              '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__plugin_flowai-workflow_flowai-workflow__get_workflow","input":{}}]}}\n' +
                 "FLOWAI_INSTALL_ACCEPTANCE_PASS host=claude",
             ),
           );
@@ -376,7 +376,7 @@ Deno.test("install acceptance — claude installs plugin and invokes get_workflo
     assertStringIncludes(agentCall.args.join(" "), "--allowedTools");
     assertStringIncludes(
       agentCall.args.join(" "),
-      "mcp__flowai-workflow__get_workflow",
+      "mcp__plugin_flowai-workflow_flowai-workflow__get_workflow",
     );
     assertStringIncludes(
       agentCall.env.FLOWAI_WORKFLOW,
