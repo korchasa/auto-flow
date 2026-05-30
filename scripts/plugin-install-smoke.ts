@@ -74,6 +74,8 @@ export interface McpProbeResult {
 
 export type McpProbe = (request: McpProbeRequest) => Promise<McpProbeResult>;
 
+export type SmokeReporter = (message: string) => void;
+
 export interface HostSmokeResult {
   host: HostKind;
   status: "passed" | "skipped";
@@ -97,6 +99,7 @@ export interface InstallSmokeOptions {
   probeMcp?: McpProbe;
   buildPayload?: (opts: BuildPayloadOptions) => Promise<BuildResult>;
   makeTempDir?: (prefix: string) => Promise<string>;
+  reporter?: SmokeReporter;
 }
 
 interface HostInstallOptions {
@@ -107,12 +110,14 @@ interface HostInstallOptions {
   runCommand?: SmokeRunCommand;
   probeMcp?: McpProbe;
   makeTempDir?: (prefix: string) => Promise<string>;
+  reporter?: SmokeReporter;
 }
 
 interface DiscoverInstalledRootOptions {
   host: HostKind;
   hostHome: string;
   installOutputs: string[];
+  reporter?: SmokeReporter;
 }
 
 interface HookCommand {
@@ -126,6 +131,7 @@ interface HookSmokeOptions {
   pluginRoot: string;
   pluginDataDir: string;
   runCommand?: SmokeRunCommand;
+  reporter?: SmokeReporter;
 }
 
 interface HookSmokeResult {
@@ -162,6 +168,54 @@ async function defaultRunCommand(
     stdout: new TextDecoder().decode(output.stdout),
     stderr: new TextDecoder().decode(output.stderr),
   };
+}
+
+function report(reporter: SmokeReporter | undefined, message: string): void {
+  reporter?.(`[plugin-install-smoke] ${message}`);
+}
+
+function shellQuote(value: string): string {
+  if (/^[A-Za-z0-9_./:@%+=,-]+$/.test(value)) return value;
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function formatCommand(command: string, args: string[]): string {
+  return [command, ...args].map(shellQuote).join(" ");
+}
+
+function reportOutput(
+  reporter: SmokeReporter | undefined,
+  stream: "stdout" | "stderr",
+  text: string,
+): void {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  for (const line of trimmed.split(/\r?\n/)) {
+    report(reporter, `${stream}: ${line}`);
+  }
+}
+
+async function runEvidenceCommand(
+  runCommand: SmokeRunCommand,
+  command: string,
+  args: string[],
+  opts: {
+    env: Record<string, string>;
+    cwd?: string;
+    stdin?: string;
+    reporter?: SmokeReporter;
+  },
+): Promise<SmokeCommandOutput> {
+  const cwd = opts.cwd ? ` (cwd=${opts.cwd})` : "";
+  report(opts.reporter, `$ ${formatCommand(command, args)}${cwd}`);
+  if (opts.stdin !== undefined) {
+    report(opts.reporter, `stdin: ${opts.stdin.trim()}`);
+  }
+  const output = await runCommand(command, args, opts);
+  report(opts.reporter, `exit code: ${output.code}`);
+  reportOutput(opts.reporter, "stdout", output.stdout);
+  reportOutput(opts.reporter, "stderr", output.stderr);
+  return output;
 }
 
 function readEngineVersion(root: string): string {
@@ -201,17 +255,26 @@ async function ensurePayload(
   if (opts.payloadDir) {
     const resolved = resolve(opts.payloadDir);
     await Deno.stat(resolved);
+    report(opts.reporter, `payload: using existing directory ${resolved}`);
     return resolved;
   }
   const engineRoot = resolve(opts.engineRoot ?? scriptEngineRoot());
   const version = opts.version ?? readEngineVersion(engineRoot);
   const outDir = await makeTempDir("flowai-plugin-payload-");
-  await (opts.buildPayload ?? buildPluginPayload)({
+  report(
+    opts.reporter,
+    `payload: building from ${engineRoot} version ${version} into ${outDir}`,
+  );
+  const result = await (opts.buildPayload ?? buildPluginPayload)({
     engineRoot,
     version,
     outDir,
     marketplaceName: OFFICIAL_MARKETPLACE_NAME,
   });
+  report(
+    opts.reporter,
+    `payload: wrote ${result.filesWritten.length} files, updated ${result.manifestsUpdated.length} manifests`,
+  );
   return outDir;
 }
 
@@ -263,9 +326,16 @@ async function assertHostCliAvailable(
   runCommand: SmokeRunCommand,
   env: Record<string, string>,
   allowMissing: boolean,
+  reporter?: SmokeReporter,
 ): Promise<HostSmokeResult | null> {
   try {
-    const result = await runCommand(hostCommand(host), ["--version"], { env });
+    report(reporter, `${host}: checking required host CLI`);
+    const result = await runEvidenceCommand(
+      runCommand,
+      hostCommand(host),
+      ["--version"],
+      { env, reporter },
+    );
     if (result.success) return null;
     throw new Error(
       `required host CLI \`${hostCommand(host)}\` version probe failed: ${
@@ -336,13 +406,29 @@ async function findCandidateRoots(
 export async function discoverInstalledPluginRoot(
   opts: DiscoverInstalledRootOptions,
 ): Promise<string> {
+  report(
+    opts.reporter,
+    `${opts.host}: discovering installed plugin root under ${opts.hostHome}`,
+  );
   const outputCandidates = opts.installOutputs.flatMap(extractAbsolutePaths);
   for (const candidate of outputCandidates) {
-    if (await isPluginRoot(opts.host, candidate)) return candidate;
+    if (await isPluginRoot(opts.host, candidate)) {
+      report(
+        opts.reporter,
+        `${opts.host}: plugin root discovered from CLI output: ${candidate}`,
+      );
+      return candidate;
+    }
   }
 
   const candidates = await findCandidateRoots(opts.host, opts.hostHome);
-  if (candidates.length === 1) return candidates[0];
+  if (candidates.length === 1) {
+    report(
+      opts.reporter,
+      `${opts.host}: plugin root discovered by cache scan: ${candidates[0]}`,
+    );
+    return candidates[0];
+  }
   if (candidates.length > 1) {
     throw new Error(
       `ambiguous installed flowai-workflow plugin roots under ${opts.hostHome}: ${
@@ -505,8 +591,10 @@ export async function probeInstalledMcp(opts: {
   pluginRoot: string;
   pluginDataDir: string;
   probeMcp?: McpProbe;
+  reporter?: SmokeReporter;
 }): Promise<McpProbeResult> {
   const mcpPath = join(opts.pluginRoot, ".mcp.json");
+  report(opts.reporter, `${opts.host}: reading MCP config ${mcpPath}`);
   const server = asRecord(
     mcpServerMap(await readJson(mcpPath))["flowai-workflow"],
     "flowai-workflow MCP server",
@@ -535,7 +623,26 @@ export async function probeInstalledMcp(opts: {
     startupTimeoutMs: MCP_STARTUP_TIMEOUT_MS,
     toolsListTimeoutMs: MCP_TOOLS_LIST_TIMEOUT_MS,
   };
+  report(
+    opts.reporter,
+    `${opts.host}: MCP command: ${
+      formatCommand(request.command, request.args)
+    } (cwd=${request.cwd})`,
+  );
+  report(
+    opts.reporter,
+    `${opts.host}: MCP expected tools: ${EXPECTED_MCP_TOOL_NAMES.join(", ")}`,
+  );
+  report(
+    opts.reporter,
+    `${opts.host}: MCP check: initialize over stdio, require tools capability, call tools/list`,
+  );
   const result = await (opts.probeMcp ?? defaultProbeMcp)(request);
+  report(opts.reporter, `${opts.host}: MCP server name: ${result.serverName}`);
+  report(
+    opts.reporter,
+    `${opts.host}: MCP returned tools: ${result.tools.join(", ")}`,
+  );
   if (result.serverName !== "flowai-workflow") {
     throw new Error(
       `MCP server name mismatch: expected flowai-workflow, got ${result.serverName}.`,
@@ -548,6 +655,7 @@ export async function probeInstalledMcp(opts: {
       `MCP tools/list missing expected tools: ${missing.join(", ")}`,
     );
   }
+  report(opts.reporter, `${opts.host}: MCP tool check passed`);
   return result;
 }
 
@@ -626,8 +734,15 @@ export async function runHookSmoke(
   opts: HookSmokeOptions,
 ): Promise<HookSmokeResult> {
   const sources = await hookSources(opts.pluginRoot, opts.host);
-  if (sources.length === 0) return { status: "no hooks declared", commands: 0 };
+  if (sources.length === 0) {
+    report(opts.reporter, `${opts.host}: no hooks declared`);
+    return { status: "no hooks declared", commands: 0 };
+  }
   const commands = sources.flatMap(parseHookCommands);
+  report(
+    opts.reporter,
+    `${opts.host}: validating ${commands.length} hook command(s) from ${sources.length} hook source(s)`,
+  );
   const env = {
     ...Deno.env.toObject(),
     HOME: opts.pluginDataDir,
@@ -645,13 +760,14 @@ export async function runHookSmoke(
       hook.command,
       hook.allowPathExecutable,
     );
-    const result = await runCommand(command, hook.args, {
+    const result = await runEvidenceCommand(runCommand, command, hook.args, {
       env,
       cwd: opts.pluginRoot,
       stdin: JSON.stringify({
         event: "SessionStart",
         source: "flowai-plugin-smoke",
       }) + "\n",
+      reporter: opts.reporter,
     });
     if (!result.success) {
       throw new Error(
@@ -661,6 +777,7 @@ export async function runHookSmoke(
       );
     }
   }
+  report(opts.reporter, `${opts.host}: hook command check passed`);
   return { status: "validated", commands: commands.length };
 }
 
@@ -676,6 +793,11 @@ export async function installPluginForHost(
   await Deno.mkdir(env.CODEX_HOME, { recursive: true });
   await Deno.mkdir(env.CLAUDE_CONFIG_DIR, { recursive: true });
   await Deno.mkdir(env.FLOWAI_PLUGIN_DATA, { recursive: true });
+  report(opts.reporter, `${opts.host}: isolated HOME=${hostHome}`);
+  report(
+    opts.reporter,
+    `${opts.host}: host state dirs CODEX_HOME=${env.CODEX_HOME} CLAUDE_CONFIG_DIR=${env.CLAUDE_CONFIG_DIR} FLOWAI_PLUGIN_DATA=${env.FLOWAI_PLUGIN_DATA}`,
+  );
 
   let pluginRoot = hostPluginRoot(opts.payloadDir, opts.host);
   if (!opts.skipHostCliInstall) {
@@ -684,12 +806,18 @@ export async function installPluginForHost(
       runCommand,
       env,
       opts.allowMissingHostCli,
+      opts.reporter,
     );
     if (unavailable) return unavailable;
 
     const outputs: string[] = [];
     for (const args of installCommands(opts.host, opts.payloadDir)) {
-      const output = await runCommand(hostCommand(opts.host), args, { env });
+      const output = await runEvidenceCommand(
+        runCommand,
+        hostCommand(opts.host),
+        args,
+        { env, reporter: opts.reporter },
+      );
       outputs.push(output.stdout, output.stderr);
       if (!output.success) {
         throw new Error(
@@ -705,22 +833,32 @@ export async function installPluginForHost(
       host: opts.host,
       hostHome,
       installOutputs: outputs,
+      reporter: opts.reporter,
     });
+  } else {
+    report(
+      opts.reporter,
+      `${opts.host}: skipping host CLI install, using payload plugin root ${pluginRoot}`,
+    );
   }
 
   const pluginDataDir = join(hostHome, "plugin-data", opts.host);
+  report(opts.reporter, `${opts.host}: plugin data dir ${pluginDataDir}`);
   await probeInstalledMcp({
     host: opts.host,
     pluginRoot,
     pluginDataDir,
     probeMcp: opts.probeMcp,
+    reporter: opts.reporter,
   });
   await runHookSmoke({
     host: opts.host,
     pluginRoot,
     pluginDataDir,
     runCommand,
+    reporter: opts.reporter,
   });
+  report(opts.reporter, `${opts.host}: smoke passed with ${pluginRoot}`);
   return { host: opts.host, status: "passed", pluginRoot };
 }
 
@@ -731,6 +869,7 @@ export async function runPluginInstallSmoke(
     ((prefix: string) => Deno.makeTempDir({ prefix }));
   const payloadDir = await ensurePayload(opts, makeTempDir);
   const hosts = hostsFromOption(opts.host);
+  report(opts.reporter, `hosts under test: ${hosts.join(", ")}`);
   const results: HostSmokeResult[] = [];
   for (const host of hosts) {
     results.push(
@@ -742,6 +881,7 @@ export async function runPluginInstallSmoke(
         runCommand: opts.runCommand,
         probeMcp: opts.probeMcp,
         makeTempDir,
+        reporter: opts.reporter,
       }),
     );
   }
@@ -836,6 +976,7 @@ if (import.meta.main) {
     host: parsed.hosts.length === 1 ? parsed.hosts[0] : "all",
     allowMissingHostCli: parsed.allowMissingHostCli,
     skipHostCliInstall: parsed.skipHostCliInstall,
+    reporter: console.log,
   });
   for (const host of result.hosts) {
     if (host.status === "skipped") {

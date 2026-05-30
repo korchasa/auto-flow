@@ -113,6 +113,7 @@ async function fixturePayload(): Promise<{
 
 Deno.test("FR-E72 official payload installs from source repo into isolated host home", async () => {
   const calls: CommandCall[] = [];
+  const evidence: string[] = [];
   const roots = await fixturePayload();
   const installedRoot = await Deno.makeTempDir({ prefix: "installed-codex-" });
   await Deno.mkdir(join(installedRoot, ".codex-plugin"), { recursive: true });
@@ -132,6 +133,7 @@ Deno.test("FR-E72 official payload installs from source repo into isolated host 
     },
     payloadDir: roots.payloadDir,
     makeTempDir: async () => await Deno.makeTempDir({ prefix: "smoke-home-" }),
+    reporter: (line) => evidence.push(line),
     probeMcp: () =>
       Promise.resolve({
         serverName: "flowai-workflow",
@@ -163,6 +165,29 @@ Deno.test("FR-E72 official payload installs from source repo into isolated host 
   ]);
   assertStringIncludes(calls[0].env.HOME, "smoke-home-");
   assertStringIncludes(calls[0].env.CODEX_HOME, "smoke-home-");
+
+  const log = evidence.join("\n");
+  assertStringIncludes(log, "payload: using existing directory");
+  assertStringIncludes(log, "hosts under test: codex");
+  assertStringIncludes(log, "$ codex --version");
+  assertStringIncludes(
+    log,
+    `$ codex plugin marketplace add ${join(roots.payloadDir, "codex")}`,
+  );
+  assertStringIncludes(
+    log,
+    "$ codex plugin add flowai-workflow@flowai-workflow",
+  );
+  assertStringIncludes(log, "codex: reading MCP config");
+  assertStringIncludes(
+    log,
+    "codex: MCP command: deno run -A ./bin/launch.ts mcp",
+  );
+  assertStringIncludes(log, "codex: MCP expected tools:");
+  assertStringIncludes(log, "codex: MCP check: initialize over stdio");
+  assertStringIncludes(log, "codex: MCP returned tools:");
+  assertStringIncludes(log, "codex: MCP tool check passed");
+  assertStringIncludes(log, "codex: smoke passed with");
 });
 
 Deno.test("FR-E71 codex install path calls marketplace add and plugin add with isolated host home", async () => {
