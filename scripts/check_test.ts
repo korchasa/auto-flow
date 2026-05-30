@@ -94,10 +94,15 @@ Deno.test("CI workflow — every push runs build and plugin install acceptance p
     ),
     true,
   );
+  assertEquals(
+    claudeJob.indexOf("CLAUDE_CODE_OAUTH_TOKEN") >
+      claudeJob.indexOf("Run Claude Code install acceptance"),
+    true,
+  );
   assertEquals(claudeJob.includes("ANTHROPIC_API_KEY"), false);
   assertEquals(
     claudeJob.includes("Verify Claude Code auth secret"),
-    true,
+    false,
   );
   assertEquals(
     claudeJob.includes("Install Claude Code CLI"),
@@ -129,12 +134,17 @@ Deno.test("CI workflow — every push runs build and plugin install acceptance p
     true,
   );
   assertEquals(
+    codexJob.indexOf("OPENROUTER_API_KEY") >
+      codexJob.indexOf("Run Codex install acceptance"),
+    true,
+  );
+  assertEquals(
     codexJob.includes("CODEX_INSTALL_ACCEPTANCE_MODEL: openai/gpt-4.1"),
     true,
   );
   assertEquals(
     codexJob.includes("Verify Codex OpenRouter auth secret"),
-    true,
+    false,
   );
   assertEquals(
     codexJob.includes("Install Codex CLI"),

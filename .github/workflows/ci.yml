@@ -52,7 +52,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CLAUDE_CODE_VERSION: 2.1.158
-      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -63,14 +62,6 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Verify Claude Code auth secret
-        run: |
-          set -euo pipefail
-          if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN}" ]]; then
-            echo "::error title=Missing CLAUDE_CODE_OAUTH_TOKEN::Configure CLAUDE_CODE_OAUTH_TOKEN to run Claude Code install acceptance with subscription auth."
-            exit 1
-          fi
-
       - name: Install Claude Code CLI
         run: |
           set -euo pipefail
@@ -78,6 +69,8 @@ jobs:
           claude --version
 
       - name: Run Claude Code install acceptance
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           deno run -A scripts/plugin-install-acceptance.ts \
             --host claude
@@ -89,7 +82,6 @@ jobs:
     env:
       CODEX_CLI_VERSION: 0.135.0
       CODEX_INSTALL_ACCEPTANCE_MODEL: openai/gpt-4.1
-      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -100,14 +92,6 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Verify Codex OpenRouter auth secret
-        run: |
-          set -euo pipefail
-          if [[ -z "${OPENROUTER_API_KEY}" ]]; then
-            echo "::error title=Missing OPENROUTER_API_KEY::Configure OPENROUTER_API_KEY to run Codex install acceptance."
-            exit 1
-          fi
-
       - name: Install Codex CLI
         run: |
           set -euo pipefail
@@ -115,6 +99,8 @@ jobs:
           codex --version
 
       - name: Run Codex install acceptance
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           deno run -A scripts/plugin-install-acceptance.ts \
             --host codex \
