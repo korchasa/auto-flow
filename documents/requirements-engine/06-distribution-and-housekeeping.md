@@ -321,12 +321,12 @@
   - [x] `cli.ts init` accepts `--bundle-dir <path>` to override the
     package-relative bundled-workflows lookup.
     Evidence: `init/mod.ts`.
-  - [ ] Full plugin install smoke: in a fresh Claude Code session,
+  - [ ] Full plugin install acceptance: in a fresh Claude Code session,
     `/plugin marketplace add korchasa/flowai-workflow-plugins --sparse claude` and
     `/plugin install flowai-workflow@korchasa` succeed; `/flowai-workflow:run
     --help` returns the engine help text. Manual — korchasa; Evidence:
     transcript pasted in release PR body.
-  - [ ] Full plugin install smoke on Codex: `codex plugin marketplace
+  - [ ] Full plugin install acceptance on Codex: `codex plugin marketplace
     add korchasa/flowai-workflow-plugins --sparse codex` + `codex plugin add
     flowai-workflow@flowai-workflow` succeed; invoking the run skill returns
     engine help. Manual — korchasa; Evidence: transcript pasted in
@@ -363,17 +363,26 @@
   a config.toml block?" question for every new user.
 - **Dep:** FR-E70, FR-E72
 - **Acceptance criteria:**
-  - [ ] Full Codex install smoke per FR-E70 (manual — korchasa).
-  - [x] CI install smoke builds the official publish-shape payload
+  - [ ] Full Codex install acceptance per FR-E70 (manual — korchasa).
+  - [x] CI install acceptance runs per IDE on every push. Each job
+    builds the official publish-shape payload, installs
+    `flowai-workflow@flowai-workflow` into an isolated temp host home,
+    probes the installed MCP config, then starts the real host agent
+    and verifies a `get_workflow` tool call from the installed plugin.
+    Evidence:
+    `scripts/plugin-install-acceptance_test.ts::install acceptance — claude installs plugin and invokes get_workflow`;
+    `scripts/plugin-install-acceptance_test.ts::install acceptance — codex openrouter uses provider config without login`;
+    `.github/workflows/ci.yml`.
+  - [x] Install runner builds the official publish-shape payload
     from the source repo, registers it as marketplace
     `flowai-workflow` inside an isolated temp host home, installs
     `flowai-workflow@flowai-workflow`, and verifies the installed
     plugin cache rather than the source tree. Evidence:
-    `scripts/plugin-install-smoke_test.ts::FR-E72 official payload installs from source repo into isolated host home`.
+    `scripts/plugin-install-acceptance_test.ts::install acceptance — install probe installs official marketplace into isolated host home`.
   - [x] Codex hook payload validation is automated when hooks are
     bundled, but Codex hook trust remains a user review step and is
     not claimed as auto-enabled by CI. Evidence:
-    `scripts/plugin-install-smoke_test.ts::FR-E71 installed plugin hook smoke validates and executes bundled hook commands`.
+    `scripts/plugin-install-acceptance_test.ts::install acceptance — hook commands are validated and executed`.
   - [ ] README's Codex install section documents the two commands
     AND explicitly states no `config.toml` patch is required because
     the Codex plugin payload ships MCP config. Manual — korchasa;
@@ -470,10 +479,10 @@
     `scripts/check.ts` (`runIfAutoInstallEnabled` invocation).
   - [x] Publish workflow validates the official split payload roots
     from the source repo before push and re-validates a downstream
-    clone after push; smoke paths target `claude/` and `codex/` roots,
-    not the retired pre-split `plugins/flowai-workflow` root.
+    clone after push; acceptance paths target `claude/` and `codex/`
+    roots, not the retired pre-split `plugins/flowai-workflow` root.
     Evidence:
-    `scripts/sync-plugins-repo_test.ts::FR-E72 publish smoke command targets host-specific payload roots`.
+    `scripts/sync-plugins-repo_test.ts::FR-E72 publish acceptance command targets host-specific payload roots`.
   - [ ] Public repo `korchasa/flowai-workflow-plugins` created (MIT,
     public, empty `main`). Manual — korchasa; Evidence:
     `gh repo view korchasa/flowai-workflow-plugins --json visibility,licenseInfo`.

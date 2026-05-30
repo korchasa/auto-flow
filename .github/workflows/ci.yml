@@ -131,65 +131,12 @@ jobs:
             --mode publish \
             --version "$RELEASE_VERSION"
 
-  plugin-install-smoke:
-    name: Plugin install smoke (Claude Code + Codex)
+  plugin-install-acceptance-claude:
+    name: Plugin install acceptance (Claude Code)
     runs-on: ubuntu-latest
     env:
       CLAUDE_CODE_VERSION: 2.1.158
-      CODEX_CLI_VERSION: 0.135.0
-
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
-
-      - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
-        with:
-          deno-version: v2.x
-
-      - name: Install Claude Code and Codex CLIs
-        run: |
-          set -euo pipefail
-          npm install -g \
-            "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
-            "@openai/codex@${CODEX_CLI_VERSION}"
-          claude --version
-          codex --version
-
-      - name: Build plugin payload for real host smoke
-        run: |
-          set -euo pipefail
-          VERSION=$(deno eval "console.log(JSON.parse(Deno.readTextFileSync('deno.json')).version)")
-          TMP_DIR=$(mktemp -d)
-          deno run -A scripts/build-plugin-payload.ts \
-            --engine-root . \
-            --version "$VERSION" \
-            --out-dir "$TMP_DIR"
-          echo "payload_dir=${TMP_DIR}" >> "$GITHUB_ENV"
-
-      - name: Validate split plugin payload roots
-        run: deno run -A scripts/plugin-payload-smoke.ts "$payload_dir"
-
-      - name: Run real Claude Code plugin install smoke
-        run: |
-          deno run -A scripts/plugin-install-smoke.ts \
-            --payload-dir "$payload_dir" \
-            --host claude
-
-      - name: Run real Codex plugin install smoke
-        run: |
-          deno run -A scripts/plugin-install-smoke.ts \
-            --payload-dir "$payload_dir" \
-            --host codex
-
-  plugin-real-agent-smoke:
-    name: Plugin real agent smoke (Claude Code + Codex)
-    runs-on: ubuntu-latest
-    env:
-      CLAUDE_CODE_VERSION: 2.1.158
-      CODEX_CLI_VERSION: 0.135.0
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -200,40 +147,61 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Install Claude Code and Codex CLIs
+      - name: Verify Claude Code auth secret
         run: |
           set -euo pipefail
-          npm install -g \
-            "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
-            "@openai/codex@${CODEX_CLI_VERSION}"
+          if [[ -z "${ANTHROPIC_API_KEY}" ]]; then
+            echo "::error title=Missing ANTHROPIC_API_KEY::Configure ANTHROPIC_API_KEY to run Claude Code install acceptance."
+            exit 1
+          fi
+
+      - name: Install Claude Code CLI
+        run: |
+          set -euo pipefail
+          npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
           claude --version
-          codex --version
 
-      - name: Build plugin payload for real agent smoke
+      - name: Run Claude Code install acceptance
         run: |
-          set -euo pipefail
-          VERSION=$(deno eval "console.log(JSON.parse(Deno.readTextFileSync('deno.json')).version)")
-          TMP_DIR=$(mktemp -d)
-          deno run -A scripts/build-plugin-payload.ts \
-            --engine-root . \
-            --version "$VERSION" \
-            --out-dir "$TMP_DIR"
-          echo "payload_dir=${TMP_DIR}" >> "$GITHUB_ENV"
-
-      - name: Validate split plugin payload roots
-        run: deno run -A scripts/plugin-payload-smoke.ts "$payload_dir"
-
-      - name: Run real Claude Code agent plugin smoke
-        run: |
-          deno run -A scripts/plugin-agent-smoke.ts \
-            --payload-dir "$payload_dir" \
+          deno run -A scripts/plugin-install-acceptance.ts \
             --host claude
 
-      - name: Run real Codex agent plugin smoke
+  plugin-install-acceptance-codex:
+    name: Plugin install acceptance (Codex)
+    runs-on: ubuntu-latest
+    env:
+      CODEX_CLI_VERSION: 0.135.0
+      CODEX_INSTALL_ACCEPTANCE_MODEL: openai/gpt-4.1
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
+        with:
+          deno-version: v2.x
+
+      - name: Verify Codex OpenRouter auth secret
         run: |
-          deno run -A scripts/plugin-agent-smoke.ts \
-            --payload-dir "$payload_dir" \
-            --host codex
+          set -euo pipefail
+          if [[ -z "${OPENROUTER_API_KEY}" ]]; then
+            echo "::error title=Missing OPENROUTER_API_KEY::Configure OPENROUTER_API_KEY to run Codex install acceptance."
+            exit 1
+          fi
+
+      - name: Install Codex CLI
+        run: |
+          set -euo pipefail
+          npm install -g "@openai/codex@${CODEX_CLI_VERSION}"
+          codex --version
+
+      - name: Run Codex install acceptance
+        run: |
+          deno run -A scripts/plugin-install-acceptance.ts \
+            --host codex \
+            --codex-provider openrouter
 
   # Reads scripts/targets.json (single source of truth, also consumed by
   # scripts/compile.ts) and emits a GitHub Actions matrix. Keeping the list

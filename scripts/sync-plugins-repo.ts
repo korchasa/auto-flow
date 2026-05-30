@@ -123,7 +123,7 @@ export function workingTreeIsDirty(porcelain: string): boolean {
  * Build the commit message used in `publish` mode. The format embeds
  * the engine source SHA (provided by the caller) for traceability.
  *
- * Pure — exported for tests + CLI smoke.
+ * Pure — exported for tests + CLI acceptance.
  */
 export function commitMessage(version: string, engineSha: string): string {
   return `release: v${version} (synced from engine@${engineSha.slice(0, 12)})`;
@@ -139,17 +139,21 @@ export function pluginPayloadRoots(
   };
 }
 
-/** Command used by CI to smoke-test the split official payload roots. */
-export function pluginPayloadInstallSmokeCommand(payloadDir: string): string[] {
+/** Command used by CI to acceptance-test the split official payload roots. */
+export function pluginPayloadInstallAcceptanceCommand(
+  payloadDir: string,
+): string[] {
   return [
     "deno",
     "run",
     "-A",
-    "scripts/plugin-install-smoke.ts",
+    "scripts/plugin-install-acceptance.ts",
     "--payload-dir",
     payloadDir,
     "--host",
     "all",
+    "--codex-provider",
+    "openrouter",
   ];
 }
 

@@ -3,7 +3,7 @@ import {
   buildCloneUrl,
   commitMessage,
   parseSyncCliArgs,
-  pluginPayloadInstallSmokeCommand,
+  pluginPayloadInstallAcceptanceCommand,
   pluginPayloadRoots,
   syncPluginsRepo,
   TARGET_REPO,
@@ -262,20 +262,22 @@ Deno.test("FR-E70 dry-run emits host-specific marketplace roots", async () => {
   assertEquals(result.payloadRoots, roots);
 });
 
-Deno.test("FR-E72 publish smoke command targets host-specific payload roots", () => {
-  const command = pluginPayloadInstallSmokeCommand("/tmp/flowai-plugins");
+Deno.test("FR-E72 publish acceptance command targets host-specific payload roots", () => {
+  const command = pluginPayloadInstallAcceptanceCommand("/tmp/flowai-plugins");
   assertEquals(command, [
     "deno",
     "run",
     "-A",
-    "scripts/plugin-install-smoke.ts",
+    "scripts/plugin-install-acceptance.ts",
     "--payload-dir",
     "/tmp/flowai-plugins",
     "--host",
     "all",
+    "--codex-provider",
+    "openrouter",
   ]);
   if (command.join(" ").includes("/plugins/flowai-workflow/engine/cli.ts")) {
-    throw new Error("stale pre-split plugin smoke path returned");
+    throw new Error("stale pre-split plugin acceptance path returned");
   }
 });
 

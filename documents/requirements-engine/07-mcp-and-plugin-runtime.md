@@ -133,17 +133,19 @@ shape) but are kept here to fit within the per-file token budget.
     every handler returns a structured missing-workflow diagnostic
     referencing `init`. Evidence:
     `mcp-server_test.ts::FR-E74 server starts in no-workflow mode and surfaces missing-workflow error on tool call`.
-  - [x] CI smoke executes the exact MCP command declared by the
+  - [x] CI install acceptance executes the exact MCP command declared by the
     installed Codex cache's `.mcp.json`, sends MCP `initialize` and
     `tools/list`, and verifies the `flowai-workflow` server plus the
     expected FR-E73 tool names. Evidence:
-    `scripts/plugin-install-smoke_test.ts::FR-E74 installed codex mcp config completes initialize and tools list`.
-  - [x] CI smoke executes the exact MCP command declared by the
+    `scripts/plugin-install-acceptance_test.ts::install acceptance — installed MCP config completes initialize and tools list`;
+    `scripts/plugin-install-acceptance_test.ts::install acceptance — codex openrouter uses provider config without login`.
+  - [x] CI install acceptance executes the exact MCP command declared by the
     installed Claude plugin root's `.mcp.json`, sends MCP `initialize`
     and `tools/list`, and verifies the `flowai-workflow` server plus
     the expected FR-E73 tool names. Evidence:
-    `scripts/plugin-install-smoke_test.ts::FR-E74 installed claude mcp config completes initialize and tools list`.
-  - [ ] Manual smoke (manual — korchasa): in a fresh Claude Code
+    `scripts/plugin-install-acceptance_test.ts::install acceptance — installed MCP config completes initialize and tools list`;
+    `scripts/plugin-install-acceptance_test.ts::install acceptance — claude installs plugin and invokes get_workflow`.
+  - [ ] Manual acceptance (manual — korchasa): in a fresh Claude Code
     session with the plugin installed via `deno task
     sync-plugins-local`, `/mcp` lists `flowai-workflow` with the
     seven tools; the first call compiles the binary into

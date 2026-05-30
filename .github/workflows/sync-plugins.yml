@@ -46,7 +46,7 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Install host CLIs for plugin smoke
+      - name: Install host CLIs for plugin acceptance
         run: |
           set -euo pipefail
           npm install -g @anthropic-ai/claude-code @openai/codex
@@ -63,12 +63,15 @@ jobs:
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Unit-test plugin install smoke
-        run: deno task test scripts/plugin-install-smoke_test.ts
+      - name: Unit-test plugin install acceptance
+        run: deno task test scripts/plugin-install-acceptance_test.ts
 
-      - name: Pre-publish official install smoke
+      - name: Pre-publish official install acceptance
         env:
           VERSION: ${{ steps.ver.outputs.version }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          CODEX_INSTALL_ACCEPTANCE_MODEL: openai/gpt-4.1
         run: |
           set -euo pipefail
           TMP_DIR=$(mktemp -d)
@@ -77,9 +80,10 @@ jobs:
             --version "$VERSION" \
             --out-dir "$TMP_DIR"
           deno run -A scripts/plugin-payload-smoke.ts "$TMP_DIR"
-          deno run -A scripts/plugin-install-smoke.ts \
+          deno run -A scripts/plugin-install-acceptance.ts \
             --payload-dir "$TMP_DIR" \
-            --host all
+            --host all \
+            --codex-provider openrouter
 
       - name: Sync plugin payload to korchasa/flowai-workflow-plugins
         env:
@@ -90,7 +94,11 @@ jobs:
             --engine-root . \
             --version "$VERSION"
 
-      - name: Post-publish downstream install smoke
+      - name: Post-publish downstream install acceptance
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          CODEX_INSTALL_ACCEPTANCE_MODEL: openai/gpt-4.1
         run: |
           set -euo pipefail
           TMP_DIR=$(mktemp -d)
@@ -98,6 +106,7 @@ jobs:
             "https://x-access-token:${PLUGINS_REPO_TOKEN}@github.com/korchasa/flowai-workflow-plugins.git" \
             "$TMP_DIR"
           deno run -A scripts/plugin-payload-smoke.ts "$TMP_DIR"
-          deno run -A scripts/plugin-install-smoke.ts \
+          deno run -A scripts/plugin-install-acceptance.ts \
             --payload-dir "$TMP_DIR" \
-            --host all
+            --host all \
+            --codex-provider openrouter

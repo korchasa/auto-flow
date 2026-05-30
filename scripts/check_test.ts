@@ -71,51 +71,77 @@ function workflowJobBlock(workflow: string, jobName: string): string {
   return next < 0 ? rest : rest.slice(0, next);
 }
 
-Deno.test("CI workflow — every push runs build and real plugin host smoke", async () => {
+Deno.test("CI workflow — every push runs build and plugin install acceptance per IDE", async () => {
   const workflow = await Deno.readTextFile(".github/workflows/ci.yml");
   assertEquals(workflow.includes('branches: ["**"]'), true);
 
-  const smokeJob = workflowJobBlock(workflow, "plugin-install-smoke");
+  const claudeJob = workflowJobBlock(
+    workflow,
+    "plugin-install-acceptance-claude",
+  );
   assertEquals(
-    smokeJob.includes("Plugin install smoke (Claude Code + Codex)"),
+    claudeJob.includes("Plugin install acceptance (Claude Code)"),
     true,
   );
-  assertEquals(smokeJob.includes("Install Claude Code and Codex CLIs"), true);
   assertEquals(
-    smokeJob.includes("Run real Claude Code plugin install smoke"),
+    claudeJob.includes("ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}"),
     true,
   );
-  assertEquals(smokeJob.includes("Run real Codex plugin install smoke"), true);
-  assertEquals(smokeJob.includes("--host claude"), true);
-  assertEquals(smokeJob.includes("--host codex"), true);
+  assertEquals(
+    claudeJob.includes("Verify Claude Code auth secret"),
+    true,
+  );
+  assertEquals(
+    claudeJob.includes("Install Claude Code CLI"),
+    true,
+  );
+  assertEquals(
+    claudeJob.includes("Run Claude Code install acceptance"),
+    true,
+  );
+  assertEquals(
+    claudeJob.includes("scripts/plugin-install-acceptance.ts"),
+    true,
+  );
+  assertEquals(claudeJob.includes("--host claude"), true);
+  assertEquals(claudeJob.includes("Build plugin payload"), false);
+  assertEquals(claudeJob.includes("--payload-dir"), false);
 
-  const agentSmokeJob = workflowJobBlock(workflow, "plugin-real-agent-smoke");
+  const codexJob = workflowJobBlock(
+    workflow,
+    "plugin-install-acceptance-codex",
+  );
   assertEquals(
-    agentSmokeJob.includes("Plugin real agent smoke (Claude Code + Codex)"),
+    codexJob.includes("Plugin install acceptance (Codex)"),
     true,
   );
   assertEquals(
-    agentSmokeJob.includes(
-      "ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}",
-    ),
+    codexJob.includes("OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}"),
     true,
   );
   assertEquals(
-    agentSmokeJob.includes("OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}"),
+    codexJob.includes("CODEX_INSTALL_ACCEPTANCE_MODEL: openai/gpt-4.1"),
     true,
   );
   assertEquals(
-    agentSmokeJob.includes("Run real Claude Code agent plugin smoke"),
+    codexJob.includes("Verify Codex OpenRouter auth secret"),
     true,
   );
   assertEquals(
-    agentSmokeJob.includes("Run real Codex agent plugin smoke"),
+    codexJob.includes("Install Codex CLI"),
     true,
   );
   assertEquals(
-    agentSmokeJob.includes("scripts/plugin-agent-smoke.ts"),
+    codexJob.includes("Run Codex install acceptance"),
     true,
   );
+  assertEquals(codexJob.includes("scripts/plugin-install-acceptance.ts"), true);
+  assertEquals(codexJob.includes("--host codex"), true);
+  assertEquals(codexJob.includes("--codex-provider openrouter"), true);
+  assertEquals(codexJob.includes("Build plugin payload"), false);
+  assertEquals(codexJob.includes("--payload-dir"), false);
+  assertEquals(workflow.includes("plugin-real-agent-smoke"), false);
+  assertEquals(workflow.includes("plugin-install-smoke"), false);
 
   const setupMatrixJob = workflowJobBlock(workflow, "setup-matrix");
   const buildJob = workflowJobBlock(workflow, "build");

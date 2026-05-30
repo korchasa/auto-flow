@@ -3,7 +3,7 @@
  * @module
  * Structural smoke checks for the generated Claude Code / Codex plugin
  * payload. This module intentionally avoids host CLI subprocesses; the
- * install smoke in `plugin-install-smoke.ts` owns runtime probing.
+ * install acceptance in `plugin-install-acceptance.ts` owns runtime probing.
  */
 
 import { join, resolve } from "@std/path";

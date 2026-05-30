@@ -1,11 +1,11 @@
 #!/usr/bin/env -S deno run -A
 /**
  * @module
- * Publish-shape plugin install smoke for Claude Code and Codex.
+ * Install acceptance for Claude Code and Codex plugin payloads.
  *
- * The runner keeps all host state under temporary homes, installs the
- * official marketplace name, probes the installed plugin cache, and validates
- * MCP plus optional hook payloads.
+ * The runner keeps all host state under temporary homes, installs the official
+ * marketplace name, probes the installed MCP and hook payloads, starts the real
+ * host agent, and verifies that the agent used the installed get_workflow tool.
  */
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -40,23 +40,32 @@ export const EXPECTED_MCP_TOOL_NAMES = [
 
 const MCP_STARTUP_TIMEOUT_MS = 90_000;
 const MCP_TOOLS_LIST_TIMEOUT_MS = 10_000;
+const DEFAULT_TIMEOUT_MS = 180_000;
+const AGENT_PASS_MARKER = "FLOWAI_INSTALL_ACCEPTANCE_PASS";
+const TOOL_EVIDENCE_PATTERN =
+  /get_workflow|mcp__flowai[-_]workflow__get_workflow/;
+const ACCEPTANCE_WORKFLOW = "github-inbox-opencode-test";
 
-export interface SmokeCommandOutput {
+export type CodexProvider = "openai" | "openrouter";
+
+export interface InstallCommandOutput {
   success: boolean;
   code: number;
   stdout: string;
   stderr: string;
 }
 
-export type SmokeRunCommand = (
+export type InstallRunCommand = (
   command: string,
   args: string[],
   opts: {
     env: Record<string, string>;
     cwd?: string;
     stdin?: string;
+    redactStdin?: boolean;
+    timeoutMs?: number;
   },
-) => Promise<SmokeCommandOutput>;
+) => Promise<InstallCommandOutput>;
 
 export interface McpProbeRequest {
   command: string;
@@ -74,52 +83,49 @@ export interface McpProbeResult {
 
 export type McpProbe = (request: McpProbeRequest) => Promise<McpProbeResult>;
 
-export type SmokeReporter = (message: string) => void;
+export type InstallReporter = (message: string) => void;
 
-export interface HostSmokeResult {
+export interface HostInstallResult {
   host: HostKind;
-  status: "passed" | "skipped";
-  hostHome?: string;
-  pluginDataDir?: string;
-  pluginRoot?: string;
-  reason?: string;
+  status: "passed";
+  hostHome: string;
+  pluginDataDir: string;
+  pluginRoot: string;
 }
 
-export interface PluginInstallSmokeResult {
+export interface PluginInstallAcceptanceResult {
   payloadDir: string;
-  hosts: HostSmokeResult[];
+  hosts: HostInstallResult[];
 }
 
-export interface InstallSmokeOptions {
+export interface InstallAcceptanceOptions {
   engineRoot?: string;
   version?: string;
   payloadDir?: string;
   host?: HostKind | "all";
-  allowMissingHostCli?: boolean;
-  skipHostCliInstall?: boolean;
-  runCommand?: SmokeRunCommand;
+  codexProvider?: CodexProvider;
+  timeoutMs?: number;
+  runCommand?: InstallRunCommand;
   probeMcp?: McpProbe;
   buildPayload?: (opts: BuildPayloadOptions) => Promise<BuildResult>;
   makeTempDir?: (prefix: string) => Promise<string>;
-  reporter?: SmokeReporter;
+  reporter?: InstallReporter;
 }
 
 interface HostInstallOptions {
   host: HostKind;
   payloadDir: string;
-  allowMissingHostCli: boolean;
-  skipHostCliInstall: boolean;
-  runCommand?: SmokeRunCommand;
+  runCommand?: InstallRunCommand;
   probeMcp?: McpProbe;
   makeTempDir?: (prefix: string) => Promise<string>;
-  reporter?: SmokeReporter;
+  reporter?: InstallReporter;
 }
 
 interface DiscoverInstalledRootOptions {
   host: HostKind;
   hostHome: string;
   installOutputs: string[];
-  reporter?: SmokeReporter;
+  reporter?: InstallReporter;
 }
 
 interface HookCommand {
@@ -128,15 +134,15 @@ interface HookCommand {
   allowPathExecutable: boolean;
 }
 
-interface HookSmokeOptions {
+interface HookAcceptanceOptions {
   host: HostKind;
   pluginRoot: string;
   pluginDataDir: string;
-  runCommand?: SmokeRunCommand;
-  reporter?: SmokeReporter;
+  runCommand?: InstallRunCommand;
+  reporter?: InstallReporter;
 }
 
-interface HookSmokeResult {
+interface HookAcceptanceResult {
   status: "validated" | "no hooks declared";
   commands: number;
 }
@@ -148,8 +154,10 @@ async function defaultRunCommand(
     env: Record<string, string>;
     cwd?: string;
     stdin?: string;
+    redactStdin?: boolean;
+    timeoutMs?: number;
   },
-): Promise<SmokeCommandOutput> {
+): Promise<InstallCommandOutput> {
   const child = new Deno.Command(command, {
     args,
     cwd: opts.cwd,
@@ -158,22 +166,42 @@ async function defaultRunCommand(
     stdout: "piped",
     stderr: "piped",
   }).spawn();
-  if (opts.stdin !== undefined) {
-    const writer = child.stdin.getWriter();
-    await writer.write(new TextEncoder().encode(opts.stdin));
-    await writer.close();
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    try {
+      child.kill("SIGTERM");
+    } catch {
+      // Process may already have exited.
+    }
+  }, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  try {
+    if (opts.stdin !== undefined) {
+      const writer = child.stdin.getWriter();
+      await writer.write(new TextEncoder().encode(opts.stdin));
+      await writer.close();
+    }
+    const output = await child.output();
+    const stdout = new TextDecoder().decode(output.stdout);
+    const stderr = new TextDecoder().decode(output.stderr);
+    if (timedOut) {
+      return {
+        success: false,
+        code: 124,
+        stdout,
+        stderr: stderr.trim()
+          ? `${stderr}\ncommand timed out after ${opts.timeoutMs}ms`
+          : `command timed out after ${opts.timeoutMs}ms`,
+      };
+    }
+    return { success: output.success, code: output.code, stdout, stderr };
+  } finally {
+    clearTimeout(timeoutId);
   }
-  const output = await child.output();
-  return {
-    success: output.success,
-    code: output.code,
-    stdout: new TextDecoder().decode(output.stdout),
-    stderr: new TextDecoder().decode(output.stderr),
-  };
 }
 
-function report(reporter: SmokeReporter | undefined, message: string): void {
-  reporter?.(`[plugin-install-smoke] ${message}`);
+function report(reporter: InstallReporter | undefined, message: string): void {
+  reporter?.(`[plugin-install-acceptance] ${message}`);
 }
 
 function shellQuote(value: string): string {
@@ -186,7 +214,7 @@ function formatCommand(command: string, args: string[]): string {
 }
 
 function reportOutput(
-  reporter: SmokeReporter | undefined,
+  reporter: InstallReporter | undefined,
   stream: "stdout" | "stderr",
   text: string,
 ): void {
@@ -198,20 +226,25 @@ function reportOutput(
 }
 
 async function runEvidenceCommand(
-  runCommand: SmokeRunCommand,
+  runCommand: InstallRunCommand,
   command: string,
   args: string[],
   opts: {
     env: Record<string, string>;
     cwd?: string;
     stdin?: string;
-    reporter?: SmokeReporter;
+    redactStdin?: boolean;
+    timeoutMs?: number;
+    reporter?: InstallReporter;
   },
-): Promise<SmokeCommandOutput> {
+): Promise<InstallCommandOutput> {
   const cwd = opts.cwd ? ` (cwd=${opts.cwd})` : "";
   report(opts.reporter, `$ ${formatCommand(command, args)}${cwd}`);
   if (opts.stdin !== undefined) {
-    report(opts.reporter, `stdin: ${opts.stdin.trim()}`);
+    report(
+      opts.reporter,
+      `stdin: ${opts.redactStdin ? "<redacted>" : opts.stdin.trim()}`,
+    );
   }
   const output = await runCommand(command, args, opts);
   report(opts.reporter, `exit code: ${output.code}`);
@@ -251,7 +284,7 @@ async function pathExists(path: string): Promise<boolean> {
 }
 
 async function ensurePayload(
-  opts: InstallSmokeOptions,
+  opts: InstallAcceptanceOptions,
   makeTempDir: (prefix: string) => Promise<string>,
 ): Promise<string> {
   if (opts.payloadDir) {
@@ -262,10 +295,10 @@ async function ensurePayload(
   }
   const engineRoot = resolve(opts.engineRoot ?? scriptEngineRoot());
   const version = opts.version ?? readEngineVersion(engineRoot);
-  const outDir = await makeTempDir("flowai-plugin-payload-");
+  const outDir = await makeTempDir("flowai-install-acceptance-payload-");
   report(
     opts.reporter,
-    `payload: building from ${engineRoot} version ${version} into ${outDir}`,
+    `payload: building ${version} from ${engineRoot} into ${outDir}`,
   );
   const result = await (opts.buildPayload ?? buildPluginPayload)({
     engineRoot,
@@ -282,10 +315,6 @@ async function ensurePayload(
 
 function hostPayloadRoot(payloadDir: string, host: HostKind): string {
   return join(payloadDir, host);
-}
-
-function hostPluginRoot(payloadDir: string, host: HostKind): string {
-  return join(hostPayloadRoot(payloadDir, host), "plugins", "flowai-workflow");
 }
 
 function hostCommand(host: HostKind): string {
@@ -325,11 +354,10 @@ function installCommands(host: HostKind, payloadDir: string): string[][] {
 
 async function assertHostCliAvailable(
   host: HostKind,
-  runCommand: SmokeRunCommand,
+  runCommand: InstallRunCommand,
   env: Record<string, string>,
-  allowMissing: boolean,
-  reporter?: SmokeReporter,
-): Promise<HostSmokeResult | null> {
+  reporter?: InstallReporter,
+): Promise<void> {
   try {
     report(reporter, `${host}: checking required host CLI`);
     const result = await runEvidenceCommand(
@@ -338,7 +366,7 @@ async function assertHostCliAvailable(
       ["--version"],
       { env, reporter },
     );
-    if (result.success) return null;
+    if (result.success) return;
     throw new Error(
       `required host CLI \`${hostCommand(host)}\` version probe failed: ${
         result.stderr.trim() || result.stdout.trim()
@@ -347,7 +375,6 @@ async function assertHostCliAvailable(
   } catch (error) {
     if (error instanceof Deno.errors.NotFound) {
       const reason = `required host CLI \`${hostCommand(host)}\` was not found`;
-      if (allowMissing) return { host, status: "skipped", reason };
       throw new Error(`${reason}.`);
     }
     throw error;
@@ -540,7 +567,7 @@ async function defaultProbeMcp(
     stderr: "pipe",
   });
   const client = new Client({
-    name: "flowai-plugin-smoke",
+    name: "flowai-plugin-acceptance",
     version: "0.0.0",
   });
   let stderr = "";
@@ -593,7 +620,7 @@ export async function probeInstalledMcp(opts: {
   pluginRoot: string;
   pluginDataDir: string;
   probeMcp?: McpProbe;
-  reporter?: SmokeReporter;
+  reporter?: InstallReporter;
 }): Promise<McpProbeResult> {
   const mcpPath = join(opts.pluginRoot, ".mcp.json");
   report(opts.reporter, `${opts.host}: reading MCP config ${mcpPath}`);
@@ -732,9 +759,9 @@ async function hookSources(
   return sources;
 }
 
-export async function runHookSmoke(
-  opts: HookSmokeOptions,
-): Promise<HookSmokeResult> {
+export async function runHookAcceptance(
+  opts: HookAcceptanceOptions,
+): Promise<HookAcceptanceResult> {
   const sources = await hookSources(opts.pluginRoot, opts.host);
   if (sources.length === 0) {
     report(opts.reporter, `${opts.host}: no hooks declared`);
@@ -767,7 +794,7 @@ export async function runHookSmoke(
       cwd: opts.pluginRoot,
       stdin: JSON.stringify({
         event: "SessionStart",
-        source: "flowai-plugin-smoke",
+        source: "flowai-plugin-acceptance",
       }) + "\n",
       reporter: opts.reporter,
     });
@@ -785,7 +812,7 @@ export async function runHookSmoke(
 
 export async function installPluginForHost(
   opts: HostInstallOptions,
-): Promise<HostSmokeResult> {
+): Promise<HostInstallResult> {
   const runCommand = opts.runCommand ?? defaultRunCommand;
   const makeTempDir = opts.makeTempDir ??
     ((prefix: string) => Deno.makeTempDir({ prefix }));
@@ -801,48 +828,36 @@ export async function installPluginForHost(
     `${opts.host}: host state dirs CODEX_HOME=${env.CODEX_HOME} CLAUDE_CONFIG_DIR=${env.CLAUDE_CONFIG_DIR} FLOWAI_PLUGIN_DATA=${env.FLOWAI_PLUGIN_DATA}`,
   );
 
-  let pluginRoot = hostPluginRoot(opts.payloadDir, opts.host);
-  if (!opts.skipHostCliInstall) {
-    const unavailable = await assertHostCliAvailable(
-      opts.host,
-      runCommand,
-      env,
-      opts.allowMissingHostCli,
-      opts.reporter,
-    );
-    if (unavailable) return unavailable;
+  await assertHostCliAvailable(
+    opts.host,
+    runCommand,
+    env,
+    opts.reporter,
+  );
 
-    const outputs: string[] = [];
-    for (const args of installCommands(opts.host, opts.payloadDir)) {
-      const output = await runEvidenceCommand(
-        runCommand,
-        hostCommand(opts.host),
-        args,
-        { env, reporter: opts.reporter },
-      );
-      outputs.push(output.stdout, output.stderr);
-      if (!output.success) {
-        throw new Error(
-          `${hostCommand(opts.host)} ${
-            args.join(" ")
-          } failed (${output.code}): ${
-            output.stderr.trim() || output.stdout.trim()
-          }`,
-        );
-      }
-    }
-    pluginRoot = await discoverInstalledPluginRoot({
-      host: opts.host,
-      hostHome,
-      installOutputs: outputs,
-      reporter: opts.reporter,
-    });
-  } else {
-    report(
-      opts.reporter,
-      `${opts.host}: skipping host CLI install, using payload plugin root ${pluginRoot}`,
+  const outputs: string[] = [];
+  for (const args of installCommands(opts.host, opts.payloadDir)) {
+    const output = await runEvidenceCommand(
+      runCommand,
+      hostCommand(opts.host),
+      args,
+      { env, reporter: opts.reporter },
     );
+    outputs.push(output.stdout, output.stderr);
+    if (!output.success) {
+      throw new Error(
+        `${hostCommand(opts.host)} ${args.join(" ")} failed (${output.code}): ${
+          output.stderr.trim() || output.stdout.trim()
+        }`,
+      );
+    }
   }
+  const pluginRoot = await discoverInstalledPluginRoot({
+    host: opts.host,
+    hostHome,
+    installOutputs: outputs,
+    reporter: opts.reporter,
+  });
 
   const pluginDataDir = join(hostHome, "plugin-data", opts.host);
   report(opts.reporter, `${opts.host}: plugin data dir ${pluginDataDir}`);
@@ -853,14 +868,17 @@ export async function installPluginForHost(
     probeMcp: opts.probeMcp,
     reporter: opts.reporter,
   });
-  await runHookSmoke({
+  await runHookAcceptance({
     host: opts.host,
     pluginRoot,
     pluginDataDir,
     runCommand,
     reporter: opts.reporter,
   });
-  report(opts.reporter, `${opts.host}: smoke passed with ${pluginRoot}`);
+  report(
+    opts.reporter,
+    `${opts.host}: install probe passed with ${pluginRoot}`,
+  );
   return {
     host: opts.host,
     status: "passed",
@@ -870,26 +888,284 @@ export async function installPluginForHost(
   };
 }
 
-export async function runPluginInstallSmoke(
-  opts: InstallSmokeOptions,
-): Promise<PluginInstallSmokeResult> {
+function requireEnv(name: string): string {
+  const value = Deno.env.get(name);
+  if (value === undefined || value.trim() === "") {
+    throw new Error(
+      `Missing required environment variable ${name} for install acceptance.`,
+    );
+  }
+  return value;
+}
+
+function requireCodexProvider(
+  provider: CodexProvider | undefined,
+): CodexProvider {
+  if (provider === "openai" || provider === "openrouter") return provider;
+  throw new Error(
+    "Codex install acceptance requires --codex-provider openai|openrouter.",
+  );
+}
+
+function hostAgentEnv(
+  host: HostKind,
+  hostHome: string,
+  pluginRoot: string,
+): Record<string, string> {
+  const dataRoot = join(hostHome, "plugin-data", host);
+  const workflowDir = join(
+    pluginRoot,
+    ".flowai-workflow",
+    ACCEPTANCE_WORKFLOW,
+  );
+  return {
+    ...Deno.env.toObject(),
+    HOME: hostHome,
+    CODEX_HOME: join(hostHome, ".codex"),
+    CLAUDE_CONFIG_DIR: join(hostHome, ".claude"),
+    PLUGIN_ROOT: pluginRoot,
+    PLUGIN_DATA: dataRoot,
+    FLOWAI_PLUGIN_DATA: dataRoot,
+    CLAUDE_PLUGIN_ROOT: pluginRoot,
+    CLAUDE_PLUGIN_DATA: dataRoot,
+    FLOWAI_WORKFLOW: workflowDir,
+    FLOWAI_SUPPRESS_DEPRECATION: "1",
+  };
+}
+
+function agentPrompt(host: HostKind): string {
+  return [
+    "This is a CI acceptance test for the installed flowai-workflow plugin.",
+    "Call the installed MCP server flowai-workflow tool get_workflow exactly once.",
+    "This must be an MCP tool call, not a shell command or resource-list call.",
+    "Do not use shell commands and do not edit files.",
+    `After the tool returns, reply with exactly: ${AGENT_PASS_MARKER} host=${host}`,
+  ].join(" ");
+}
+
+function claudeArgs(pluginRoot: string, prompt: string): string[] {
+  const args = [
+    "--bare",
+    "--plugin-dir",
+    pluginRoot,
+    "--permission-mode",
+    "bypassPermissions",
+    "--allowedTools",
+    "mcp__flowai-workflow__get_workflow",
+    "--output-format",
+    "stream-json",
+    "--max-budget-usd",
+    Deno.env.get("CLAUDE_INSTALL_ACCEPTANCE_MAX_BUDGET_USD") ?? "0.25",
+  ];
+  const model = Deno.env.get("CLAUDE_INSTALL_ACCEPTANCE_MODEL");
+  if (model && model.trim() !== "") args.push("--model", model);
+  args.push("-p", prompt);
+  return args;
+}
+
+function codexArgs(
+  prompt: string,
+  projectDir: string,
+  provider: CodexProvider,
+): string[] {
+  const args = ["--dangerously-bypass-approvals-and-sandbox"];
+  if (provider === "openrouter") {
+    const model = requireEnv("CODEX_INSTALL_ACCEPTANCE_MODEL");
+    args.push(
+      "-c",
+      'model_provider="openrouter"',
+      "-c",
+      `model="${model}"`,
+      "-c",
+      'model_providers.openrouter.name="OpenRouter"',
+      "-c",
+      'model_providers.openrouter.base_url="https://openrouter.ai/api/v1"',
+      "-c",
+      'model_providers.openrouter.env_key="OPENROUTER_API_KEY"',
+      "-c",
+      'model_providers.openrouter.wire_api="responses"',
+    );
+  } else {
+    const model = Deno.env.get("CODEX_INSTALL_ACCEPTANCE_MODEL");
+    if (model && model.trim() !== "") args.push("--model", model);
+  }
+  args.push(
+    "exec",
+    "--json",
+    "--cd",
+    projectDir,
+    "--skip-git-repo-check",
+    prompt,
+  );
+  return args;
+}
+
+function hasInstalledPluginToolEvidence(output: string): boolean {
+  for (const rawLine of output.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line.startsWith("{")) continue;
+    let event: unknown;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!event || typeof event !== "object") continue;
+    const record = event as Record<string, unknown>;
+    if (
+      record.type === "tool_use" &&
+      typeof record.name === "string" &&
+      TOOL_EVIDENCE_PATTERN.test(record.name)
+    ) {
+      return true;
+    }
+    const item = record.item;
+    if (!item || typeof item !== "object") continue;
+    const itemRecord = item as Record<string, unknown>;
+    if (
+      record.type === "item.completed" &&
+      itemRecord.type === "mcp_tool_call" &&
+      itemRecord.server === "flowai-workflow" &&
+      itemRecord.tool === "get_workflow" &&
+      itemRecord.error === null &&
+      itemRecord.status === "completed"
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function assertAgentEvidence(
+  host: HostKind,
+  output: InstallCommandOutput,
+): void {
+  const combined = `${output.stdout}\n${output.stderr}`;
+  if (!output.success) {
+    throw new Error(
+      `${host} install acceptance failed (${output.code}): ${combined.trim()}`,
+    );
+  }
+  if (!combined.includes(AGENT_PASS_MARKER)) {
+    throw new Error(
+      `${host} install acceptance did not emit ${AGENT_PASS_MARKER}.`,
+    );
+  }
+  if (!hasInstalledPluginToolEvidence(combined)) {
+    throw new Error(
+      `${host} install acceptance did not show get_workflow tool evidence.`,
+    );
+  }
+}
+
+async function runHostInstallAcceptance(opts: {
+  host: HostKind;
+  payloadDir: string;
+  codexProvider?: CodexProvider;
+  makeTempDir: (prefix: string) => Promise<string>;
+  runCommand: InstallRunCommand;
+  probeMcp?: McpProbe;
+  reporter?: InstallReporter;
+  timeoutMs: number;
+}): Promise<HostInstallResult> {
+  if (opts.host === "claude") requireEnv("ANTHROPIC_API_KEY");
+  const codexProvider = opts.host === "codex"
+    ? requireCodexProvider(opts.codexProvider)
+    : undefined;
+  if (codexProvider === "openai") requireEnv("OPENAI_API_KEY");
+  if (codexProvider === "openrouter") requireEnv("OPENROUTER_API_KEY");
+
+  const installed = await installPluginForHost({
+    host: opts.host,
+    payloadDir: opts.payloadDir,
+    makeTempDir: opts.makeTempDir,
+    runCommand: opts.runCommand,
+    probeMcp: opts.probeMcp,
+    reporter: opts.reporter,
+  });
+
+  const env = hostAgentEnv(opts.host, installed.hostHome, installed.pluginRoot);
+  report(
+    opts.reporter,
+    `${opts.host}: real agent FLOWAI_WORKFLOW=${env.FLOWAI_WORKFLOW}`,
+  );
+  const prompt = agentPrompt(opts.host);
+  report(opts.reporter, `${opts.host}: real agent prompt: ${prompt}`);
+
+  let output: InstallCommandOutput;
+  if (opts.host === "claude") {
+    output = await runEvidenceCommand(
+      opts.runCommand,
+      "claude",
+      claudeArgs(installed.pluginRoot, prompt),
+      { env, reporter: opts.reporter, timeoutMs: opts.timeoutMs },
+    );
+  } else {
+    if (!codexProvider) {
+      throw new Error("Codex install acceptance provider was not resolved.");
+    }
+    const projectDir = await opts.makeTempDir("flowai-codex-agent-project-");
+    if (codexProvider === "openai") {
+      const apiKey = requireEnv("OPENAI_API_KEY");
+      const login = await runEvidenceCommand(
+        opts.runCommand,
+        "codex",
+        ["login", "--with-api-key"],
+        {
+          env,
+          stdin: `${apiKey}\n`,
+          redactStdin: true,
+          reporter: opts.reporter,
+          timeoutMs: opts.timeoutMs,
+        },
+      );
+      if (!login.success) {
+        throw new Error(
+          `codex login --with-api-key failed (${login.code}): ${
+            login.stderr.trim() || login.stdout.trim()
+          }`,
+        );
+      }
+    }
+    output = await runEvidenceCommand(
+      opts.runCommand,
+      "codex",
+      codexArgs(prompt, projectDir, codexProvider),
+      {
+        env,
+        cwd: projectDir,
+        reporter: opts.reporter,
+        timeoutMs: opts.timeoutMs,
+      },
+    );
+  }
+
+  assertAgentEvidence(opts.host, output);
+  report(opts.reporter, `${opts.host}: install acceptance passed`);
+  return installed;
+}
+
+export async function runPluginInstallAcceptance(
+  opts: InstallAcceptanceOptions,
+): Promise<PluginInstallAcceptanceResult> {
   const makeTempDir = opts.makeTempDir ??
     ((prefix: string) => Deno.makeTempDir({ prefix }));
+  const runCommand = opts.runCommand ?? defaultRunCommand;
   const payloadDir = await ensurePayload(opts, makeTempDir);
   const hosts = hostsFromOption(opts.host);
-  report(opts.reporter, `hosts under test: ${hosts.join(", ")}`);
-  const results: HostSmokeResult[] = [];
+  report(opts.reporter, `acceptance hosts under test: ${hosts.join(", ")}`);
+  const results: HostInstallResult[] = [];
   for (const host of hosts) {
     results.push(
-      await installPluginForHost({
+      await runHostInstallAcceptance({
         host,
         payloadDir,
-        allowMissingHostCli: opts.allowMissingHostCli ?? false,
-        skipHostCliInstall: opts.skipHostCliInstall ?? false,
-        runCommand: opts.runCommand,
-        probeMcp: opts.probeMcp,
+        codexProvider: opts.codexProvider,
         makeTempDir,
+        runCommand,
+        probeMcp: opts.probeMcp,
         reporter: opts.reporter,
+        timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       }),
     );
   }
@@ -901,24 +1177,22 @@ interface ParsedArgs {
   version?: string;
   payloadDir?: string;
   hosts: HostKind[];
-  allowMissingHostCli: boolean;
-  skipHostCliInstall: boolean;
+  timeoutMs: number;
+  codexProvider?: CodexProvider;
 }
 
-export function parseInstallSmokeArgs(
+export function parseInstallAcceptanceArgs(
   argv: string[],
 ): ParsedArgs | { help: string } {
   let engineRoot = ".";
   let version: string | undefined;
   let payloadDir: string | undefined;
   let host: HostKind | "all" = "all";
-  let allowMissingHostCli = false;
-  let skipHostCliInstall = false;
+  let timeoutMs = DEFAULT_TIMEOUT_MS;
+  let codexProvider: CodexProvider | undefined;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     switch (arg) {
-      case "--":
-        break;
       case "--engine-root":
         engineRoot = argv[++i] ?? "";
         break;
@@ -936,19 +1210,31 @@ export function parseInstallSmokeArgs(
         host = value;
         break;
       }
-      case "--allow-missing-host-cli":
-        allowMissingHostCli = true;
+      case "--timeout-ms": {
+        timeoutMs = Number(argv[++i] ?? "");
+        if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
+          throw new Error("--timeout-ms must be a positive integer.");
+        }
         break;
-      case "--skip-host-cli-install":
-        skipHostCliInstall = true;
+      }
+      case "--codex-provider": {
+        const value = argv[++i] ?? "";
+        if (value !== "openai" && value !== "openrouter") {
+          throw new Error(
+            "--codex-provider must be one of: openai, openrouter.",
+          );
+        }
+        codexProvider = value;
         break;
+      }
       case "-h":
       case "--help":
         return {
           help: [
-            "Usage: plugin-install-smoke [--payload-dir <dir>] [--engine-root <dir>]",
-            "                            [--version <version>] [--host claude|codex|all]",
-            "                            [--allow-missing-host-cli] [--skip-host-cli-install]",
+            "Usage: plugin-install-acceptance [--payload-dir <dir>] [--engine-root <dir>]",
+            "                                  [--version <version>] [--host claude|codex|all]",
+            "                                  [--codex-provider openai|openrouter]",
+            "                                  [--timeout-ms <ms>]",
           ].join("\n"),
         };
       default:
@@ -960,15 +1246,15 @@ export function parseInstallSmokeArgs(
     version,
     payloadDir,
     hosts: hostsFromOption(host),
-    allowMissingHostCli,
-    skipHostCliInstall,
+    timeoutMs,
+    codexProvider,
   };
 }
 
 if (import.meta.main) {
   let parsed: ParsedArgs | { help: string };
   try {
-    parsed = parseInstallSmokeArgs(Deno.args);
+    parsed = parseInstallAcceptanceArgs(Deno.args);
   } catch (error) {
     console.error((error as Error).message);
     Deno.exit(2);
@@ -977,20 +1263,16 @@ if (import.meta.main) {
     console.log(parsed.help);
     Deno.exit(0);
   }
-  const result = await runPluginInstallSmoke({
+  const result = await runPluginInstallAcceptance({
     engineRoot: resolve(parsed.engineRoot),
     version: parsed.version,
     payloadDir: parsed.payloadDir,
     host: parsed.hosts.length === 1 ? parsed.hosts[0] : "all",
-    allowMissingHostCli: parsed.allowMissingHostCli,
-    skipHostCliInstall: parsed.skipHostCliInstall,
+    codexProvider: parsed.codexProvider,
+    timeoutMs: parsed.timeoutMs,
     reporter: console.log,
   });
   for (const host of result.hosts) {
-    if (host.status === "skipped") {
-      console.log(`${host.host}: skipped (${host.reason})`);
-    } else {
-      console.log(`${host.host}: passed (${host.pluginRoot})`);
-    }
+    console.log(`${host.host}: install acceptance passed (${host.pluginRoot})`);
   }
 }
