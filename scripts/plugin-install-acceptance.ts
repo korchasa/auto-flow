@@ -238,6 +238,7 @@ async function runEvidenceCommand(
     redactStdin?: boolean;
     timeoutMs?: number;
     reporter?: InstallReporter;
+    reportOutput?: boolean;
   },
 ): Promise<InstallCommandOutput> {
   const cwd = opts.cwd ? ` (cwd=${opts.cwd})` : "";
@@ -248,10 +249,14 @@ async function runEvidenceCommand(
       `stdin: ${opts.redactStdin ? "<redacted>" : opts.stdin.trim()}`,
     );
   }
-  const output = await runCommand(command, args, opts);
+  const { reportOutput: shouldReportOutput, reporter: _reporter, ...runOpts } =
+    opts;
+  const output = await runCommand(command, args, runOpts);
   report(opts.reporter, `exit code: ${output.code}`);
-  reportOutput(opts.reporter, "stdout", output.stdout);
-  reportOutput(opts.reporter, "stderr", output.stderr);
+  if (shouldReportOutput !== false) {
+    reportOutput(opts.reporter, "stdout", output.stdout);
+    reportOutput(opts.reporter, "stderr", output.stderr);
+  }
   return output;
 }
 
@@ -1068,6 +1073,107 @@ function hasInstalledPluginToolEvidence(output: string): boolean {
   return false;
 }
 
+function agentOutputEvidenceLines(host: HostKind, output: string): string[] {
+  const lines: string[] = [];
+  const seen = new Set<string>();
+  function push(line: string): void {
+    if (seen.has(line)) return;
+    seen.add(line);
+    lines.push(`${host}: agent evidence: ${line}`);
+  }
+
+  for (const rawLine of output.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line.includes(AGENT_PASS_MARKER)) {
+      push(`${AGENT_PASS_MARKER} host=${host}`);
+    }
+    if (!line.startsWith("{")) continue;
+    let event: unknown;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!event || typeof event !== "object") continue;
+    const record = event as Record<string, unknown>;
+    if (
+      record.type === "tool_use" &&
+      typeof record.name === "string" &&
+      TOOL_EVIDENCE_PATTERN.test(record.name)
+    ) {
+      push(`tool_use ${record.name}`);
+    }
+    if (record.type === "assistant") {
+      const message = record.message;
+      if (message && typeof message === "object") {
+        const content = (message as Record<string, unknown>).content;
+        if (Array.isArray(content)) {
+          for (const entry of content) {
+            if (!entry || typeof entry !== "object") continue;
+            const entryRecord = entry as Record<string, unknown>;
+            if (
+              entryRecord.type === "tool_use" &&
+              typeof entryRecord.name === "string" &&
+              TOOL_EVIDENCE_PATTERN.test(entryRecord.name)
+            ) {
+              push(`tool_use ${entryRecord.name}`);
+            }
+            if (
+              entryRecord.type === "text" &&
+              typeof entryRecord.text === "string" &&
+              entryRecord.text.includes(AGENT_PASS_MARKER)
+            ) {
+              push(`${AGENT_PASS_MARKER} host=${host}`);
+            }
+          }
+        }
+      }
+    }
+    const item = record.item;
+    if (!item || typeof item !== "object") continue;
+    const itemRecord = item as Record<string, unknown>;
+    if (
+      record.type === "item.completed" &&
+      itemRecord.type === "mcp_tool_call" &&
+      itemRecord.server === "flowai-workflow" &&
+      itemRecord.tool === "get_workflow"
+    ) {
+      push(
+        `mcp_tool_call server=flowai-workflow tool=get_workflow status=${
+          String(itemRecord.status)
+        } error=${itemRecord.error === null ? "null" : "present"}`,
+      );
+    }
+  }
+  return lines;
+}
+
+function reportAgentOutputEvidence(
+  reporter: InstallReporter | undefined,
+  host: HostKind,
+  output: InstallCommandOutput,
+): void {
+  const combined = `${output.stdout}\n${output.stderr}`;
+  const lines = agentOutputEvidenceLines(host, combined);
+  if (lines.length === 0) {
+    report(reporter, `${host}: agent evidence: no safe evidence lines found`);
+    return;
+  }
+  for (const line of lines) report(reporter, line);
+}
+
+function safeAgentFailureDetails(
+  host: HostKind,
+  output: InstallCommandOutput,
+): string {
+  const combined = `${output.stdout}\n${output.stderr}`;
+  const evidence = agentOutputEvidenceLines(host, combined);
+  if (evidence.length > 0) return evidence.join("; ");
+  const stderrLines = output.stderr.trim().split(/\r?\n/).filter(Boolean);
+  if (stderrLines.length === 0) return "no sanitized agent evidence";
+  return `stderr tail: ${stderrLines.slice(-3).join(" | ")}`;
+}
+
 function assertAgentEvidence(
   host: HostKind,
   output: InstallCommandOutput,
@@ -1075,7 +1181,9 @@ function assertAgentEvidence(
   const combined = `${output.stdout}\n${output.stderr}`;
   if (!output.success) {
     throw new Error(
-      `${host} install acceptance failed (${output.code}): ${combined.trim()}`,
+      `${host} install acceptance failed (${output.code}): ${
+        safeAgentFailureDetails(host, output)
+      }`,
     );
   }
   if (!combined.includes(AGENT_PASS_MARKER)) {
@@ -1130,7 +1238,12 @@ async function runHostInstallAcceptance(opts: {
       opts.runCommand,
       "claude",
       claudeArgs(installed.pluginRoot, prompt),
-      { env, reporter: opts.reporter, timeoutMs: opts.timeoutMs },
+      {
+        env,
+        reporter: opts.reporter,
+        timeoutMs: opts.timeoutMs,
+        reportOutput: false,
+      },
     );
   } else {
     if (!codexProvider) {
@@ -1168,10 +1281,12 @@ async function runHostInstallAcceptance(opts: {
         cwd: projectDir,
         reporter: opts.reporter,
         timeoutMs: opts.timeoutMs,
+        reportOutput: false,
       },
     );
   }
 
+  reportAgentOutputEvidence(opts.reporter, opts.host, output);
   assertAgentEvidence(opts.host, output);
   report(opts.reporter, `${opts.host}: install acceptance passed`);
   return installed;

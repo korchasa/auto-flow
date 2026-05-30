@@ -358,7 +358,8 @@ Deno.test("install acceptance — claude installs plugin and invokes get_workflo
         if (args.includes("--plugin-dir")) {
           return Promise.resolve(
             ok(
-              '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__plugin_flowai-workflow_flowai-workflow__get_workflow","input":{}}]}}\n' +
+              '{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"hidden","signature":"secret-looking-signature"}]},"request_id":"req_hidden"}\n' +
+                '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__plugin_flowai-workflow_flowai-workflow__get_workflow","input":{}}]}}\n' +
                 "FLOWAI_INSTALL_ACCEPTANCE_PASS host=claude",
             ),
           );
@@ -386,6 +387,15 @@ Deno.test("install acceptance — claude installs plugin and invokes get_workflo
       evidence.join("\n"),
       "claude: install acceptance passed",
     );
+    assertStringIncludes(
+      evidence.join("\n"),
+      "claude: agent evidence: tool_use mcp__plugin_flowai-workflow_flowai-workflow__get_workflow",
+    );
+    assertEquals(
+      evidence.join("\n").includes("secret-looking-signature"),
+      false,
+    );
+    assertEquals(evidence.join("\n").includes("req_hidden"), false);
   } finally {
     if (oldToken === undefined) Deno.env.delete("CLAUDE_CODE_OAUTH_TOKEN");
     else Deno.env.set("CLAUDE_CODE_OAUTH_TOKEN", oldToken);
@@ -475,6 +485,14 @@ Deno.test("install acceptance — codex openai logs in, installs plugin, and inv
     assertStringIncludes(
       evidence.join("\n"),
       "codex: install acceptance passed",
+    );
+    assertStringIncludes(
+      evidence.join("\n"),
+      "codex: agent evidence: mcp_tool_call server=flowai-workflow tool=get_workflow status=completed error=null",
+    );
+    assertEquals(
+      evidence.join("\n").includes('"type":"item.completed"'),
+      false,
     );
   } finally {
     if (oldKey === undefined) Deno.env.delete("OPENAI_API_KEY");
