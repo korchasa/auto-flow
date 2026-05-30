@@ -62,6 +62,45 @@ Deno.test("checkArgs — empty args returns null (ok)", () => {
   assertEquals(result, null);
 });
 
+function workflowJobBlock(workflow: string, jobName: string): string {
+  const marker = `\n  ${jobName}:\n`;
+  const start = workflow.indexOf(marker);
+  if (start < 0) return "";
+  const rest = workflow.slice(start + marker.length);
+  const next = rest.search(new RegExp("\\n\\s{2}[a-zA-Z0-9_-]+:\\n"));
+  return next < 0 ? rest : rest.slice(0, next);
+}
+
+Deno.test("CI workflow — every push runs build and real plugin host smoke", async () => {
+  const workflow = await Deno.readTextFile(".github/workflows/ci.yml");
+  assertEquals(workflow.includes('branches: ["**"]'), true);
+
+  const smokeJob = workflowJobBlock(workflow, "plugin-install-smoke");
+  assertEquals(
+    smokeJob.includes("Plugin install smoke (Claude Code + Codex)"),
+    true,
+  );
+  assertEquals(smokeJob.includes("Install Claude Code and Codex CLIs"), true);
+  assertEquals(
+    smokeJob.includes("Run real Claude Code plugin install smoke"),
+    true,
+  );
+  assertEquals(smokeJob.includes("Run real Codex plugin install smoke"), true);
+  assertEquals(smokeJob.includes("--host claude"), true);
+  assertEquals(smokeJob.includes("--host codex"), true);
+
+  const setupMatrixJob = workflowJobBlock(workflow, "setup-matrix");
+  const buildJob = workflowJobBlock(workflow, "build");
+  assertEquals(
+    setupMatrixJob.includes("if: needs.check.outputs.released == 'true'"),
+    false,
+  );
+  assertEquals(
+    buildJob.includes("\n    if: needs.check.outputs.released == 'true'"),
+    false,
+  );
+});
+
 // --- validateAgentListContent ---
 
 Deno.test("validateAgentListContent — valid 6-agent content passes", () => {

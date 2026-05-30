@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
     branches: [main]
 
@@ -131,20 +131,70 @@ jobs:
             --mode publish \
             --version "$RELEASE_VERSION"
 
+  plugin-install-smoke:
+    name: Plugin install smoke (Claude Code + Codex)
+    runs-on: ubuntu-latest
+    env:
+      CLAUDE_CODE_VERSION: 2.1.158
+      CODEX_CLI_VERSION: 0.135.0
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
+        with:
+          deno-version: v2.x
+
+      - name: Install Claude Code and Codex CLIs
+        run: |
+          set -euo pipefail
+          npm install -g \
+            "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
+            "@openai/codex@${CODEX_CLI_VERSION}"
+          claude --version
+          codex --version
+
+      - name: Build plugin payload for real host smoke
+        run: |
+          set -euo pipefail
+          VERSION=$(deno eval "console.log(JSON.parse(Deno.readTextFileSync('deno.json')).version)")
+          TMP_DIR=$(mktemp -d)
+          deno run -A scripts/build-plugin-payload.ts \
+            --engine-root . \
+            --version "$VERSION" \
+            --out-dir "$TMP_DIR"
+          echo "payload_dir=${TMP_DIR}" >> "$GITHUB_ENV"
+
+      - name: Validate split plugin payload roots
+        run: deno run -A scripts/plugin-payload-smoke.ts "$payload_dir"
+
+      - name: Run real Claude Code plugin install smoke
+        run: |
+          deno run -A scripts/plugin-install-smoke.ts \
+            --payload-dir "$payload_dir" \
+            --host claude
+
+      - name: Run real Codex plugin install smoke
+        run: |
+          deno run -A scripts/plugin-install-smoke.ts \
+            --payload-dir "$payload_dir" \
+            --host codex
+
   # Reads scripts/targets.json (single source of truth, also consumed by
   # scripts/compile.ts) and emits a GitHub Actions matrix. Keeping the list
   # in one file prevents drift between the local compile script and CI.
   setup-matrix:
     name: Resolve build matrix
     needs: check
-    if: needs.check.outputs.released == 'true'
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.targets.outputs.matrix }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ needs.check.outputs.tag }}
+          ref: ${{ needs.check.outputs.released == 'true' && needs.check.outputs.tag || github.sha }}
 
       - name: Build matrix from scripts/targets.json
         id: targets
@@ -153,7 +203,6 @@ jobs:
   build:
     name: Build ${{ matrix.target }}
     needs: [check, setup-matrix]
-    if: needs.check.outputs.released == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -162,7 +211,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ needs.check.outputs.tag }}
+          ref: ${{ needs.check.outputs.released == 'true' && needs.check.outputs.tag || github.sha }}
 
       - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
         with:
@@ -170,10 +219,11 @@ jobs:
 
       - name: Compile
         env:
-          VERSION: ${{ needs.check.outputs.tag }}
+          VERSION: ${{ needs.check.outputs.released == 'true' && needs.check.outputs.tag || 'dev' }}
         run: deno task compile --target ${{ matrix.target }}
 
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        if: needs.check.outputs.released == 'true'
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}
