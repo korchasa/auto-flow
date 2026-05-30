@@ -1,6 +1,6 @@
 ---
 date: "2026-05-30"
-status: to do
+status: done
 implements: [FR-E71, FR-E72, FR-E74]
 tags: [plugin, ci, mcp, hooks, codex, claude-code]
 related_tasks:
@@ -87,12 +87,12 @@ correctly wired; document the trust boundary explicitly".
 
 ## Definition of Done
 
-- [ ] Payload smoke script validates Claude and Codex marketplace
+- [x] Payload smoke script validates Claude and Codex marketplace
       roots, plugin manifests, MCP paths, and optional hook paths from
       a built payload. Acceptance tuple — FR-E72 + Test:
       `scripts/plugin-payload-smoke_test.ts::FR-E72 payload smoke validates official host roots`;
       Evidence: `deno task test scripts/plugin-payload-smoke_test.ts`.
-- [ ] Original-repo publish-shape install smoke builds the final
+- [x] Original-repo publish-shape install smoke builds the final
       official payload from the `flowai-workflow` checkout, registers it
       as a local marketplace named `flowai-workflow` inside an isolated
       temp host home, installs `flowai-workflow@flowai-workflow`, and
@@ -100,13 +100,13 @@ correctly wired; document the trust boundary explicitly".
       Acceptance tuple — FR-E71 + FR-E72 + Test:
       `scripts/plugin-install-smoke_test.ts::FR-E72 official payload installs from source repo into isolated host home`;
       Evidence: `deno task test scripts/plugin-install-smoke_test.ts`.
-- [ ] Codex MCP smoke executes the exact command and `cwd` declared in
+- [x] Codex MCP smoke executes the exact command and `cwd` declared in
       the installed Codex cache's `.mcp.json`, sends MCP `initialize`
       and `tools/list`, and verifies the `flowai-workflow` server plus
       expected tool names. Acceptance tuple — FR-E71 + FR-E74 + Test:
       `scripts/plugin-install-smoke_test.ts::FR-E74 installed codex mcp config completes initialize and tools list`;
       Evidence: `deno task test scripts/plugin-install-smoke_test.ts`.
-- [ ] Claude MCP smoke executes the command declared in
+- [x] Claude MCP smoke executes the command declared in
       the installed Claude plugin root's `.mcp.json` with
       `CLAUDE_PLUGIN_ROOT` and `FLOWAI_PLUGIN_DATA` pointed at the
       installed temp cache, sends MCP `initialize` and `tools/list`,
@@ -114,7 +114,7 @@ correctly wired; document the trust boundary explicitly".
       names. Acceptance tuple — FR-E74 + Test:
       `scripts/plugin-install-smoke_test.ts::FR-E74 installed claude mcp config completes initialize and tools list`;
       Evidence: `deno task test scripts/plugin-install-smoke_test.ts`.
-- [ ] Hook smoke validates every plugin `hooks/hooks.json` or manifest
+- [x] Hook smoke validates every plugin `hooks/hooks.json` or manifest
       `hooks` entry when present, rejects paths outside plugin root,
       and directly executes command hooks from the installed plugin
       cache with synthetic stdin plus `PLUGIN_ROOT`, `PLUGIN_DATA`,
@@ -122,18 +122,18 @@ correctly wired; document the trust boundary explicitly".
       — FR-E71 + Test:
       `scripts/plugin-install-smoke_test.ts::FR-E71 installed plugin hook smoke validates and executes bundled hook commands`;
       Evidence: `deno task test scripts/plugin-install-smoke_test.ts`.
-- [ ] GitHub sync workflow smoke uses the split official payload roots
+- [x] GitHub sync workflow smoke uses the split official payload roots
       after cloning `korchasa/flowai-workflow-plugins`, not the stale
       pre-split `plugins/flowai-workflow` path. Acceptance tuple —
       FR-E72 + Test:
       `scripts/sync-plugins-repo_test.ts::FR-E72 publish smoke command targets host-specific payload roots`;
       Evidence: `deno task test scripts/sync-plugins-repo_test.ts`.
-- [ ] Documentation states the CI guarantee and the hook trust boundary:
+- [x] Documentation states the CI guarantee and the hook trust boundary:
       MCP handshake is automated; Codex hook trust remains a user
       review step and is not claimed as auto-enabled by CI. Acceptance
       tuple — FR-E71 + FR-E74 + manual — korchasa; Evidence:
       `rg -n "hook trust|MCP handshake|plugin-payload-smoke" README.md documents/requirements-engine`.
-- [ ] Full verification passes after adding the smoke checks.
+- [x] Full verification passes after adding the smoke checks.
       Acceptance tuple — FR-E71 + FR-E72 + FR-E74 + Test:
       `scripts/check.ts::full check pipeline`;
       Evidence: `deno task check`.

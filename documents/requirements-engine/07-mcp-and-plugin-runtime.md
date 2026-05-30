@@ -133,12 +133,12 @@ shape) but are kept here to fit within the per-file token budget.
     every handler returns a structured missing-workflow diagnostic
     referencing `init`. Evidence:
     `mcp-server_test.ts::FR-E74 server starts in no-workflow mode and surfaces missing-workflow error on tool call`.
-  - [ ] CI smoke executes the exact MCP command declared by the
+  - [x] CI smoke executes the exact MCP command declared by the
     installed Codex cache's `.mcp.json`, sends MCP `initialize` and
     `tools/list`, and verifies the `flowai-workflow` server plus the
     expected FR-E73 tool names. Evidence:
     `scripts/plugin-install-smoke_test.ts::FR-E74 installed codex mcp config completes initialize and tools list`.
-  - [ ] CI smoke executes the exact MCP command declared by the
+  - [x] CI smoke executes the exact MCP command declared by the
     installed Claude plugin root's `.mcp.json`, sends MCP `initialize`
     and `tools/list`, and verifies the `flowai-workflow` server plus
     the expected FR-E73 tool names. Evidence:

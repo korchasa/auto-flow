@@ -46,6 +46,13 @@ jobs:
         with:
           deno-version: v2.x
 
+      - name: Install host CLIs for plugin smoke
+        run: |
+          set -euo pipefail
+          npm install -g @anthropic-ai/claude-code @openai/codex
+          claude --version
+          codex --version
+
       - name: Resolve target version
         id: ver
         run: |
@@ -56,6 +63,24 @@ jobs:
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
+      - name: Unit-test plugin install smoke
+        run: deno task test scripts/plugin-install-smoke_test.ts
+
+      - name: Pre-publish official install smoke
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          TMP_DIR=$(mktemp -d)
+          deno run -A scripts/build-plugin-payload.ts \
+            --engine-root . \
+            --version "$VERSION" \
+            --out-dir "$TMP_DIR"
+          deno run -A scripts/plugin-payload-smoke.ts "$TMP_DIR"
+          deno run -A scripts/plugin-install-smoke.ts \
+            --payload-dir "$TMP_DIR" \
+            --host all
+
       - name: Sync plugin payload to korchasa/flowai-workflow-plugins
         env:
           VERSION: ${{ steps.ver.outputs.version }}
@@ -65,18 +90,14 @@ jobs:
             --engine-root . \
             --version "$VERSION"
 
-      - name: Payload-integrity smoke (clone downstream, deno run --version)
+      - name: Post-publish downstream install smoke
         run: |
-          # NOTE: this verifies the payload runs under Deno, NOT that
-          # `claude plugin install` works end-to-end. Full marketplace
-          # install is a manual checklist item (see FR-E72) — GH Actions
-          # runners do not ship the `claude` CLI.
           set -euo pipefail
           TMP_DIR=$(mktemp -d)
           git clone --depth=1 \
             "https://x-access-token:${PLUGINS_REPO_TOKEN}@github.com/korchasa/flowai-workflow-plugins.git" \
             "$TMP_DIR"
-          FLOWAI_SUPPRESS_DEPRECATION=1 \
-            deno run -A \
-              "$TMP_DIR/plugins/flowai-workflow/engine/cli.ts" \
-              --version
+          deno run -A scripts/plugin-payload-smoke.ts "$TMP_DIR"
+          deno run -A scripts/plugin-install-smoke.ts \
+            --payload-dir "$TMP_DIR" \
+            --host all

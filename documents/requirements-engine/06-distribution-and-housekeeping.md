@@ -364,13 +364,13 @@
 - **Dep:** FR-E70, FR-E72
 - **Acceptance criteria:**
   - [ ] Full Codex install smoke per FR-E70 (manual — korchasa).
-  - [ ] CI install smoke builds the official publish-shape payload
+  - [x] CI install smoke builds the official publish-shape payload
     from the source repo, registers it as marketplace
     `flowai-workflow` inside an isolated temp host home, installs
     `flowai-workflow@flowai-workflow`, and verifies the installed
     plugin cache rather than the source tree. Evidence:
     `scripts/plugin-install-smoke_test.ts::FR-E72 official payload installs from source repo into isolated host home`.
-  - [ ] Codex hook payload validation is automated when hooks are
+  - [x] Codex hook payload validation is automated when hooks are
     bundled, but Codex hook trust remains a user review step and is
     not claimed as auto-enabled by CI. Evidence:
     `scripts/plugin-install-smoke_test.ts::FR-E71 installed plugin hook smoke validates and executes bundled hook commands`.
@@ -468,7 +468,7 @@
     is a no-op. Evidence:
     `scripts/sync-plugins-local.ts:shouldAutoInstall`,
     `scripts/check.ts` (`runIfAutoInstallEnabled` invocation).
-  - [ ] Publish workflow validates the official split payload roots
+  - [x] Publish workflow validates the official split payload roots
     from the source repo before push and re-validates a downstream
     clone after push; smoke paths target `claude/` and `codex/` roots,
     not the retired pre-split `plugins/flowai-workflow` root.

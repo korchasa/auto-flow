@@ -3,6 +3,7 @@ import {
   buildCloneUrl,
   commitMessage,
   parseSyncCliArgs,
+  pluginPayloadInstallSmokeCommand,
   pluginPayloadRoots,
   syncPluginsRepo,
   TARGET_REPO,
@@ -259,6 +260,23 @@ Deno.test("FR-E70 dry-run emits host-specific marketplace roots", async () => {
     mocks,
   );
   assertEquals(result.payloadRoots, roots);
+});
+
+Deno.test("FR-E72 publish smoke command targets host-specific payload roots", () => {
+  const command = pluginPayloadInstallSmokeCommand("/tmp/flowai-plugins");
+  assertEquals(command, [
+    "deno",
+    "run",
+    "-A",
+    "scripts/plugin-install-smoke.ts",
+    "--payload-dir",
+    "/tmp/flowai-plugins",
+    "--host",
+    "all",
+  ]);
+  if (command.join(" ").includes("/plugins/flowai-workflow/engine/cli.ts")) {
+    throw new Error("stale pre-split plugin smoke path returned");
+  }
 });
 
 Deno.test("FR-E72 publish uses correct target repo default", () => {

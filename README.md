@@ -38,6 +38,17 @@ Codex payload ships host-native plugin metadata plus an embedded MCP
 config, so plugin install wires both launcher skills and
 `flowai-workflow` MCP startup.
 
+### Plugin CI smoke guarantee
+
+Release CI runs `plugin-payload-smoke` plus the publish-shape install
+smoke against isolated Claude Code and Codex homes. It verifies the
+generated split payload roots, installs `flowai-workflow@flowai-workflow`,
+then performs an automated MCP handshake (`initialize` and `tools/list`)
+from the installed cache. Hook definitions are parsed and command hooks
+are executed with synthetic host environment variables when bundled.
+Codex hook trust remains a user-reviewed step; CI validates hook payload
+shape and executability, not automatic trust in a real Codex session.
+
 ### Migrating from JSR / standalone binary
 
 `@korchasa/flowai-workflow` on JSR and the prebuilt binaries on GitHub

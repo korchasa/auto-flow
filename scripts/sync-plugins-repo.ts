@@ -139,6 +139,20 @@ export function pluginPayloadRoots(
   };
 }
 
+/** Command used by CI to smoke-test the split official payload roots. */
+export function pluginPayloadInstallSmokeCommand(payloadDir: string): string[] {
+  return [
+    "deno",
+    "run",
+    "-A",
+    "scripts/plugin-install-smoke.ts",
+    "--payload-dir",
+    payloadDir,
+    "--host",
+    "all",
+  ];
+}
+
 // ---------------------------------------------------------------------------
 // Default dependency wiring.
 // ---------------------------------------------------------------------------
