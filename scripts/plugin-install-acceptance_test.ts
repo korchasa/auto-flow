@@ -387,6 +387,11 @@ Deno.test("install acceptance — claude installs plugin and invokes get_workflo
       evidence.join("\n"),
       "claude: install acceptance passed",
     );
+    assertStringIncludes(evidence.join("\n"), "-p '<acceptance-prompt>'");
+    assertEquals(
+      evidence.join("\n").includes("This is a CI acceptance test"),
+      false,
+    );
     assertStringIncludes(
       evidence.join("\n"),
       "claude: agent evidence: tool_use mcp__plugin_flowai-workflow_flowai-workflow__get_workflow",
@@ -485,6 +490,14 @@ Deno.test("install acceptance — codex openai logs in, installs plugin, and inv
     assertStringIncludes(
       evidence.join("\n"),
       "codex: install acceptance passed",
+    );
+    assertStringIncludes(
+      evidence.join("\n"),
+      "--skip-git-repo-check '<acceptance-prompt>'",
+    );
+    assertEquals(
+      evidence.join("\n").includes("This is a CI acceptance test"),
+      false,
     );
     assertStringIncludes(
       evidence.join("\n"),

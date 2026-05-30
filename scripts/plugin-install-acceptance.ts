@@ -239,10 +239,14 @@ async function runEvidenceCommand(
     timeoutMs?: number;
     reporter?: InstallReporter;
     reportOutput?: boolean;
+    displayArgs?: string[];
   },
 ): Promise<InstallCommandOutput> {
   const cwd = opts.cwd ? ` (cwd=${opts.cwd})` : "";
-  report(opts.reporter, `$ ${formatCommand(command, args)}${cwd}`);
+  report(
+    opts.reporter,
+    `$ ${formatCommand(command, opts.displayArgs ?? args)}${cwd}`,
+  );
   if (opts.stdin !== undefined) {
     report(
       opts.reporter,
@@ -1017,6 +1021,12 @@ function codexArgs(
   return args;
 }
 
+function redactAcceptancePromptArgs(args: string[]): string[] {
+  return args.map((arg) =>
+    arg.includes("This is a CI acceptance test") ? "<acceptance-prompt>" : arg
+  );
+}
+
 function hasInstalledPluginToolEvidence(output: string): boolean {
   for (const rawLine of output.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -1230,19 +1240,20 @@ async function runHostInstallAcceptance(opts: {
     `${opts.host}: real agent FLOWAI_WORKFLOW=${env.FLOWAI_WORKFLOW}`,
   );
   const prompt = agentPrompt(opts.host);
-  report(opts.reporter, `${opts.host}: real agent prompt: ${prompt}`);
 
   let output: InstallCommandOutput;
   if (opts.host === "claude") {
+    const args = claudeArgs(installed.pluginRoot, prompt);
     output = await runEvidenceCommand(
       opts.runCommand,
       "claude",
-      claudeArgs(installed.pluginRoot, prompt),
+      args,
       {
         env,
         reporter: opts.reporter,
         timeoutMs: opts.timeoutMs,
         reportOutput: false,
+        displayArgs: redactAcceptancePromptArgs(args),
       },
     );
   } else {
@@ -1272,16 +1283,18 @@ async function runHostInstallAcceptance(opts: {
         );
       }
     }
+    const args = codexArgs(prompt, projectDir, codexProvider);
     output = await runEvidenceCommand(
       opts.runCommand,
       "codex",
-      codexArgs(prompt, projectDir, codexProvider),
+      args,
       {
         env,
         cwd: projectDir,
         reporter: opts.reporter,
         timeoutMs: opts.timeoutMs,
         reportOutput: false,
+        displayArgs: redactAcceptancePromptArgs(args),
       },
     );
   }
