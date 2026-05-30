@@ -936,13 +936,23 @@ function hostAgentEnv(
 }
 
 function agentPrompt(host: HostKind): string {
-  return [
+  const prompt = [
     "This is a CI acceptance test for the installed flowai-workflow plugin.",
     "Call the installed MCP server flowai-workflow tool get_workflow exactly once.",
-    "This must be an MCP tool call, not a shell command or resource-list call.",
+    "This must be a direct MCP tool call, not a shell command, resource-list call, or resource-read call.",
     "Do not use shell commands and do not edit files.",
-    `After the tool returns, reply with exactly: ${AGENT_PASS_MARKER} host=${host}`,
-  ].join(" ");
+  ];
+  if (host === "codex") {
+    prompt.push(
+      "For Codex, do not call read_mcp_resource, resources/read, list_mcp_resources, or any mcp/ URI.",
+      "Only a completed MCP tool call with server=flowai-workflow and tool=get_workflow counts.",
+      "If you cannot call that exact MCP tool successfully, do not print the pass marker.",
+    );
+  }
+  prompt.push(
+    `After the get_workflow tool returns successfully, reply with exactly: ${AGENT_PASS_MARKER} host=${host}`,
+  );
+  return prompt.join(" ");
 }
 
 function claudeArgs(pluginRoot: string, prompt: string): string[] {

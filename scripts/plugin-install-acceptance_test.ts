@@ -462,6 +462,11 @@ Deno.test("install acceptance — codex openai logs in, installs plugin, and inv
     );
     assertStringIncludes(execCall.args.join(" "), "--json");
     assertStringIncludes(execCall.args.join(" "), "--skip-git-repo-check");
+    assertStringIncludes(execCall.args.join(" "), "read_mcp_resource");
+    assertStringIncludes(
+      execCall.args.join(" "),
+      "server=flowai-workflow and tool=get_workflow",
+    );
     assertStringIncludes(
       execCall.env.FLOWAI_WORKFLOW,
       "github-inbox-opencode-test",
@@ -540,6 +545,7 @@ Deno.test("install acceptance — codex openrouter uses provider config without 
     if (!execCall) throw new Error("missing codex exec call");
     assertEquals(execCall.command, "codex");
     assertStringIncludes(execCall.args.join(" "), "--skip-git-repo-check");
+    assertStringIncludes(execCall.args.join(" "), "read_mcp_resource");
     assertStringIncludes(
       execCall.args.join(" "),
       'model_provider="openrouter"',
