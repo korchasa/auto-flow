@@ -945,7 +945,6 @@ function agentPrompt(host: HostKind): string {
 
 function claudeArgs(pluginRoot: string, prompt: string): string[] {
   const args = [
-    "--bare",
     "--plugin-dir",
     pluginRoot,
     "--permission-mode",
@@ -1068,7 +1067,7 @@ async function runHostInstallAcceptance(opts: {
   reporter?: InstallReporter;
   timeoutMs: number;
 }): Promise<HostInstallResult> {
-  if (opts.host === "claude") requireEnv("ANTHROPIC_API_KEY");
+  if (opts.host === "claude") requireEnv("CLAUDE_CODE_OAUTH_TOKEN");
   const codexProvider = opts.host === "codex"
     ? requireCodexProvider(opts.codexProvider)
     : undefined;

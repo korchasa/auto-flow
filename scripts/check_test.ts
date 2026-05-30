@@ -84,9 +84,12 @@ Deno.test("CI workflow — every push runs build and plugin install acceptance p
     true,
   );
   assertEquals(
-    claudeJob.includes("ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}"),
+    claudeJob.includes(
+      "CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}",
+    ),
     true,
   );
+  assertEquals(claudeJob.includes("ANTHROPIC_API_KEY"), false);
   assertEquals(
     claudeJob.includes("Verify Claude Code auth secret"),
     true,

@@ -320,8 +320,8 @@ Deno.test("install acceptance — missing hook declaration is accepted explicitl
 });
 
 Deno.test("install acceptance — claude installs plugin and invokes get_workflow", async () => {
-  const oldKey = Deno.env.get("ANTHROPIC_API_KEY");
-  Deno.env.set("ANTHROPIC_API_KEY", "test-anthropic-key");
+  const oldToken = Deno.env.get("CLAUDE_CODE_OAUTH_TOKEN");
+  Deno.env.set("CLAUDE_CODE_OAUTH_TOKEN", "test-claude-oauth-token");
   try {
     const calls: CommandCall[] = [];
     const evidence: string[] = [];
@@ -371,6 +371,7 @@ Deno.test("install acceptance — claude installs plugin and invokes get_workflo
     const agentCall = calls.find((call) => call.args.includes("--plugin-dir"));
     if (!agentCall) throw new Error("missing claude agent call");
     assertEquals(agentCall.command, "claude");
+    assertEquals(agentCall.args.includes("--bare"), false);
     assertStringIncludes(agentCall.args.join(" "), "--allowedTools");
     assertStringIncludes(
       agentCall.args.join(" "),
@@ -385,8 +386,8 @@ Deno.test("install acceptance — claude installs plugin and invokes get_workflo
       "claude: install acceptance passed",
     );
   } finally {
-    if (oldKey === undefined) Deno.env.delete("ANTHROPIC_API_KEY");
-    else Deno.env.set("ANTHROPIC_API_KEY", oldKey);
+    if (oldToken === undefined) Deno.env.delete("CLAUDE_CODE_OAUTH_TOKEN");
+    else Deno.env.set("CLAUDE_CODE_OAUTH_TOKEN", oldToken);
   }
 });
 
@@ -621,8 +622,8 @@ Deno.test("install acceptance — codex command execution is not MCP tool eviden
 });
 
 Deno.test("install acceptance — missing auth fails before host launch", async () => {
-  const oldKey = Deno.env.get("ANTHROPIC_API_KEY");
-  Deno.env.delete("ANTHROPIC_API_KEY");
+  const oldToken = Deno.env.get("CLAUDE_CODE_OAUTH_TOKEN");
+  Deno.env.delete("CLAUDE_CODE_OAUTH_TOKEN");
   try {
     const roots = await fixturePayload();
     await assertRejects(
@@ -633,10 +634,12 @@ Deno.test("install acceptance — missing auth fails before host launch", async 
           runCommand: () => Promise.reject(new Error("should not run")),
         }),
       Error,
-      "Missing required environment variable ANTHROPIC_API_KEY",
+      "Missing required environment variable CLAUDE_CODE_OAUTH_TOKEN",
     );
   } finally {
-    if (oldKey !== undefined) Deno.env.set("ANTHROPIC_API_KEY", oldKey);
+    if (oldToken !== undefined) {
+      Deno.env.set("CLAUDE_CODE_OAUTH_TOKEN", oldToken);
+    }
   }
 });
 

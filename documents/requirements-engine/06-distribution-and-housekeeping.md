@@ -369,6 +369,9 @@
     `flowai-workflow@flowai-workflow` into an isolated temp host home,
     probes the installed MCP config, then starts the real host agent
     and verifies a `get_workflow` tool call from the installed plugin.
+    Claude Code uses subscription auth via `CLAUDE_CODE_OAUTH_TOKEN`
+    and must not pass `--bare`, because that mode does not read the
+    OAuth token.
     Evidence:
     `scripts/plugin-install-acceptance_test.ts::install acceptance — claude installs plugin and invokes get_workflow`;
     `scripts/plugin-install-acceptance_test.ts::install acceptance — codex openrouter uses provider config without login`;

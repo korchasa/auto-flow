@@ -136,7 +136,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CLAUDE_CODE_VERSION: 2.1.158
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -150,8 +150,8 @@ jobs:
       - name: Verify Claude Code auth secret
         run: |
           set -euo pipefail
-          if [[ -z "${ANTHROPIC_API_KEY}" ]]; then
-            echo "::error title=Missing ANTHROPIC_API_KEY::Configure ANTHROPIC_API_KEY to run Claude Code install acceptance."
+          if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN}" ]]; then
+            echo "::error title=Missing CLAUDE_CODE_OAUTH_TOKEN::Configure CLAUDE_CODE_OAUTH_TOKEN to run Claude Code install acceptance with subscription auth."
             exit 1
           fi
 
