@@ -372,6 +372,7 @@ Deno.test("install acceptance — claude installs plugin and invokes get_workflo
     if (!agentCall) throw new Error("missing claude agent call");
     assertEquals(agentCall.command, "claude");
     assertEquals(agentCall.args.includes("--bare"), false);
+    assertEquals(agentCall.args.includes("--verbose"), true);
     assertStringIncludes(agentCall.args.join(" "), "--allowedTools");
     assertStringIncludes(
       agentCall.args.join(" "),

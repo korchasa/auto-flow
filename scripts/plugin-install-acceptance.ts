@@ -953,6 +953,7 @@ function claudeArgs(pluginRoot: string, prompt: string): string[] {
     "mcp__flowai-workflow__get_workflow",
     "--output-format",
     "stream-json",
+    "--verbose",
     "--max-budget-usd",
     Deno.env.get("CLAUDE_INSTALL_ACCEPTANCE_MAX_BUDGET_USD") ?? "0.25",
   ];
