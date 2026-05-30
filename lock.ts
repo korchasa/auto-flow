@@ -47,6 +47,27 @@ function isLockAlive(existing: LockInfo): boolean {
   return isProcessAlive(existing.pid);
 }
 
+/** Report whether `runId` is the run currently held alive by the workflow
+ * lock (FR-E75). True iff the lock file exists, names this exact `runId`,
+ * and its PID is a live process. Returns false (never throws) when the
+ * lock is absent, corrupted, owned by a different run, or held by a dead
+ * PID. Used by the unified command layer so `answer` can tell the operator
+ * whether the live poll loop will pick up the inbox file or whether they
+ * must resume the engine separately. */
+export async function isRunLive(
+  workflowDir: string,
+  runId: string,
+): Promise<boolean> {
+  let info: LockInfo;
+  try {
+    info = await readLockInfo(defaultLockPath(workflowDir));
+  } catch {
+    // NotFound (no lock) or SyntaxError (corrupted lock) → not live.
+    return false;
+  }
+  return info.run_id === runId && isProcessAlive(info.pid);
+}
+
 /** Acquire workflow lock. Throws if another live process holds it.
  * Reclaims stale locks (dead PID on same host) automatically. */
 export async function acquireLock(

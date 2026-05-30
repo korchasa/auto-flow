@@ -1,6 +1,6 @@
 /**
  * @module
- * Embedded MCP server exposing seven engine-control tools over a generic
+ * Embedded MCP server exposing eight engine-control tools over a generic
  * transport (default stdio). Built on `@modelcontextprotocol/sdk`. The
  * server is transport-agnostic — the `mcp` CLI subcommand wires
  * `StdioServerTransport`; future HTTP/SSE consumers swap the transport
@@ -11,13 +11,19 @@
  *   - get_state            — `replayRunJournal` → RunState JSON
  *   - list_runs            — walk `runs/`, replay each → summary array
  *   - tail_artifacts       — read artifact file → last N lines
- *   - resume_node          — construct `Engine({resume})` and `await run()`
+ *   - resume_node          — `commands.resumeRun` (single Engine-resume site)
  *   - cancel_run           — read lock → SIGTERM lock owner
  *   - apply_workflow_patch — apply add/replace/remove ops to workflow.yaml
+ *   - provide_human_input  — `commands.deliverHumanAnswer` (FR-E75 local
+ *                            HITL inbox; write-only)
+ *
+ * MCP is a THIN interface: `resume_node` and `provide_human_input` delegate
+ * to `commands.ts` so the same operations behave identically from the CLI.
  *
  * Constraints (FR-E59/E60/E61):
  *   - No OS signal handlers installed here (CLI owns signal routing).
- *   - Per-run PhaseRegistry — each `resume_node` builds its own `Engine`.
+ *   - Per-run PhaseRegistry — `resume_node` → `commands.resumeRun` builds a
+ *     fresh `Engine` per call.
  *   - Concurrent `resume_node` for the same workflow folder is serialised
  *     by the existing per-workflow run lock; the tool never adds a second
  *     lock layer.
@@ -32,7 +38,7 @@ import { join } from "@std/path";
 import { parse as parseYaml, stringify as stringifyYaml } from "@std/yaml";
 
 import { loadConfig } from "./config.ts";
-import { Engine } from "./engine.ts";
+import { deliverHumanAnswer, resumeRun } from "./commands.ts";
 import { defaultLockPath, readLockInfo } from "./lock.ts";
 import { replayRunJournal } from "./run-journal.ts";
 import { getNodeDir, getRunDir } from "./state.ts";
@@ -97,6 +103,7 @@ export async function runMcpServer(
     registerResumeNode(server, workflowDir);
     registerCancelRun(server, workflowDir);
     registerApplyWorkflowPatch(server, workflowDir);
+    registerProvideHumanInput(server, workflowDir);
   }
 
   if (options.transport) {
@@ -141,7 +148,7 @@ function configPathOf(workflowDir: string): string {
 }
 
 /**
- * No-workflow mode (FR-E74): register the same seven tool names so
+ * No-workflow mode (FR-E74): register the same eight tool names so
  * `tools/list` matches the full surface, but every handler returns the
  * structured missing-workflow diagnostic. The MCP handshake completes
  * normally so Claude Code reports the server as up; the user sees the
@@ -156,6 +163,7 @@ function registerAllToolsNoWorkflow(server: McpServer): void {
     "resume_node",
     "cancel_run",
     "apply_workflow_patch",
+    "provide_human_input",
   ] as const;
   for (const name of names) {
     server.tool(
@@ -295,21 +303,44 @@ function registerResumeNode(server: McpServer, workflowDir: string): void {
     { run_id: z.string() },
     async ({ run_id }: { run_id: string }) => {
       try {
-        const engine = new Engine({
-          config_path: configPathOf(workflowDir),
-          run_id,
-          resume: true,
-          dry_run: false,
-          verbosity: "quiet",
-          args: {},
-          env_overrides: {},
-        });
-        const state = await engine.run();
-        return ok({
-          run_id: state.run_id,
-          status: state.status,
-          total_cost_usd: state.total_cost_usd,
-        });
+        // Thin delegate (FR-E75): commands.resumeRun is the single
+        // Engine({resume}) construction site, shared with CLI `run --resume`.
+        return ok(await resumeRun({ workflowDir, runId: run_id }));
+      } catch (e) {
+        return err((e as Error).message);
+      }
+    },
+  );
+}
+
+function registerProvideHumanInput(
+  server: McpServer,
+  workflowDir: string,
+): void {
+  server.tool(
+    "provide_human_input",
+    "Deliver a human reply to a waiting HITL node via the run's local " +
+      "inbox file (FR-E75). Write-only: the live engine poll loop picks it " +
+      "up. Returns { inboxPath, live }; when live is false, resume the run " +
+      "separately with resume_node.",
+    { run_id: z.string(), node_id: z.string(), text: z.string() },
+    async (
+      { run_id, node_id, text }: {
+        run_id: string;
+        node_id: string;
+        text: string;
+      },
+    ) => {
+      try {
+        // Thin delegate (FR-E75): same core as CLI `answer`.
+        return ok(
+          await deliverHumanAnswer({
+            workflowDir,
+            runId: run_id,
+            nodeId: node_id,
+            text,
+          }),
+        );
       } catch (e) {
         return err((e as Error).message);
       }

@@ -28,7 +28,7 @@ import type {
   RuntimeInvokeOptions,
 } from "@korchasa/ai-ide-cli/runtime/types";
 import { defaultRegistry } from "@korchasa/ai-ide-cli/process-registry";
-import { workPath } from "./state.ts";
+import { getHitlInboxPath, workPath } from "./state.ts";
 import { buildHitlMcpServers, createHitlObserver } from "./hitl-injection.ts";
 import type { OutputManager } from "./output.ts";
 
@@ -186,14 +186,86 @@ export async function runHitlLoop(
     }
   }
 
+  // Shared reply→resume path for BOTH the local inbox (FR-E75) and the
+  // check_script reply: append the Q+A audit artefact (FR-E64) before
+  // resume — so a crash mid-resume still leaves the question on disk for
+  // the post-mortem dashboard — then resume the agent session with the
+  // human reply and map the runtime result to AgentResult. Use
+  // ctx.node_dir wrapped with workPath (FR-E52 convention) so the artefact
+  // lands in the same per-node directory the engine uses for every other
+  // artefact.
+  const resumeWithReply = async (reply: string): Promise<AgentResult> => {
+    const nodeDirAbs = workPath(ctx.workDir, ctx.node_dir);
+    await appendHitlAuditRecord(nodeDirAbs, question, reply);
+
+    // Re-register the HITL MCP server on resume so the agent can raise
+    // another HITL request inside the same session if needed (a single
+    // run may legitimately HITL multiple rounds; the per-round audit
+    // artefact records each).
+    const resumeObserver = createHitlObserver(runtime);
+    const result = await runtimeRun({
+      resumeSessionId: sessionId,
+      taskPrompt: reply,
+      extraArgs: applyBudgetFlags(runtimeArgs, runtime, maxTurns),
+      permissionMode: opts.permissionMode,
+      model: opts.model,
+      // FR-E42: forward effort; library filters --effort on resume.
+      reasoningEffort: opts.reasoningEffort,
+      allowedTools: opts.allowedTools,
+      disallowedTools: opts.disallowedTools,
+      mcpServers: buildHitlMcpServers(),
+      onToolUseObserved: resumeObserver.observer,
+      timeoutSeconds: settings.timeout_seconds,
+      maxRetries: settings.max_retries,
+      retryDelaySeconds: settings.retry_delay_seconds,
+      cwd: cwdOpt,
+      processRegistry: opts.processRegistry ?? defaultRegistry,
+    });
+
+    if (result.error) {
+      return {
+        success: false,
+        session_id: result.output?.session_id,
+        output: result.output,
+        continuations: 0,
+        error: result.error,
+        error_category: "cli_crash",
+      };
+    }
+
+    return {
+      success: true,
+      session_id: result.output?.session_id,
+      output: result.output,
+      continuations: 0,
+      permission_denials: result.output?.permission_denials,
+      hitl_question: resumeObserver.getQuestion() ?? undefined,
+    };
+  };
+
   // Step 2: Poll for reply
   const deadline = Date.now() + config.timeout * 1000;
+  // FR-E75: local answer channel. The external writer (commands.ts, driven
+  // by MCP `provide_human_input` / CLI `answer`) drops the reply here; the
+  // live poll loop reads it without any transport (Telegram) involvement.
+  const inboxPath = getHitlInboxPath(runDir, nodeId);
 
   while (Date.now() < deadline) {
     // Sleep first (give human time to respond)
     await sleep(config.poll_interval * 1000);
 
     if (Date.now() >= deadline) break;
+
+    // FR-E75: a locally-delivered reply wins over check_script. Read and
+    // consume the inbox file before polling the transport; absence is the
+    // normal "no local answer yet" case.
+    const inboxReply = await readAndConsumeInbox(inboxPath);
+    if (inboxReply !== undefined) {
+      if (output) {
+        output.status(nodeId, "received local HITL reply (inbox)");
+      }
+      return await resumeWithReply(inboxReply);
+    }
 
     // Status update
     const elapsed = Math.round(
@@ -215,58 +287,7 @@ export async function runHitlLoop(
     const checkResult = await runner(config.check_script, checkArgs);
 
     if (checkResult.exitCode === 0 && checkResult.stdout.trim()) {
-      // Reply received — append Q+A audit artefact (FR-E64) before resume,
-      // so a crash mid-resume still leaves the question on disk for the
-      // post-mortem dashboard. Use ctx.node_dir wrapped with workPath
-      // (FR-E52 convention) so the artefact lands in the same per-node
-      // directory the engine uses for every other artefact.
-      const reply = checkResult.stdout.trim();
-      const nodeDirAbs = workPath(ctx.workDir, ctx.node_dir);
-      await appendHitlAuditRecord(nodeDirAbs, question, reply);
-
-      // Re-register the HITL MCP server on resume so the agent can raise
-      // another HITL request inside the same session if needed (a single
-      // run may legitimately HITL multiple rounds; the per-round audit
-      // artefact records each).
-      const resumeObserver = createHitlObserver(runtime);
-      const result = await runtimeRun({
-        resumeSessionId: sessionId,
-        taskPrompt: reply,
-        extraArgs: applyBudgetFlags(runtimeArgs, runtime, maxTurns),
-        permissionMode: opts.permissionMode,
-        model: opts.model,
-        // FR-E42: forward effort; library filters --effort on resume.
-        reasoningEffort: opts.reasoningEffort,
-        allowedTools: opts.allowedTools,
-        disallowedTools: opts.disallowedTools,
-        mcpServers: buildHitlMcpServers(),
-        onToolUseObserved: resumeObserver.observer,
-        timeoutSeconds: settings.timeout_seconds,
-        maxRetries: settings.max_retries,
-        retryDelaySeconds: settings.retry_delay_seconds,
-        cwd: cwdOpt,
-        processRegistry: opts.processRegistry ?? defaultRegistry,
-      });
-
-      if (result.error) {
-        return {
-          success: false,
-          session_id: result.output?.session_id,
-          output: result.output,
-          continuations: 0,
-          error: result.error,
-          error_category: "cli_crash",
-        };
-      }
-
-      return {
-        success: true,
-        session_id: result.output?.session_id,
-        output: result.output,
-        continuations: 0,
-        permission_denials: result.output?.permission_denials,
-        hitl_question: resumeObserver.getQuestion() ?? undefined,
-      };
+      return await resumeWithReply(checkResult.stdout.trim());
     }
 
     // exit 1 = no reply yet; other codes = transient error, continue
@@ -292,6 +313,35 @@ export async function runHitlLoop(
 }
 
 // --- Internal helpers ---
+
+/**
+ * Read and atomically consume the local HITL inbox file (FR-E75).
+ *
+ * Returns the trimmed reply text, or `undefined` when the file is absent
+ * (the normal "no local answer yet" poll) or contains only whitespace.
+ * The file is removed on every successful read (consume-on-pickup) so a
+ * later HITL round in the same session does not re-answer with a stale
+ * file. `NotFound` is swallowed (no reply); a remove that races to
+ * `NotFound` is also benign. Any other read error propagates — fail-fast.
+ */
+async function readAndConsumeInbox(
+  path: string,
+): Promise<string | undefined> {
+  let content: string;
+  try {
+    content = await Deno.readTextFile(path);
+  } catch (err) {
+    if (err instanceof Deno.errors.NotFound) return undefined;
+    throw err;
+  }
+  try {
+    await Deno.remove(path);
+  } catch (err) {
+    if (!(err instanceof Deno.errors.NotFound)) throw err;
+  }
+  const reply = content.trim();
+  return reply.length > 0 ? reply : undefined;
+}
 
 /**
  * Append one HITL Q+A round to `<nodeDirAbs>/hitl.jsonl` (FR-E64).

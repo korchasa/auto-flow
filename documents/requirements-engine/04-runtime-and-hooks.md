@@ -111,7 +111,76 @@
   - **Tests:** `hitl_test.ts` (FR-E64; regression-locked; reply-path
     audit append, multi-round counter, runDir tmp lifecycle).
 
+### 3.75 FR-E75: Local HITL Answer Channel + Unified Command Layer
 
+- **Description:** A transport-independent local channel that delivers a
+  HITL reply to a waiting run from the same host the operator is already
+  in (host IDE via MCP, or terminal via CLI), without impersonating the
+  operator on the workflow's remote transport (e.g. Telegram). Two thin
+  interfaces (MCP tool + CLI subcommand) sit over ONE shared core command
+  module (`commands.ts`).
+
+  **Local inbox file (channel):**
+  - Path: `<runDir>/.hitl-inbox/<nodeId>.txt`, where `<runDir>` =
+    `getRunDir(runId, workflowDir)`. Run-dir anchor (not the phased
+    node-dir) keeps reader and writer in agreement with zero
+    `PhaseRegistry`/worktree coupling. Lives under gitignored `runs/**`.
+  - Content = reply text verbatim (mirrors the `check_script` stdout
+    reply contract).
+  - Written atomically: a sibling `<...>.txt.tmp` is written then
+    `Deno.rename`d into place, so the live poll loop never reads a
+    half-written file.
+
+  **Reader precedence (poll loop):**
+  - Each `runHitlLoop` iteration checks the inbox file BEFORE invoking
+    `check_script`. On hit: read content, trim, atomically consume
+    (`Deno.remove`), then run the existing reply→resume path (FR-E64
+    audit append + session resume). Consume-on-pickup means a subsequent
+    HITL round in the same session does NOT re-answer with the stale file.
+  - Local inbox WINS over `check_script`: when both a file and a
+    `check_script` reply are present in the same iteration, the inbox
+    reply is used and `check_script` is not consulted that round.
+
+  **`answer` command contract (write-only):**
+  - `deliverHumanAnswer({workflowDir, runId, nodeId, text}) →
+    {inboxPath, live}` validates the target node is in `waiting` status
+    (replay the run journal; reject non-waiting / unknown node with a
+    clear error — no silent fallback), writes the inbox file atomically,
+    and reports engine liveness (`live`) from the per-workflow run lock.
+    It NEVER resumes a dead engine and NEVER blocks. The caller resumes
+    separately when `live === false`.
+  - Target node is ALWAYS explicit (`--node` / `node_id`); there is no
+    "single waiting node" auto-pick.
+
+  **Unified command layer:**
+  - `commands.ts` is the single construction site for an engine resume:
+    `resumeRun({workflowDir, runId, verbosity?}) →
+    {run_id, status, total_cost_usd}` builds `Engine({resume:true})` and
+    runs it. The MCP `resume_node` tool and the CLI `run --resume` path
+    both delegate here — no duplicated `new Engine({resume})`.
+  - Two interfaces over the core:
+    - MCP tool `provide_human_input {run_id, node_id, text}` →
+      `deliverHumanAnswer` → `{inboxPath, live}`.
+    - CLI `answer <workflow> <run-id> --node <id> "<text>"` →
+      `deliverHumanAnswer` → prints `{inboxPath, live}`; on
+      `live: false` hints to run resume separately.
+- **Tasks:** documents/tasks/2026/05/local-hitl-answer-inbox.md.
+- **Motivation:** When a workflow's `check_script` polls a remote
+  transport (Telegram), a choice the operator makes locally in the host
+  IDE never reaches the live engine — the run hangs healthy-but-blocked
+  with no local mechanism to deliver the answer, and the agent must not
+  forge a reply on the operator's behalf in the remote channel. A local
+  file channel the live poll loop reads closes the gap while keeping the
+  engine transport-agnostic.
+- **Dep:** FR-E8, FR-E64, FR-E73.
+- **Acceptance criteria:**
+  - **Tests:** `state_test.ts`, `lock_test.ts`, `hitl_test.ts`,
+    `commands_test.ts`, `mcp-server_test.ts`, `cli_test.ts` (FR-E75;
+    regression-locked; inbox path helper, run-liveness probe, inbox
+    pickup+consume+resume, inbox-wins-over-check precedence,
+    `deliverHumanAnswer` waiting-validation + atomic write + liveness, MCP
+    `provide_human_input` delivery, resume parity MCP↔core, `answer`
+    argument parsing).
 
 ### 3.19 FR-E19: Generic Workflow Failure Hook (`on_failure_script`)
 

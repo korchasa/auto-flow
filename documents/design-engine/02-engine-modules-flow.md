@@ -36,6 +36,25 @@
     runner for testing. Detection lives in `hitl-injection.ts` via the
     runtime-neutral `onToolUseObserved` hook (FR-L35; hitl-via-engine-mcp) — no
     runtime-specific parsing in `hitl.ts`.
+    **Local inbox reader (FR-E75):** each poll iteration reads
+    `getHitlInboxPath(runDir, nodeId)` (`<runDir>/.hitl-inbox/<nodeId>.txt`)
+    BEFORE running `check_script`; on hit it trims the content,
+    `Deno.remove`s the file (consume-on-pickup), and runs the shared
+    `resumeWithReply(reply)` closure (extracted from the former inline
+    reply→resume block so the inbox and `check_script` paths share the
+    FR-E64 audit append + session resume). Local inbox wins over
+    `check_script` in the same round.
+  - `commands.ts` — run-control core (FR-E75): the single home for
+    operations exposed identically through MCP and CLI. Exports
+    `deliverHumanAnswer({workflowDir, runId, nodeId, text}) →
+    {inboxPath, live}` (validates the node is `waiting` via
+    `replayRunJournal(getRunDir(...))`, atomic `tmp→rename` write of
+    `getHitlInboxPath(...)`, liveness via `isRunLive(workflowDir, runId)`;
+    write-only, never resumes/blocks) and `resumeRun({workflowDir, runId,
+    verbosity?}) → {run_id, status, total_cost_usd}` (the sole
+    `Engine({resume:true})` construction site). `mcp-server.ts` and
+    `cli.ts` delegate here — no duplicated engine-resume or
+    inbox-write logic.
   - `hitl-injection.ts` — engine-side HITL plumbing on top of the
     library's generic primitives. `buildHitlMcpServers()` returns the
     `mcpServers` invoke entry registering the engine's
@@ -167,15 +186,19 @@
     `printSummary()`: builds `nodeResults` from `state.nodes[*].result`,
     passes to `summary()` for per-node result rendering.
   - `mcp-server.ts` — embedded MCP server (FR-E73). Exports
-    `runMcpServer(workflowDir, options?)`; registers seven tools
+    `runMcpServer(workflowDir, options?)`; registers eight tools
     (`get_workflow`, `get_state`, `list_runs`, `tail_artifacts`,
-    `resume_node`, `cancel_run`, `apply_workflow_patch`) on the
-    SDK's `McpServer`. Transport-agnostic — `cli.ts mcp` wires
-    `StdioServerTransport`; tests wire `InMemoryTransport`.
+    `resume_node`, `cancel_run`, `apply_workflow_patch`,
+    `provide_human_input`) on the SDK's `McpServer`. Transport-agnostic
+    — `cli.ts mcp` wires `StdioServerTransport`; tests wire
+    `InMemoryTransport`.
     Per-tool envelope: `try { … } catch { return { isError: true, …} }`
     so transport stays up on tool failure. Read-only tools never
-    acquire the run lock; `resume_node` builds its own `Engine`
-    instance per call (per-run `PhaseRegistry`, FR-E59); `cancel_run`
+    acquire the run lock; `resume_node` delegates to
+    `commands.resumeRun` (the single `Engine({resume})` site, per-run
+    `PhaseRegistry`, FR-E59); `provide_human_input` delegates to
+    `commands.deliverHumanAnswer` (FR-E75, write-only local inbox);
+    `cancel_run`
     treats `NotFound`/`PermissionDenied` from `Deno.kill` as a benign
     no-op (race with lock holder releasing). Internal helper
     `applyJsonPointerOp(doc, op)` implements RFC 6901 walk for
@@ -186,7 +209,7 @@
     `run` → `runEngine(args)` (DAG workflow),
     `init` → `runInit(args)` (project scaffolder),
     `mcp <workflow>` → `runMcpServer(workflowDir)` (FR-E73: embedded
-    MCP server over stdio, seven tools for workflow inspection and
+    MCP server over stdio, eight tools for workflow inspection and
     control; statically imported — a dynamic `await import()` of
     `mcp-server.ts` deadlocks in Deno 2.8 once the cli.ts static
     graph has pulled `@modelcontextprotocol/sdk` via `Engine →
@@ -200,7 +223,14 @@
     (FR-E61). Helper `normalizeWorkflowDir(arg)` strips trailing
     slashes off the workflow positional and is reused by both `run`
     (via `parseArgs`) and `mcp`.
-    `runEngine()` extracted as named function shared by `run` and compat shim.
+    `answer <workflow> <run-id> --node <id> "<text>"` →
+    `commands.deliverHumanAnswer` (FR-E75: write the local HITL inbox
+    file, print `{inboxPath, live}`; on `live:false` hint to resume
+    separately; missing `--node`/run/non-waiting node → non-zero exit
+    with a clear message).
+    `runEngine()` extracted as named function shared by `run` and compat
+    shim; its `--resume` path delegates to `commands.resumeRun` (FR-E75
+    — same engine-resume construction as MCP `resume_node`).
     `parseArgs()`: parses `--budget <USD>` flag (FR-E47). Converts to float,
     validates positive. Maps to `EngineOptions.budget_usd`. Added to `--help`
     output.
@@ -256,6 +286,9 @@
     [--env KEY=VAL] [--skip nodes] [--only nodes] [--budget <USD>]
     [--cycles <N>]`,
     `flowai-workflow init [--workflow <name>] [--dry-run] [--allow-dirty]`,
+    `flowai-workflow answer <workflow> <run-id> --node <id> "<text>"`
+    (FR-E75: deliver a local HITL reply),
+    `flowai-workflow mcp <workflow>` (FR-E73),
     `--version|-V`, `--help`. `<workflow>` is a mandatory positional
     pointing at the workflow folder (FR-E53; FR-S47).
   - Config: `<workflow>/workflow.yaml` (YAML, version "1")

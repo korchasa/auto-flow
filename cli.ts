@@ -6,6 +6,9 @@
  *
  * - `flowai-workflow run <workflow> [options]` → DAG workflow engine
  * - `flowai-workflow init [options]` → project scaffolder
+ * - `flowai-workflow answer <workflow> <run-id> --node <id> "<text>"` →
+ *   deliver a local HITL reply (FR-E75)
+ * - `flowai-workflow mcp <workflow>` → embedded MCP server (FR-E73)
  *
  * Run usage (FR-E53):
  *   flowai-workflow run <workflow> [options]
@@ -29,8 +32,10 @@
  *   --version / -V        Print version and exit
  */
 
+import { dirname } from "@std/path";
 import type { EngineOptions, Verbosity } from "./types.ts";
 import { Engine } from "./engine.ts";
+import { deliverHumanAnswer, resumeRun } from "./commands.ts";
 import {
   INTERNAL_HITL_MCP_ARG,
   runFlowaiHitlMcpServer,
@@ -100,6 +105,70 @@ export function getVersionString(): string {
  * (workflowDir argument for `runMcpServer`). FR-E73. */
 export function normalizeWorkflowDir(arg: string): string {
   return arg.replace(/\/+$/, "");
+}
+
+/** Parsed positional/flag arguments for the `answer` subcommand (FR-E75). */
+export interface AnswerArgs {
+  /** Workflow folder (trailing slashes stripped). */
+  workflowDir: string;
+  /** Target run id. */
+  runId: string;
+  /** Target waiting node id (from `--node`/`--node=`). */
+  nodeId: string;
+  /** Reply text (remaining positionals joined with a space). */
+  text: string;
+}
+
+/**
+ * Parse `answer <workflow> <run-id> --node <id> "<text>"` (FR-E75).
+ * Positionals are, in order: workflow folder, run id, then the reply text
+ * (remaining positionals are joined so unquoted multi-word replies still
+ * work). `--node <id>` and `--node=<id>` are both accepted. Fail-fast with
+ * a clear message when any required piece is missing — no silent defaults.
+ */
+export function parseAnswerArgs(args: string[]): AnswerArgs {
+  let nodeId: string | undefined;
+  const positionals: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--node") {
+      nodeId = args[++i];
+      continue;
+    }
+    if (a.startsWith("--node=")) {
+      nodeId = a.slice("--node=".length);
+      continue;
+    }
+    positionals.push(a);
+  }
+  const [workflow, runId, ...rest] = positionals;
+  const text = rest.join(" ");
+  if (!workflow) {
+    throw new Error(
+      "answer: missing <workflow>. " +
+        'Usage: flowai-workflow answer <workflow> <run-id> --node <id> "<text>"',
+    );
+  }
+  if (!runId) {
+    throw new Error(
+      "answer: missing <run-id>. " +
+        'Usage: flowai-workflow answer <workflow> <run-id> --node <id> "<text>"',
+    );
+  }
+  if (!nodeId) {
+    throw new Error(
+      "answer: missing --node <id> (the waiting node to answer).",
+    );
+  }
+  if (!text.trim()) {
+    throw new Error("answer: missing answer text.");
+  }
+  return {
+    workflowDir: normalizeWorkflowDir(workflow),
+    runId,
+    nodeId,
+    text,
+  };
 }
 
 /**
@@ -239,12 +308,18 @@ Workflow Engine — Configurable multi-agent workflow runner
 Usage:
   flowai-workflow run <workflow> [options]  Execute DAG workflow
   flowai-workflow init [options]            Scaffold .flowai-workflow/ directory
+  flowai-workflow answer <workflow> <run-id> --node <id> "<text>"
+                                            Deliver a local HITL reply (FR-E75)
   flowai-workflow mcp <workflow>            Start embedded MCP server (FR-E73)
 
 Subcommands:
   run                   Execute DAG workflow engine
   init                  Scaffold .flowai-workflow/ directory (run init --help for details)
-  mcp <workflow>        Start embedded MCP server exposing 7 engine-control tools over stdio
+  answer                Deliver a human reply to a waiting HITL node via the run's
+                        local inbox file (transport-independent). Prints
+                        {inboxPath, live}; when live is false, resume the run to
+                        consume the queued answer.
+  mcp <workflow>        Start embedded MCP server exposing 8 engine-control tools over stdio
 
 Run positional:
   <workflow>            Path to workflow folder containing workflow.yaml (mandatory).
@@ -274,6 +349,7 @@ Examples:
   flowai-workflow run .flowai-workflow/github-inbox --prompt "Focus on the login bug"
   flowai-workflow run .flowai-workflow/github-inbox --resume 20260308T143022 -v
   flowai-workflow run .flowai-workflow/github-inbox --dry-run
+  flowai-workflow answer .flowai-workflow/autonomous-sdlc 20260529T094727 --node specification "monetization"
   flowai-workflow mcp .flowai-workflow/github-inbox
 `);
 }
@@ -345,6 +421,24 @@ async function runEngine(args: string[]): Promise<never> {
       // .env file is optional
     }
 
+    // Resume delegates to the shared command core (FR-E75) so MCP
+    // `resume_node` and CLI `run --resume` use ONE Engine-resume
+    // construction. `--cycles` is already rejected with `--resume`, so a
+    // resume run is always single. (Resume replays args/env from the
+    // journal — engine.ts:209-214 — so the empty args/env in resumeRun is
+    // behaviour-preserving vs. the former inline `new Engine(options)`.)
+    if (options.resume) {
+      if (!options.run_id) {
+        throw new Error("--resume requires a run-id: --resume <run-id>");
+      }
+      const result = await resumeRun({
+        workflowDir: dirname(options.config_path),
+        runId: options.run_id,
+        verbosity: options.verbosity,
+      });
+      Deno.exit(result.status === "completed" ? 0 : 1);
+    }
+
     for (let cycle = 1; cycle <= cycles; cycle++) {
       if (cycles > 1 && options.verbosity !== "quiet") {
         console.error(`\n=== Cycle ${cycle}/${cycles} ===\n`);
@@ -359,6 +453,37 @@ async function runEngine(args: string[]): Promise<never> {
   } catch (err) {
     console.error(`Error: ${(err as Error).message}`);
     Deno.exit(2);
+  }
+}
+
+/**
+ * Run the `answer` subcommand (FR-E75): deliver a local HITL reply to a
+ * waiting run via `commands.deliverHumanAnswer` (the same core the MCP
+ * `provide_human_input` tool calls). Write-only — prints `{inboxPath,
+ * live}`; when the engine is not currently running this run (`live:
+ * false`), hints to resume it so the queued answer is consumed.
+ */
+async function runAnswer(args: string[]): Promise<never> {
+  try {
+    const { workflowDir, runId, nodeId, text } = parseAnswerArgs(args);
+    const result = await deliverHumanAnswer({
+      workflowDir,
+      runId,
+      nodeId,
+      text,
+    });
+    console.log(JSON.stringify(result, null, 2));
+    if (!result.live) {
+      console.error(
+        `\nEngine is not currently running ${runId}. The answer is queued ` +
+          `at ${result.inboxPath}; resume the run to consume it:\n` +
+          `  flowai-workflow run ${workflowDir} --resume ${runId}`,
+      );
+    }
+    Deno.exit(0);
+  } catch (err) {
+    console.error(`Error: ${(err as Error).message}`);
+    Deno.exit(1);
   }
 }
 
@@ -419,6 +544,12 @@ if (import.meta.main) {
   // Subcommand: `run` → DAG workflow engine
   if (subcommand === "run") {
     await runEngine(Deno.args.slice(1));
+  }
+
+  // Subcommand: `answer <workflow> <run-id> --node <id> "<text>"` (FR-E75)
+  // → deliver a local HITL reply through the shared command core.
+  if (subcommand === "answer") {
+    await runAnswer(Deno.args.slice(1));
   }
 
   // Subcommand: `init` → verbatim copy of a bundled workflow folder.

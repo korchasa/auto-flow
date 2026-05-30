@@ -275,9 +275,10 @@
        `handleAgentHitl({mode: "detect"})` in `node-dispatch.ts`.
     5. Engine calls `defaults.hitl.ask_script` (external workflow
        script) with question JSON + context args.
-    6. Engine enters poll loop: `sleep(poll_interval)` → call
-       `defaults.hitl.check_script` → if exit 0, read reply from
-       stdout.
+    6. Engine enters poll loop: `sleep(poll_interval)` → check local
+       inbox `<runDir>/.hitl-inbox/<nodeId>.txt` (FR-E75; read+trim+
+       consume, wins over check) else `check_script` → exit 0 reads
+       reply from stdout.
     7. Engine appends one `{ts, round, question, reply}` record to
        `<nodeDirAbs>/hitl.jsonl` (FR-E64; round counter from existing
        line count for crash-resume) BEFORE the resume call.

@@ -2,6 +2,7 @@ import { assertEquals, assertThrows } from "@std/assert";
 import {
   createRunState,
   generateRunId,
+  getHitlInboxPath,
   getJournalFilePath,
   getNodeDir,
   getNodesByStatus,
@@ -91,6 +92,21 @@ Deno.test("getRunDir — workflow-aware: returns <workflowDir>/runs/<run-id>", (
   assertEquals(
     getRunDir("X", ".flowai-workflow/foo"),
     ".flowai-workflow/foo/runs/X",
+  );
+});
+
+// FR-E75: local HITL answer inbox path, anchored at the run directory so
+// the live poll-loop reader (hitl.ts, holds runDir) and the external writer
+// (commands.ts, computes getRunDir) agree on the same file.
+Deno.test("FR-E75 getHitlInboxPath — anchors inbox under the run dir", () => {
+  assertEquals(
+    getHitlInboxPath("/tmp/run", "pm"),
+    "/tmp/run/.hitl-inbox/pm.txt",
+  );
+  // Composes with getRunDir for the writer side.
+  assertEquals(
+    getHitlInboxPath(getRunDir("X", ".flowai-workflow/foo"), "specification"),
+    ".flowai-workflow/foo/runs/X/.hitl-inbox/specification.txt",
   );
 });
 

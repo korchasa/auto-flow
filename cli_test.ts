@@ -6,6 +6,7 @@ import {
   extractCliFlags,
   getVersionString,
   normalizeWorkflowDir,
+  parseAnswerArgs,
   parseArgs,
   VERSION,
 } from "./cli.ts";
@@ -287,6 +288,81 @@ Deno.test("FR-E73 normalizeWorkflowDir strips trailing slashes", () => {
   assertEquals(
     normalizeWorkflowDir(".flowai-workflow/x///"),
     ".flowai-workflow/x",
+  );
+});
+
+// --- FR-E75: `answer` subcommand argument parsing ---
+
+Deno.test("FR-E75 parseAnswerArgs — parses workflow, run-id, --node, and text", () => {
+  const a = parseAnswerArgs([
+    ".flowai-workflow/autonomous-sdlc",
+    "20260529T094727",
+    "--node",
+    "specification",
+    "монетизация",
+  ]);
+  assertEquals(a.workflowDir, ".flowai-workflow/autonomous-sdlc");
+  assertEquals(a.runId, "20260529T094727");
+  assertEquals(a.nodeId, "specification");
+  assertEquals(a.text, "монетизация");
+});
+
+Deno.test("FR-E75 parseAnswerArgs — normalizes trailing slash on workflow", () => {
+  const a = parseAnswerArgs([
+    ".flowai-workflow/x/",
+    "r1",
+    "--node",
+    "n",
+    "hi",
+  ]);
+  assertEquals(a.workflowDir, ".flowai-workflow/x");
+});
+
+Deno.test("FR-E75 parseAnswerArgs — joins multi-word unquoted text", () => {
+  const a = parseAnswerArgs([
+    ".flowai-workflow/x",
+    "r1",
+    "--node",
+    "n",
+    "go",
+    "with",
+    "monetization",
+  ]);
+  assertEquals(a.text, "go with monetization");
+});
+
+Deno.test("FR-E75 parseAnswerArgs — --node=value form accepted", () => {
+  const a = parseAnswerArgs([
+    ".flowai-workflow/x",
+    "r1",
+    "--node=spec",
+    "hi",
+  ]);
+  assertEquals(a.nodeId, "spec");
+  assertEquals(a.text, "hi");
+});
+
+Deno.test("FR-E75 parseAnswerArgs — missing --node rejects", () => {
+  assertThrows(
+    () => parseAnswerArgs([".flowai-workflow/x", "r1", "answer-text"]),
+    Error,
+    "--node",
+  );
+});
+
+Deno.test("FR-E75 parseAnswerArgs — missing text rejects", () => {
+  assertThrows(
+    () => parseAnswerArgs([".flowai-workflow/x", "r1", "--node", "n"]),
+    Error,
+    "text",
+  );
+});
+
+Deno.test("FR-E75 parseAnswerArgs — missing run-id rejects", () => {
+  assertThrows(
+    () => parseAnswerArgs([".flowai-workflow/x", "--node", "n"]),
+    Error,
+    "run-id",
   );
 });
 

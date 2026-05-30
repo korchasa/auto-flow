@@ -14,11 +14,12 @@ import { applyJsonPointerOp, runMcpServer } from "./mcp-server.ts";
 import { RunJournalWriter } from "./run-journal.ts";
 import {
   createRunState,
+  getHitlInboxPath,
   getNodeDir,
   getRunDir,
   markRunCompleted,
 } from "./state.ts";
-import { nodeCompleted, nodeStarted } from "./node-lifecycle.ts";
+import { nodeCompleted, nodeStarted, nodeWaiting } from "./node-lifecycle.ts";
 import { defaultLockPath } from "./lock.ts";
 
 // --- Fixture helpers ---
@@ -127,7 +128,7 @@ function parseToolJson(result: { content: Array<{ text: string }> }): unknown {
 
 // --- Tests ---
 
-Deno.test("FR-E73 mcp-server registers all seven tools with expected names", async () => {
+Deno.test("FR-E73 mcp-server registers all eight tools with expected names", async () => {
   const fixture = await setupFixtureWorkflow();
   try {
     const { client, shutdown } = await startServerWithClient(
@@ -135,12 +136,14 @@ Deno.test("FR-E73 mcp-server registers all seven tools with expected names", asy
     );
     const tools = await client.listTools();
     const names = tools.tools.map((t: { name: string }) => t.name).sort();
+    // FR-E75 adds provide_human_input as the eighth tool.
     assertEquals(names, [
       "apply_workflow_patch",
       "cancel_run",
       "get_state",
       "get_workflow",
       "list_runs",
+      "provide_human_input",
       "resume_node",
       "tail_artifacts",
     ]);
@@ -254,6 +257,86 @@ Deno.test("FR-E73 resume_node returns an error when no journal is found", async 
     }) as { isError?: boolean; content: Array<{ text: string }> };
     assertEquals(result.isError, true);
     assert(result.content[0].text.length > 0);
+    await shutdown();
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+Deno.test("FR-E75 provide_human_input writes the local inbox for a waiting node", async () => {
+  // Build a run whose node "wait" is in waiting status, then deliver a reply
+  // through the MCP tool and assert the inbox file lands on disk.
+  const workflowDir = await Deno.makeTempDir({ prefix: "fr-e75-mcp-" });
+  try {
+    await Deno.writeTextFile(
+      join(workflowDir, "workflow.yaml"),
+      FIXTURE_WORKFLOW_YAML,
+    );
+    const runId = "run-waiting";
+    const runDir = getRunDir(runId, workflowDir);
+    await Deno.mkdir(runDir, { recursive: true });
+    const writer = await RunJournalWriter.open(runDir, runId);
+    await writer.append({
+      kind: "run_started",
+      config_path: "workflow.yaml",
+      started_at: "2026-05-30T00:00:00.000Z",
+      ts: "2026-05-30T00:00:00.000Z",
+      args: {},
+      env: {},
+    });
+    await writer.append({
+      kind: "node_declared",
+      node_id: "build",
+      node_type: "agent",
+      label: "Build",
+    });
+    const state = createRunState(runId, "workflow.yaml", ["build"], {}, {});
+    await nodeStarted(state, "build", undefined, writer);
+    await nodeWaiting(
+      state,
+      "build",
+      "sess-1",
+      JSON.stringify({ question: "Pick" }),
+      undefined,
+      writer,
+    );
+
+    const { client, shutdown } = await startServerWithClient(workflowDir);
+    const result = await client.callTool({
+      name: "provide_human_input",
+      arguments: { run_id: runId, node_id: "build", text: "монетизация" },
+    }) as { isError?: boolean; content: Array<{ text: string }> };
+    assertEquals(result.isError, undefined);
+    const payload = JSON.parse(result.content[0].text) as {
+      inboxPath: string;
+      live: boolean;
+    };
+    const expectedPath = getHitlInboxPath(runDir, "build");
+    assertEquals(payload.inboxPath, expectedPath);
+    assertEquals(payload.live, false); // no engine holds the lock in this test
+    assertEquals(await Deno.readTextFile(expectedPath), "монетизация");
+    await shutdown();
+  } finally {
+    await Deno.remove(workflowDir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E75 provide_human_input rejects a node that is not waiting", async () => {
+  const fixture = await setupFixtureWorkflow();
+  try {
+    const { client, shutdown } = await startServerWithClient(
+      fixture.workflowDir,
+    );
+    const result = await client.callTool({
+      name: "provide_human_input",
+      arguments: {
+        run_id: fixture.completedRunId,
+        node_id: "build",
+        text: "x",
+      },
+    }) as { isError?: boolean; content: Array<{ text: string }> };
+    assertEquals(result.isError, true);
+    assertStringIncludes(result.content[0].text, "not waiting");
     await shutdown();
   } finally {
     await fixture.cleanup();
@@ -431,11 +514,11 @@ Deno.test(
     const client = new Client({ name: "fr-e74-test-client", version: "0" });
     await client.connect(clientTransport);
     try {
-      // All seven tools must still be advertised so the MCP handshake
+      // All eight tools must still be advertised so the MCP handshake
       // completes; otherwise Claude Code shows an opaque "server crashed"
       // diagnostic instead of the missing-workflow message.
       const tools = await client.listTools();
-      assertEquals(tools.tools.length, 7);
+      assertEquals(tools.tools.length, 8);
 
       const result = await client.callTool({
         name: "get_workflow",

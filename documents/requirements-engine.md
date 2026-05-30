@@ -108,3 +108,4 @@ FR-IDs are stable — never renumber them on move.
 - FR-E72 (Cross-Repo Plugin Payload Sync) → 06-distribution-and-housekeeping
 - FR-E73 (Embedded MCP Server Over Engine) → 07-mcp-and-plugin-runtime
 - FR-E74 (Plugin Self-Contained Runtime)   → 07-mcp-and-plugin-runtime
+- FR-E75 (Local HITL Answer + Command Layer) → 04-runtime-and-hooks

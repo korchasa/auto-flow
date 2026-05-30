@@ -14,7 +14,7 @@ subcommand (`flowai-workflow mcp <workflow>`).
 `runMcpServer(workflowDir, options)`:
 
 1. Construct `new McpServer({ name: "flowai-workflow", version: VERSION })`.
-2. Register the seven tools (one helper per tool, all on the root
+2. Register the eight tools (one helper per tool, all on the root
    `workflowDir`):
    - `registerGetWorkflow`
    - `registerGetState`
@@ -23,6 +23,7 @@ subcommand (`flowai-workflow mcp <workflow>`).
    - `registerResumeNode`
    - `registerCancelRun`
    - `registerApplyWorkflowPatch`
+   - `registerProvideHumanInput` (FR-E75)
 3. Branch on transport ownership:
    - When the caller supplies `options.transport` (tests with
      `InMemoryTransport`): `await server.connect(options.transport)`
@@ -68,11 +69,19 @@ err((e as Error).message) }`. `ok(payload)` returns
   read text, split on `\n`, strip a single trailing empty entry from
   the file's terminator newline, slice last `lines` entries
   (default 50).
-- **`resume_node({ run_id })`** — build a fresh `new Engine({
-  config_path: …workflow.yaml, run_id, resume: true, dry_run: false,
-  verbosity: "quiet", args: {}, env_overrides: {} })`, `await
-  engine.run()`, return `{ run_id, status, total_cost_usd }`. Blocks
-  the MCP request for the entire engine run.
+- **`resume_node({ run_id })`** — delegates to
+  `commands.resumeRun({ workflowDir, run_id, verbosity: "quiet" })`
+  (FR-E75: the single `Engine({resume:true})` construction site,
+  shared with CLI `run --resume`), returns `{ run_id, status,
+  total_cost_usd }`. Blocks the MCP request for the entire engine run.
+- **`provide_human_input({ run_id, node_id, text })`** (FR-E75) —
+  delegates to `commands.deliverHumanAnswer({ workflowDir, run_id,
+  node_id, text })`. Validates the node is `waiting`, atomically writes
+  the local inbox file `<runDir>/.hitl-inbox/<node_id>.txt`, and returns
+  `{ inboxPath, live }` (`live` = engine process holding the run lock is
+  alive). Write-only: never resumes, never blocks. The live poll loop
+  (`hitl.ts`, FR-E75) picks the file up on its next iteration. When
+  `live === false` the caller resumes separately via `resume_node`.
 - **`cancel_run({ run_id })`** —
   `readLockInfo(defaultLockPath(workflowDir))`. If
   `info.run_id !== run_id` → `err("no matching active run…")`.

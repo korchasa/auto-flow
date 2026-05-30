@@ -139,6 +139,23 @@ export function getNodeDir(
   return `${getRunDir(runId, workflowDir)}/${nodeId}`;
 }
 
+/** Get the local HITL answer inbox file path for a waiting node (FR-E75).
+ *
+ * Anchored at the run directory — NOT the phased node-dir — so the live
+ * poll-loop reader ({@link runHitlLoop}, which holds the absolute `runDir`)
+ * and the external writer (`commands.ts`, which computes
+ * `getRunDir(runId, workflowDir)`) resolve the identical path with zero
+ * {@link PhaseRegistry}/worktree coupling. The file content is the reply
+ * text verbatim (mirrors the `check_script` stdout contract). Lives under
+ * the gitignored `runs/**` tree.
+ *
+ * @param runDir — the run's root directory (e.g. `getRunDir(runId, workflowDir)`).
+ * @param nodeId — the waiting node whose inbox file is addressed.
+ */
+export function getHitlInboxPath(runDir: string, nodeId: string): string {
+  return `${runDir}/.hitl-inbox/${nodeId}.txt`;
+}
+
 /** Get the journal.jsonl file path for a run. */
 export function getJournalFilePath(
   runId: string,

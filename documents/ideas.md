@@ -30,7 +30,8 @@ Each entry: rationale + concrete integration shape + rough effort.
 - **Why**: makes the engine controllable by any agent (Claude/Codex/Cursor).
   Aligns with FR-E59/E60/E61 host-embedding direction.
 - **Tools to expose**: `get_workflow`, `get_state`, `list_runs`,
-  `tail_artifacts`, `resume_node`, `cancel_run`, `apply_workflow_patch`.
+  `tail_artifacts`, `resume_node`, `cancel_run`, `apply_workflow_patch`,
+  `provide_human_input` (FR-E75: local HITL answer channel).
 - **Effort**: 2–4 days; reuses existing `Engine.run()` + `state.json`.
 - **Priority**: HIGH — best benefit-to-cost ratio.
 

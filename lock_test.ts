@@ -2,6 +2,7 @@ import { assertEquals } from "@std/assert";
 import {
   acquireLock,
   defaultLockPath,
+  isRunLive,
   type LockInfo,
   readLockInfo,
   releaseLock,
@@ -164,6 +165,63 @@ Deno.test("readLockInfo — throws if lock file missing", async () => {
     caught = true;
   }
   assertEquals(caught, true);
+});
+
+// FR-E75: liveness probe for the unified command layer — tells `answer`
+// whether the engine process is alive (and resuming) or whether the caller
+// must resume separately.
+Deno.test("FR-E75 isRunLive — true when lock holds matching run_id and live PID", async () => {
+  const wf = await Deno.makeTempDir();
+  const held: LockInfo = {
+    pid: Deno.pid, // current process is alive by definition
+    hostname: Deno.hostname(),
+    run_id: "run-live",
+    started_at: new Date().toISOString(),
+  };
+  await Deno.mkdir(`${wf}/runs`, { recursive: true });
+  await Deno.writeTextFile(defaultLockPath(wf), JSON.stringify(held));
+
+  assertEquals(await isRunLive(wf, "run-live"), true);
+
+  await Deno.remove(wf, { recursive: true });
+});
+
+Deno.test("FR-E75 isRunLive — false when lock PID is dead", async () => {
+  const wf = await Deno.makeTempDir();
+  const dead: LockInfo = {
+    pid: 99999999, // not a live PID
+    hostname: Deno.hostname(),
+    run_id: "run-dead",
+    started_at: new Date().toISOString(),
+  };
+  await Deno.mkdir(`${wf}/runs`, { recursive: true });
+  await Deno.writeTextFile(defaultLockPath(wf), JSON.stringify(dead));
+
+  assertEquals(await isRunLive(wf, "run-dead"), false);
+
+  await Deno.remove(wf, { recursive: true });
+});
+
+Deno.test("FR-E75 isRunLive — false when lock run_id does not match", async () => {
+  const wf = await Deno.makeTempDir();
+  const other: LockInfo = {
+    pid: Deno.pid, // alive, but belongs to a different run
+    hostname: Deno.hostname(),
+    run_id: "run-other",
+    started_at: new Date().toISOString(),
+  };
+  await Deno.mkdir(`${wf}/runs`, { recursive: true });
+  await Deno.writeTextFile(defaultLockPath(wf), JSON.stringify(other));
+
+  assertEquals(await isRunLive(wf, "run-requested"), false);
+
+  await Deno.remove(wf, { recursive: true });
+});
+
+Deno.test("FR-E75 isRunLive — false when no lock file exists", async () => {
+  const wf = await Deno.makeTempDir();
+  assertEquals(await isRunLive(wf, "run-x"), false);
+  await Deno.remove(wf, { recursive: true });
 });
 
 Deno.test("defaultLockPath — derives <workflowDir>/runs/.lock (FR-E54)", () => {

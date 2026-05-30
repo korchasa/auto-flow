@@ -10,7 +10,8 @@ shape) but are kept here to fit within the per-file token budget.
 ### 3.73 FR-E73: Embedded MCP Server Over Engine
 
 - **Description:** The engine exposes an embedded Model Context Protocol
-  (MCP) server with seven engine-control tools, accessible via the
+  (MCP) server with eight engine-control tools (the eighth,
+  `provide_human_input`, added by FR-E75), accessible via the
   `flowai-workflow mcp <workflow>` subcommand. Default transport is stdio;
   the server core is transport-agnostic so future HTTP/SSE consumers swap
   transports without touching tool handlers. Built on
@@ -30,9 +31,11 @@ shape) but are kept here to fit within the per-file token budget.
   - `tail_artifacts({ run_id, node_id, filename, lines? })` — read the
     artifact file under the node directory and return the last N lines
     (default 50).
-  - `resume_node({ run_id })` — construct `new Engine({ resume: true,
-    run_id, ... }).run()` and return the final `RunState` summary. Blocks
-    until the engine completes (may take minutes).
+  - `resume_node({ run_id })` — resume a run and return the final
+    `RunState` summary. Delegates to the shared `commands.resumeRun`
+    (FR-E75: the single `Engine({resume:true})` construction site, also
+    used by CLI `run --resume`). Blocks until the engine completes (may
+    take minutes).
   - `cancel_run({ run_id })` — read the workflow lock, send SIGTERM to the
     holder. Rejects when `lockInfo.run_id !== run_id`. Treats
     `Deno.errors.NotFound` and `PermissionDenied` from `Deno.kill` as a
@@ -41,6 +44,12 @@ shape) but are kept here to fit within the per-file token budget.
     (JSON Pointer paths per RFC 6901) to `workflow.yaml`. Rejects ops
     targeting the root or the `version` key. Caveat: `@std/yaml` round-
     trip drops comments and may normalise quoting.
+  - `provide_human_input({ run_id, node_id, text })` — deliver a human
+    reply to a waiting HITL node via the run's local inbox file
+    (transport-independent); returns `{ inboxPath, live }`. Write-only —
+    the live engine poll loop consumes it; when `live` is false, resume
+    the run separately. Delegates to `commands.deliverHumanAnswer`
+    (FR-E75; see [04-runtime-and-hooks](04-runtime-and-hooks.md)).
 
   **Process model invariants** (carried from FR-E59/E60/E61):
 
@@ -62,8 +71,8 @@ shape) but are kept here to fit within the per-file token budget.
   - **Tests:** `mcp-server_test.ts`, `cli_test.ts`, `mod_test.ts`
     (FR-E73; regression-locked).
   - [ ] `flowai-workflow mcp <workflow>` starts a server that advertises
-    exactly the seven tools above via `tools/list`. Evidence:
-    `mcp-server_test.ts::FR-E73 mcp-server registers all seven tools…`.
+    exactly the eight tools above via `tools/list`. Evidence:
+    `mcp-server_test.ts::FR-E73 mcp-server registers all eight tools…`.
   - [ ] Integration smoke (manual — korchasa): `npx
     @modelcontextprotocol/inspector` against the running server lists
     tools, calls `list_runs`, calls `tail_artifacts` against a known

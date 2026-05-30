@@ -363,6 +363,116 @@ Deno.test("runHitlLoop — FR-E64 round counter survives existing file", async (
   assertEquals(last.reply, "yes");
 });
 
+// --- FR-E75: local HITL answer inbox channel ---
+
+Deno.test("FR-E75 runHitlLoop — local inbox reply resumes and is consumed", async () => {
+  const tmpRoot = await Deno.makeTempDir({ prefix: "flowai-hitl-inbox-" });
+  // Pre-place the local inbox file the operator's host IDE / CLI would write
+  // via commands.deliverHumanAnswer. check_script NEVER replies, proving the
+  // inbox path is what drives the resume.
+  await Deno.mkdir(`${tmpRoot}/.hitl-inbox`, { recursive: true });
+  await Deno.writeTextFile(`${tmpRoot}/.hitl-inbox/pm.txt`, "монетизация\n");
+
+  let resumePrompt: string | undefined;
+  const opts = makeBaseOpts({
+    runDir: tmpRoot,
+    ctx: {
+      node_dir: "pm",
+      run_dir: tmpRoot,
+      run_id: "test-run",
+      workDir: tmpRoot,
+      args: {},
+      env: {},
+      input: {},
+    },
+    scriptRunner: (path: string, _args: string[]) =>
+      Promise.resolve({ exitCode: path.includes("check") ? 1 : 0, stdout: "" }),
+    claudeRunner: (o) => {
+      resumePrompt = o.taskPrompt;
+      return Promise.resolve({
+        output: {
+          result: "ok",
+          session_id: "s1",
+          total_cost_usd: 0,
+          duration_ms: 1,
+          duration_api_ms: 1,
+          num_turns: 1,
+          is_error: false,
+        },
+      });
+    },
+  });
+
+  const result = await runHitlLoop(opts, true /* skipAsk */);
+  assertEquals(result.success, true);
+  assertEquals(resumePrompt, "монетизация");
+
+  // Consumed: file removed so a later HITL round won't re-answer with it.
+  let exists = true;
+  try {
+    await Deno.stat(`${tmpRoot}/.hitl-inbox/pm.txt`);
+  } catch {
+    exists = false;
+  }
+  assertEquals(exists, false);
+
+  // FR-E64 audit append happens for the local reply too.
+  const audit = await Deno.readTextFile(`${tmpRoot}/pm/hitl.jsonl`);
+  const rec = JSON.parse(audit.trim().split("\n").pop()!);
+  assertEquals(rec.reply, "монетизация");
+
+  await Deno.remove(tmpRoot, { recursive: true });
+});
+
+Deno.test("FR-E75 runHitlLoop — local inbox wins over check_script reply", async () => {
+  const tmpRoot = await Deno.makeTempDir({ prefix: "flowai-hitl-inbox-" });
+  await Deno.mkdir(`${tmpRoot}/.hitl-inbox`, { recursive: true });
+  await Deno.writeTextFile(`${tmpRoot}/.hitl-inbox/pm.txt`, "local-choice");
+
+  let checkCalls = 0;
+  let resumePrompt: string | undefined;
+  const opts = makeBaseOpts({
+    runDir: tmpRoot,
+    ctx: {
+      node_dir: "pm",
+      run_dir: tmpRoot,
+      run_id: "test-run",
+      workDir: tmpRoot,
+      args: {},
+      env: {},
+      input: {},
+    },
+    scriptRunner: (path: string, _args: string[]) => {
+      if (path.includes("check")) {
+        checkCalls++;
+        return Promise.resolve({ exitCode: 0, stdout: "telegram-choice" });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: "" });
+    },
+    claudeRunner: (o) => {
+      resumePrompt = o.taskPrompt;
+      return Promise.resolve({
+        output: {
+          result: "ok",
+          session_id: "s2",
+          total_cost_usd: 0,
+          duration_ms: 1,
+          duration_api_ms: 1,
+          num_turns: 1,
+          is_error: false,
+        },
+      });
+    },
+  });
+
+  const result = await runHitlLoop(opts, true /* skipAsk */);
+  assertEquals(result.success, true);
+  assertEquals(resumePrompt, "local-choice"); // inbox, not telegram
+  assertEquals(checkCalls, 0); // check_script not consulted once inbox hits
+
+  await Deno.remove(tmpRoot, { recursive: true });
+});
+
 Deno.test(
   "runHitlLoop — surfaces ask_script stderr in error message on non-zero exit",
   async () => {
