@@ -39,14 +39,44 @@ Deno.test("FR-E70 classifyPayloadFile routes shared runtime into host plugin roo
       join(host, "plugins/flowai-workflow/skills/run/SKILL.md"),
     );
     assertEquals(
-      classifyPayloadFile(host, "plugin-src/shared/agents/supervisor.md"),
-      join(host, "plugins/flowai-workflow/agents/supervisor.md"),
-    );
-    assertEquals(
       classifyPayloadFile(host, "plugin-src/shared/README.md"),
       join(host, "plugins/flowai-workflow/README.md"),
     );
   }
+});
+
+Deno.test("FR-E76 codex drops shared agents, claude keeps them, codex skills route to codex only", () => {
+  // Codex plugin manifest has no `agents` pointer (only skills/mcpServers/
+  // apps), so shared agents are inert there and must not ship.
+  assertEquals(
+    classifyPayloadFile("codex", "plugin-src/shared/agents/orchestrator.md"),
+    null,
+  );
+  assertEquals(
+    classifyPayloadFile("codex", "plugin-src/shared/agents/supervisor.md"),
+    null,
+  );
+  // Claude/OpenCode still ship the agents verbatim.
+  assertEquals(
+    classifyPayloadFile("claude", "plugin-src/shared/agents/orchestrator.md"),
+    "claude/plugins/flowai-workflow/agents/orchestrator.md",
+  );
+  // The Codex operational skills live under plugin-src/codex/ and route to
+  // the Codex host only (the existing host-prefix arm).
+  assertEquals(
+    classifyPayloadFile(
+      "codex",
+      "plugin-src/codex/plugins/flowai-workflow/skills/orchestrator/SKILL.md",
+    ),
+    "codex/plugins/flowai-workflow/skills/orchestrator/SKILL.md",
+  );
+  assertEquals(
+    classifyPayloadFile(
+      "claude",
+      "plugin-src/codex/plugins/flowai-workflow/skills/supervisor/SKILL.md",
+    ),
+    null,
+  );
 });
 
 Deno.test("FR-E70 classifyPayloadFile routes host-specific wiring only to that host", () => {
@@ -259,6 +289,17 @@ async function tempEngine(): Promise<string> {
       },
     }),
   );
+  await Deno.mkdir(
+    join(dir, "plugin-src/codex/plugins/flowai-workflow/skills/orchestrator"),
+    { recursive: true },
+  );
+  await Deno.writeTextFile(
+    join(
+      dir,
+      "plugin-src/codex/plugins/flowai-workflow/skills/orchestrator/SKILL.md",
+    ),
+    "---\nname: orchestrator\n---\nCodex orchestrator skill.\n",
+  );
 
   await Deno.mkdir(join(dir, "init"), { recursive: true });
   await Deno.writeTextFile(join(dir, "cli.ts"), 'export const x = "cli";\n');
@@ -294,6 +335,7 @@ const syntheticFiles = [
   "plugin-src/codex/.agents/plugins/marketplace.json",
   "plugin-src/codex/plugins/flowai-workflow/.codex-plugin/plugin.json",
   "plugin-src/codex/plugins/flowai-workflow/.mcp.json",
+  "plugin-src/codex/plugins/flowai-workflow/skills/orchestrator/SKILL.md",
   "cli.ts",
   "cli_test.ts",
   "init/mod.ts",
@@ -345,10 +387,35 @@ Deno.test("FR-E70 builds separate Claude and Codex plugin payloads from shared s
         await Deno.readTextFile(join(root, "skills/run/SKILL.md")),
         "run",
       );
-      assertStringIncludes(
-        await Deno.readTextFile(join(root, "agents/supervisor.md")),
-        "Supervisor",
-      );
+      if (host === "claude") {
+        // Claude/OpenCode ship the agents; Codex must not (no `agents`
+        // manifest pointer) and instead carries the operational skill.
+        assertStringIncludes(
+          await Deno.readTextFile(join(root, "agents/supervisor.md")),
+          "Supervisor",
+        );
+        await Deno.stat(join(root, "skills/orchestrator/SKILL.md")).then(
+          () => {
+            throw new Error("claude payload should not carry codex skills");
+          },
+          (err) => {
+            if (!(err instanceof Deno.errors.NotFound)) throw err;
+          },
+        );
+      } else {
+        assertStringIncludes(
+          await Deno.readTextFile(join(root, "skills/orchestrator/SKILL.md")),
+          "orchestrator",
+        );
+        await Deno.stat(join(root, "agents/supervisor.md")).then(
+          () => {
+            throw new Error("codex payload should not carry shared agents");
+          },
+          (err) => {
+            if (!(err instanceof Deno.errors.NotFound)) throw err;
+          },
+        );
+      }
       assertStringIncludes(
         await Deno.readTextFile(join(root, "engine/cli.ts")),
         "cli",

@@ -133,6 +133,15 @@ export function classifyPayloadFile(
   // Tests never ship in the payload.
   if (relPath.endsWith("_test.ts")) return null;
 
+  // Codex plugin manifests expose only `skills`/`mcpServers`/`apps` — there
+  // is no `agents` component pointer (FR-E76). The shared agents are inert on
+  // Codex; the orchestrator/supervisor operational logic ships there as
+  // skills under `plugin-src/codex/` instead. Drop the dead agent copies so
+  // the Codex payload does not advertise files no host loads.
+  if (host === "codex" && relPath.startsWith("plugin-src/shared/agents/")) {
+    return null;
+  }
+
   // Shared plugin runtime files are copied into every host-specific
   // plugin root. Host discovery files are handled by the host branches
   // below, keeping Claude and Codex MCP wiring isolated from each other.

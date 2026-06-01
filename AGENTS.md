@@ -147,7 +147,21 @@ example of engine usage.
   - `agents/<name>.md` — context-isolated subagents with their own
     `tools`, `model`, `effort`, `maxTurns`: `orchestrator` (policy
     selection) and `supervisor` (one run). Operational logic lives
-    here; the parent context never inlines it.
+    here; the parent context never inlines it. **Claude/OpenCode only.**
+  - **Codex variant (FR-E76).** The Codex plugin manifest has no `agents`
+    pointer (only `skills`/`mcpServers`/`apps`), so the shared `agents/*.md`
+    are inert there and `classifyPayloadFile` drops them for `host=codex`.
+    The same operational logic ships to Codex as **skills** authored under
+    `plugin-src/codex/plugins/flowai-workflow/skills/{orchestrator,supervisor}/SKILL.md`
+    (Codex frontmatter: `name`/`description`/`effort`; no `tools`/`maxTurns`).
+    These bodies INTENTIONALLY diverge from the Claude agents (worker-spawn
+    framing vs `subagent_type`) — keep them in sync by concern, not verbatim.
+    On Codex the `orchestrate`/`supervise` dispatchers spawn a native `worker`
+    subagent (Codex `max_depth=1`; parent dispatches) and tell it, by skill
+    name, to invoke `orchestrator`/`supervisor`. Verified live (codex-cli
+    0.135.0): a Codex worker auto-discovers and loads a skill by name in its
+    own isolated thread, so context isolation holds without an `agents`
+    pointer.
   - **Dispatch graph for `/flowai-workflow:orchestrate`:** parent →
     `skills/orchestrate` → subagent `orchestrator` → returns
     `SUPERVISOR_DELEGATION` block → parent → subagent `supervisor`

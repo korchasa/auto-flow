@@ -159,3 +159,52 @@ shape) but are kept here to fit within the per-file token budget.
     sync-plugins-local`, `/mcp` lists `flowai-workflow` with the
     seven tools; the first call compiles the binary into
     `${CLAUDE_PLUGIN_DATA}/bin/` and subsequent calls run instantly.
+
+
+
+### 3.76 FR-E76: Codex Subagent Delivery as Skills
+
+- **Description:** The plugin's operational subagents `orchestrator` and
+  `supervisor` reach Codex hosts as **skills**, not agents. The Codex plugin
+  manifest exposes only `skills`/`mcpServers`/`apps` component pointers — there
+  is no `agents` pointer — so the shared `agents/*.md` (Claude/OpenCode subagent
+  format) are inert on Codex. This FR delivers the same operational logic to
+  Codex as `SKILL.md` files and wires the dispatchers to use Codex's native
+  `worker` subagent for context isolation.
+
+  **Payload routing** (`scripts/build-plugin-payload.ts::classifyPayloadFile`):
+
+  - For `host == "codex"`, files under `plugin-src/shared/agents/` route to
+    `null` (dropped — no host loads them on Codex). Claude/OpenCode still
+    receive `…/agents/<name>.md` verbatim.
+  - Codex operational skills are authored under
+    `plugin-src/codex/plugins/flowai-workflow/skills/{orchestrator,supervisor}/SKILL.md`
+    and route to the Codex host only via the existing host-prefix arm; the
+    Claude payload never contains them.
+  - The Codex plugin manifest already declares `skills: "./skills/"` — no
+    manifest change.
+
+  **Dispatch (variant B — isolation preserved):** the shared `orchestrate`/
+  `supervise` dispatchers gain a Codex branch. The parent spawns a native
+  Codex `worker` subagent (Codex `max_depth=1` forbids nested spawns, so the
+  parent dispatches) and instructs it, by skill name, to invoke the
+  `orchestrator`/`supervisor` skill and return the `SUPERVISOR_DELEGATION` /
+  `SUPERVISOR_REPORT` block. The worker — not the parent — performs all policy
+  and run-artifact reads. Verified live against `codex-cli 0.135.0`: a Codex
+  worker auto-discovers and loads a skill by name in its isolated thread
+  (`spawn_agent`/`wait`/`close_agent` collab tools).
+
+- **Tasks:** [codex-subagents-as-skills](../tasks/2026/05/codex-subagents-as-skills.md)
+- **Motivation:** Before this FR, `/orchestrate` and `/supervise` dead-ended on
+  Codex: the dispatchers offered only Claude/OpenCode branches and the
+  operational agents were inert (no `agents` manifest pointer), so the
+  "no native subagent dispatch → stop" guard fired even though Codex has
+  native `worker` subagents.
+- **Dep:** FR-E70, FR-E74
+- **Acceptance criteria:**
+  - **Tests:** `scripts/build-plugin-payload_test.ts` (FR-E76;
+    regression-locked).
+  - [ ] Manual Codex smoke (manual — korchasa): plugin installed via
+    `deno task sync-plugins-local`; in a Codex session `$orchestrate` spawns a
+    `worker`, the worker loads the `orchestrator` skill, and the loop reaches
+    a `SUPERVISOR_DELEGATION` / `SUPERVISOR_REPORT` round.
