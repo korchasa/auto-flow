@@ -17,7 +17,10 @@ import type {
   RuntimeId,
   Verbosity,
 } from "@korchasa/ai-ide-cli/types";
-import type { ExtraArgsMap } from "@korchasa/ai-ide-cli/runtime/types";
+import type {
+  ExtraArgsMap,
+  TransportOption,
+} from "@korchasa/ai-ide-cli/runtime/types";
 import type { ReasoningEffort } from "@korchasa/ai-ide-cli/runtime/reasoning-effort";
 import type { ProcessRegistry } from "@korchasa/ai-ide-cli/process-registry";
 import type { PermissionMode } from "@korchasa/ai-ide-cli";
@@ -29,6 +32,7 @@ export type {
   ProcessRegistry,
   ReasoningEffort,
   RuntimeId,
+  TransportOption,
   Verbosity,
 };
 export { VALID_RUNTIME_IDS } from "@korchasa/ai-ide-cli/types";
@@ -117,6 +121,10 @@ export interface WorkflowDefaults extends NodeSettings {
   max_parallel?: number;
   /** Runtime used for agent execution when not overridden (default: claude). */
   runtime?: RuntimeId;
+  /** Transport used to talk to the runtime (FR-E77). Default `"cli"` keeps
+   * legacy subprocess behavior; `"acp"` routes through the Agent Client
+   * Protocol front. Cascade: node → enclosing loop → defaults → "cli". */
+  transport?: TransportOption;
   /** Generic extra CLI args forwarded to the selected runtime.
    * Map-shape: `{ "--flag": "value" }`, `{ "--bool": "" }` (boolean flag),
    * `{ "--suppressed": null }` (suppress a parent-supplied flag). */
@@ -185,6 +193,9 @@ export interface NodeConfig {
   effort?: ReasoningEffort;
   /** Runtime override for this node. */
   runtime?: RuntimeId;
+  /** Transport override for this node (FR-E77). See
+   * {@link WorkflowDefaults.transport} for cascade semantics. */
+  transport?: TransportOption;
   /** Generic extra CLI args forwarded to this node's selected runtime.
    * Map-shape: see {@link WorkflowDefaults.runtime_args}. */
   runtime_args?: ExtraArgsMap;

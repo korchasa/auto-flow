@@ -1,5 +1,5 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { parseConfig } from "./config.ts";
+import { parseConfig, resolveTransport } from "./config.ts";
 import {
   getRuntimeAdapter,
   resolveRuntimeConfig,
@@ -168,4 +168,54 @@ Deno.test("getRuntimeAdapter — opencode adapter declares HITL and permissionMo
   assertEquals(adapter.id, "opencode");
   assertEquals(adapter.capabilities.mcpInjection, true);
   assertEquals(adapter.capabilities.permissionMode, true);
+});
+
+Deno.test("FR-E77 transport cascade — node wins over parent and defaults", () => {
+  const defaults: WorkflowDefaults = { transport: "cli" };
+  const parent: NodeConfig = {
+    type: "loop",
+    label: "Loop",
+    transport: "cli",
+  };
+  const node: NodeConfig = {
+    type: "agent",
+    label: "Build",
+    prompt: "build",
+    transport: "acp",
+  };
+  assertEquals(resolveTransport(node, defaults, parent), "acp");
+});
+
+Deno.test("FR-E77 transport cascade — parent loop wins over defaults when body omits", () => {
+  const defaults: WorkflowDefaults = { transport: "cli" };
+  const parent: NodeConfig = {
+    type: "loop",
+    label: "Loop",
+    transport: "acp",
+  };
+  const node: NodeConfig = {
+    type: "agent",
+    label: "Build",
+    prompt: "build",
+  };
+  assertEquals(resolveTransport(node, defaults, parent), "acp");
+});
+
+Deno.test("FR-E77 transport cascade — defaults applies when neither node nor parent set", () => {
+  const defaults: WorkflowDefaults = { transport: "acp" };
+  const node: NodeConfig = {
+    type: "agent",
+    label: "Build",
+    prompt: "build",
+  };
+  assertEquals(resolveTransport(node, defaults), "acp");
+});
+
+Deno.test("FR-E77 transport cascade — falls back to 'cli' when nothing declares it", () => {
+  const node: NodeConfig = {
+    type: "agent",
+    label: "Build",
+    prompt: "build",
+  };
+  assertEquals(resolveTransport(node, undefined), "cli");
 });

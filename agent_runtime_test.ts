@@ -268,6 +268,116 @@ Deno.test(
   },
 );
 
+Deno.test("FR-E77 transport forwarded — adapter.invoke receives transport on initial and resume", async () => {
+  const nodeDir = Deno.makeTempDirSync();
+  const outputPath = `${nodeDir}/result.md`;
+  const calls: RuntimeInvokeOptions[] = [];
+
+  const runtimeAdapter: RuntimeAdapter = {
+    id: "opencode",
+    capabilities: {
+      permissionMode: false,
+      mcpInjection: false,
+      transcript: false,
+      interactive: false,
+      toolUseObservation: false,
+      session: false,
+      capabilityInventory: false,
+      toolFilter: false,
+      reasoningEffort: false,
+    },
+    launchInteractive() {
+      throw new Error("not implemented");
+    },
+    invoke: async (opts) => {
+      calls.push(opts);
+      if (calls.length === 2) {
+        await Deno.writeTextFile(outputPath, "# done\n");
+      }
+      return {
+        output: {
+          runtime: "opencode",
+          result: calls.length === 1 ? "first" : "second",
+          session_id: "ses_acp",
+          total_cost_usd: 0.01,
+          duration_ms: 100,
+          duration_api_ms: 100,
+          num_turns: 1,
+          is_error: false,
+        },
+      };
+    },
+  };
+
+  const result = await runAgent({
+    node: {
+      type: "agent",
+      label: "Build",
+      prompt: "build",
+      validate: [{ type: "file_exists", path: outputPath }],
+    } as NodeConfig,
+    ctx: makeCtx(nodeDir),
+    settings: makeSettings(),
+    runtime: "opencode",
+    runtimeAdapter,
+    transport: "acp",
+  });
+
+  assertEquals(result.success, true);
+  assertEquals(calls.length, 2);
+  assertEquals(calls[0].transport, "acp");
+  assertEquals(calls[1].transport, "acp");
+});
+
+Deno.test("FR-E77 transport forwarded — default omitted transport stays undefined", async () => {
+  const nodeDir = Deno.makeTempDirSync();
+  const calls: RuntimeInvokeOptions[] = [];
+
+  const runtimeAdapter: RuntimeAdapter = {
+    id: "opencode",
+    capabilities: {
+      permissionMode: false,
+      mcpInjection: false,
+      transcript: false,
+      interactive: false,
+      toolUseObservation: false,
+      session: false,
+      capabilityInventory: false,
+      toolFilter: false,
+      reasoningEffort: false,
+    },
+    launchInteractive() {
+      throw new Error("not implemented");
+    },
+    invoke: (opts) => {
+      calls.push(opts);
+      return Promise.resolve({
+        output: {
+          runtime: "opencode",
+          result: "ok",
+          session_id: "s",
+          total_cost_usd: 0,
+          duration_ms: 1,
+          duration_api_ms: 1,
+          num_turns: 1,
+          is_error: false,
+        },
+      });
+    },
+  };
+
+  await runAgent({
+    node: { type: "agent", label: "Build", prompt: "build" } as NodeConfig,
+    ctx: makeCtx(nodeDir),
+    settings: makeSettings(),
+    runtime: "opencode",
+    runtimeAdapter,
+  });
+
+  assertEquals(calls.length, 1);
+  assertEquals(calls[0].transport, undefined);
+});
+
 Deno.test("runAgent — preserves runtime stream_stall error category", async () => {
   const nodeDir = Deno.makeTempDirSync();
 

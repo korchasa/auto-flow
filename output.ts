@@ -198,13 +198,22 @@ export class OutputManager {
     );
   }
 
-  /** Print the dry-run execution plan. */
+  /** Print the dry-run execution plan.
+   *
+   * `transportMap` (FR-E77) maps each agent node ID to its resolved transport.
+   * Nodes mapped to `"acp"` get a `[transport: acp]` suffix; `"cli"` and
+   * missing entries render without a suffix to keep default plans noiseless.
+   */
   dryRunPlan(
     levels: string[][],
     labels: Record<string, string>,
     postWorkflowNodeIds?: string[],
     runOnMap?: Record<string, string>,
+    transportMap?: Record<string, string>,
   ): void {
+    const transportSuffix = (nodeId: string): string =>
+      transportMap?.[nodeId] === "acp" ? " [transport: acp]" : "";
+
     this.write("\nExecution Plan (dry run):\n");
     this.write(`${"─".repeat(40)}\n`);
     for (let i = 0; i < levels.length; i++) {
@@ -213,7 +222,7 @@ export class OutputManager {
       this.write(`Level ${i + 1}${parallel}:\n`);
       for (const nodeId of level) {
         const label = labels[nodeId] ?? nodeId;
-        this.write(`  - ${nodeId}: ${label}\n`);
+        this.write(`  - ${nodeId}: ${label}${transportSuffix(nodeId)}\n`);
       }
     }
     if (postWorkflowNodeIds && postWorkflowNodeIds.length > 0) {
@@ -221,7 +230,11 @@ export class OutputManager {
       for (const nodeId of postWorkflowNodeIds) {
         const label = labels[nodeId] ?? nodeId;
         const condition = runOnMap?.[nodeId] ?? "always";
-        this.write(`  - ${nodeId}: ${label} (run_on: ${condition})\n`);
+        this.write(
+          `  - ${nodeId}: ${label} (run_on: ${condition})${
+            transportSuffix(nodeId)
+          }\n`,
+        );
       }
     }
     this.write(`${"─".repeat(40)}\n`);

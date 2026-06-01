@@ -36,6 +36,7 @@ export type {
   RunTerminalJournalEvent,
   RuntimeId,
   TemplateContext,
+  TransportOption,
   ValidationRule,
   Verbosity,
   WorkflowConfig,
@@ -50,7 +51,9 @@ export {
   extractWorktreeDisabled,
   loadConfig,
   parseConfig,
+  resolveTransport,
 } from "./config.ts";
+export type { ConfigWarnSink } from "./config.ts";
 export { buildLevels, buildLoopBodyOrder } from "./dag.ts";
 export type { ExecutionLevels } from "./dag.ts";
 export { allPassed, formatFailures, runValidations } from "./validate.ts";

@@ -379,6 +379,32 @@ Deno.test("summary — omits node results section when nodeResults absent", () =
   assertEquals(joined.includes("RESULT:"), false);
 });
 
+Deno.test("FR-E77 dry-run transport — agent nodes with transport: acp render '[transport: acp]' suffix", () => {
+  const cap = createCapture();
+  const out = new OutputManager("normal", cap.writer);
+  out.dryRunPlan(
+    [["a", "b"]],
+    { a: "Agent A", b: "Agent B" },
+    undefined,
+    undefined,
+    { a: "acp", b: "cli" },
+  );
+  const joined = cap.lines.join("");
+  // 'a' has acp → suffix
+  assertEquals(/-\s+a:\s+Agent A\s+\[transport:\s+acp\]/.test(joined), true);
+  // 'b' has cli → no suffix
+  assertEquals(/-\s+b:\s+Agent B\n/.test(joined), true);
+  assertEquals(joined.includes("Agent B [transport"), false);
+});
+
+Deno.test("FR-E77 dry-run transport — missing transport map omits suffix", () => {
+  const cap = createCapture();
+  const out = new OutputManager("normal", cap.writer);
+  out.dryRunPlan([["a"]], { a: "Agent A" });
+  const joined = cap.lines.join("");
+  assertEquals(joined.includes("[transport"), false);
+});
+
 Deno.test("summary — renders standard fields correctly", () => {
   const cap = createCapture();
   const out = new OutputManager("normal", cap.writer);

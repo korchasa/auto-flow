@@ -1,14 +1,15 @@
 {
   "version": "5",
   "specifiers": {
-    "jsr:@korchasa/ai-ide-cli@~0.8.7": "0.8.7",
+    "jsr:@korchasa/ai-ide-cli@~0.8.8": "0.8.8",
     "jsr:@std/assert@^1.0.19": "1.0.19",
-    "jsr:@std/cli@1": "1.0.29",
+    "jsr:@std/cli@1": "1.0.30",
     "jsr:@std/fmt@^1.0.10": "1.0.10",
-    "jsr:@std/fs@1": "1.0.23",
-    "jsr:@std/internal@^1.0.12": "1.0.13",
-    "jsr:@std/internal@^1.0.13": "1.0.13",
-    "jsr:@std/path@^1.1.4": "1.1.4",
+    "jsr:@std/fs@1": "1.0.24",
+    "jsr:@std/internal@^1.0.12": "1.0.14",
+    "jsr:@std/internal@^1.0.14": "1.0.14",
+    "jsr:@std/path@^1.1.4": "1.1.5",
+    "jsr:@std/path@^1.1.5": "1.1.5",
     "jsr:@std/semver@1": "1.0.8",
     "jsr:@std/yaml@^1.0.12": "1.1.0",
     "npm:@modelcontextprotocol/sdk@*": "1.29.0_zod@4.4.3",
@@ -16,11 +17,11 @@
     "npm:zod@4": "4.4.3"
   },
   "jsr": {
-    "@korchasa/ai-ide-cli@0.8.7": {
-      "integrity": "19a9551accb9b599654c5758a6518fc3fb4af6c34a8ddcd52947eea7a9adaba7",
+    "@korchasa/ai-ide-cli@0.8.8": {
+      "integrity": "b2e1d045c72a07aaa5a0ecc5a7864bb7b5547edcb0a26e3991958796f968d8c9",
       "dependencies": [
         "jsr:@std/fs",
-        "jsr:@std/path",
+        "jsr:@std/path@^1.1.4",
         "jsr:@std/yaml"
       ]
     },
@@ -30,30 +31,39 @@
         "jsr:@std/internal@^1.0.12"
       ]
     },
-    "@std/cli@1.0.29": {
-      "integrity": "fa4ef29130baa834d8a13b7d138240c3a2fcfba740bfb7afa646a360a15ec84f",
+    "@std/cli@1.0.30": {
+      "integrity": "769446536522d0417d7127ebcabcafac1ab0ce6766d0eb3fca1d36326fe98d13",
       "dependencies": [
         "jsr:@std/fmt",
-        "jsr:@std/internal@^1.0.13"
+        "jsr:@std/internal@^1.0.14"
       ]
     },
     "@std/fmt@1.0.10": {
       "integrity": "90dfba288802ac6de82fb31d0917eb9e4450b9925b954d5e51fc29ac07419db5"
     },
-    "@std/fs@1.0.23": {
-      "integrity": "3ecbae4ce4fee03b180fa710caff36bb5adb66631c46a6460aaad49515565a37",
+    "@std/fs@1.0.24": {
+      "integrity": "f3061b45b81673a2bece689da041df32d174be064c89eb6397fb5718d3fb7877",
       "dependencies": [
-        "jsr:@std/internal@^1.0.12",
-        "jsr:@std/path"
+        "jsr:@std/internal@^1.0.14",
+        "jsr:@std/path@^1.1.5"
       ]
     },
     "@std/internal@1.0.13": {
       "integrity": "2f9546691d4ac2d32859c82dff284aaeac980ddeca38430d07941e7e288725c0"
     },
+    "@std/internal@1.0.14": {
+      "integrity": "291516b3d4c35024d6ffbc0a9df5bf4c64116e05b50012cf846710152d2ffdf7"
+    },
     "@std/path@1.1.4": {
       "integrity": "1d2d43f39efb1b42f0b1882a25486647cb851481862dc7313390b2bb044314b5",
       "dependencies": [
         "jsr:@std/internal@^1.0.12"
+      ]
+    },
+    "@std/path@1.1.5": {
+      "integrity": "ccea00982ea28c36becaf6e62f855406c76a8c32d462f66f415bbb7d83a271bc",
+      "dependencies": [
+        "jsr:@std/internal@^1.0.14"
       ]
     },
     "@std/semver@1.0.8": {
@@ -581,7 +591,7 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@korchasa/ai-ide-cli@~0.8.7",
+      "jsr:@korchasa/ai-ide-cli@~0.8.8",
       "jsr:@std/assert@^1.0.19",
       "jsr:@std/cli@1",
       "jsr:@std/fs@1",

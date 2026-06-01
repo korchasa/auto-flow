@@ -102,6 +102,25 @@ Deno.test("EngineOptions — env overrides", () => {
   assertEquals(opts.env_overrides.DEBUG, "true");
 });
 
+Deno.test("FR-E77 engine smoke — defaults.transport flows through parseConfig + resolveTransport", async () => {
+  const yaml = `
+name: smoke
+version: "1"
+defaults:
+  transport: acp
+nodes:
+  build:
+    type: agent
+    label: Build
+    prompt: build
+`;
+  const { parseConfig, resolveTransport } = await import("./config.ts");
+  const cfg = parseConfig(yaml);
+  const node = cfg.nodes.build;
+  assertEquals(cfg.defaults?.transport, "acp");
+  assertEquals(resolveTransport(node, cfg.defaults), "acp");
+});
+
 Deno.test("EngineOptions exposes node lifecycle callback", async () => {
   const events: NodeLifecycleEvent[] = [];
   const opts = makeOptions({

@@ -6,7 +6,11 @@
  */
 import type { AgentResult } from "./agent.ts";
 import { resolveInputArtifacts, runAgent } from "./agent.ts";
-import { resolveBudget, resolveToolFilter } from "./config.ts";
+import {
+  resolveBudget,
+  resolveToolFilter,
+  resolveTransport,
+} from "./config.ts";
 import { runWithGuardrail } from "./guardrail.ts";
 import { handleAgentHitl } from "./hitl-handler.ts";
 import { isHitlConfigured } from "./hitl.ts";
@@ -99,6 +103,7 @@ export async function executeAgentNode(
     node,
   });
   const toolFilter = resolveToolFilter(node, eng.config.defaults);
+  const transport = resolveTransport(node, eng.config.defaults);
   const cwd = eng.workDir !== "." ? eng.workDir : undefined;
 
   // Resume path: node was waiting for human reply
@@ -132,6 +137,7 @@ export async function executeAgentNode(
       cwd,
       maxTurns: resolveBudget(node, eng.config.defaults)?.max_turns,
       processRegistry: eng.options.processRegistry,
+      transport,
       nodeFailed: eng.nodeFailed,
       nodeWaiting: eng.nodeWaiting,
     });
@@ -178,6 +184,7 @@ export async function executeAgentNode(
         cwd,
         maxTurns: resolveBudget(node, eng.config.defaults)?.max_turns,
         processRegistry: eng.options.processRegistry,
+        transport,
       }),
   );
 
@@ -265,6 +272,7 @@ export async function executeAgentNode(
       cwd,
       maxTurns: resolveBudget(node, eng.config.defaults)?.max_turns,
       processRegistry: eng.options.processRegistry,
+      transport,
       nodeFailed: eng.nodeFailed,
       nodeWaiting: eng.nodeWaiting,
     });

@@ -8,7 +8,10 @@
 
 import { parse as parseYaml } from "@std/yaml";
 import { dirname } from "@std/path";
-import { resolveRuntimeConfig } from "@korchasa/ai-ide-cli/runtime";
+import {
+  getRuntimeAdapter,
+  resolveRuntimeConfig,
+} from "@korchasa/ai-ide-cli/runtime";
 import { validateTemplateVars } from "./template.ts";
 import {
   REASONING_EFFORT_VALUES,
@@ -19,9 +22,18 @@ import type {
   NodeBudget,
   NodeConfig,
   NodeSettings,
+  TransportOption,
   WorkflowConfig,
   WorkflowDefaults,
 } from "./types.ts";
+
+/** Valid `transport` values (FR-E77). Must stay in sync with
+ * `TransportOption` from `@korchasa/ai-ide-cli/runtime/types`. */
+const VALID_TRANSPORTS = ["cli", "acp"] as const;
+
+/** Optional sink for non-fatal warnings emitted during config load (FR-E77).
+ * Defaults to no-op; CLI wires it to `OutputManager.warn`. */
+export type ConfigWarnSink = (message: string) => void;
 
 /** Default node settings applied when not specified. */
 export const DEFAULT_SETTINGS: Required<NodeSettings> = {
@@ -35,7 +47,10 @@ export const DEFAULT_SETTINGS: Required<NodeSettings> = {
 /** Default workflow-level settings. Fields intentionally excluded from
  * Required<> because undefined carries semantic meaning ("not set"):
  * `permission_mode`, `effort`, `budget`, `allowed_tools`,
- * `disallowed_tools`, `memory_paths`. */
+ * `disallowed_tools`, `memory_paths`, `transport`. FR-E77: `transport`
+ * defaults to `"cli"` exclusively through `resolveTransport`, not via
+ * this map — an explicit default would shadow the `undefined ≡ "cli"`
+ * library convention. */
 export const DEFAULT_WORKFLOW_DEFAULTS: Required<
   Omit<
     WorkflowDefaults,
@@ -45,6 +60,7 @@ export const DEFAULT_WORKFLOW_DEFAULTS: Required<
     | "allowed_tools"
     | "disallowed_tools"
     | "memory_paths"
+    | "transport"
   >
 > = {
   ...DEFAULT_SETTINGS,
@@ -79,11 +95,14 @@ export function extractWorktreeDisabled(yaml: string): boolean {
 /** Parse YAML string into WorkflowConfig, validate schema, merge defaults.
  * @param workDir — base directory for resolving {{file()}} references.
  * @param workflowDir — workDir-relative directory containing the workflow.yaml,
- *   used for resolving {{flow_file()}} references. Defaults to "" (workDir root). */
+ *   used for resolving {{flow_file()}} references. Defaults to "" (workDir root).
+ * @param warnSink — optional callback for non-fatal warnings (FR-E77 tool-filter
+ *   downgrade etc.). Defaults to no-op. */
 export function parseConfig(
   yaml: string,
   workDir?: string,
   workflowDir?: string,
+  warnSink?: ConfigWarnSink,
 ): WorkflowConfig {
   const raw = parseYaml(yaml);
   if (!raw || typeof raw !== "object") {
@@ -95,19 +114,22 @@ export function parseConfig(
     config as unknown as WorkflowConfig,
     workDir,
     workflowDir,
+    warnSink,
   );
 }
 
 /** Load and parse workflow config from a file path.
  * @param workDir — base directory for resolving {{file()}} references.
- *   `{{flow_file()}}` references resolve against `workDir/dirname(path)`. */
+ *   `{{flow_file()}}` references resolve against `workDir/dirname(path)`.
+ * @param warnSink — optional non-fatal warning callback (see {@link parseConfig}). */
 export async function loadConfig(
   path: string,
   workDir?: string,
+  warnSink?: ConfigWarnSink,
 ): Promise<WorkflowConfig> {
   const yaml = await Deno.readTextFile(path);
   const wfDir = workflowDirFromConfigPath(path, workDir);
-  return parseConfig(yaml, workDir, wfDir);
+  return parseConfig(yaml, workDir, wfDir, warnSink);
 }
 
 /** Compute the workDir-relative workflow directory from a (possibly
@@ -240,6 +262,17 @@ function validateSchema(config: Record<string, unknown>): void {
     }
     if (defaults.budget !== undefined) {
       validateBudget("defaults", defaults.budget);
+    }
+    if (defaults.transport !== undefined) {
+      if (
+        !VALID_TRANSPORTS.includes(defaults.transport as TransportOption)
+      ) {
+        throw new Error(
+          `defaults.transport has invalid value '${defaults.transport}'. Must be one of: ${
+            VALID_TRANSPORTS.join(", ")
+          }`,
+        );
+      }
     }
     validateToolFilterLevel("defaults", defaults);
 
@@ -535,6 +568,17 @@ function validateNode(
 
   if (node.runtime_args !== undefined) {
     validateRuntimeArgs(`Node '${id}'`, node.runtime_args);
+  }
+
+  // FR-E77: validate per-node transport enum.
+  if (node.transport !== undefined) {
+    if (!VALID_TRANSPORTS.includes(node.transport as TransportOption)) {
+      throw new Error(
+        `Node '${id}' has invalid transport '${node.transport}'. Must be one of: ${
+          VALID_TRANSPORTS.join(", ")
+        }`,
+      );
+    }
   }
 
   // Validate allowed_paths if present (FR-E37)
@@ -908,6 +952,7 @@ function mergeDefaults(
   config: WorkflowConfig,
   workDir?: string,
   workflowDir?: string,
+  warnSink?: ConfigWarnSink,
 ): WorkflowConfig {
   const workflowDefaults: WorkflowDefaults = {
     ...DEFAULT_WORKFLOW_DEFAULTS,
@@ -960,12 +1005,15 @@ function mergeDefaults(
     defaults: workflowDefaults,
     nodes: mergedNodes,
   };
-  validateRuntimeCompatibility(result);
+  validateRuntimeCompatibility(result, warnSink);
   validateFileReferences(result, workDir, workflowDir);
   return result;
 }
 
-function validateRuntimeCompatibility(config: WorkflowConfig): void {
+function validateRuntimeCompatibility(
+  config: WorkflowConfig,
+  warnSink?: ConfigWarnSink,
+): void {
   const defaults = config.defaults;
 
   const checkNode = (nodeId: string, node: NodeConfig, parent?: NodeConfig) => {
@@ -973,20 +1021,58 @@ function validateRuntimeCompatibility(config: WorkflowConfig): void {
 
     const runtimeConfig = resolveRuntimeConfig({ defaults, node, parent });
     if (
-      runtimeConfig.runtime !== "opencode" &&
-      runtimeConfig.runtime !== "cursor"
-    ) return;
-
-    if (
-      runtimeConfig.permissionMode &&
-      runtimeConfig.permissionMode !== "bypassPermissions"
+      runtimeConfig.runtime === "opencode" ||
+      runtimeConfig.runtime === "cursor"
     ) {
-      const source = node.permission_mode !== undefined
-        ? `nodes.${nodeId}.permission_mode`
-        : "defaults.permission_mode";
-      throw new Error(
-        `${source} '${runtimeConfig.permissionMode}' is not supported for runtime '${runtimeConfig.runtime}' — only 'bypassPermissions' is supported (node '${nodeId}')`,
-      );
+      if (
+        runtimeConfig.permissionMode &&
+        runtimeConfig.permissionMode !== "bypassPermissions"
+      ) {
+        const source = node.permission_mode !== undefined
+          ? `nodes.${nodeId}.permission_mode`
+          : "defaults.permission_mode";
+        throw new Error(
+          `${source} '${runtimeConfig.permissionMode}' is not supported for runtime '${runtimeConfig.runtime}' — only 'bypassPermissions' is supported (node '${nodeId}')`,
+        );
+      }
+    }
+
+    // FR-E77: resolved transport must be supported by the resolved runtime.
+    const transport = resolveTransport(node, defaults, parent);
+    if (transport === "acp") {
+      const adapter = getRuntimeAdapter(runtimeConfig.runtime);
+      let acpCaps: { toolFilter?: boolean } | undefined;
+      try {
+        acpCaps = adapter.capabilitiesFor?.("acp");
+      } catch (_err) {
+        throw new Error(
+          `Node '${nodeId}': runtime '${runtimeConfig.runtime}' does not support transport 'acp'`,
+        );
+      }
+      if (acpCaps === undefined) {
+        throw new Error(
+          `Node '${nodeId}': runtime '${runtimeConfig.runtime}' does not support transport 'acp'`,
+        );
+      }
+      // FR-E77: surface the silent tool-filter downgrade at config-load.
+      // Only the node's OWN level matters here — a defaults-level
+      // allowed_tools paired with a node-level transport: acp is the same
+      // operator decision and deserves the same warning.
+      if (
+        warnSink &&
+        (node.allowed_tools !== undefined ||
+          node.disallowed_tools !== undefined ||
+          defaults?.allowed_tools !== undefined ||
+          defaults?.disallowed_tools !== undefined)
+      ) {
+        const field = (node.allowed_tools ?? defaults?.allowed_tools) !==
+            undefined
+          ? "allowed_tools"
+          : "disallowed_tools";
+        warnSink(
+          `Node '${nodeId}': ${field} is ignored under transport 'acp' (capabilitiesFor: toolFilter=${acpCaps.toolFilter})`,
+        );
+      }
     }
   };
 
@@ -998,6 +1084,26 @@ function validateRuntimeCompatibility(config: WorkflowConfig): void {
       }
     }
   }
+}
+
+/**
+ * Resolve effective transport via SCALAR-REPLACE cascade (FR-E77):
+ * node → enclosing loop parent → workflow defaults → "cli".
+ *
+ * Unlike `runtime_args` which merges per-key, `transport` is a scalar enum —
+ * the FIRST level that declares it wins. Falls back to `"cli"` to match
+ * the library default and keep `RuntimeInvokeOptions.transport === undefined`
+ * semantically equivalent to `"cli"`.
+ */
+export function resolveTransport(
+  node: NodeConfig,
+  defaults: WorkflowDefaults | undefined,
+  loopParent?: NodeConfig,
+): TransportOption {
+  if (node.transport !== undefined) return node.transport;
+  if (loopParent?.transport !== undefined) return loopParent.transport;
+  if (defaults?.transport !== undefined) return defaults.transport;
+  return "cli";
 }
 
 /**
@@ -1111,6 +1217,7 @@ function extractNodeSettings(defaults: WorkflowDefaults): NodeSettings {
     effort: _effort,
     permission_mode: _pm,
     worktree_disabled: _wd,
+    transport: _tp,
     ...settings
   } = defaults;
   return settings;

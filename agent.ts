@@ -19,6 +19,7 @@ import type {
   ReasoningEffort,
   RuntimeId,
   TemplateContext,
+  TransportOption,
   ValidationRule,
   Verbosity,
 } from "./types.ts";
@@ -144,6 +145,11 @@ export interface AgentRunOptions {
    * instead of the ai-ide-cli default singleton. Omit to keep the legacy
    * singleton behavior. */
   processRegistry?: ProcessRegistry;
+  /** Resolved transport (FR-E77). Forwarded to `adapter.invoke()` on both
+   * the initial call and continuation/resume calls. The HITL MCP injection
+   * gate consults `adapter.capabilitiesFor?.(transport)` instead of the
+   * adapter's CLI vector so transport-specific downgrades take effect. */
+  transport?: TransportOption;
 }
 
 /**
@@ -205,17 +211,25 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     allowedTools,
     disallowedTools,
     processRegistry,
+    transport,
   } = opts;
   const adapter = runtimeAdapter ?? getRuntimeAdapter(runtime);
   const extraArgs = applyBudgetFlags(runtimeArgs, runtime, maxTurns);
 
+  // FR-E77: derive the transport-scoped capability vector for HITL gating.
+  // Falls back to the CLI vector when the adapter does not implement
+  // `capabilitiesFor` (older library versions or test stubs).
+  const effectiveCaps = adapter.capabilitiesFor?.(transport ?? "cli") ??
+    adapter.capabilities;
+
   // FR-L35: register the engine's HITL MCP server when (a) the workflow
-  // has HITL configured AND (b) the runtime supports per-invocation MCP
-  // injection. The `onToolUseObserved` observer intercepts the agent's
-  // call to `request_human_input` and aborts the run with the question
-  // stashed for the caller to route through `handleAgentHitl`.
+  // has HITL configured AND (b) the resolved transport's capability vector
+  // supports per-invocation MCP injection. The `onToolUseObserved` observer
+  // intercepts the agent's call to `request_human_input` and aborts the run
+  // with the question stashed for the caller to route through
+  // `handleAgentHitl`.
   const hitlEnabled = isHitlConfigured(hitlConfig) &&
-    adapter.capabilities.mcpInjection;
+    effectiveCaps.mcpInjection;
   const mcpServers = hitlEnabled ? buildHitlMcpServers() : undefined;
   const hitlObserver = hitlEnabled ? createHitlObserver(runtime) : undefined;
 
@@ -273,6 +287,8 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     verbosity,
     cwd,
     processRegistry: processRegistry ?? defaultRegistry,
+    // FR-E77: forward resolved transport on the initial invocation.
+    transport,
   };
   let result = await adapter.invoke(initialInvokeOptions);
 
@@ -412,6 +428,10 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       verbosity,
       cwd,
       processRegistry: processRegistry ?? defaultRegistry,
+      // FR-E77: forward resolved transport on resume so HITL replies and
+      // validation continuations land on the same transport as the
+      // initial invocation.
+      transport,
     });
 
     // Same short-circuit applies if the observer captures during a

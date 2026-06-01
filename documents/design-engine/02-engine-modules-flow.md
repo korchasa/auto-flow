@@ -354,3 +354,32 @@
   `npm:@modelcontextprotocol/sdk` + `npm:zod` (FR-E73: MCP server).
 
 
+
+- **FR-E77 — Transport Selection (CLI vs ACP) data flow:**
+  - `types.ts` re-exports `TransportOption` from
+    `@korchasa/ai-ide-cli/runtime/types` and adds `transport?: TransportOption`
+    to both `WorkflowDefaults` and `NodeConfig`.
+  - `config.ts` parses the field, rejects unknown enum values, and exposes
+    `resolveTransport(node, defaults, loopParent?) → TransportOption`
+    (scalar-replace cascade: `node → loopParent → defaults → "cli"`).
+    `validateRuntimeCompatibility` rejects `transport: acp` for runtimes
+    whose adapter throws on `capabilitiesFor("acp")` (Cursor today) and
+    emits an `OutputManager.warn` warning when the resolved transport is
+    `"acp"` and a tool-filter field is set (toolFilter downgrade on ACP).
+  - `node-dispatch.ts:executeAgentNode` and `loop.ts` resolve the transport
+    alongside runtime/budget/tool-filter and forward it into both
+    `runAgent(...)` and `handleAgentHitl(...)` calls.
+  - `agent.ts:runAgent` threads `transport` into `RuntimeInvokeOptions` on
+    BOTH the initial invocation and the validation-continuation resume.
+    The HITL MCP injection gate consults
+    `adapter.capabilitiesFor?.(transport ?? "cli") ?? adapter.capabilities`
+    so transport-specific downgrades automatically disable HITL wiring
+    instead of crashing at adapter.invoke.
+  - `hitl-handler.ts` / `hitl.ts:runHitlLoop` forward the transport on the
+    post-reply resume invocation, keeping the human round-trip on the same
+    transport as the original call.
+  - `engine.ts` dry-run path passes a `transportMap` to `OutputManager.dryRunPlan`
+    so each agent node prints with a `[transport: acp]` suffix when its
+    resolved transport is `"acp"`.
+  - Flow: `WorkflowDefaults.transport → resolveTransport → AgentRunOptions.transport
+    → adapter.invoke({ transport })`.

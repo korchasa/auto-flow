@@ -2039,3 +2039,106 @@ Deno.test("resolveToolFilter — cross-level mode switch: node.disallowed replac
   assertEquals(r.disallowedTools, ["Write"]);
   assertEquals(r.allowedTools, undefined);
 });
+
+// --- FR-E77: Transport selection (CLI vs ACP) ---
+
+Deno.test("FR-E77 invalid transport — defaults.transport enum rejection", () => {
+  const yaml = `
+name: w
+version: "1"
+defaults:
+  transport: stream
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "defaults.transport has invalid value 'stream'",
+  );
+});
+
+Deno.test("FR-E77 invalid transport — per-node transport enum rejection", () => {
+  const yaml = `
+name: w
+version: "1"
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+    transport: webhook
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "Node 'n' has invalid transport 'webhook'",
+  );
+});
+
+Deno.test("FR-E77 transport accepted — defaults.transport: acp", () => {
+  const yaml = `
+name: w
+version: "1"
+defaults:
+  transport: acp
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.defaults?.transport, "acp");
+});
+
+Deno.test("FR-E77 transport runtime mismatch — acp + cursor rejected at config load", () => {
+  const yaml = `
+name: w
+version: "1"
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+    runtime: cursor
+    permission_mode: bypassPermissions
+    transport: acp
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "does not support transport 'acp'",
+  );
+});
+
+Deno.test("FR-E77 transport allowed_tools downgrade warning under acp", () => {
+  const yaml = `
+name: w
+version: "1"
+defaults:
+  transport: acp
+  allowed_tools: ["Read"]
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+`;
+  const warnings: string[] = [];
+  parseConfig(yaml, undefined, undefined, (m) => warnings.push(m));
+  const matched = warnings.some(
+    (m) =>
+      m.includes("transport 'acp'") &&
+      m.includes("allowed_tools") &&
+      m.includes("toolFilter=false"),
+  );
+  assertEquals(
+    matched,
+    true,
+    `expected toolFilter downgrade warning, got ${JSON.stringify(warnings)}`,
+  );
+});

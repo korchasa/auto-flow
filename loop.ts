@@ -27,7 +27,11 @@ import {
 } from "./state.ts";
 import type { OutputManager } from "./output.ts";
 import { resolveRuntimeConfig } from "@korchasa/ai-ide-cli/runtime";
-import { resolveBudget, resolveToolFilter } from "./config.ts";
+import {
+  resolveBudget,
+  resolveToolFilter,
+  resolveTransport,
+} from "./config.ts";
 
 /** Reason a loop exited. Undefined on failure. */
 export type LoopExitReason =
@@ -227,6 +231,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         config.defaults,
         loopNode,
       );
+      const transport = resolveTransport(bodyNode, config.defaults, loopNode);
 
       const result = await runAgent({
         node: bodyNode,
@@ -246,6 +251,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         verbosity: opts.verbosity,
         cwd: opts.cwd,
         maxTurns: resolvedBudget?.max_turns,
+        transport,
       });
 
       bodyResults.push(result);

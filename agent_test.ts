@@ -1343,3 +1343,154 @@ Deno.test("applyBudgetFlags — does not mutate the input base map", () => {
   assertEquals(base, { "--foo": "" });
   assertEquals(result, { "--foo": "", "--max-turns": "5" });
 });
+
+Deno.test("FR-E77 hitl capability under transport — acp vector drops mcpInjection ⇒ no mcpServers emitted", async () => {
+  const nodeDir = Deno.makeTempDirSync();
+  const calls: Array<Record<string, unknown>> = [];
+
+  const runtimeAdapter: RuntimeAdapter = {
+    id: "opencode",
+    capabilities: {
+      permissionMode: false,
+      mcpInjection: true,
+      transcript: false,
+      interactive: false,
+      toolUseObservation: false,
+      session: false,
+      capabilityInventory: false,
+      toolFilter: true,
+      reasoningEffort: false,
+    },
+    capabilitiesFor(transport) {
+      if (transport === "acp") {
+        return {
+          permissionMode: false,
+          mcpInjection: false,
+          transcript: false,
+          interactive: false,
+          toolUseObservation: false,
+          session: false,
+          capabilityInventory: false,
+          toolFilter: false,
+          reasoningEffort: false,
+        };
+      }
+      return this.capabilities;
+    },
+    launchInteractive() {
+      throw new Error("not implemented");
+    },
+    invoke: (opts) => {
+      calls.push(opts as unknown as Record<string, unknown>);
+      return Promise.resolve({
+        output: {
+          runtime: "opencode",
+          result: "done",
+          session_id: "s",
+          total_cost_usd: 0,
+          duration_ms: 1,
+          duration_api_ms: 1,
+          num_turns: 1,
+          is_error: false,
+        },
+      });
+    },
+  };
+
+  await runAgent({
+    node: { type: "agent", label: "Build", prompt: "build" } as NodeConfig,
+    ctx: {
+      node_dir: nodeDir,
+      run_dir: nodeDir,
+      run_id: "t",
+      workDir: ".",
+      args: {},
+      env: {},
+      input: {},
+    } as TemplateContext,
+    settings: makeSettings(),
+    runtime: "opencode",
+    runtimeAdapter,
+    transport: "acp",
+    hitlConfig: {
+      ask_script: "ask.sh",
+      check_script: "check.sh",
+      poll_interval: 60,
+      timeout: 120,
+    },
+  });
+
+  assertEquals(calls.length, 1);
+  assertEquals(calls[0].mcpServers, undefined);
+  assertEquals(calls[0].onToolUseObserved, undefined);
+});
+
+Deno.test("FR-E77 hitl capability under transport — cli vector keeps mcpInjection ⇒ mcpServers emitted", async () => {
+  const nodeDir = Deno.makeTempDirSync();
+  const calls: Array<Record<string, unknown>> = [];
+
+  const runtimeAdapter: RuntimeAdapter = {
+    id: "opencode",
+    capabilities: {
+      permissionMode: false,
+      mcpInjection: true,
+      transcript: false,
+      interactive: false,
+      toolUseObservation: false,
+      session: false,
+      capabilityInventory: false,
+      toolFilter: true,
+      reasoningEffort: false,
+    },
+    capabilitiesFor(transport) {
+      if (transport === "acp") {
+        return { ...this.capabilities, mcpInjection: false };
+      }
+      return this.capabilities;
+    },
+    launchInteractive() {
+      throw new Error("not implemented");
+    },
+    invoke: (opts) => {
+      calls.push(opts as unknown as Record<string, unknown>);
+      return Promise.resolve({
+        output: {
+          runtime: "opencode",
+          result: "done",
+          session_id: "s",
+          total_cost_usd: 0,
+          duration_ms: 1,
+          duration_api_ms: 1,
+          num_turns: 1,
+          is_error: false,
+        },
+      });
+    },
+  };
+
+  await runAgent({
+    node: { type: "agent", label: "Build", prompt: "build" } as NodeConfig,
+    ctx: {
+      node_dir: nodeDir,
+      run_dir: nodeDir,
+      run_id: "t",
+      workDir: ".",
+      args: {},
+      env: {},
+      input: {},
+    } as TemplateContext,
+    settings: makeSettings(),
+    runtime: "opencode",
+    runtimeAdapter,
+    transport: "cli",
+    hitlConfig: {
+      ask_script: "ask.sh",
+      check_script: "check.sh",
+      poll_interval: 60,
+      timeout: 120,
+    },
+  });
+
+  assertEquals(calls.length, 1);
+  assertEquals(calls[0].mcpServers !== undefined, true);
+});

@@ -17,6 +17,7 @@ import type {
   ReasoningEffort,
   RuntimeId,
   TemplateContext,
+  TransportOption,
 } from "./types.ts";
 import { interpolate } from "./template.ts";
 import { applyBudgetFlags } from "./agent.ts";
@@ -107,6 +108,10 @@ export interface HitlRunOptions {
    * (FR-E60). Forwarded to the runtime adapter
    * on the resume invocation that delivers the human reply. */
   processRegistry?: ProcessRegistry;
+  /** Resolved transport (FR-E77); forwarded to the runtime adapter on
+   * resume so the human reply lands on the same transport as the
+   * original invocation. */
+  transport?: TransportOption;
 }
 
 /**
@@ -138,6 +143,7 @@ export async function runHitlLoop(
   } = opts;
 
   const cwdOpt = opts.cwd;
+  const transport = opts.transport;
   const runner = opts.scriptRunner ??
     ((path: string, args: string[]) => defaultScriptRunner(path, args, cwdOpt));
   const adapter = opts.runtimeAdapter ?? getRuntimeAdapter(runtime);
@@ -153,12 +159,18 @@ export async function runHitlLoop(
     };
   }
 
-  if (!adapter.capabilities.mcpInjection) {
+  // FR-E77: consult the transport-scoped capability vector so an ACP front
+  // that downgrades `mcpInjection` is rejected with a clear message rather
+  // than crashing at adapter.invoke().
+  const effectiveCaps = adapter.capabilitiesFor?.(transport ?? "cli") ??
+    adapter.capabilities;
+  if (!effectiveCaps.mcpInjection) {
     return {
       success: false,
       continuations: 0,
-      error:
-        `Runtime '${runtime}' does not support per-invocation MCP injection (capabilities.mcpInjection === false). HITL requires it.`,
+      error: `Runtime '${runtime}' (transport '${
+        transport ?? "cli"
+      }') does not support per-invocation MCP injection (capabilities.mcpInjection === false). HITL requires it.`,
       error_category: "unknown",
     };
   }
@@ -220,6 +232,9 @@ export async function runHitlLoop(
       retryDelaySeconds: settings.retry_delay_seconds,
       cwd: cwdOpt,
       processRegistry: opts.processRegistry ?? defaultRegistry,
+      // FR-E77: forward resolved transport so HITL resume uses the same
+      // transport as the original invocation.
+      transport,
     });
 
     if (result.error) {

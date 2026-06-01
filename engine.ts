@@ -20,6 +20,7 @@ import {
   findNodeConfig,
   loadConfig,
   resolveBudget,
+  resolveTransport,
 } from "./config.ts";
 import { resolveRuntimeConfig } from "@korchasa/ai-ide-cli/runtime";
 import { buildLevels } from "./dag.ts";
@@ -119,7 +120,11 @@ export class Engine {
 
     // Dry-run: load config from CWD (no worktree needed), print plan, exit
     if (this.options.dry_run) {
-      this.config = await loadConfig(this.options.config_path);
+      this.config = await loadConfig(
+        this.options.config_path,
+        undefined,
+        (m) => this.output.warn(m),
+      );
       const levels = buildLevels(this.config);
       const labels: Record<string, string> = {};
       for (const [id, node] of Object.entries(this.config.nodes)) {
@@ -138,11 +143,31 @@ export class Engine {
         const node = this.config.nodes[id];
         if (node.run_on) runOnMap[id] = node.run_on;
       }
+      // FR-E77: compute resolved transport per agent node so the dry-run
+      // plan shows the active transport before the operator pays for a run.
+      const transportMap: Record<string, string> = {};
+      for (const [id, node] of Object.entries(this.config.nodes)) {
+        if (node.type === "agent") {
+          transportMap[id] = resolveTransport(node, this.config.defaults);
+        }
+        if (node.type === "loop" && node.nodes) {
+          for (const [bid, bnode] of Object.entries(node.nodes)) {
+            if (bnode.type === "agent") {
+              transportMap[bid] = resolveTransport(
+                bnode,
+                this.config.defaults,
+                node,
+              );
+            }
+          }
+        }
+      }
       this.output.dryRunPlan(
         filteredLevels,
         labels,
         postWorkflowNodeIds,
         runOnMap,
+        transportMap,
       );
       return this.createDryRunState(levels);
     }
@@ -198,6 +223,7 @@ export class Engine {
     this.config = await loadConfig(
       configPath,
       this.workDir === "." ? undefined : this.workDir,
+      (m) => this.output.warn(m),
     );
     // Merge env overrides
     const env = { ...this.config.env, ...this.options.env_overrides };

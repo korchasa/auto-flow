@@ -16,6 +16,7 @@ import type {
   RunState,
   RuntimeId,
   TemplateContext,
+  TransportOption,
 } from "./types.ts";
 import type {
   ExtraArgsMap,
@@ -62,6 +63,9 @@ interface HitlBaseParams {
    * (FR-E60). Forwarded to the runtime adapter
    * on the resume invocation that delivers the human reply. */
   processRegistry?: ProcessRegistry;
+  /** Resolved transport (FR-E77); forwarded so HITL resume uses the same
+   * transport as the original invocation. */
+  transport?: TransportOption;
   /** Mark a node as failed and publish optional lifecycle callback. */
   nodeFailed?: (
     nodeId: string,
@@ -126,6 +130,7 @@ export async function handleAgentHitl(
     allowedTools,
     disallowedTools,
     processRegistry,
+    transport,
     workflowDir,
   } = params;
   // HITL scripts run with cwd=workDir (worktree under isolation) and write
@@ -175,6 +180,7 @@ export async function handleAgentHitl(
         allowedTools,
         disallowedTools,
         processRegistry,
+        transport,
       },
       true, /* skipAsk — question already delivered */
     );
