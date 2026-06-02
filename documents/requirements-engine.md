@@ -82,7 +82,7 @@ FR-IDs are stable — never renumber them on move.
 - FR-E40 (Permission Mode)           → 04-runtime-and-hooks
 - FR-E41 (Auto-Update & Release CI)  → 06-distribution-and-housekeeping
 - FR-E42 (Per-Node Effort Level)     → 02-nodes-and-models
-- FR-E43 (Fallback Model)            → 02-nodes-and-models
+- FR-E43 (Runtime Fallback)          → 02-nodes-and-models
 - FR-E44 (IDE CLI Wrapper Split)     → 06-distribution-and-housekeeping
 - FR-E45 (Subcommand Routing)        → 05-cli-and-observability
 - ~~FR-E46~~ (Interactive REPL)       — removed

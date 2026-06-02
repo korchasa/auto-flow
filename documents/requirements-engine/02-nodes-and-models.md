@@ -209,40 +209,83 @@
 
 
 
-### 3.43 FR-E43: Fallback Model (`fallback_model`)
+### 3.43 FR-E43: Runtime Fallback (`fallback`)
 
-- **Description:** Optional `fallback_model` field on `WorkflowDefaults` that
-  maps to Claude Code's `--fallback-model` CLI flag. Enables automatic model
-  fallback when primary model is overloaded (works only with `-p` mode, which
-  is our execution mode). Applied globally — not per-node (failover policy is
-  a workflow concern, not a node concern).
+- **Description:** Optional `fallback` block on `WorkflowDefaults` that
+  switches the entire runtime (and its model/effort/runtime_args/transport)
+  when the primary runtime invocation fails with a classifiable
+  overload / quota / availability error. Supersedes the original
+  `fallback_model` scope: the failover unit is the whole runtime
+  (e.g. `claude` → `codex`, `codex` → `opencode`), not a sibling model
+  within the same runtime. Workflow-level only — failover policy is a
+  workflow concern, not a node concern (AC4 carries over).
 
   **Config schema:**
   ```yaml
   defaults:
+    runtime: claude
     model: claude-opus-4-6
-    fallback_model: claude-sonnet-4-6   # auto-fallback on overload
+    fallback:
+      runtime: codex              # mandatory; must differ from primary
+      model: gpt-5-codex          # optional; falls back to adapter default
+      effort: medium              # optional
+      runtime_args: {}            # optional
+      transport: cli              # optional
+      # Set of engine-classified error categories that trigger fallback.
+      # Default: ["overloaded", "rate_limit", "quota_exhausted",
+      #           "provider_unavailable"]. Other categories propagate
+      # unchanged so the existing retry / on_failure_script /
+      # continuation paths still apply.
+      on: [overloaded, rate_limit]
   ```
 
   **Engine behavior:**
-  - On fresh invocation: if `fallback_model` set, append
-    `--fallback-model <value>` to Claude CLI args.
-  - On `--resume`: do NOT emit `--fallback-model`. Session inherits model
-    context from original invocation.
-  - Workflow-level only (`WorkflowDefaults`). Not per-node — overload is
-    transient and model-specific, not task-specific.
-- **Acceptance criteria:**
-  - [ ] AC1: `WorkflowDefaults` in `types.ts` has `fallback_model?: string`
-    field.
-  - [ ] AC2: `buildClaudeArgs()` emits `--fallback-model <value>` when set AND
-    `resumeSessionId` is NOT set.
-  - [ ] AC3: Config validation: if `fallback_model` set, `model` (defaults or
-    node-level) must also be set (fallback without primary is meaningless).
-    Error: `"fallback_model requires defaults.model to be set"`.
-  - [ ] AC4: Not exposed on `NodeConfig` — workflow-level only. No per-node
-    override.
-  - [ ] AC5: Unit tests: flag emission, skip on resume, validation
-    (fallback without model), absence (no flag).
-  - [ ] AC6: `deno task check` passes.
+  - On fresh invocation: invoke the primary runtime as configured.
+  - If the invocation returns a `RuntimeInvokeResult` whose
+    `error_category` (FR-L36) is in `fallback.on`, the engine performs
+    ONE additional invocation against the fallback runtime with a
+    fresh session (cross-runtime resume is not supported — sessions
+    are runtime-scoped).
+  - The fallback invocation reuses the node's prompt, system prompt,
+    permission mode, allowed/disallowed tools, MCP servers, HITL
+    config, budget, and cwd. Model / effort / runtime_args / transport
+    come from `fallback.*` if set; otherwise from the resolved
+    primary node config (model is reset only if the primary value is
+    not understood by the fallback runtime — engine emits a clear
+    warning instead of silently dropping).
+  - On continuation (`--resume`) and re-runs after `on_failure_script`
+    completes: do NOT re-trigger fallback. The first invocation owns
+    the fallback decision; subsequent continuations stay on whichever
+    runtime answered the initial call.
+  - Single attempt: if the fallback runtime also returns an
+    `error_category` in `fallback.on`, the node fails through the
+    normal error precedence path (FR-E34). No oscillation or
+    exponential ladder of fallbacks.
+  - Workflow-level only (`WorkflowDefaults`). Not per-node — failover
+    policy is global. Per-node `runtime` override stays valid and
+    silently disables fallback for that node when it diverges from
+    `defaults.runtime` (only the primary runtime declared in
+    `defaults` is eligible to fall back).
+  - `fallback.runtime` MUST differ from `defaults.runtime`. Config
+    validation rejects equality at load time.
+
+  **Failure-category contract:** engine-classified categories live in
+  `RuntimeInvokeResult.error_category` (FR-L36). FR-E43 consumes the
+  pre-existing taxonomy — it does NOT introduce new categories. The
+  initial reasonable set: `overloaded`, `rate_limit`,
+  `quota_exhausted`, `provider_unavailable`. If `fallback.on` lists
+  an unknown category, config validation rejects it with the full
+  list of supported names.
+
+  **Out of scope (future FRs):**
+  - Chained fallbacks (`fallback.fallback`).
+  - Per-node `fallback` override.
+  - Adaptive policies (sticky-fallback for the rest of the run, time
+    windows, breaker patterns).
+
+- **Tasks:** [fr-e43-runtime-fallback](../tasks/2026/06/fr-e43-runtime-fallback.md)
+- **Status:** Re-scoped 2026-06-02 from per-model fallback
+  (`fallback_model`) to whole-runtime fallback. Implementation
+  deferred — task `fr-e43-runtime-fallback` carries the open plan.
 
 
