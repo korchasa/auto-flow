@@ -8,6 +8,7 @@ import {
   normalizeWorkflowDir,
   parseAnswerArgs,
   parseArgs,
+  resolveActiveWorkflow,
   VERSION,
 } from "./cli.ts";
 
@@ -293,22 +294,22 @@ Deno.test("FR-E73 normalizeWorkflowDir strips trailing slashes", () => {
 
 // --- FR-E75: `answer` subcommand argument parsing ---
 
-Deno.test("FR-E75 parseAnswerArgs — parses workflow, run-id, --node, and text", () => {
+Deno.test("FR-E78 parseAnswerArgs — workflow auto-resolved when --workflow omitted", () => {
   const a = parseAnswerArgs([
-    ".flowai-workflow/autonomous-sdlc",
     "20260529T094727",
     "--node",
     "specification",
     "монетизация",
   ]);
-  assertEquals(a.workflowDir, ".flowai-workflow/autonomous-sdlc");
+  assertEquals(a.workflowDir, undefined);
   assertEquals(a.runId, "20260529T094727");
   assertEquals(a.nodeId, "specification");
   assertEquals(a.text, "монетизация");
 });
 
-Deno.test("FR-E75 parseAnswerArgs — normalizes trailing slash on workflow", () => {
+Deno.test("FR-E75 parseAnswerArgs — explicit --workflow normalises trailing slash", () => {
   const a = parseAnswerArgs([
+    "--workflow",
     ".flowai-workflow/x/",
     "r1",
     "--node",
@@ -316,11 +317,11 @@ Deno.test("FR-E75 parseAnswerArgs — normalizes trailing slash on workflow", ()
     "hi",
   ]);
   assertEquals(a.workflowDir, ".flowai-workflow/x");
+  assertEquals(a.runId, "r1");
 });
 
 Deno.test("FR-E75 parseAnswerArgs — joins multi-word unquoted text", () => {
   const a = parseAnswerArgs([
-    ".flowai-workflow/x",
     "r1",
     "--node",
     "n",
@@ -333,7 +334,6 @@ Deno.test("FR-E75 parseAnswerArgs — joins multi-word unquoted text", () => {
 
 Deno.test("FR-E75 parseAnswerArgs — --node=value form accepted", () => {
   const a = parseAnswerArgs([
-    ".flowai-workflow/x",
     "r1",
     "--node=spec",
     "hi",
@@ -342,9 +342,20 @@ Deno.test("FR-E75 parseAnswerArgs — --node=value form accepted", () => {
   assertEquals(a.text, "hi");
 });
 
+Deno.test("FR-E75 parseAnswerArgs — --workflow=value form accepted", () => {
+  const a = parseAnswerArgs([
+    "--workflow=.flowai-workflow/x",
+    "r1",
+    "--node",
+    "n",
+    "hi",
+  ]);
+  assertEquals(a.workflowDir, ".flowai-workflow/x");
+});
+
 Deno.test("FR-E75 parseAnswerArgs — missing --node rejects", () => {
   assertThrows(
-    () => parseAnswerArgs([".flowai-workflow/x", "r1", "answer-text"]),
+    () => parseAnswerArgs(["r1", "answer-text"]),
     Error,
     "--node",
   );
@@ -352,7 +363,7 @@ Deno.test("FR-E75 parseAnswerArgs — missing --node rejects", () => {
 
 Deno.test("FR-E75 parseAnswerArgs — missing text rejects", () => {
   assertThrows(
-    () => parseAnswerArgs([".flowai-workflow/x", "r1", "--node", "n"]),
+    () => parseAnswerArgs(["r1", "--node", "n"]),
     Error,
     "text",
   );
@@ -360,10 +371,84 @@ Deno.test("FR-E75 parseAnswerArgs — missing text rejects", () => {
 
 Deno.test("FR-E75 parseAnswerArgs — missing run-id rejects", () => {
   assertThrows(
-    () => parseAnswerArgs([".flowai-workflow/x", "--node", "n"]),
+    () => parseAnswerArgs(["--node", "n"]),
     Error,
     "run-id",
   );
+});
+
+Deno.test("FR-E78 resolveActiveWorkflow returns FLOWAI_WORKFLOW when set", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "mcp-resolve-explicit-" });
+  try {
+    const result = await resolveActiveWorkflow({
+      env: { FLOWAI_WORKFLOW: "/explicit/path" },
+      cwd: dir,
+    });
+    assertEquals(result, "/explicit/path");
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E78 resolveActiveWorkflow picks the single workflow under .flowai-workflow/", async () => {
+  const root = await Deno.makeTempDir({ prefix: "mcp-resolve-single-" });
+  try {
+    const wf = `${root}/.flowai-workflow/only-one`;
+    await Deno.mkdir(wf, { recursive: true });
+    await Deno.writeTextFile(`${wf}/workflow.yaml`, "nodes: []\n");
+    const result = await resolveActiveWorkflow({ env: {}, cwd: root });
+    assertEquals(result, wf);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("FR-E78 resolveActiveWorkflow prefers github-inbox when multiple exist", async () => {
+  const root = await Deno.makeTempDir({ prefix: "mcp-resolve-default-" });
+  try {
+    for (const name of ["github-inbox", "other"]) {
+      const wf = `${root}/.flowai-workflow/${name}`;
+      await Deno.mkdir(wf, { recursive: true });
+      await Deno.writeTextFile(`${wf}/workflow.yaml`, "nodes: []\n");
+    }
+    const result = await resolveActiveWorkflow({ env: {}, cwd: root });
+    assertEquals(result, `${root}/.flowai-workflow/github-inbox`);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("FR-E78 resolveActiveWorkflow returns null when no bundle exists", async () => {
+  const root = await Deno.makeTempDir({ prefix: "mcp-resolve-empty-" });
+  try {
+    const result = await resolveActiveWorkflow({ env: {}, cwd: root });
+    assertEquals(result, null);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("FR-E78 resolveActiveWorkflow ignores CLAUDE_PROJECT_DIR (host-agnostic)", async () => {
+  const cwdRoot = await Deno.makeTempDir({ prefix: "mcp-resolve-cwd-" });
+  const elsewhere = await Deno.makeTempDir({ prefix: "mcp-resolve-other-" });
+  try {
+    // Engine MUST NOT consult host-specific env (CLAUDE_PROJECT_DIR is
+    // Claude-only); the .mcp.json contract pins cwd to the project
+    // root for every host, so only cwd is relevant.
+    const wfElsewhere = `${elsewhere}/.flowai-workflow/single`;
+    await Deno.mkdir(wfElsewhere, { recursive: true });
+    await Deno.writeTextFile(`${wfElsewhere}/workflow.yaml`, "nodes: []\n");
+    // No workflow folder under cwd → null even though CLAUDE_PROJECT_DIR
+    // points at a valid one.
+    const result = await resolveActiveWorkflow({
+      env: { CLAUDE_PROJECT_DIR: elsewhere },
+      cwd: cwdRoot,
+    });
+    assertEquals(result, null);
+  } finally {
+    await Deno.remove(cwdRoot, { recursive: true });
+    await Deno.remove(elsewhere, { recursive: true });
+  }
 });
 
 Deno.test("FR-E73 mcp subcommand parses the same workflow path shape as run", () => {

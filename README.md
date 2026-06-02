@@ -4,11 +4,29 @@ Universal DAG-based engine for orchestrating AI agents. Define agent workflows a
 
 ## Install
 
-`flowai-workflow` ships as a Claude Code / Codex plugin. Both install
-paths bundle the engine source and the canonical workflows; the host
-runs them via locally-installed Deno 2.x.
+`flowai-workflow` ships as a Claude Code / Codex plugin. The plugin's
+`.mcp.json` invokes the `flowai-workflow mcp` subcommand directly —
+the engine binary is a **plugin precondition** (FR-E78).
 
-Prerequisite (all paths): [Deno](https://deno.com/) 2.x on `$PATH`.
+### Prerequisite — install the engine binary on PATH
+
+Pick one of:
+
+- **Release binary (recommended for end users).** Download the binary
+  for your platform from
+  [GitHub Releases](https://github.com/korchasa/flowai-workflow/releases/latest)
+  (`flowai-workflow-{linux,darwin,windows}-{x86_64,arm64}[.exe]`),
+  verify the accompanying `<artifact>.sha256` sidecar with
+  `sha256sum -c`, then `chmod +x` and move into a directory on
+  `$PATH` (`/usr/local/bin/` is typical on POSIX).
+- **JSR install (recommended for Deno users).**
+  `deno install -A -n flowai-workflow jsr:@korchasa/flowai-workflow/cli`.
+  Deno 2.x is the only prerequisite.
+
+Verify with `flowai-workflow --version`. The ARM-64 Linux binary is
+cross-compiled and not currently exercised in CI runtime tests — if
+you hit a runtime issue on `aarch64`, prefer the JSR install or
+rebuild from source.
 
 ### Claude Code
 
@@ -17,7 +35,7 @@ Prerequisite (all paths): [Deno](https://deno.com/) 2.x on `$PATH`.
 /plugin install flowai-workflow@korchasa
 ```
 
-Then invoke the launcher skills from inside Claude Code:
+Then invoke the skills from inside Claude Code:
 
 - `/flowai-workflow:run <workflow-name>` — execute a bundled or
   project-local DAG (forwards `--prompt`, `--dry-run`, `--cycles`,
@@ -35,8 +53,16 @@ codex plugin add flowai-workflow@flowai-workflow
 
 No `~/.codex/config.toml` `[mcp_servers.*]` block is required. The
 Codex payload ships host-native plugin metadata plus an embedded MCP
-config, so plugin install wires both launcher skills and
-`flowai-workflow` MCP startup.
+config (`command = "flowai-workflow", args = ["mcp"]`), so plugin
+install wires both interactive skills and the MCP server.
+
+### Troubleshooting — missing binary
+
+If the MCP host surfaces `ENOENT: no such file or directory:
+flowai-workflow`, the precondition is unmet — go back to the
+prerequisite section above and install the binary. The plugin does
+not download or compile the engine itself; it relies on the binary
+being on `$PATH` at handshake time.
 
 ### Plugin CI smoke guarantee
 
@@ -49,21 +75,14 @@ are executed with synthetic host environment variables when bundled.
 Codex hook trust remains a user-reviewed step; CI validates hook payload
 shape and executability, not automatic trust in a real Codex session.
 
-### Migrating from JSR / standalone binary
+### Migrating from the FR-E74 launcher
 
-`@korchasa/flowai-workflow` on JSR and the prebuilt binaries on GitHub
-Releases are being retired in favor of the plugin install above. The
-final JSR release (`0.7.12`) prints a deprecation banner on every
-startup to remind users to migrate; set
-`FLOWAI_SUPPRESS_DEPRECATION=1` to silence it (the plugin launcher
-skills already do this).
-
-To migrate:
-
-```bash
-deno uninstall flowai-workflow            # remove the JSR install
-# then, in your AI IDE, follow the plugin install instructions above
-```
+Earlier plugin builds shipped a Deno launcher (`bin/launch.ts`) that
+lazy-compiled the engine on first call. As of FR-E78 the plugin
+treats the `flowai-workflow` engine binary as a precondition: install
+it once on PATH (see the prerequisite above), reinstall the plugin,
+and the `.mcp.json` invokes `flowai-workflow mcp` directly. There is
+no migration shim — the install step above is the migration step.
 
 ### Local plugin dogfood
 
@@ -327,10 +346,12 @@ Standalone (JSR-installed or compiled-binary on `PATH`):
 }
 ```
 
-Claude Code / Codex plugin install needs no manual MCP block. The
-Claude payload ships `.mcp.json` with
-`${CLAUDE_PLUGIN_ROOT}/bin/launch.ts`; the Codex payload ships
-plugin-root `.mcp.json` with `cwd = "."` and `./bin/launch.ts`.
+Claude Code / Codex plugin install needs no manual MCP block. Both
+payloads ship `.mcp.json` invoking `flowai-workflow mcp` directly
+(FR-E78); the Claude manifest pins `cwd` to `${CLAUDE_PROJECT_DIR}`,
+the Codex manifest inherits the session `cwd`. The engine resolves
+the active workflow from `<cwd>/.flowai-workflow/` (single or
+`github-inbox` default) or from the `FLOWAI_WORKFLOW` env override.
 
 ## Configuration
 

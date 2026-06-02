@@ -133,6 +133,12 @@ export function classifyPayloadFile(
   // Tests never ship in the payload.
   if (relPath.endsWith("_test.ts")) return null;
 
+  // FR-E78: the engine binary is a plugin precondition (`flowai-workflow`
+  // on PATH). The launcher (`plugin-src/shared/bin/launch.ts`) and the
+  // engine TS tree (`engine/cli.ts`, etc.) that backed FR-E74's lazy
+  // compile are no longer copied into the payload.
+  if (relPath === "plugin-src/shared/bin/launch.ts") return null;
+
   // Codex plugin manifests expose only `skills`/`mcpServers`/`apps` — there
   // is no `agents` component pointer (FR-E76). The shared agents are inert on
   // Codex; the orchestrator/supervisor operational logic ships there as
@@ -170,23 +176,9 @@ export function classifyPayloadFile(
     if (relPath.endsWith(".template.json")) return null;
     return join(host, "plugins/flowai-workflow", relPath);
   }
-  // Engine source: root *.ts plus init/*.ts. Tests already filtered above.
-  if (relPath.endsWith(".ts")) {
-    // Skip scripts/, .claude/, documents/, anything not part of the engine
-    // runtime that the plugin doesn't need at runtime.
-    if (relPath.startsWith("scripts/")) return null;
-    if (relPath.startsWith(".claude/")) return null;
-    if (relPath.startsWith("documents/")) return null;
-    if (relPath.startsWith("claude-plugin/")) return null;
-    return join(host, "plugins/flowai-workflow/engine", relPath);
-  }
-  // deno.json travels with the engine so JSR import-map resolves
-  // inside the plugin install.
-  if (relPath === "deno.json") {
-    return join(host, "plugins/flowai-workflow/engine/deno.json");
-  }
-  // Everything else (README at repo root, AGENTS.md, CI configs, docs,
-  // scripts, etc.) is not part of the runtime payload.
+  // Everything else (engine sources, deno.json, README at repo root,
+  // AGENTS.md, CI configs, docs, scripts, etc.) is not part of the
+  // runtime payload — the operator gets the engine via PATH (FR-E78).
   return null;
 }
 

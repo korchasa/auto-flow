@@ -2,9 +2,12 @@
 
 # SRS Engine — MCP Server and Plugin Runtime
 
-Embedded MCP server (FR-E73) and the plugin's self-contained runtime
-that auto-registers it (FR-E74). Both depend on FR-E70 (plugin payload
-shape) but are kept here to fit within the per-file token budget.
+Embedded MCP server (FR-E73), the plugin's self-contained runtime that
+auto-registers it (FR-E74, superseded by FR-E78), Codex subagent
+delivery as skills (FR-E76), and the engine binary precondition +
+release distribution model (FR-E78). All depend on FR-E70 (plugin
+payload shape) but are kept here to fit within the per-file token
+budget.
 
 
 ### 3.73 FR-E73: Embedded MCP Server Over Engine
@@ -82,83 +85,91 @@ shape) but are kept here to fit within the per-file token budget.
 
 ### 3.74 FR-E74: Plugin Self-Contained Runtime (Lazy Compile + Auto-MCP)
 
-- **Description:** The Claude Code / Codex plugin ships engine
+- **Description:** Historical contract — the plugin shipped engine
   TypeScript sources plus a Deno-runtime launcher
-  (`plugin-src/shared/bin/launch.ts`). On first invocation the launcher
-  compiles `engine/cli.ts` via `deno compile` into the host data dir
-  (`CLAUDE_PLUGIN_DATA`, `FLOWAI_PLUGIN_DATA`, `CODEX_HOME`, or `HOME`
-  fallback; atomic via `Deno.rename` from a `.tmp.<pid>` sibling) and
-  spawns the cached binary with forwarded stdio + SIGINT/SIGTERM.
-  Subsequent invocations stat-check the cached binary and skip compile.
-  Plugin payloads also contain host-specific MCP config:
-  Claude `plugins/flowai-workflow/.mcp.json` invokes
-  `${CLAUDE_PLUGIN_ROOT}/bin/launch.ts`; Codex
-  `plugins/flowai-workflow/.mcp.json` invokes `./bin/launch.ts` with
-  `cwd = "."` so the stdio server starts from the plugin root. Both
-  register the `flowai-workflow` MCP server for the embedded MCP
-  surface (FR-E73 seven tools). The host needs Deno on PATH (the same
-  dependency the rest of the engine already requires) — no separate
-  POSIX-shell or Python tooling. Launcher
-  resolves the active workflow at spawn time via `$FLOWAI_WORKFLOW` →
-  `$CLAUDE_PROJECT_DIR/.flowai-workflow/<single-or-default>` →
-  `--no-workflow` (`cli.ts mcp --no-workflow` starts the server in
-  no-workflow mode where every tool handler returns a structured
-  missing-workflow diagnostic so the MCP handshake still completes
-  and Claude Code surfaces the actionable "run /flowai-workflow:init"
-  message via the standard tool-error path rather than an opaque
-  spawn failure).
-- **Tasks:** [plugin-self-contained-runtime](../tasks/2026/05/plugin-self-contained-runtime.md), [ts-launcher](../tasks/2026/05/ts-launcher.md), [plugin-ci-mcp-hooks-smoke](../tasks/2026/05/plugin-ci-mcp-hooks-smoke.md)
-- **Motivation:** Closes the "everything in the plugin" gap left by
-  FR-E70 (sources only) and FR-E73 (no auto-registration). The user
-  installs the plugin once and the IDE wires both CLI invocations
-  (`/flowai-workflow:run` skill etc.) and the MCP server
-  automatically. No separate `deno install`, no GitHub-Release
-  binary download, no hand-edited `~/.codex/config.toml`.
+  (`plugin-src/shared/bin/launch.ts`) that lazily compiled
+  `engine/cli.ts` into a host-data-dir cache and spawned the binary
+  with forwarded stdio + signals. Superseded by FR-E78: the plugin's
+  `.mcp.json` now invokes `flowai-workflow mcp` directly and the
+  operator installs the engine binary once on PATH (no launcher, no
+  bundled engine TS, no per-host cache).
+- **Tasks:** [plugin-self-contained-runtime](../tasks/2026/05/plugin-self-contained-runtime.md), [ts-launcher](../tasks/2026/05/ts-launcher.md), [plugin-ci-mcp-hooks-smoke](../tasks/2026/05/plugin-ci-mcp-hooks-smoke.md), [plugin-binary-fallback](../tasks/2026/06/plugin-binary-fallback.md)
+- **Status:** superseded by FR-E78
+- **Motivation:** Closed the "everything in the plugin" gap left by
+  FR-E70 (sources only) and FR-E73 (no auto-registration). Retired
+  because the precondition model (engine on PATH) makes the launcher
+  redundant — every plugin user installs `flowai-workflow` anyway.
+- **Supersedes:** none
+- **Acceptance criteria:** withdrawn; see FR-E78 for the current
+  plugin invocation contract.
+
+
+
+### 3.78 FR-E78: Plugin Precondition + Release Binary Distribution
+
+- **Description:** The `flowai-workflow` engine binary is a
+  documented precondition of the Claude Code / Codex plugin. The
+  plugin's `.mcp.json` invokes `flowai-workflow mcp` directly (no
+  launcher, no Deno-specific argv, no `${CLAUDE_PLUGIN_ROOT}`
+  interpolation). When invoked without a positional argument
+  (the plugin's call shape), `cli.ts mcp` resolves the active
+  workflow via `resolveActiveWorkflow`: `$FLOWAI_WORKFLOW` →
+  exactly-one or `github-inbox` default under
+  `<cwd>/.flowai-workflow/` → no-workflow mode (the server registers
+  FR-E73 tools and returns a structured missing-workflow diagnostic
+  on every call so the MCP handshake still completes). The engine
+  itself reads no host-specific env vars; the project-root signal
+  comes from `cwd`, which the plugin's `.mcp.json` pins per host
+  (`"cwd": "${CLAUDE_PROJECT_DIR}"` for Claude; Codex inherits the
+  session cwd by default — no `cwd` field needed). CI publishes pre-compiled engine binaries for
+  five targets (Linux x86_64, Linux arm64, macOS x86_64, macOS arm64,
+  Windows x86_64; `scripts/targets.json`) as GitHub release assets
+  with `.sha256` sidecars; the existing `attach-binaries` job's
+  `gh release create … dist/*` glob picks both files up atomically.
+  The plugin payload no longer bundles `bin/launch.ts` or the engine
+  TS tree (`scripts/build-plugin-payload.ts:classifyPayloadFile`
+  returns `null` for both).
+
+  **Failure mode** — if `flowai-workflow` is not on PATH, the MCP
+  host surfaces the OS spawn error verbatim and the README install
+  section explains the precondition. No retry, no inline download,
+  no migration shim.
+
+  **Windows scope** — FR-E78 guarantees only that `flowai-workflow
+  mcp` starts and answers `initialize` + `tools/list` on Windows.
+  Workflows that use `before`/`after` shell hooks or HITL
+  `ask_script`/`check_script` still depend on POSIX `sh`
+  (`agent.ts`, `hitl.ts`) and are out of scope (separate FR track).
+- **Tasks:** [plugin-binary-fallback](../tasks/2026/06/plugin-binary-fallback.md)
+- **Motivation:** The FR-E74 launcher solved a non-problem — every
+  plugin user already has `flowai-workflow` installed. Shipping the
+  launcher + engine TS bloated the payload, added a cold-start
+  compile step, and forced an extra Deno dependency on hosts that
+  could install the binary directly. Treating the binary as a
+  precondition (like `npx`/`uvx` MCP servers do) matches industry
+  norms and shrinks the payload substantially.
+- **Dep:** FR-E70, FR-E72, FR-E73
+- **Supersedes:** FR-E74
 - **Acceptance criteria:**
-  - **Tests:** `scripts/launch_test.ts`,
-    `scripts/build-plugin-payload_test.ts`, `mcp-server_test.ts`,
-    `cli_test.ts` (FR-E74; regression-locked).
-  - [x] Launcher caches the compiled binary at
-    `${CLAUDE_PLUGIN_DATA}/bin/flowai-workflow-<version>`; first call
-    invokes `deno compile`, second call skips it. Evidence:
-    `scripts/launch_test.ts::FR-E74 launcher compiles on first call and caches by version`.
-  - [x] Plugin payload includes the launcher `bin/launch.ts`.
-    Evidence:
-    `scripts/build-plugin-payload_test.ts::FR-E74 payload includes launcher`.
-  - [x] Plugin payload includes host-specific MCP config declaring
-    `command = "deno"`: Claude uses
-    `${CLAUDE_PLUGIN_ROOT}/bin/launch.ts`; Codex uses plugin-root
-    `.mcp.json` with `cwd = "."` and `./bin/launch.ts`, and contains
-    no `CLAUDE_PLUGIN_ROOT` reference.
-    Evidence:
-    `scripts/build-plugin-payload_test.ts::FR-E74 claude payload includes Claude MCP wiring`,
-    `scripts/build-plugin-payload_test.ts::FR-E74 codex payload includes Codex MCP wiring without Claude env`.
-  - [x] Launcher forwards SIGTERM/SIGINT to the spawned engine
-    binary (installed before any `await` to close the cold-start
-    race). Evidence:
-    `scripts/launch_test.ts::FR-E74 launcher forwards SIGTERM to child binary`.
-  - [x] `cli.ts mcp --no-workflow` dispatches the MCP server in
-    no-workflow mode; the server registers all seven tool names but
-    every handler returns a structured missing-workflow diagnostic
-    referencing `init`. Evidence:
-    `mcp-server_test.ts::FR-E74 server starts in no-workflow mode and surfaces missing-workflow error on tool call`.
-  - [x] CI install acceptance executes the exact MCP command declared by the
-    installed Codex cache's `.mcp.json`, sends MCP `initialize` and
-    `tools/list`, and verifies the `flowai-workflow` server plus the
-    expected FR-E73 tool names. Evidence:
-    `scripts/plugin-install-acceptance_test.ts::install acceptance — installed MCP config completes initialize and tools list`;
-    `scripts/plugin-install-acceptance_test.ts::install acceptance — codex openrouter uses provider config without login`.
-  - [x] CI install acceptance executes the exact MCP command declared by the
-    installed Claude plugin root's `.mcp.json`, sends MCP `initialize`
-    and `tools/list`, and verifies the `flowai-workflow` server plus
-    the expected FR-E73 tool names. Evidence:
-    `scripts/plugin-install-acceptance_test.ts::install acceptance — installed MCP config completes initialize and tools list`;
-    `scripts/plugin-install-acceptance_test.ts::install acceptance — claude installs plugin and invokes get_workflow`.
-  - [ ] Manual acceptance (manual — korchasa): in a fresh Claude Code
-    session with the plugin installed via `deno task
-    sync-plugins-local`, `/mcp` lists `flowai-workflow` with the
-    seven tools; the first call compiles the binary into
-    `${CLAUDE_PLUGIN_DATA}/bin/` and subsequent calls run instantly.
+  - **Tests:** `scripts/build-plugin-payload_test.ts`,
+    `scripts/compile_test.ts`, `scripts/ci_yaml_test.ts`,
+    `scripts/plugin-install-acceptance_test.ts`, `cli_test.ts`
+    (FR-E78; regression-locked).
+  - [ ] Manual acceptance (manual — korchasa): in a fresh Claude
+    Code session with the plugin installed via `deno task
+    sync-plugins-local` and `flowai-workflow` on PATH, `/mcp` lists
+    `flowai-workflow` with the seven FR-E73 tools and the first call
+    returns the expected JSON payload.
+  - [ ] Manual acceptance (manual — korchasa): a fresh Codex session
+    with the plugin installed and `flowai-workflow` on PATH spawns
+    the MCP server, lists tools, and runs `get_workflow` without
+    error.
+  - [ ] Release artefact verification (manual — korchasa): the
+    GitHub release for the FR-E78-shipping tag contains
+    `flowai-workflow-linux-x86_64`, `…-linux-arm64`,
+    `…-darwin-x86_64`, `…-darwin-arm64`, `…-windows-x86_64.exe`,
+    each accompanied by a `.sha256` sidecar that `sha256sum -c`
+    accepts.
 
 
 
@@ -200,11 +211,14 @@ shape) but are kept here to fit within the per-file token budget.
   operational agents were inert (no `agents` manifest pointer), so the
   "no native subagent dispatch → stop" guard fired even though Codex has
   native `worker` subagents.
-- **Dep:** FR-E70, FR-E74
+- **Dep:** FR-E70, FR-E78
 - **Acceptance criteria:**
   - **Tests:** `scripts/build-plugin-payload_test.ts` (FR-E76;
     regression-locked).
-  - [ ] Manual Codex smoke (manual — korchasa): plugin installed via
-    `deno task sync-plugins-local`; in a Codex session `$orchestrate` spawns a
-    `worker`, the worker loads the `orchestrator` skill, and the loop reaches
-    a `SUPERVISOR_DELEGATION` / `SUPERVISOR_REPORT` round.
+  - [x] Manual Codex smoke (manual — korchasa): plugin installed via
+    `deno task sync-plugins-local`; in a Codex session `$orchestrate`
+    spawns a `worker`, the worker loads the `orchestrator` skill, and
+    the loop reaches a `SUPERVISOR_DELEGATION` / `SUPERVISOR_REPORT`
+    round. Evidence: Description above — "Verified live against
+    `codex-cli 0.135.0`: a Codex worker auto-discovers and loads a
+    skill by name in its isolated thread".

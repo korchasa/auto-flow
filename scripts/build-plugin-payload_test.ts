@@ -31,10 +31,6 @@ Deno.test("FR-E70 substituteMarketplaceName rewrites top-level name only", () =>
 Deno.test("FR-E70 classifyPayloadFile routes shared runtime into host plugin roots", () => {
   for (const host of ["claude", "codex"] as HostKind[]) {
     assertEquals(
-      classifyPayloadFile(host, "plugin-src/shared/bin/launch.ts"),
-      join(host, "plugins/flowai-workflow/bin/launch.ts"),
-    );
-    assertEquals(
       classifyPayloadFile(host, "plugin-src/shared/skills/run/SKILL.md"),
       join(host, "plugins/flowai-workflow/skills/run/SKILL.md"),
     );
@@ -42,6 +38,22 @@ Deno.test("FR-E70 classifyPayloadFile routes shared runtime into host plugin roo
       classifyPayloadFile(host, "plugin-src/shared/README.md"),
       join(host, "plugins/flowai-workflow/README.md"),
     );
+  }
+});
+
+Deno.test("FR-E78 payload excludes launch.ts and engine ts sources", () => {
+  for (const host of ["claude", "codex"] as HostKind[]) {
+    // FR-E74 launcher is superseded by FR-E78 — the precondition model means
+    // the engine binary is already on PATH, so the plugin payload no longer
+    // ships either the launcher or the engine TS tree.
+    assertEquals(
+      classifyPayloadFile(host, "plugin-src/shared/bin/launch.ts"),
+      null,
+    );
+    assertEquals(classifyPayloadFile(host, "cli.ts"), null);
+    assertEquals(classifyPayloadFile(host, "engine.ts"), null);
+    assertEquals(classifyPayloadFile(host, "init/mod.ts"), null);
+    assertEquals(classifyPayloadFile(host, "deno.json"), null);
   }
 });
 
@@ -126,17 +138,9 @@ Deno.test("FR-E70 classifyPayloadFile routes host-specific wiring only to that h
 
 Deno.test("FR-E70 classifyPayloadFile routes engine and workflows under each host", () => {
   for (const host of ["claude", "codex"] as HostKind[]) {
-    assertEquals(
-      classifyPayloadFile(host, "cli.ts"),
-      join(host, "plugins/flowai-workflow/engine/cli.ts"),
-    );
     assertEquals(classifyPayloadFile(host, "cli_test.ts"), null);
     assertEquals(classifyPayloadFile(host, "scripts/check.ts"), null);
     assertEquals(classifyPayloadFile(host, "documents/index.md"), null);
-    assertEquals(
-      classifyPayloadFile(host, "deno.json"),
-      join(host, "plugins/flowai-workflow/engine/deno.json"),
-    );
     assertEquals(
       classifyPayloadFile(host, ".flowai-workflow/github-inbox/workflow.yaml"),
       join(
@@ -240,9 +244,9 @@ async function tempEngine(): Promise<string> {
     JSON.stringify({
       mcpServers: {
         "flowai-workflow": {
-          command: "deno",
-          args: ["run", "-A", "${CLAUDE_PLUGIN_ROOT}/bin/launch.ts", "mcp"],
-          env: { FLOWAI_SUPPRESS_DEPRECATION: "1" },
+          command: "flowai-workflow",
+          args: ["mcp"],
+          cwd: "${CLAUDE_PROJECT_DIR}",
         },
       },
     }),
@@ -282,10 +286,8 @@ async function tempEngine(): Promise<string> {
     join(dir, "plugin-src/codex/plugins/flowai-workflow/.mcp.json"),
     JSON.stringify({
       "flowai-workflow": {
-        command: "deno",
-        args: ["run", "-A", "./bin/launch.ts", "mcp"],
-        cwd: ".",
-        env: { FLOWAI_SUPPRESS_DEPRECATION: "1" },
+        command: "flowai-workflow",
+        args: ["mcp"],
       },
     }),
   );
@@ -379,9 +381,23 @@ Deno.test("FR-E70 builds separate Claude and Codex plugin payloads from shared s
 
     for (const host of ["claude", "codex"] as HostKind[]) {
       const root = join(outDir, host, "plugins/flowai-workflow");
-      assertStringIncludes(
-        await Deno.readTextFile(join(root, "bin/launch.ts")),
-        "launch",
+      // FR-E78: launch.ts and engine/ are dropped from the payload —
+      // the precondition model assumes `flowai-workflow` is on PATH.
+      await Deno.stat(join(root, "bin/launch.ts")).then(
+        () => {
+          throw new Error("FR-E78 payload must not ship bin/launch.ts");
+        },
+        (err) => {
+          if (!(err instanceof Deno.errors.NotFound)) throw err;
+        },
+      );
+      await Deno.stat(join(root, "engine")).then(
+        () => {
+          throw new Error("FR-E78 payload must not ship engine/ TS tree");
+        },
+        (err) => {
+          if (!(err instanceof Deno.errors.NotFound)) throw err;
+        },
       );
       assertStringIncludes(
         await Deno.readTextFile(join(root, "skills/run/SKILL.md")),
@@ -417,10 +433,6 @@ Deno.test("FR-E70 builds separate Claude and Codex plugin payloads from shared s
         );
       }
       assertStringIncludes(
-        await Deno.readTextFile(join(root, "engine/cli.ts")),
-        "cli",
-      );
-      assertStringIncludes(
         await Deno.readTextFile(
           join(root, ".flowai-workflow/wf1/workflow.yaml"),
         ),
@@ -441,14 +453,6 @@ Deno.test("FR-E70 builds separate Claude and Codex plugin payloads from shared s
     assertEquals(claudeMarket.plugins[0].version, "9.9.9");
     assertEquals(codexMarket.plugins[0].version, "9.9.9");
 
-    const engineDeno = JSON.parse(
-      await Deno.readTextFile(
-        join(outDir, "codex/plugins/flowai-workflow/engine/deno.json"),
-      ),
-    );
-    assertEquals(engineDeno.publish, undefined);
-    assertEquals(engineDeno.version, undefined);
-    assertEquals(engineDeno.tasks.compile, undefined);
     assertEquals(result.manifestsUpdated.length, 4);
   } finally {
     await Deno.remove(engineRoot, { recursive: true });
@@ -456,7 +460,7 @@ Deno.test("FR-E70 builds separate Claude and Codex plugin payloads from shared s
   }
 });
 
-Deno.test("FR-E74 claude payload includes Claude MCP wiring", async () => {
+Deno.test("FR-E78 plugin manifests invoke flowai-workflow mcp directly", async () => {
   const engineRoot = await tempEngine();
   const outDir = await Deno.makeTempDir({ prefix: "build-payload-out-" });
   try {
@@ -466,57 +470,36 @@ Deno.test("FR-E74 claude payload includes Claude MCP wiring", async () => {
       version: "0.1.0",
       enumerateFiles: () => Promise.resolve(syntheticFiles),
     });
-    const mcpConfig = JSON.parse(
+
+    const claudeMcp = JSON.parse(
       await Deno.readTextFile(
         join(outDir, "claude/plugins/flowai-workflow/.mcp.json"),
       ),
     );
-    assertEquals(mcpConfig.mcpServers["flowai-workflow"].args, [
-      "run",
-      "-A",
-      "${CLAUDE_PLUGIN_ROOT}/bin/launch.ts",
-      "mcp",
-    ]);
+    const claudeServer = claudeMcp.mcpServers["flowai-workflow"];
+    assertEquals(claudeServer.command, "flowai-workflow");
+    assertEquals(claudeServer.args, ["mcp"]);
+    // No Deno-specific argv pollution.
     assertEquals(
-      mcpConfig.mcpServers["flowai-workflow"].env.FLOWAI_SUPPRESS_DEPRECATION,
-      "1",
+      JSON.stringify(claudeServer).includes("launch.ts"),
+      false,
     );
-  } finally {
-    await Deno.remove(engineRoot, { recursive: true });
-    await Deno.remove(outDir, { recursive: true });
-  }
-});
+    assertEquals(
+      JSON.stringify(claudeServer).includes("CLAUDE_PLUGIN_ROOT"),
+      false,
+    );
 
-Deno.test("FR-E74 codex payload includes Codex MCP wiring without Claude env", async () => {
-  const engineRoot = await tempEngine();
-  const outDir = await Deno.makeTempDir({ prefix: "build-payload-out-" });
-  try {
-    await buildPluginPayload({
-      engineRoot,
-      outDir,
-      version: "0.1.0",
-      enumerateFiles: () => Promise.resolve(syntheticFiles),
-    });
-    const plugin = JSON.parse(
-      await Deno.readTextFile(
-        join(outDir, "codex/plugins/flowai-workflow/.codex-plugin/plugin.json"),
-      ),
-    );
-    assertEquals(plugin.mcpServers, "./.mcp.json");
-    const mcpConfig = JSON.parse(
+    const codexMcp = JSON.parse(
       await Deno.readTextFile(
         join(outDir, "codex/plugins/flowai-workflow/.mcp.json"),
       ),
     );
-    assertEquals(mcpConfig["flowai-workflow"].command, "deno");
-    assertEquals(mcpConfig["flowai-workflow"].args, [
-      "run",
-      "-A",
-      "./bin/launch.ts",
-      "mcp",
-    ]);
-    assertEquals(mcpConfig["flowai-workflow"].cwd, ".");
+    const codexServer = codexMcp["flowai-workflow"];
+    assertEquals(codexServer.command, "flowai-workflow");
+    assertEquals(codexServer.args, ["mcp"]);
+    assertEquals(JSON.stringify(codexServer).includes("launch.ts"), false);
 
+    // Codex payload must remain free of Claude-specific env references.
     const offenders = await filesContainingText(
       join(outDir, "codex"),
       "CLAUDE_PLUGIN_ROOT",

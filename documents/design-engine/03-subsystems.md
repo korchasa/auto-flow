@@ -221,3 +221,43 @@
 - **Assets:** 4 binaries named `flowai-workflow-<os>-<arch>`.
 
 
+### 3.7 Plugin Precondition + Release Binary Distribution — FR-E78
+
+- **Purpose:** Replace the FR-E74 launcher with a documented engine
+  precondition. The plugin's `.mcp.json` invokes `flowai-workflow mcp`
+  directly; the operator installs the binary once on PATH (release
+  asset with `.sha256` sidecar, or `deno install -A
+  jsr:@korchasa/flowai-workflow`).
+- **Dispatch flow:**
+  - Host MCP client reads
+    `<plugin-root>/.mcp.json` → spawns `flowai-workflow mcp`.
+  - `cli.ts mcp` (no positional) calls
+    `resolveActiveWorkflow({ env: Deno.env.toObject() })`:
+    `$FLOWAI_WORKFLOW` → exactly-one or `github-inbox` default under
+    `<cwd>/.flowai-workflow/` → `null`. The engine reads no
+    host-specific env (`CLAUDE_PROJECT_DIR`, `CLAUDE_PLUGIN_ROOT`,
+    etc.) — the plugin's `.mcp.json` pins `cwd` per host so the
+    project-root signal stays in one place.
+  - On `null`, the server is invoked in no-workflow mode; tool calls
+    return a structured missing-workflow diagnostic so the MCP
+    handshake still completes.
+- **Binary distribution channel:** `scripts/targets.json` lists five
+  triples (adds `x86_64-pc-windows-msvc` →
+  `flowai-workflow-windows-x86_64.exe`); the CI `build` matrix
+  compiles each target, generates a `<artifact>.sha256` sidecar via
+  `sha256sum`, and uploads both via a multi-path `actions/upload-artifact`
+  step. The existing `publish-github` job's `gh release create … dist/*`
+  glob picks both files up atomically.
+- **Payload classification:** `scripts/build-plugin-payload.ts::classifyPayloadFile`
+  returns `null` for `plugin-src/shared/bin/launch.ts` and for every
+  engine-source file (root `*.ts`, `deno.json`). The payload shrinks
+  to skills + agents + bundled `.flowai-workflow/<name>/` + host
+  manifests and `.mcp.json`.
+- **Windows scope caveat:** FR-E78 guarantees only that
+  `flowai-workflow mcp` starts and answers `initialize` +
+  `tools/list` on Windows. Workflows that use `before`/`after` shell
+  hooks or HITL `ask_script`/`check_script` still depend on POSIX
+  `sh` and are out of scope (separate FR track).
+- **Supersedes:** FR-E74 (launcher + lazy compile retired).
+
+

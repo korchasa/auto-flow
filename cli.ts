@@ -4,18 +4,25 @@
  * CLI entry point for the workflow engine.
  * Parses arguments and delegates to the appropriate subcommand:
  *
- * - `flowai-workflow run <workflow> [options]` → DAG workflow engine
+ * - `flowai-workflow run [<workflow>] [options]` → DAG workflow engine
  * - `flowai-workflow init [options]` → project scaffolder
- * - `flowai-workflow answer <workflow> <run-id> --node <id> "<text>"` →
- *   deliver a local HITL reply (FR-E75)
- * - `flowai-workflow mcp <workflow>` → embedded MCP server (FR-E73)
+ * - `flowai-workflow answer [--workflow <path>] <run-id> --node <id> "<text>"`
+ *   → deliver a local HITL reply (FR-E75)
+ * - `flowai-workflow mcp [<workflow>]` → embedded MCP server (FR-E73)
  *
- * Run usage (FR-E53):
- *   flowai-workflow run <workflow> [options]
+ * Every subcommand that accepts an optional workflow positional shares
+ * the same resolution rule (FR-E78): explicit positional → `FLOWAI_WORKFLOW`
+ * env → `<cwd>/.flowai-workflow/<single-or-default>`. `mcp` additionally
+ * falls through to no-workflow mode so the plugin handshake always
+ * completes.
+ *
+ * Run usage (FR-E53 + FR-E78):
+ *   flowai-workflow run [<workflow>] [options]
  *
  * Positional:
- *   <workflow>            Path to workflow folder containing workflow.yaml.
- *                         Mandatory; no autodetection.
+ *   [<workflow>]          Path to workflow folder containing workflow.yaml.
+ *                         Optional — falls back to the FR-E78 resolver
+ *                         (FLOWAI_WORKFLOW or `<cwd>/.flowai-workflow/`).
  *
  * Options:
  *   --prompt <text>       Additional context for PM agent (sets args.prompt)
@@ -32,7 +39,7 @@
  *   --version / -V        Print version and exit
  */
 
-import { dirname } from "@std/path";
+import { dirname, join } from "@std/path";
 import type { EngineOptions, Verbosity } from "./types.ts";
 import { Engine } from "./engine.ts";
 import { deliverHumanAnswer, resumeRun } from "./commands.ts";
@@ -107,10 +114,62 @@ export function normalizeWorkflowDir(arg: string): string {
   return arg.replace(/\/+$/, "");
 }
 
+/** Resolve the active workflow folder from env and cwd (FR-E78).
+ *
+ * Shared across every subcommand that accepts an optional workflow
+ * positional (`run`, `answer`, `mcp`). Pure rule, no per-command
+ * special cases:
+ *
+ *  1. `env.FLOWAI_WORKFLOW` — explicit user override, returned as-is.
+ *  2. `<cwd>/.flowai-workflow/<dir>` with `workflow.yaml`, when
+ *     exactly one such subdir exists.
+ *  3. `<cwd>/.flowai-workflow/github-inbox/` if present
+ *     (ambiguity fallback).
+ *  4. `null` — caller decides what "no active workflow" means (error
+ *     out for `run` / `answer`; no-workflow mode for `mcp` so the
+ *     MCP handshake still completes with a structured diagnostic).
+ *
+ * The engine is host-agnostic: the plugin's `.mcp.json` is responsible
+ * for spawning the server with `cwd = <project root>` (Codex inherits
+ * it for free; Claude Code uses `"cwd": "${CLAUDE_PROJECT_DIR}"`).
+ * `Deno.cwd()` is therefore the only host-touched signal, and `cwd`
+ * is only overridable for tests.
+ */
+export async function resolveActiveWorkflow(opts: {
+  env: Record<string, string | undefined>;
+  cwd?: string;
+}): Promise<string | null> {
+  if (opts.env.FLOWAI_WORKFLOW) return opts.env.FLOWAI_WORKFLOW;
+  const projectRoot = opts.cwd ?? Deno.cwd();
+  const bundleDir = join(projectRoot, ".flowai-workflow");
+  const candidates: string[] = [];
+  try {
+    for await (const entry of Deno.readDir(bundleDir)) {
+      if (!entry.isDirectory) continue;
+      const child = join(bundleDir, entry.name);
+      try {
+        const stat = await Deno.stat(join(child, "workflow.yaml"));
+        if (stat.isFile) candidates.push(child);
+      } catch (e) {
+        if (!(e instanceof Deno.errors.NotFound)) throw e;
+      }
+    }
+  } catch (e) {
+    if (e instanceof Deno.errors.NotFound) return null;
+    throw e;
+  }
+  if (candidates.length === 1) return candidates[0];
+  const gh = join(bundleDir, "github-inbox");
+  if (candidates.includes(gh)) return gh;
+  return null;
+}
+
 /** Parsed positional/flag arguments for the `answer` subcommand (FR-E75). */
 export interface AnswerArgs {
-  /** Workflow folder (trailing slashes stripped). */
-  workflowDir: string;
+  /** Workflow folder (trailing slashes stripped). `undefined` when the
+   * user did not pass `--workflow <path>`; the caller falls back to the
+   * shared `resolveActiveWorkflow` resolver (FR-E78). */
+  workflowDir: string | undefined;
   /** Target run id. */
   runId: string;
   /** Target waiting node id (from `--node`/`--node=`). */
@@ -120,14 +179,15 @@ export interface AnswerArgs {
 }
 
 /**
- * Parse `answer <workflow> <run-id> --node <id> "<text>"` (FR-E75).
- * Positionals are, in order: workflow folder, run id, then the reply text
- * (remaining positionals are joined so unquoted multi-word replies still
- * work). `--node <id>` and `--node=<id>` are both accepted. Fail-fast with
- * a clear message when any required piece is missing — no silent defaults.
+ * Parse `answer [--workflow <path>] <run-id> --node <id> "<text>"` (FR-E75).
+ * Workflow is optional: when `--workflow <path>` is omitted the caller
+ * falls back to `resolveActiveWorkflow` (FR-E78). Remaining positionals
+ * are joined as text so unquoted multi-word replies still work.
+ * `--node <id>` and `--node=<id>` are both accepted.
  */
 export function parseAnswerArgs(args: string[]): AnswerArgs {
   let nodeId: string | undefined;
+  let workflow: string | undefined;
   const positionals: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -139,20 +199,23 @@ export function parseAnswerArgs(args: string[]): AnswerArgs {
       nodeId = a.slice("--node=".length);
       continue;
     }
+    if (a === "--workflow") {
+      workflow = args[++i];
+      continue;
+    }
+    if (a.startsWith("--workflow=")) {
+      workflow = a.slice("--workflow=".length);
+      continue;
+    }
     positionals.push(a);
   }
-  const [workflow, runId, ...rest] = positionals;
+  const [runId, ...rest] = positionals;
   const text = rest.join(" ");
-  if (!workflow) {
-    throw new Error(
-      "answer: missing <workflow>. " +
-        'Usage: flowai-workflow answer <workflow> <run-id> --node <id> "<text>"',
-    );
-  }
   if (!runId) {
     throw new Error(
       "answer: missing <run-id>. " +
-        'Usage: flowai-workflow answer <workflow> <run-id> --node <id> "<text>"',
+        "Usage: flowai-workflow answer [--workflow <path>] <run-id> " +
+        '--node <id> "<text>"',
     );
   }
   if (!nodeId) {
@@ -164,7 +227,7 @@ export function parseAnswerArgs(args: string[]): AnswerArgs {
     throw new Error("answer: missing answer text.");
   }
   return {
-    workflowDir: normalizeWorkflowDir(workflow),
+    workflowDir: workflow ? normalizeWorkflowDir(workflow) : undefined,
     runId,
     nodeId,
     text,
@@ -306,11 +369,11 @@ function printUsage(): void {
 Workflow Engine — Configurable multi-agent workflow runner
 
 Usage:
-  flowai-workflow run <workflow> [options]  Execute DAG workflow
-  flowai-workflow init [options]            Scaffold .flowai-workflow/ directory
-  flowai-workflow answer <workflow> <run-id> --node <id> "<text>"
-                                            Deliver a local HITL reply (FR-E75)
-  flowai-workflow mcp <workflow>            Start embedded MCP server (FR-E73)
+  flowai-workflow run [<workflow>] [options] Execute DAG workflow
+  flowai-workflow init [options]             Scaffold .flowai-workflow/ directory
+  flowai-workflow answer [--workflow <path>] <run-id> --node <id> "<text>"
+                                             Deliver a local HITL reply (FR-E75)
+  flowai-workflow mcp [<workflow>]           Start embedded MCP server (FR-E73)
 
 Subcommands:
   run                   Execute DAG workflow engine
@@ -319,10 +382,21 @@ Subcommands:
                         local inbox file (transport-independent). Prints
                         {inboxPath, live}; when live is false, resume the run to
                         consume the queued answer.
-  mcp <workflow>        Start embedded MCP server exposing 8 engine-control tools over stdio
+  mcp                   Start embedded MCP server exposing 8 engine-control tools over stdio.
+
+Workflow resolution (run / answer / mcp; FR-E78):
+  Every subcommand that accepts a workflow shares one rule when the
+  positional / --workflow is omitted:
+    1. $FLOWAI_WORKFLOW env override.
+    2. Single subdir of <cwd>/.flowai-workflow/ containing workflow.yaml.
+    3. <cwd>/.flowai-workflow/github-inbox/ if present (ambiguity fallback).
+  The mcp subcommand additionally falls through to no-workflow mode so
+  the MCP handshake completes; run / answer error out instead.
 
 Run positional:
-  <workflow>            Path to workflow folder containing workflow.yaml (mandatory).
+  [<workflow>]          Path to workflow folder containing workflow.yaml
+                        (optional; falls back to the workflow-resolution
+                        rule above).
 
 Run options:
   --prompt <text>       Additional context for PM agent (optional)
@@ -349,7 +423,8 @@ Examples:
   flowai-workflow run .flowai-workflow/github-inbox --prompt "Focus on the login bug"
   flowai-workflow run .flowai-workflow/github-inbox --resume 20260308T143022 -v
   flowai-workflow run .flowai-workflow/github-inbox --dry-run
-  flowai-workflow answer .flowai-workflow/autonomous-sdlc 20260529T094727 --node specification "monetization"
+  flowai-workflow answer 20260529T094727 --node specification "monetization"
+  flowai-workflow answer --workflow .flowai-workflow/autonomous-sdlc 20260529T094727 --node specification "monetization"
   flowai-workflow mcp .flowai-workflow/github-inbox
 `);
 }
@@ -368,12 +443,21 @@ async function runEngine(args: string[]): Promise<never> {
     const { skipUpdateCheck, cycles, remaining } = extractCliFlags(args);
     const options = parseArgs(remaining);
 
-    // FR-E53: workflow path is mandatory and positional.
+    // FR-E78: when the positional is omitted, fall back to the shared
+    // active-workflow resolver (FLOWAI_WORKFLOW → single or
+    // `github-inbox` default under `<cwd>/.flowai-workflow/`).
     if (!options.config_path) {
-      throw new Error(
-        "Missing workflow argument. " +
-          "Usage: flowai-workflow run <workflow> [options]",
-      );
+      const resolved = await resolveActiveWorkflow({
+        env: Deno.env.toObject(),
+      });
+      if (resolved === null) {
+        throw new Error(
+          "Could not resolve active workflow. Pass it as a positional " +
+            "(`flowai-workflow run <workflow>`), set FLOWAI_WORKFLOW, or " +
+            "place a workflow under `<cwd>/.flowai-workflow/`.",
+        );
+      }
+      options.config_path = `${normalizeWorkflowDir(resolved)}/workflow.yaml`;
     }
 
     // `--cycles N` repeats the whole workflow; resuming a specific run
@@ -465,13 +549,28 @@ async function runEngine(args: string[]): Promise<never> {
  */
 async function runAnswer(args: string[]): Promise<never> {
   try {
-    const { workflowDir, runId, nodeId, text } = parseAnswerArgs(args);
+    const parsed = parseAnswerArgs(args);
+    let workflowDir = parsed.workflowDir;
+    if (!workflowDir) {
+      const resolved = await resolveActiveWorkflow({
+        env: Deno.env.toObject(),
+      });
+      if (resolved === null) {
+        throw new Error(
+          "Could not resolve active workflow. Pass it via " +
+            "`--workflow <path>`, set FLOWAI_WORKFLOW, or place a " +
+            "workflow under `<cwd>/.flowai-workflow/`.",
+        );
+      }
+      workflowDir = normalizeWorkflowDir(resolved);
+    }
     const result = await deliverHumanAnswer({
       workflowDir,
-      runId,
-      nodeId,
-      text,
+      runId: parsed.runId,
+      nodeId: parsed.nodeId,
+      text: parsed.text,
     });
+    const { runId } = parsed;
     console.log(JSON.stringify(result, null, 2));
     if (!result.live) {
       console.error(
@@ -561,7 +660,7 @@ if (import.meta.main) {
     Deno.exit(exitCode);
   }
 
-  // Subcommand: `mcp <workflow>` or `mcp --no-workflow` (FR-E73, FR-E74).
+  // Subcommand: `mcp [<workflow>] | --no-workflow` (FR-E73, FR-E78).
   // `runMcpServer` is imported statically: a dynamic `await import()` here
   // deadlocks in Deno 2.8 when the static graph (Engine → ai-ide-cli) already
   // pulled @modelcontextprotocol/sdk + zod, leaving the MCP handshake stuck
@@ -569,23 +668,31 @@ if (import.meta.main) {
   if (subcommand === "mcp") {
     const rest = Deno.args.slice(1);
     if (rest.includes("--no-workflow")) {
-      // Plugin launcher passes this when no .flowai-workflow/<name>/
-      // folder is resolvable in the current project (FR-E74). The
-      // server still completes the MCP handshake; tool calls return a
-      // structured missing-workflow error.
+      // Caller explicitly opted out of workflow resolution (FR-E78
+      // tests, dev smoke). The server still completes the MCP
+      // handshake; tool calls return a structured missing-workflow
+      // error.
       await runMcpServer(undefined, { noWorkflow: true });
       Deno.exit(0);
     }
     const positional = rest[0];
-    if (!positional) {
-      console.error(
-        "Error: missing workflow argument. " +
-          "Usage: flowai-workflow mcp <workflow> | --no-workflow",
-      );
-      Deno.exit(1);
+    if (positional) {
+      await runMcpServer(normalizeWorkflowDir(positional));
+      Deno.exit(0);
     }
-    const workflowDir = normalizeWorkflowDir(positional);
-    await runMcpServer(workflowDir);
+    // FR-E78: the plugin manifest invokes `flowai-workflow mcp` bare —
+    // workflow resolution moved from the deleted launcher into the
+    // engine itself. Fall back to the shared resolver; absent any
+    // bundle, start in no-workflow mode so the handshake still
+    // completes and Claude/Codex surface the structured diagnostic.
+    const resolved = await resolveActiveWorkflow({
+      env: Deno.env.toObject(),
+    });
+    if (resolved !== null) {
+      await runMcpServer(normalizeWorkflowDir(resolved));
+    } else {
+      await runMcpServer(undefined, { noWorkflow: true });
+    }
     Deno.exit(0);
   }
 

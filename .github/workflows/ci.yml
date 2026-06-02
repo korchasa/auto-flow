@@ -233,11 +233,20 @@ jobs:
           VERSION: ${{ needs.release.outputs.released == 'true' && needs.release.outputs.tag || 'dev' }}
         run: deno task compile --target ${{ matrix.target }}
 
+      # FR-E78: emit a sha256 sidecar so operators can verify the release
+      # binary before placing it on PATH. The single `dist/*` glob in
+      # publish-github picks both files up; no extra release-attach step.
+      - name: Generate sha256 sidecar
+        if: needs.release.outputs.released == 'true'
+        run: sha256sum "${{ matrix.artifact }}" > "${{ matrix.artifact }}.sha256"
+
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         if: needs.release.outputs.released == 'true'
         with:
           name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.artifact }}
+            ${{ matrix.artifact }}.sha256
 
   # Inline sync of the plugin payload to korchasa/flowai-workflow-plugins.
   # GITHUB_TOKEN-pushed tags don't trigger downstream workflows (recursion

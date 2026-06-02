@@ -85,23 +85,16 @@ async function fixturePayload(): Promise<{
   });
   await writeJson(join(codexRoot, ".mcp.json"), {
     "flowai-workflow": {
-      command: "deno",
-      args: ["run", "-A", "./bin/launch.ts", "mcp"],
-      cwd: ".",
-      env: { FLOWAI_SUPPRESS_DEPRECATION: "1" },
+      command: "flowai-workflow",
+      args: ["mcp"],
     },
   });
   await writeJson(join(claudeRoot, ".mcp.json"), {
     mcpServers: {
       "flowai-workflow": {
-        command: "deno",
-        args: [
-          "run",
-          "-A",
-          "${CLAUDE_PLUGIN_ROOT}/bin/launch.ts",
-          "mcp",
-        ],
-        env: { FLOWAI_SUPPRESS_DEPRECATION: "1" },
+        command: "flowai-workflow",
+        args: ["mcp"],
+        cwd: "${CLAUDE_PROJECT_DIR}",
       },
     },
   });
@@ -219,7 +212,7 @@ Deno.test("install acceptance — installed plugin root discovery rejects ambigu
   );
 });
 
-Deno.test("install acceptance — installed MCP config completes initialize and tools list", async () => {
+Deno.test("FR-E78 installed MCP config invokes flowai-workflow mcp", async () => {
   const roots = await fixturePayload();
   const seen: Array<
     {
@@ -243,10 +236,8 @@ Deno.test("install acceptance — installed MCP config completes initialize and 
     },
   });
   assertEquals(codex.serverName, "flowai-workflow");
-  assertEquals(seen[0].command, "deno");
-  assertEquals(seen[0].args, ["run", "-A", "./bin/launch.ts", "mcp"]);
-  assertEquals(seen[0].cwd, roots.codexRoot);
-  assertEquals(seen[0].env.FLOWAI_SUPPRESS_DEPRECATION, "1");
+  assertEquals(seen[0].command, "flowai-workflow");
+  assertEquals(seen[0].args, ["mcp"]);
   assertEquals(seen[0].env.PLUGIN_ROOT, roots.codexRoot);
 
   await probeInstalledMcp({
@@ -261,13 +252,8 @@ Deno.test("install acceptance — installed MCP config completes initialize and 
       });
     },
   });
-  assertEquals(seen[1].args, [
-    "run",
-    "-A",
-    join(roots.claudeRoot, "bin", "launch.ts"),
-    "mcp",
-  ]);
-  assertEquals(seen[1].cwd, roots.claudeRoot);
+  assertEquals(seen[1].command, "flowai-workflow");
+  assertEquals(seen[1].args, ["mcp"]);
   assertEquals(seen[1].env.CLAUDE_PLUGIN_ROOT, roots.claudeRoot);
 });
 

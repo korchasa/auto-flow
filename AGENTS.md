@@ -102,37 +102,29 @@ example of engine usage.
   `.agents/plugins/marketplace.json`). On every `v*` tag, CI runs
   `scripts/sync-plugins-repo.ts` (FR-E72) which uses
   `scripts/build-plugin-payload.ts` (FR-E70) to assemble the full
-  payload under separate `claude/` and `codex/` roots (engine TS
-  sources under `plugins/flowai-workflow/engine/`, bundled
+  payload under separate `claude/` and `codex/` roots (bundled
   `.flowai-workflow/<name>/` workflows, host-specific manifests and
   MCP config with version pinned to engine `deno.json#version`) and
   pushes it into
   `korchasa/flowai-workflow-plugins` with a matching `vX.Y.Z` tag.
   Idempotent — a byte-equal payload is a no-op. Hand-edits to the
   downstream repo are overwritten by the next sync.
-  **Self-contained runtime (FR-E74).** The payload also ships a
-  Deno/TS launcher `bin/launch.ts` and host-specific MCP config:
-  Claude uses `.mcp.json` with `${CLAUDE_PLUGIN_ROOT}/bin/launch.ts`;
-  Codex uses plugin-root `.mcp.json` with `cwd = "."` and
-  `./bin/launch.ts` per the Codex plugin layout. On first call the
-  launcher compiles `engine/cli.ts` to the host data dir
-  (`CLAUDE_PLUGIN_DATA`, `FLOWAI_PLUGIN_DATA`, `CODEX_HOME`, or
-  `HOME` fallback; atomic tmp→`Deno.rename`) and spawns the cached
-  binary with forwarded stdio + SIGINT/SIGTERM; subsequent calls
-  stat-check the cache and skip compile. Deno is the only host
-  dependency (no POSIX shell, no Python). The
-  launcher resolves the active workflow from `$FLOWAI_WORKFLOW` →
-  `$CLAUDE_PROJECT_DIR/.flowai-workflow/<single-or-default>` →
-  `--no-workflow` flag (server then surfaces a missing-workflow
-  diagnostic through tool-error responses so the handshake still
-  completes). Signal handlers are registered before any `await`
-  to close the cold-start race window.
-  The launcher skills invoke `bin/launch.ts` with
-  `FLOWAI_SUPPRESS_DEPRECATION=1` so plugin-installed users never see
-  the JSR deprecation banner. The
-  banner itself (`cli.ts:maybePrintDeprecationBanner`) fires only for
-  standalone JSR / binary installs (`VERSION !== "dev"` and env var
-  unset).
+  **Engine binary precondition (FR-E78, supersedes FR-E74).** The
+  plugin's `.mcp.json` invokes `flowai-workflow mcp` directly. Neither
+  the launcher (`bin/launch.ts`) nor the engine TS tree ships in the
+  payload anymore — the operator installs `flowai-workflow` once on
+  PATH (release binary with `.sha256` sidecar, or `deno install -A
+  jsr:@korchasa/flowai-workflow`). Workflow resolution happens inside
+  `cli.ts mcp` via `resolveActiveWorkflow`: `$FLOWAI_WORKFLOW` →
+  `<cwd>/.flowai-workflow/<single-or-default>` → no-workflow mode
+  (handshake still completes; tool calls return a structured
+  missing-workflow diagnostic). The engine reads no host-specific env
+  — the plugin's `.mcp.json` pins `cwd` per host (`"cwd":
+  "${CLAUDE_PROJECT_DIR}"` for Claude; Codex inherits the session
+  cwd). The deprecation banner
+  (`cli.ts:maybePrintDeprecationBanner`) fires only for standalone
+  JSR / binary installs (`VERSION !== "dev"` and
+  `FLOWAI_SUPPRESS_DEPRECATION` unset).
 - **Plugin agents/skills layout.** The plugin's shared interactive
   surface lives under `plugin-src/shared/skills/` and
   `plugin-src/shared/agents/`; host wiring lives under

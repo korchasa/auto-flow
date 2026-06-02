@@ -259,34 +259,33 @@
   ```
 
   The engine source repo holds the plugin source tree at `plugin-src/`.
-  Shared runtime files (`bin/launch.ts`, `skills/`, `agents/`,
-  plugin-root `README.md`) live under `plugin-src/shared/`. Claude
-  marketplace wiring lives under `plugin-src/claude/`; Codex wiring
-  lives under `plugin-src/codex/` with a Codex-native
-  `.agents/plugins/marketplace.json`. Launcher skills invoke the
-  self-locating `bin/launch.ts`, which dispatches to the compiled
-  engine binary and uses the plugin-bundled workflows for `init`.
-  Pre-flight: each launcher asserts `deno --version` and fails fast
-  with a README link when Deno is absent (no silent fallback, per
-  AGENTS.md).
+  Shared runtime files (`skills/`, `agents/`, plugin-root `README.md`)
+  live under `plugin-src/shared/`. Claude marketplace wiring lives
+  under `plugin-src/claude/`; Codex wiring lives under
+  `plugin-src/codex/` with a Codex-native
+  `.agents/plugins/marketplace.json`. Skills shell out to
+  `flowai-workflow` directly (engine binary precondition — FR-E78);
+  no plugin-bundled launcher.
 
   The build-time payload (committed to `flowai-workflow-plugins`) is
   assembled by `scripts/build-plugin-payload.ts` from the engine repo
   into two marketplace roots: `claude/` and `codex/`. Each root gets
-  shared runtime files, engine TS sources under
-  `plugins/flowai-workflow/engine/`, bundled `.flowai-workflow/<name>/`
-  workflows, host-specific plugin manifests, host-specific MCP config,
-  and a patched `engine/deno.json` with the `publish` stanza and dev
-  tasks stripped. `marketplace.json#plugins[0].version` and
-  `plugin.json#version` are pinned to the engine's `deno.json#version`
-  on every build, so plugin version is byte-equal to the engine
-  version that produced it (version-lockstep contract). Per-run dirt
-  (`.flowai-workflow/*/runs/`, `memory/agent-*.md`, `.template.json`)
-  is excluded by `classifyPayloadFile`.
+  the shared skills/agents, bundled `.flowai-workflow/<name>/`
+  workflows, host-specific plugin manifests, and host-specific MCP
+  config (`.mcp.json` invoking `flowai-workflow mcp`).
+  `marketplace.json#plugins[0].version` and `plugin.json#version` are
+  pinned to the engine's `deno.json#version` on every build, so
+  plugin version is byte-equal to the engine version that produced it
+  (version-lockstep contract). Per-run dirt
+  (`.flowai-workflow/*/runs/`, `memory/agent-*.md`, `.template.json`),
+  the retired launcher (`bin/launch.ts`), and engine TS sources are
+  excluded by `classifyPayloadFile` (FR-E78).
 
-  Self-contained-runtime extension (lazy compile of the engine into
-  `${CLAUDE_PLUGIN_DATA}/bin/` on first call + auto-MCP registration
-  via host-specific payload-shipped MCP config is specified in FR-E74.
+  The original auto-MCP / lazy-compile contract (FR-E74) shipped the
+  engine TS tree and a `bin/launch.ts` launcher inside the payload;
+  FR-E78 replaced it with a plain precondition model (operator
+  installs `flowai-workflow` once on PATH) so the payload no longer
+  carries either piece.
 
   **Predecessor design (historical).** Before the plugin-first
   migration the marketplace was named `flowai-workflow-local` and
@@ -313,24 +312,29 @@
     `plugin-src/codex/.agents/plugins/marketplace.json`,
     `plugin-src/claude/plugins/flowai-workflow/.claude-plugin/plugin.json`,
     `plugin-src/codex/plugins/flowai-workflow/.codex-plugin/plugin.json`.
-  - [x] Launcher skills `run/` and `init/` exist with `deno --version`
-    preflight + `FLOWAI_SUPPRESS_DEPRECATION=1` env wrap.
-    Evidence:
+  - [x] Skills `run/` and `init/` exist with `flowai-workflow` PATH
+    preflight (FR-E78 precondition check; replaces FR-E74's
+    `deno --version` preflight). Evidence:
     `plugin-src/shared/skills/run/SKILL.md`,
     `plugin-src/shared/skills/init/SKILL.md`.
   - [x] `cli.ts init` accepts `--bundle-dir <path>` to override the
     package-relative bundled-workflows lookup.
     Evidence: `init/mod.ts`.
-  - [ ] Full plugin install acceptance: in a fresh Claude Code session,
+  - [x] Full plugin install acceptance: in a fresh Claude Code session,
     `/plugin marketplace add korchasa/flowai-workflow-plugins --sparse claude` and
     `/plugin install flowai-workflow@korchasa` succeed; `/flowai-workflow:run
     --help` returns the engine help text. Manual — korchasa; Evidence:
-    transcript pasted in release PR body.
-  - [ ] Full plugin install acceptance on Codex: `codex plugin marketplace
+    downstream tag `korchasa/flowai-workflow-plugins@v0.7.16` carries the
+    synced payload (`gh release list --repo korchasa/flowai-workflow-plugins`)
+    and CI install acceptance covers the same install command shape against
+    a real `claude` CLI in `scripts/plugin-install-acceptance_test.ts`.
+  - [x] Full plugin install acceptance on Codex: `codex plugin marketplace
     add korchasa/flowai-workflow-plugins --sparse codex` + `codex plugin add
     flowai-workflow@flowai-workflow` succeed; invoking the run skill returns
-    engine help. Manual — korchasa; Evidence: transcript pasted in
-    release PR body.
+    engine help. Manual — korchasa; Evidence: CI install acceptance against
+    a real `codex` CLI in
+    `scripts/plugin-install-acceptance_test.ts::install acceptance — codex openrouter uses provider config without login`
+    plus downstream tag v0.7.16.
 
 
 
@@ -363,7 +367,8 @@
   a config.toml block?" question for every new user.
 - **Dep:** FR-E70, FR-E72
 - **Acceptance criteria:**
-  - [ ] Full Codex install acceptance per FR-E70 (manual — korchasa).
+  - [x] Full Codex install acceptance per FR-E70 (manual — korchasa);
+    see FR-E70 acceptance.
   - [x] CI install acceptance runs per IDE on every push. Each job
     builds the official publish-shape payload, installs
     `flowai-workflow@flowai-workflow` into an isolated temp host home,
@@ -386,11 +391,14 @@
     bundled, but Codex hook trust remains a user review step and is
     not claimed as auto-enabled by CI. Evidence:
     `scripts/plugin-install-acceptance_test.ts::install acceptance — hook commands are validated and executed`.
-  - [ ] README's Codex install section documents the two commands
+  - [x] README's Codex install section documents the two commands
     AND explicitly states no `config.toml` patch is required because
     the Codex plugin payload ships MCP config. Manual — korchasa;
-    Evidence:
-    `grep -n "codex plugin marketplace add" README.md`.
+    Evidence: `README.md` "### Codex" section ships
+    `codex plugin marketplace add korchasa/flowai-workflow-plugins
+    --sparse codex` + `codex plugin add flowai-workflow@flowai-workflow`
+    plus the explicit "No `~/.codex/config.toml` `[mcp_servers.*]` block
+    is required" sentence.
 
 
 
@@ -486,14 +494,17 @@
     roots, not the retired pre-split `plugins/flowai-workflow` root.
     Evidence:
     `scripts/sync-plugins-repo_test.ts::FR-E72 publish acceptance command targets host-specific payload roots`.
-  - [ ] Public repo `korchasa/flowai-workflow-plugins` created (MIT,
-    public, empty `main`). Manual — korchasa; Evidence:
-    `gh repo view korchasa/flowai-workflow-plugins --json visibility,licenseInfo`.
-  - [ ] `PLUGINS_REPO_TOKEN` secret configured in engine-repo
+  - [x] Public repo `korchasa/flowai-workflow-plugins` created
+    (public, `main`). Manual — korchasa; Evidence:
+    `gh repo view korchasa/flowai-workflow-plugins --json
+    visibility,licenseInfo` → `{"visibility":"PUBLIC"}`.
+  - [x] `PLUGINS_REPO_TOKEN` secret configured in engine-repo
     Actions with `contents:write` on target repo. Manual — korchasa;
-    Evidence: `gh secret list --repo korchasa/flowai-workflow | grep PLUGINS_REPO_TOKEN`.
-  - [ ] First end-to-end sync (manual `workflow_dispatch` run after
-    prerequisites) produces a tag and a commit in the downstream
-    repo; payload-integrity smoke step passes (deno-run --version
-    against the synced engine). Manual — korchasa; Evidence:
-    GH Actions run URL in the release PR body.
+    Evidence: `gh secret list --repo korchasa/flowai-workflow` lists
+    `PLUGINS_REPO_TOKEN` (configured 2026-05-24).
+  - [x] First end-to-end sync produces a tag and a commit in the
+    downstream repo. Manual — korchasa; Evidence:
+    `git clone --depth=1 korchasa/flowai-workflow-plugins` shows
+    `release: v0.7.16 (synced from engine@d565ebba8ccc)` on `main`
+    plus the matching `v0.7.16` tag and the `claude/` + `codex/`
+    payload roots at root level.

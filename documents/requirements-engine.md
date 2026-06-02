@@ -34,8 +34,9 @@ FR-IDs are stable — never renumber them on move.
   removal, standalone binary, auto-update, IDE CLI wrapper split.
 - [07-mcp-and-plugin-runtime.md](requirements-engine/07-mcp-and-plugin-runtime.md)
   — Embedded MCP server (FR-E73), the plugin's self-contained runtime
-  with lazy binary compile + auto-MCP registration (FR-E74), and Codex
-  subagent delivery as skills (FR-E76).
+  with lazy binary compile + auto-MCP registration (FR-E74, superseded
+  by FR-E78), Codex subagent delivery as skills (FR-E76), and engine
+  binary precondition + release distribution (FR-E78).
 
 ## FR-E ID → Section File
 
@@ -112,3 +113,4 @@ FR-IDs are stable — never renumber them on move.
 - FR-E75 (Local HITL Answer + Command Layer) → 04-runtime-and-hooks
 - FR-E76 (Codex Subagent Delivery as Skills)  → 07-mcp-and-plugin-runtime
 - FR-E77 (Transport Selection CLI vs ACP)     → 04-runtime-and-hooks
+- FR-E78 (Plugin Precondition + Release Binary Distribution) → 07-mcp-and-plugin-runtime

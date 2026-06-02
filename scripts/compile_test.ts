@@ -1,8 +1,13 @@
 import { assertEquals } from "@std/assert";
 import { stripVersionPrefix, TARGETS } from "./compile.ts";
 
-Deno.test("TARGETS — has exactly 4 platform targets", () => {
-  assertEquals(TARGETS.length, 4);
+Deno.test("TARGETS — has exactly 5 platform targets", () => {
+  assertEquals(TARGETS.length, 5);
+});
+
+Deno.test("FR-E78 TARGETS — windows x86_64 maps to flowai-workflow-windows-x86_64.exe", () => {
+  const t = TARGETS.find((t) => t.target === "x86_64-pc-windows-msvc");
+  assertEquals(t?.artifact, "flowai-workflow-windows-x86_64.exe");
 });
 
 Deno.test("TARGETS — linux x86_64 maps to flowai-workflow-linux-x86_64", () => {
