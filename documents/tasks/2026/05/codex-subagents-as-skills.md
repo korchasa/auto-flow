@@ -128,24 +128,35 @@ Ran live experiments against the real Codex CLI (`/tmp/codex-skill-exp`,
 
 ## Definition of Done
 
-- [ ] FR-E76 added to SRS (`requirements-engine/07-mcp-and-plugin-runtime.md`),
+- [x] FR-E76 added to SRS (`requirements-engine/07-mcp-and-plugin-runtime.md`),
       cross-refs FR-E70/E74; index updated.
-- [ ] SDS updated: Codex subagent-as-skill dispatch in plugin-runtime design;
+      Evidence: `documents/requirements-engine/07-mcp-and-plugin-runtime.md:176`
+      (§3.76), `documents/requirements-engine.md:114`.
+- [x] SDS updated: Codex subagent-as-skill dispatch in plugin-runtime design;
       `AGENTS.md` "Plugin agents/skills layout" gains a Codex variant note +
       drift note.
-- [ ] `classifyPayloadFile(host="codex", "plugin-src/shared/agents/<x>.md")`
+      Evidence: `AGENTS.md` "Codex variant (FR-E76)" subsection (search
+      "Codex variant (FR-E76)") + drift caveat.
+- [x] `classifyPayloadFile(host="codex", "plugin-src/shared/agents/<x>.md")`
       returns `null`; `host="claude"` still routes to `…/agents/<x>.md`.
-- [ ] Codex skills `plugin-src/codex/plugins/flowai-workflow/skills/orchestrator/SKILL.md`
+      Evidence: `scripts/build-plugin-payload.ts:147` (`host === "codex" && relPath.startsWith("plugin-src/shared/agents/")` → `null`).
+- [x] Codex skills `plugin-src/codex/plugins/flowai-workflow/skills/orchestrator/SKILL.md`
       and `…/skills/supervisor/SKILL.md` authored; payload build places them
       under `codex/…/skills/{orchestrator,supervisor}/SKILL.md` and the Claude
       payload does NOT contain them.
-- [ ] Shared `orchestrate`/`supervise` dispatchers gain a Codex branch (spawn
+      Evidence: `plugin-src/codex/plugins/flowai-workflow/skills/orchestrator/SKILL.md`,
+      `plugin-src/codex/plugins/flowai-workflow/skills/supervisor/SKILL.md`;
+      `scripts/build-plugin-payload_test.ts:428` ("codex payload should not carry shared agents").
+- [x] Shared `orchestrate`/`supervise` dispatchers gain a Codex branch (spawn
       `worker` → run `$orchestrator`/`$supervisor` → return structured block;
       fallback documented). The "no native dispatch → stop" guard no longer
       fires on Codex.
-- [ ] `build-plugin-payload_test.ts` updated: codex-agents-dropped +
+      Evidence: `plugin-src/shared/skills/orchestrate/SKILL.md:23,37`,
+      `plugin-src/shared/skills/supervise/SKILL.md:21`.
+- [x] `build-plugin-payload_test.ts` updated: codex-agents-dropped +
       codex-skills-present + claude-unaffected assertions (FR-E76;
       regression-locked).
+      Evidence: `scripts/build-plugin-payload_test.ts:60` ("FR-E76 codex drops shared agents, claude keeps them, codex skills route to codex only").
 - [ ] `deno task check` green; `deno task sync-plugins -- --dry-run` shows the
       two new Codex skills and no Codex `agents/` entries.
 - [ ] Manual Codex smoke (manual — korchasa): install via

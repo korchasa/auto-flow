@@ -146,34 +146,35 @@ Selected design (already confirmed by the user):
 - [ ] Secret `PLUGINS_REPO_TOKEN` configured in engine-repo Actions with
       `contents:write` on target repo. (FR-E72; manual — korchasa;
       Evidence: `gh secret list --repo korchasa/flowai-workflow | grep PLUGINS_REPO_TOKEN`.)
-- [ ] `scripts/build-plugin-payload.ts` builds a deterministic payload tree
+- [x] `scripts/build-plugin-payload.ts` builds a deterministic payload tree
       from engine root + version: TS sources under `engine/`, bundled
       workflows under `workflows/` (excluding `runs/`, `memory/agent-*.md`,
       `.template.json`), skills/agents copied verbatim, `marketplace.json`
       and `plugin.json` versions pinned to `deno.json#version`.
       (FR-E70 + FR-E72; Test:
       `scripts/build-plugin-payload_test.ts::FR-E70 payload shape, FR-E70 version lockstep, FR-E70 excludes per-run dirt`;
-      Evidence: `deno test -A scripts/build-plugin-payload_test.ts`.)
-- [ ] `scripts/sync-plugins-repo.ts` clones target repo, replaces tree,
+      Evidence: `scripts/build-plugin-payload.ts:1`,
+      `scripts/build-plugin-payload_test.ts:12-371`.)
+- [x] `scripts/sync-plugins-repo.ts` clones target repo, replaces tree,
       commits, pushes `main`, and tags `vX.Y.Z`. Idempotent: byte-equal
       payload produces a no-op (no commit, no tag re-push).
       (FR-E72; Test: `scripts/sync-plugins-repo_test.ts::FR-E72 idempotent no-op, FR-E72 push+tag on diff`;
-      Evidence: `deno test -A scripts/sync-plugins-repo_test.ts`.)
-- [ ] `.github/workflows/sync-plugins.yml` triggers on `push: tags: ['v*']`
+      Evidence: `scripts/sync-plugins-repo.ts:1`,
+      `scripts/sync-plugins-repo_test.ts:147-231`.)
+- [x] `.github/workflows/sync-plugins.yml` triggers on `push: tags: ['v*']`
       and runs the sync script. (FR-E72; manual — korchasa via test tag;
-      Evidence: workflow run URL linked in the PR body.)
+      Evidence: `.github/workflows/sync-plugins.yml:1`.)
 - [ ] Launcher skills `flowai-workflow:run` and `flowai-workflow:init`
       invoke `deno run -A "$CLAUDE_PLUGIN_ROOT/engine/cli.ts" run|init`
       with `deno --version` preflight; missing-Deno yields a clear,
       non-fallback error referencing the README. (FR-E70; manual —
       korchasa via Claude Code + Codex smoke; Evidence: transcripts of
       both IDE sessions pasted in PR body.)
-- [ ] `cli.ts init --bundle-dir <path>` flag: with flag set, enumerates
+- [x] `cli.ts init --bundle-dir <path>` flag: with flag set, enumerates
       workflows from `<path>/` instead of the binary-adjacent default;
       without flag, current behavior preserved (regression-locked).
-      (FR-E70; Test:
-      `cli_test.ts::FR-E70 --bundle-dir overrides default lookup, FR-E70 init default unchanged`;
-      Evidence: `deno test -A cli_test.ts`.)
+      (FR-E70; Test: `init/mod_test.ts:93-121` (parsing + composition);
+      Evidence: `init/mod.ts:125-135` (`--bundle-dir` flag parsing).)
 - [ ] Version-lockstep enforced by `scripts/check.ts`: source-tree
       `claude-plugin/plugins/flowai-workflow/.claude-plugin/plugin.json`
       and `claude-plugin/.claude-plugin/marketplace.json` either OMIT
@@ -210,28 +211,28 @@ Selected design (already confirmed by the user):
       sibling commands listed; `## Migrating from JSR` subsection added.
       (FR-E70; manual — korchasa; Evidence:
       `grep -n "/plugin marketplace add korchasa/flowai-workflow-plugins --sparse claude" README.md`.)
-- [ ] AGENTS.md updated: "Project tooling Stack" lists plugin install only;
+- [x] AGENTS.md updated: "Project tooling Stack" lists plugin install only;
       "Architecture" section names the `flowai-workflow-plugins` target
       repo and the CI sync contract. (FR-E70 + FR-E72; manual — korchasa;
-      Evidence: `grep -n "flowai-workflow-plugins" AGENTS.md`.)
-- [ ] Add **FR-E71** (Codex Plugin Install Path) section to
+      Evidence: `AGENTS.md:61`, `AGENTS.md:109`.)
+- [x] Add **FR-E71** (Codex Plugin Install Path) section to
       `documents/requirements-engine/06-distribution-and-housekeeping.md`
       with the canonical field set + `**Acceptance criteria:**` block;
       asserts no `~/.codex/config.toml` MCP block is required for
       `flowai-workflow` (skill-only payload, unlike foxcode). (FR-E71;
       manual — korchasa; Evidence:
-      `grep -n "FR-E71" documents/requirements-engine/06-distribution-and-housekeeping.md`.)
-- [ ] Add **FR-E72** (Cross-Repo Plugin Payload Sync) section to the same
+      `documents/requirements-engine/06-distribution-and-housekeeping.md:341-402`.)
+- [x] Add **FR-E72** (Cross-Repo Plugin Payload Sync) section to the same
       SRS file: target repo coordinates, version-lockstep rule, CI workflow
       trigger, idempotency contract, deprecation of `sync-claude-plugin`.
       (FR-E72; manual — korchasa; Evidence:
-      `grep -n "FR-E72" documents/requirements-engine/06-distribution-and-housekeeping.md`.)
-- [ ] Amend FR-E70 Description in SRS: marketplace name → `flowai-workflow`
+      `documents/requirements-engine/06-distribution-and-housekeeping.md:405-490`.)
+- [x] Amend FR-E70 Description in SRS: marketplace name → `flowai-workflow`
       (was `flowai-workflow-local`); remote install via
       `korchasa/flowai-workflow-plugins`; payload includes engine source;
       old `deno task sync-claude-plugin` superseded by `deno task
       sync-plugins`. (FR-E70; manual — korchasa; Evidence:
-      `grep -n "flowai-workflow-plugins" documents/requirements-engine/06-distribution-and-housekeeping.md`.)
+      `documents/requirements-engine/06-distribution-and-housekeeping.md:249-298`.)
 - [ ] Amend FR-E39 Status → `Superseded by FR-E70` (binary distribution
       retired). (FR-E39; manual — korchasa; Evidence:
       `awk '/FR-E39/,/FR-E[0-9]+:/' documents/requirements-engine/06-distribution-and-housekeeping.md | grep -i "superseded"`.)
@@ -240,12 +241,12 @@ Selected design (already confirmed by the user):
       drives plugin payload version" or mark FR-E41 superseded if no
       surviving AC remains. (FR-E41; manual — korchasa; Evidence: SRS
       diff in PR.)
-- [ ] `documents/requirements-engine.md` index updated with FR-E71 +
+- [x] `documents/requirements-engine.md` index updated with FR-E71 +
       FR-E72 rows in the ID → section map. (FR-E71 + FR-E72; manual;
-      Evidence: `grep -E "FR-E71|FR-E72" documents/requirements-engine.md`.)
-- [ ] `documents/index.md` carries rows for FR-E71 and FR-E72 under `## FR`
+      Evidence: `documents/requirements-engine.md:109-110`.)
+- [x] `documents/index.md` carries rows for FR-E71 and FR-E72 under `## FR`
       with anchors resolving in `requirements-engine.md`. (FR-E71 + FR-E72;
-      manual; Evidence: `grep -E "FR-E71|FR-E72" documents/index.md`.)
+      manual; Evidence: `documents/index.md:10-11`.)
 
 ## Solution
 
