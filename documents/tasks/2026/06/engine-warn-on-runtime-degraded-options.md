@@ -1,6 +1,6 @@
 ---
 date: "2026-06-04"
-status: to do
+status: done
 implements: [FR-E79]
 tags: [observability, acp, transport, diagnosis]
 related_tasks:
