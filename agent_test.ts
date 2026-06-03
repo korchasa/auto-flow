@@ -1494,3 +1494,145 @@ Deno.test("FR-E77 hitl capability under transport — cli vector keeps mcpInject
   assertEquals(calls.length, 1);
   assertEquals(calls[0].mcpServers !== undefined, true);
 });
+
+Deno.test("FR-E79 runtime onCallbackError surfaces as engine warn", async () => {
+  const nodeDir = Deno.makeTempDirSync();
+  const captured: string[] = [];
+  const output = new OutputManager("normal", (text) => {
+    captured.push(text);
+  });
+
+  const adapter: RuntimeAdapter = {
+    id: "claude",
+    capabilities: {
+      permissionMode: true,
+      transcript: true,
+      interactive: false,
+      toolUseObservation: true,
+      session: false,
+      capabilityInventory: false,
+      toolFilter: true,
+      reasoningEffort: true,
+      mcpInjection: false,
+      sessionFidelity: "native",
+    },
+    launchInteractive() {
+      throw new Error("not used");
+    },
+    invoke(opts) {
+      opts.onCallbackError?.(
+        new Error(
+          `acp(claude): option "systemPrompt" degraded — inlined into prompt[0].text`,
+        ),
+        "onEvent",
+      );
+      return Promise.resolve({
+        output: {
+          result: "ok",
+          session_id: "s",
+          duration_ms: 1,
+          num_turns: 1,
+          is_error: false,
+        },
+      });
+    },
+  };
+
+  await runAgent({
+    node: { type: "agent", label: "Review", prompt: "review" } as NodeConfig,
+    ctx: {
+      node_dir: nodeDir,
+      run_dir: nodeDir,
+      run_id: "t",
+      workDir: ".",
+      args: {},
+      env: {},
+      input: {},
+    } as TemplateContext,
+    settings: makeSettings(),
+    runtime: "claude",
+    runtimeAdapter: adapter,
+    output,
+    nodeId: "tech-lead-review",
+  });
+
+  const joined = captured.join("");
+  assertEquals(
+    joined.includes("runtime onEvent:"),
+    true,
+    `expected runtime warn line in: ${joined}`,
+  );
+  assertEquals(
+    joined.includes("tech-lead-review"),
+    true,
+    `expected node id in warn line: ${joined}`,
+  );
+  assertEquals(
+    joined.includes(`option "systemPrompt" degraded`),
+    true,
+    `expected library message in warn line: ${joined}`,
+  );
+  assertEquals(
+    joined.startsWith("WARN: ") || joined.includes("\nWARN: "),
+    true,
+    `expected WARN prefix in: ${joined}`,
+  );
+});
+
+Deno.test("FR-E79 omitted OutputManager keeps onCallbackError undefined", async () => {
+  const nodeDir = Deno.makeTempDirSync();
+  const seen: Array<Record<string, unknown>> = [];
+  const adapter: RuntimeAdapter = {
+    id: "claude",
+    capabilities: {
+      permissionMode: true,
+      transcript: true,
+      interactive: false,
+      toolUseObservation: true,
+      session: false,
+      capabilityInventory: false,
+      toolFilter: true,
+      reasoningEffort: true,
+      mcpInjection: false,
+      sessionFidelity: "native",
+    },
+    launchInteractive() {
+      throw new Error("not used");
+    },
+    invoke(opts) {
+      seen.push(opts as unknown as Record<string, unknown>);
+      return Promise.resolve({
+        output: {
+          result: "ok",
+          session_id: "s",
+          duration_ms: 1,
+          num_turns: 1,
+          is_error: false,
+        },
+      });
+    },
+  };
+
+  await runAgent({
+    node: { type: "agent", label: "Review", prompt: "review" } as NodeConfig,
+    ctx: {
+      node_dir: nodeDir,
+      run_dir: nodeDir,
+      run_id: "t",
+      workDir: ".",
+      args: {},
+      env: {},
+      input: {},
+    } as TemplateContext,
+    settings: makeSettings(),
+    runtime: "claude",
+    runtimeAdapter: adapter,
+  });
+
+  assertEquals(seen.length, 1);
+  assertEquals(
+    seen[0].onCallbackError,
+    undefined,
+    "library default must run when engine has no OutputManager",
+  );
+});

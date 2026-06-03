@@ -219,6 +219,16 @@
     `claude --version` captured once at run start via `Deno.Command` →
     stored in `RunState.claude_cli_version`. Failure (e.g. `claude` not
     on PATH for OpenCode runtime) → warning, field remains `undefined`.
+    **Runtime warn surface (FR-E79):** `runAgent()` builds an
+    `onCallbackError` once when `output && nodeId` are both supplied
+    and passes it into both `adapter.invoke()` call sites. The handler
+    routes the library's `onCallbackError(err, source)` (FR-L32
+    consumer-callback throws + FR-L39 ACP `degradedOptions`) through
+    `OutputManager.warn` with the prefix
+    `<nodeId padded to 16> runtime <source>: <err.message or String(err)>`.
+    Omitted `output` / `nodeId` leaves the field undefined so the
+    library's default `console.warn` runs — pre-existing headless
+    behaviour preserved.
     Low-level CLI invocation, stream parsing, event formatting, and
     `FileReadTracker` live in `@korchasa/ai-ide-cli` — see the sibling
     repo's `documents/design/01-modules.md` for details

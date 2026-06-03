@@ -238,6 +238,18 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     ? (line: string) => output.nodeOutput(nodeId, line)
     : undefined;
 
+  // FR-E79: surface library `onCallbackError` (FR-L32 consumer-callback
+  // throws + FR-L39 ACP `degradedOptions` diagnostics) as node-tagged
+  // engine WARN lines. When `output`/`nodeId` is omitted (headless
+  // embedders), leave the field undefined so the library's default
+  // `console.warn` handler runs — pre-existing behaviour preserved.
+  const onCallbackError = output && nodeId
+    ? (err: unknown, source: string) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      output.warn(`${nodeId.padEnd(16)}runtime ${source}: ${msg}`);
+    }
+    : undefined;
+
   // Run before hook
   if (node.before) {
     const hookCmd = interpolate(node.before, ctx, cwd);
@@ -283,6 +295,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     maxRetries: settings.max_retries,
     retryDelaySeconds: settings.retry_delay_seconds,
     onOutput,
+    onCallbackError,
     streamLogPath,
     verbosity,
     cwd,
@@ -424,6 +437,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       maxRetries: settings.max_retries,
       retryDelaySeconds: settings.retry_delay_seconds,
       onOutput,
+      onCallbackError,
       streamLogPath,
       verbosity,
       cwd,

@@ -398,3 +398,38 @@
     `lifecycle-replay_test.ts::terminal workflow record wins over stale running snapshot`.
   - [x] Dashboard reads replayed journal state. Evidence:
     `scripts/generate-dashboard_test.ts::readRunState — replays valid journal.jsonl`.
+
+
+
+### 3.79 FR-E79: Runtime `onCallbackError` Surfaced as Engine WARN
+
+- **Description:** Engine wires
+  `RuntimeInvokeOptions.onCallbackError` (sibling-repo
+  `@korchasa/ai-ide-cli`, FR-L32) on every `adapter.invoke()` it makes
+  from `runAgent` (initial + resume). The supplied handler routes the
+  callback through `OutputManager.warn` with a node-tagged prefix
+  `<nodeId padded to 16> runtime <source>: <err.message or String(err)>`.
+  Two diagnostic classes flow through this channel: (a) consumer-callback
+  throws (`onEvent`, `onStderr`, `onToolUseObserved`, `onSendFailed`),
+  (b) ACP transport degraded-option entries
+  (`runtime/acp/adapter.ts::reportDegradedOptions`, FR-L39 — e.g.
+  `systemPrompt` inlined, `streamLogPath` dropped, `resumeSessionId`
+  ignored). When `output` or `nodeId` is omitted (headless embedders),
+  the engine sends `onCallbackError: undefined` so the library falls
+  back to its default `console.warn` — pre-existing behaviour
+  preserved.
+- **Tasks:** [engine-warn-on-runtime-degraded-options](../tasks/2026/06/engine-warn-on-runtime-degraded-options.md).
+- **Motivation:** Per the LumaTale ACP incident report
+  ([`documents/tasks/2026/06/acp-codex-transport-issues-report.md`](../tasks/2026/06/acp-codex-transport-issues-report.md))
+  P3, the engine had no handler on this channel. The library's
+  default `console.warn` carries no node context and bypasses the
+  `OutputManager` verbosity gate, so a ~40 KB system_prompt silently
+  inlined into `prompt[0].text` produced zero operator-visible
+  diagnostic before the opaque `-32700` failure.
+- **Acceptance criteria:**
+  - **Tests:** `agent_test.ts` (FR-E79; regression-locked).
+  - [x] Behaviour unchanged when `OutputManager` is omitted from
+    `runAgent` options — the runtime sees `onCallbackError: undefined`
+    and the library's default handler runs. Evidence:
+    `agent.ts::runAgent` (callback constructed only when
+    `output && nodeId`).
