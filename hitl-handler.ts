@@ -10,9 +10,9 @@ import type {
   ErrorCategory,
   HitlConfig,
   NodeConfig,
-  NodeSettings,
   ProcessRegistry,
   ReasoningEffort,
+  ResolvedNodeSettings,
   RunState,
   RuntimeId,
   TemplateContext,
@@ -42,7 +42,7 @@ interface HitlBaseParams {
   workflowDir: string;
   node: NodeConfig;
   ctx: TemplateContext;
-  settings: Required<NodeSettings>;
+  settings: ResolvedNodeSettings;
   runtime?: RuntimeId;
   runtimeArgs?: ExtraArgsMap;
   permissionMode?: string;

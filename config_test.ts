@@ -2142,3 +2142,153 @@ nodes:
     `expected toolFilter downgrade warning, got ${JSON.stringify(warnings)}`,
   );
 });
+
+// --- FR-E80: cumulative wall-clock retry cap ---
+
+Deno.test("FR-E80 max_retry_wall_clock_seconds accepted at defaults level", () => {
+  const yaml = `
+name: w
+version: "1"
+defaults:
+  max_retry_wall_clock_seconds: 600
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.defaults!.max_retry_wall_clock_seconds, 600);
+  assertEquals(config.nodes.n.settings!.max_retry_wall_clock_seconds, 600);
+});
+
+Deno.test("FR-E80 max_retry_wall_clock_seconds accepted at node level", () => {
+  const yaml = `
+name: w
+version: "1"
+defaults:
+  max_retry_wall_clock_seconds: 600
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+    settings:
+      max_retry_wall_clock_seconds: 120
+`;
+  const config = parseConfig(yaml);
+  assertEquals(config.nodes.n.settings!.max_retry_wall_clock_seconds, 120);
+});
+
+Deno.test("FR-E80 max_retry_wall_clock_seconds omission stays undefined", () => {
+  const yaml = `
+name: w
+version: "1"
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+`;
+  const config = parseConfig(yaml);
+  assertEquals(
+    config.nodes.n.settings!.max_retry_wall_clock_seconds,
+    undefined,
+  );
+  assertEquals(config.defaults!.max_retry_wall_clock_seconds, undefined);
+});
+
+Deno.test("FR-E80 rejects zero at defaults level", () => {
+  const yaml = `
+name: w
+version: "1"
+defaults:
+  max_retry_wall_clock_seconds: 0
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "defaults.max_retry_wall_clock_seconds must be a positive integer (got '0')",
+  );
+});
+
+Deno.test("FR-E80 rejects negative at defaults level", () => {
+  const yaml = `
+name: w
+version: "1"
+defaults:
+  max_retry_wall_clock_seconds: -1
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "defaults.max_retry_wall_clock_seconds must be a positive integer (got '-1')",
+  );
+});
+
+Deno.test("FR-E80 rejects non-integer at defaults level", () => {
+  const yaml = `
+name: w
+version: "1"
+defaults:
+  max_retry_wall_clock_seconds: 1.5
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "defaults.max_retry_wall_clock_seconds must be a positive integer (got '1.5')",
+  );
+});
+
+Deno.test("FR-E80 rejects string at defaults level", () => {
+  const yaml = `
+name: w
+version: "1"
+defaults:
+  max_retry_wall_clock_seconds: "600"
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "defaults.max_retry_wall_clock_seconds must be a positive integer (got '600')",
+  );
+});
+
+Deno.test("FR-E80 rejects non-positive at node level", () => {
+  const yaml = `
+name: w
+version: "1"
+nodes:
+  n:
+    type: agent
+    label: n
+    prompt: p
+    settings:
+      max_retry_wall_clock_seconds: 0
+`;
+  assertThrows(
+    () => parseConfig(yaml),
+    Error,
+    "Node 'n' settings.max_retry_wall_clock_seconds must be a positive integer (got '0')",
+  );
+});

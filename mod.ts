@@ -26,6 +26,7 @@ export type {
   PermissionDenial,
   PermissionMode,
   ReasoningEffort,
+  ResolvedNodeSettings,
   RunJournalEvent,
   RunJournalEventBase,
   RunJournalEventKind,

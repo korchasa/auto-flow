@@ -4,9 +4,13 @@ import type {
   RuntimeAdapter,
   RuntimeInvokeOptions,
 } from "@korchasa/ai-ide-cli/runtime/types";
-import type { NodeConfig, NodeSettings, TemplateContext } from "./types.ts";
+import type {
+  NodeConfig,
+  ResolvedNodeSettings,
+  TemplateContext,
+} from "./types.ts";
 
-function makeSettings(): Required<NodeSettings> {
+function makeSettings(): ResolvedNodeSettings {
   return {
     max_continuations: 2,
     timeout_seconds: 30,
@@ -418,4 +422,273 @@ Deno.test("runAgent — preserves runtime stream_stall error category", async ()
 
   assertEquals(result.success, false);
   assertEquals(result.error_category, "stream_stall");
+});
+
+// --- FR-E80: cumulative wall-clock retry cap ---
+
+Deno.test("FR-E80 budget timer aborts in-flight invoke and surfaces WARN", async () => {
+  const nodeDir = Deno.makeTempDirSync();
+  const calls: RuntimeInvokeOptions[] = [];
+  const warnLines: string[] = [];
+
+  const runtimeAdapter: RuntimeAdapter = {
+    id: "opencode",
+    capabilities: {
+      permissionMode: false,
+      mcpInjection: false,
+      transcript: false,
+      interactive: false,
+      toolUseObservation: false,
+      session: false,
+      capabilityInventory: false,
+      toolFilter: false,
+      reasoningEffort: false,
+    },
+    launchInteractive() {
+      throw new Error("not implemented");
+    },
+    invoke: (opts) => {
+      calls.push(opts);
+      return new Promise((resolve) => {
+        const onAbort = () => {
+          opts.signal?.removeEventListener("abort", onAbort);
+          resolve({
+            error: "Aborted: wall-clock budget exceeded",
+          });
+        };
+        if (opts.signal?.aborted) {
+          onAbort();
+          return;
+        }
+        opts.signal?.addEventListener("abort", onAbort, { once: true });
+      });
+    },
+  };
+
+  // Minimal OutputManager stub that captures warn lines.
+  const output = {
+    nodeOutput: () => {},
+    status: () => {},
+    warn: (m: string) => warnLines.push(m),
+    error: () => {},
+    nodeFailed: () => {},
+    nodeResult: () => {},
+    verbosePrompt: () => {},
+    verboseInputs: () => {},
+    verboseValidation: () => {},
+    verboseContinuation: () => {},
+    loopIteration: () => {},
+    // deno-lint-ignore no-explicit-any
+  } as any;
+
+  const result = await runAgent({
+    node: { type: "agent", label: "Build", prompt: "build" } as NodeConfig,
+    ctx: makeCtx(nodeDir),
+    settings: { ...makeSettings(), max_retry_wall_clock_seconds: 1 },
+    runtime: "opencode",
+    runtimeAdapter,
+    nodeId: "build",
+    output,
+  });
+
+  assertEquals(result.success, false);
+  assertEquals(result.error_category, "retry_budget_exceeded");
+  assertEquals(calls.length, 1);
+  assertEquals(calls[0].signal !== undefined, true);
+  const warned = warnLines.some((l) =>
+    l.includes("wall-clock budget") && l.includes("build")
+  );
+  assertEquals(
+    warned,
+    true,
+    `expected node-tagged WARN with 'wall-clock budget', got ${
+      JSON.stringify(warnLines)
+    }`,
+  );
+});
+
+Deno.test("FR-E80 no cap keeps signal absent", async () => {
+  const nodeDir = Deno.makeTempDirSync();
+  const calls: RuntimeInvokeOptions[] = [];
+
+  const runtimeAdapter: RuntimeAdapter = {
+    id: "opencode",
+    capabilities: {
+      permissionMode: false,
+      mcpInjection: false,
+      transcript: false,
+      interactive: false,
+      toolUseObservation: false,
+      session: false,
+      capabilityInventory: false,
+      toolFilter: false,
+      reasoningEffort: false,
+    },
+    launchInteractive() {
+      throw new Error("not implemented");
+    },
+    invoke: (opts) => {
+      calls.push(opts);
+      return Promise.resolve({
+        output: {
+          runtime: "opencode",
+          result: "ok",
+          session_id: "s",
+          total_cost_usd: 0,
+          duration_ms: 1,
+          duration_api_ms: 1,
+          num_turns: 1,
+          is_error: false,
+        },
+      });
+    },
+  };
+
+  await runAgent({
+    node: { type: "agent", label: "Build", prompt: "build" } as NodeConfig,
+    ctx: makeCtx(nodeDir),
+    settings: makeSettings(),
+    runtime: "opencode",
+    runtimeAdapter,
+  });
+
+  assertEquals(calls.length, 1);
+  assertEquals(calls[0].signal, undefined);
+});
+
+Deno.test("FR-E80 controller reused across continuations", async () => {
+  const nodeDir = Deno.makeTempDirSync();
+  const outputPath = `${nodeDir}/result.md`;
+  const calls: RuntimeInvokeOptions[] = [];
+
+  const runtimeAdapter: RuntimeAdapter = {
+    id: "opencode",
+    capabilities: {
+      permissionMode: false,
+      mcpInjection: false,
+      transcript: false,
+      interactive: false,
+      toolUseObservation: false,
+      session: false,
+      capabilityInventory: false,
+      toolFilter: false,
+      reasoningEffort: false,
+    },
+    launchInteractive() {
+      throw new Error("not implemented");
+    },
+    invoke: async (opts) => {
+      calls.push(opts);
+      if (calls.length === 3) {
+        await Deno.writeTextFile(outputPath, "# done\n");
+      }
+      return {
+        output: {
+          runtime: "opencode",
+          result: `pass ${calls.length}`,
+          session_id: "ses_test",
+          total_cost_usd: 0,
+          duration_ms: 1,
+          duration_api_ms: 1,
+          num_turns: 1,
+          is_error: false,
+        },
+      };
+    },
+  };
+
+  const result = await runAgent({
+    node: {
+      type: "agent",
+      label: "Build",
+      prompt: "build",
+      validate: [{ type: "file_exists", path: outputPath }],
+    } as NodeConfig,
+    ctx: makeCtx(nodeDir),
+    settings: {
+      ...makeSettings(),
+      max_continuations: 3,
+      max_retry_wall_clock_seconds: 600,
+    },
+    runtime: "opencode",
+    runtimeAdapter,
+  });
+
+  assertEquals(result.success, true);
+  assertEquals(calls.length, 3);
+  // Same AbortSignal instance MUST be forwarded across all calls — the
+  // cumulative budget contract requires one controller per runAgent.
+  assertEquals(calls[0].signal !== undefined, true);
+  assertEquals(calls[0].signal === calls[1].signal, true);
+  assertEquals(calls[1].signal === calls[2].signal, true);
+});
+
+Deno.test("FR-E80 HITL capture clears the timer (no abort after capture)", async () => {
+  const nodeDir = Deno.makeTempDirSync();
+  const outputPath = `${nodeDir}/spec.md`;
+
+  const runtimeAdapter: RuntimeAdapter = {
+    id: "opencode",
+    capabilities: {
+      permissionMode: false,
+      mcpInjection: true,
+      transcript: false,
+      interactive: false,
+      toolUseObservation: true,
+      session: false,
+      capabilityInventory: false,
+      toolFilter: false,
+      reasoningEffort: false,
+    },
+    launchInteractive() {
+      throw new Error("not implemented");
+    },
+    invoke: async (opts) => {
+      await opts.onToolUseObserved?.({
+        runtime: "opencode",
+        id: "tool-1",
+        name: "flowai-workflow-hitl_request_human_input",
+        input: { question: "Approve?" },
+        turn: 1,
+      });
+      return {
+        output: {
+          runtime: "opencode",
+          result: "aborted by observer",
+          session_id: "ses_test",
+          total_cost_usd: 0,
+          duration_ms: 1,
+          duration_api_ms: 1,
+          num_turns: 1,
+          is_error: true,
+        },
+      };
+    },
+  };
+
+  const result = await runAgent({
+    node: {
+      type: "agent",
+      label: "Spec",
+      prompt: "write spec",
+      validate: [{ type: "file_exists", path: outputPath }],
+    } as NodeConfig,
+    ctx: makeCtx(nodeDir),
+    settings: { ...makeSettings(), max_retry_wall_clock_seconds: 1 },
+    runtime: "opencode",
+    runtimeAdapter,
+    hitlConfig: {
+      ask_script: "ask.sh",
+      check_script: "check.sh",
+      poll_interval: 60,
+      timeout: 120,
+    },
+  });
+
+  assertEquals(result.hitl_question?.question, "Approve?");
+  // Wait past the budget window — if the timer was not cleared on HITL
+  // early-return, it would still fire and leak an unhandled abort.
+  await new Promise((r) => setTimeout(r, 1200));
+  // No throw / no rejection means the timer was properly cleared.
+  assertEquals(result.error_category, undefined);
 });

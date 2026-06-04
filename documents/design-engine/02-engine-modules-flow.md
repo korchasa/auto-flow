@@ -383,3 +383,28 @@
     resolved transport is `"acp"`.
   - Flow: `WorkflowDefaults.transport → resolveTransport → AgentRunOptions.transport
     → adapter.invoke({ transport })`.
+
+- **FR-E80 — Cumulative Wall-Clock Retry Cap data flow:**
+  - `types.ts` adds `max_retry_wall_clock_seconds?: number` to `NodeSettings`
+    and a `"retry_budget_exceeded"` member to the `ErrorCategory` union.
+    A new `ResolvedNodeSettings` alias keeps the field optional after the
+    defaults cascade (undefined ≡ no cap).
+  - `config.ts:validateSettings` and the `defaults` branch of
+    `validateSchema` accept the field; `validateWallClockBudget` rejects
+    non-positive integers at both levels with the canonical message.
+    `DEFAULT_SETTINGS` and `DEFAULT_WORKFLOW_DEFAULTS` exclude the field
+    from `Required<>` — no implicit default is injected.
+  - `agent.ts:runAgent` creates ONE `AbortController` + `setTimeout`
+    when `settings.max_retry_wall_clock_seconds !== undefined`, threads
+    `signal: budgetController.signal` into both the initial and resume
+    `adapter.invoke()` calls, and after each invoke short-circuits to a
+    `retry_budget_exceeded` `AgentResult` when the signal is aborted.
+    A `try`/`finally` clears the timer on every exit path (success,
+    HITL early-return, fail-fast, continuation exhaustion, hook failure).
+  - Pre-existing propagation in `node-dispatch.ts:executeAgentNode` and
+    `loop.ts` forwards the category verbatim through `nodeFailed` and the
+    durable journal — no per-category branch needed.
+  - Flow: `NodeSettings.max_retry_wall_clock_seconds → ResolvedNodeSettings →
+    AgentRunOptions.settings → AbortController → RuntimeInvokeOptions.signal
+    → library cooperative abort → AgentResult.error_category =
+    "retry_budget_exceeded" → nodeFailed / journal node_failed`.

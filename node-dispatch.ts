@@ -37,7 +37,7 @@ import type {
   EngineOptions,
   ErrorCategory,
   NodeConfig,
-  NodeSettings,
+  ResolvedNodeSettings,
   RunState,
   TemplateContext,
   WorkflowConfig,
@@ -94,7 +94,7 @@ export async function executeAgentNode(
   wasWaiting = false,
 ): Promise<AgentResult | null> {
   const ctx = eng.buildContext(nodeId);
-  const settings = node.settings as Required<NodeSettings>;
+  const settings = node.settings as ResolvedNodeSettings;
   const hitlConfig = isHitlConfigured(eng.config.defaults?.hitl)
     ? eng.config.defaults.hitl
     : undefined;

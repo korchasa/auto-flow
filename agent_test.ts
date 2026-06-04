@@ -20,7 +20,7 @@ import type {
 } from "@korchasa/ai-ide-cli/claude/stream";
 import type {
   NodeConfig,
-  NodeSettings,
+  ResolvedNodeSettings,
   TemplateContext,
   ValidationRule,
 } from "./types.ts";
@@ -31,7 +31,7 @@ import type { RuntimeAdapter } from "@korchasa/ai-ide-cli/runtime/types";
 // These tests verify the module's helpers and data structures.
 // Integration tests will be added when running with claude CLI available.
 
-function makeSettings(): Required<NodeSettings> {
+function makeSettings(): ResolvedNodeSettings {
   return {
     max_continuations: 3,
     timeout_seconds: 1800,

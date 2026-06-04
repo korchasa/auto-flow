@@ -14,4 +14,5 @@
 - [FR-E74](requirements-engine/07-mcp-and-plugin-runtime.md#374-fr-e74-plugin-self-contained-runtime-lazy-compile--auto-mcp) — Plugin self-contained runtime: lazy-compile binary + auto-MCP registration — superseded by FR-E78
 - [FR-E77](requirements-engine/04-runtime-and-hooks.md#377-fr-e77-transport-selection-cli-vs-acp) — Transport Selection (CLI vs ACP) via `defaults.transport` / `node.transport` cascade — [x]
 - [FR-E78](requirements-engine/07-mcp-and-plugin-runtime.md#378-fr-e78-plugin-precondition--release-binary-distribution) — Plugin precondition + release binary distribution (supersedes FR-E74 launcher) — [ ]
+- [FR-E80](requirements-engine/05-cli-and-observability.md#380-fr-e80-cumulative-wall-clock-retry-cap) — Cumulative wall-clock retry cap per node via AbortSignal pass-through — [x]
 - [FR-E9](requirements-engine/01-execution-model.md#39-fr-e9-run-artifacts-folder-structure) — Run artifacts live under the selected workflow run directory — [x]

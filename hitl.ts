@@ -12,9 +12,9 @@ import type {
   HitlConfig,
   HumanInputRequest,
   NodeConfig,
-  NodeSettings,
   ProcessRegistry,
   ReasoningEffort,
+  ResolvedNodeSettings,
   RuntimeId,
   TemplateContext,
   TransportOption,
@@ -76,7 +76,7 @@ export interface HitlRunOptions {
   /** Template context for artifact resolution. */
   ctx: TemplateContext;
   /** Resolved node settings (timeouts, retries). */
-  settings: Required<NodeSettings>;
+  settings: ResolvedNodeSettings;
   /** Runtime used for HITL resume. Defaults to claude for backward compatibility. */
   runtime?: RuntimeId;
   /** Extra CLI flags forwarded to the selected runtime on resume. Map-shape. */

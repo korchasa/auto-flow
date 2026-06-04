@@ -13,9 +13,13 @@ import type {
   RuntimeAdapter,
   RuntimeInvokeOptions,
 } from "@korchasa/ai-ide-cli/runtime/types";
-import type { NodeConfig, NodeSettings, TemplateContext } from "./types.ts";
+import type {
+  NodeConfig,
+  ResolvedNodeSettings,
+  TemplateContext,
+} from "./types.ts";
 
-function makeSettings(): Required<NodeSettings> {
+function makeSettings(): ResolvedNodeSettings {
   return {
     max_continuations: 1,
     timeout_seconds: 60,

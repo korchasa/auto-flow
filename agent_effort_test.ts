@@ -20,12 +20,12 @@ import type {
 } from "@korchasa/ai-ide-cli/runtime/types";
 import type {
   NodeConfig,
-  NodeSettings,
+  ResolvedNodeSettings,
   TemplateContext,
   WorkflowDefaults,
 } from "./types.ts";
 
-function makeSettings(): Required<NodeSettings> {
+function makeSettings(): ResolvedNodeSettings {
   return {
     max_continuations: 1,
     timeout_seconds: 60,

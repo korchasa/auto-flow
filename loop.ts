@@ -10,7 +10,7 @@
 import type {
   ErrorCategory,
   NodeConfig,
-  NodeSettings,
+  ResolvedNodeSettings,
   RunState,
   TemplateContext,
   Verbosity,
@@ -202,7 +202,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
     // Run each body node in order (from inline nodes sub-object)
     for (const bodyNodeId of bodyOrder) {
       const bodyNode = loopNode.nodes![bodyNodeId];
-      const settings = bodyNode.settings as Required<NodeSettings>;
+      const settings = bodyNode.settings as ResolvedNodeSettings;
       const ctx = opts.buildCtx(bodyNodeId, iteration);
       const runtimeConfig = resolveRuntimeConfig({
         defaults: config.defaults,

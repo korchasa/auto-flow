@@ -433,3 +433,52 @@
     and the library's default handler runs. Evidence:
     `agent.ts::runAgent` (callback constructed only when
     `output && nodeId`).
+
+
+
+### 3.80 FR-E80: Cumulative Wall-Clock Retry Cap
+
+- **Description:** Engine enforces an optional per-node cumulative
+  wall-clock budget covering the SUM of (library-internal retries +
+  engine-level validation continuations). Field
+  `settings.max_retry_wall_clock_seconds?: number` (positive integer,
+  seconds; undefined ≡ no cap) cascades through the standard 3-tier
+  defaults pipeline (hardcoded → `defaults` → `node.settings`).
+  When configured, `runAgent` creates ONE `AbortController` shared
+  across every `adapter.invoke()` it makes — initial invoke plus all
+  continuations — forwarded as
+  `RuntimeInvokeOptions.signal` (sibling-repo `@korchasa/ai-ide-cli`).
+  A single `setTimeout(cap * 1000)` aborts the controller on expiry;
+  the library cooperatively kills its own subprocess and returns. The
+  engine then short-circuits to a structured failure with
+  `error_category: "retry_budget_exceeded"`, emits a node-tagged WARN
+  (`<nodeId padded to 16>wall-clock budget Ns exceeded after K attempt(s)`),
+  and skips the continuation loop. The budget timer is cleared on every
+  exit path via a `try`/`finally` around the post-create body — success,
+  fail-fast, HITL early-return, continuation exhaustion, hook failure.
+- **Tasks:** [acp-codex-followups](../tasks/2026/06/acp-codex-followups.md).
+- **Motivation:** Per the LumaTale ACP incident report
+  ([`documents/tasks/2026/06/acp-codex-transport-issues-report.md`](../tasks/2026/06/acp-codex-transport-issues-report.md))
+  P4, a deterministic-failure `tech-lead-review` node spent ~2 h
+  retrying the same `JSON-RPC -32700` parser failure because the
+  library's classifier treats it as retryable and the workflow set
+  `max_retries: 10` × per-attempt timeout. Per-attempt `timeout_seconds`
+  bounds ONE attempt; nothing bounded the cumulative cost. This FR adds
+  a generic per-node ceiling that bounds operator pain regardless of
+  how the library classifies the upstream error.
+- **Dep:** FR-E77 (transport agnostic — same cap on `cli` and `acp`);
+  FR-L33 (library `RuntimeInvokeOptions.signal` is the cooperative
+  abort channel).
+- **Acceptance criteria:**
+  - **Tests:** `config_test.ts`, `agent_runtime_test.ts`, `state_test.ts`
+    (FR-E80; regression-locked).
+  - [x] Behaviour unchanged when the field is omitted — engine sends
+    `signal: undefined` and creates no `AbortController` or timer.
+    Evidence: `agent.ts::runAgent` (AbortController constructed only
+    when `wallClockCapSec !== undefined`).
+  - [x] Cap value validated at config load: positive integer at both
+    `defaults` and per-node levels. Evidence:
+    `config.ts::validateWallClockBudget`.
+  - [x] Documentation map updated. Evidence:
+    `documents/requirements-engine.md` FR-E80 row;
+    `documents/index.md` FR-E80 row.

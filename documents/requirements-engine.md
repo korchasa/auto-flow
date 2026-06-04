@@ -115,3 +115,4 @@ FR-IDs are stable — never renumber them on move.
 - FR-E77 (Transport Selection CLI vs ACP)     → 04-runtime-and-hooks
 - FR-E78 (Plugin Precondition + Release Binary Distribution) → 07-mcp-and-plugin-runtime
 - FR-E79 (Runtime `onCallbackError` Surfaced as Engine WARN) → 05-cli-and-observability
+- FR-E80 (Cumulative Wall-Clock Retry Cap) → 05-cli-and-observability

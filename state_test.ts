@@ -171,6 +171,9 @@ Deno.test("markNodeFailed — all error categories are valid", () => {
     "hook_failure",
     "hitl_timeout",
     "aborted",
+    "scope_violation",
+    // FR-E80: cumulative wall-clock retry cap
+    "retry_budget_exceeded",
     "unknown",
   ] as const;
 

@@ -35,8 +35,12 @@ const VALID_TRANSPORTS = ["cli", "acp"] as const;
  * Defaults to no-op; CLI wires it to `OutputManager.warn`. */
 export type ConfigWarnSink = (message: string) => void;
 
-/** Default node settings applied when not specified. */
-export const DEFAULT_SETTINGS: Required<NodeSettings> = {
+/** Default node settings applied when not specified. `max_retry_wall_clock_seconds`
+ * (FR-E80) is intentionally absent: `undefined` IS the documented "no cap"
+ * state, mirroring the `transport` precedent from FR-E77. */
+export const DEFAULT_SETTINGS: Required<
+  Omit<NodeSettings, "max_retry_wall_clock_seconds">
+> = {
   max_continuations: 3,
   timeout_seconds: 1800,
   on_error: "fail",
@@ -61,6 +65,7 @@ export const DEFAULT_WORKFLOW_DEFAULTS: Required<
     | "disallowed_tools"
     | "memory_paths"
     | "transport"
+    | "max_retry_wall_clock_seconds"
   >
 > = {
   ...DEFAULT_SETTINGS,
@@ -275,6 +280,14 @@ function validateSchema(config: Record<string, unknown>): void {
       }
     }
     validateToolFilterLevel("defaults", defaults);
+
+    // FR-E80: validate defaults.max_retry_wall_clock_seconds if present.
+    if (defaults.max_retry_wall_clock_seconds !== undefined) {
+      validateWallClockBudget(
+        "defaults",
+        defaults.max_retry_wall_clock_seconds,
+      );
+    }
 
     // Validate memory_paths if present (FR-S28)
     if (defaults.memory_paths !== undefined) {
@@ -615,6 +628,7 @@ function validateSettings(
     "on_error",
     "max_retries",
     "retry_delay_seconds",
+    "max_retry_wall_clock_seconds",
   ];
   for (const key of Object.keys(settings)) {
     if (!validKeys.includes(key)) {
@@ -630,6 +644,23 @@ function validateSettings(
   ) {
     throw new Error(
       `Node '${nodeId}' settings.on_error must be "fail" or "continue"`,
+    );
+  }
+  if (settings.max_retry_wall_clock_seconds !== undefined) {
+    validateWallClockBudget(
+      `Node '${nodeId}' settings`,
+      settings.max_retry_wall_clock_seconds,
+    );
+  }
+}
+
+/** Validate FR-E80 `max_retry_wall_clock_seconds`: positive integer. */
+function validateWallClockBudget(context: string, value: unknown): void {
+  if (
+    typeof value !== "number" || !Number.isInteger(value) || value <= 0
+  ) {
+    throw new Error(
+      `${context}.max_retry_wall_clock_seconds must be a positive integer (got '${value}')`,
     );
   }
 }

@@ -291,7 +291,25 @@ export interface NodeSettings {
   max_retries?: number;
   /** Delay in seconds between retry attempts (default 5). */
   retry_delay_seconds?: number;
+  /**
+   * Cumulative wall-clock budget for ALL invocation attempts of a single
+   * node, in seconds (FR-E80). Bounds the engine's outer
+   * AbortController forwarded into `RuntimeInvokeOptions.signal`. The
+   * SAME controller is reused across initial invoke + validation
+   * continuations, so the budget covers the sum (not per-attempt).
+   * Undefined ≡ no cap; only the per-attempt `timeout_seconds` applies.
+   */
+  max_retry_wall_clock_seconds?: number;
 }
+
+/**
+ * Node settings after the 3-tier defaults cascade. All fields with documented
+ * defaults are guaranteed present; `max_retry_wall_clock_seconds` (FR-E80)
+ * remains optional because `undefined` is the documented "no cap" state.
+ */
+export type ResolvedNodeSettings =
+  & Required<Omit<NodeSettings, "max_retry_wall_clock_seconds">>
+  & Pick<NodeSettings, "max_retry_wall_clock_seconds">;
 
 /** Artifact validation rule. */
 export interface ValidationRule {
@@ -336,6 +354,7 @@ export type ErrorCategory =
   | "hitl_timeout"
   | "aborted"
   | "scope_violation"
+  | "retry_budget_exceeded"
   | "unknown";
 
 /** Status of a single node during execution. */

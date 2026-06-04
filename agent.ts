@@ -13,10 +13,10 @@ import type {
   HitlConfig,
   HumanInputRequest,
   NodeConfig,
-  NodeSettings,
   PermissionDenial,
   ProcessRegistry,
   ReasoningEffort,
+  ResolvedNodeSettings,
   RuntimeId,
   TemplateContext,
   TransportOption,
@@ -103,7 +103,7 @@ export interface AgentRunOptions {
   /** Template context for interpolating prompt/hook variables. */
   ctx: TemplateContext;
   /** Resolved node settings (timeouts, retries, continuations). */
-  settings: Required<NodeSettings>;
+  settings: ResolvedNodeSettings;
   /** Runtime used for this invocation. Defaults to claude for backward compatibility. */
   runtime?: RuntimeId;
   /** Extra CLI arguments passed to the selected runtime. Map-shape per FR-L14. */
@@ -216,6 +216,37 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
   const adapter = runtimeAdapter ?? getRuntimeAdapter(runtime);
   const extraArgs = applyBudgetFlags(runtimeArgs, runtime, maxTurns);
 
+  // FR-E80: cumulative wall-clock retry cap. When configured, a single
+  // AbortController is shared across the initial invoke and every
+  // continuation; expiry aborts the in-flight subprocess via the signal
+  // forwarded into `RuntimeInvokeOptions.signal`. Undefined cap means no
+  // clock and no signal — preserves byte-identical legacy behaviour for
+  // workflows that omit the field.
+  const wallClockCapSec = settings.max_retry_wall_clock_seconds;
+  const budgetController = wallClockCapSec !== undefined
+    ? new AbortController()
+    : undefined;
+  const budgetTimer = wallClockCapSec !== undefined && budgetController
+    ? setTimeout(() => {
+      budgetController.abort(
+        new Error(`retry budget ${wallClockCapSec}s exceeded`),
+      );
+    }, wallClockCapSec * 1000)
+    : undefined;
+  const buildBudgetExceeded = (attempts: number): AgentResult => {
+    const msg =
+      `wall-clock budget ${wallClockCapSec}s exceeded after ${attempts} attempt(s)`;
+    if (output && nodeId) {
+      output.warn(`${nodeId.padEnd(16)}${msg}`);
+    }
+    return {
+      success: false,
+      continuations: Math.max(0, attempts - 1),
+      error: msg,
+      error_category: "retry_budget_exceeded",
+    };
+  };
+
   // FR-E77: derive the transport-scoped capability vector for HITL gating.
   // Falls back to the CLI vector when the adapter does not implement
   // `capabilitiesFor` (older library versions or test stubs).
@@ -302,196 +333,219 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     processRegistry: processRegistry ?? defaultRegistry,
     // FR-E77: forward resolved transport on the initial invocation.
     transport,
+    // FR-E80: shared budget signal — undefined when no cap is configured.
+    signal: budgetController?.signal,
   };
-  let result = await adapter.invoke(initialInvokeOptions);
+  let attempts = 0;
 
-  let continuations = 0;
-  const validationRules = node.validate ?? [];
+  try {
+    attempts++;
+    let result = await adapter.invoke(initialInvokeOptions);
+    if (budgetController?.signal.aborted) {
+      return buildBudgetExceeded(attempts);
+    }
 
-  // FR-L35 / hitl-via-engine-mcp: HITL question captured by `onToolUseObserved` is the
-  // run's terminal state. Skip the cli_crash branch (the abort-induced
-  // is_error is by design) AND skip validation/continuation: the artifact
-  // is intentionally absent until the user replies, so validation would
-  // fail and a resume would re-invoke the agent — at which point the
-  // observer's "captured-once" guard lets the second tool call through with
-  // a fake `{ok:true}` response. The agent then believes the question was
-  // answered, and the engine never surfaces the captured question to
-  // `handleAgentHitl`. Short-circuit here and let the caller route it.
-  const hitlEarlyReturn = (): AgentResult | null => {
-    const captured = hitlObserver?.getQuestion();
-    if (!captured) return null;
+    let continuations = 0;
+    const validationRules = node.validate ?? [];
+
+    // FR-L35 / hitl-via-engine-mcp: HITL question captured by `onToolUseObserved` is the
+    // run's terminal state. Skip the cli_crash branch (the abort-induced
+    // is_error is by design) AND skip validation/continuation: the artifact
+    // is intentionally absent until the user replies, so validation would
+    // fail and a resume would re-invoke the agent — at which point the
+    // observer's "captured-once" guard lets the second tool call through with
+    // a fake `{ok:true}` response. The agent then believes the question was
+    // answered, and the engine never surfaces the captured question to
+    // `handleAgentHitl`. Short-circuit here and let the caller route it.
+    const hitlEarlyReturn = (): AgentResult | null => {
+      const captured = hitlObserver?.getQuestion();
+      if (!captured) return null;
+      return {
+        success: true,
+        session_id: result.output?.session_id,
+        output: result.output,
+        continuations,
+        hitl_question: captured,
+        permission_denials: result.output?.permission_denials,
+      };
+    };
+    {
+      const early = hitlEarlyReturn();
+      if (early) return early;
+    }
+
+    // Fail fast if initial invocation returned no output at all
+    if (result.error && !result.output) {
+      return {
+        success: false,
+        continuations,
+        error: result.error,
+        error_category: mapRuntimeErrorCategory(result.error_category),
+      };
+    }
+
+    // Continuation loop: runs when validate rules exist OR scope check is active
+    while (validationRules.length > 0 || node.allowed_paths !== undefined) {
+      const validationResults = await runValidations(validationRules, ctx, cwd);
+
+      // Inject scope_check result if out-of-scope modifications detected (FR-E37)
+      if (node.allowed_paths !== undefined && beforeSnapshot !== undefined) {
+        const afterSnapshot = await snapshotModifiedFiles(cwd);
+        const violations = findViolations(
+          beforeSnapshot,
+          afterSnapshot,
+          node.allowed_paths,
+        );
+        if (violations.length > 0) {
+          const scopeRule: ValidationRule = { type: "scope_check", path: "" };
+          validationResults.push({
+            rule: scopeRule,
+            passed: false,
+            message: `Out-of-scope modifications: ${violations.join(", ")}`,
+          });
+        }
+        // Update snapshot for next iteration (incremental detection)
+        beforeSnapshot = afterSnapshot;
+      }
+
+      // Verbose: show validation results
+      if (output && nodeId) {
+        output.verboseValidation(
+          nodeId,
+          toVerboseValidation(validationResults),
+        );
+      }
+
+      if (allPassed(validationResults)) {
+        break;
+      }
+
+      if (continuations >= settings.max_continuations) {
+        const failures = formatFailures(validationResults);
+        return {
+          success: false,
+          session_id: result.output?.session_id,
+          output: result.output,
+          continuations,
+          error:
+            `Continuation limit (${settings.max_continuations}) reached. Failures:\n${failures}`,
+          error_category: "continuations_exhausted",
+        };
+      }
+
+      continuations++;
+      const failures = formatFailures(validationResults);
+
+      // Verbose: show continuation context
+      if (output && nodeId) {
+        output.verboseContinuation(
+          nodeId,
+          continuations,
+          settings.max_continuations,
+          validationResults.filter((r) => !r.passed).map((r) =>
+            `${r.rule.type}: ${r.message}`
+          ),
+        );
+      }
+
+      const resumePrompt =
+        `Validation failed (continuation ${continuations}/${settings.max_continuations}):\n${failures}\nFix the issues.`;
+
+      if (!result.output?.session_id) {
+        return {
+          success: false,
+          output: result.output,
+          continuations,
+          error: "No session_id available for --resume continuation",
+          error_category: "unknown",
+        };
+      }
+
+      attempts++;
+      result = await adapter.invoke({
+        resumeSessionId: result.output.session_id,
+        taskPrompt: resumePrompt,
+        extraArgs,
+        permissionMode,
+        model,
+        // FR-E42: still forward — library skips emission on resume.
+        reasoningEffort,
+        allowedTools,
+        disallowedTools,
+        mcpServers,
+        onToolUseObserved: hitlObserver?.observer,
+        timeoutSeconds: settings.timeout_seconds,
+        maxRetries: settings.max_retries,
+        retryDelaySeconds: settings.retry_delay_seconds,
+        onOutput,
+        onCallbackError,
+        streamLogPath,
+        verbosity,
+        cwd,
+        processRegistry: processRegistry ?? defaultRegistry,
+        // FR-E77: forward resolved transport on resume so HITL replies and
+        // validation continuations land on the same transport as the
+        // initial invocation.
+        transport,
+        // FR-E80: same controller as the initial invocation — cumulative
+        // budget across all attempts.
+        signal: budgetController?.signal,
+      });
+      if (budgetController?.signal.aborted) {
+        return buildBudgetExceeded(attempts);
+      }
+
+      // Same short-circuit applies if the observer captures during a
+      // continuation: the artifact still cannot be produced without the
+      // user's reply, and any further continuation would race the
+      // observer's captured-once guard.
+      const earlyAfterResume = hitlEarlyReturn();
+      if (earlyAfterResume) return earlyAfterResume;
+    }
+
+    if (result.error) {
+      return {
+        success: false,
+        session_id: result.output?.session_id,
+        output: result.output,
+        continuations,
+        error: result.error,
+        error_category: mapRuntimeErrorCategory(result.error_category),
+      };
+    }
+
+    // Run after hook
+    if (node.after) {
+      const hookCmd = interpolate(node.after, ctx, cwd);
+      try {
+        await runShellCommand(hookCmd, "after hook", cwd);
+      } catch (err) {
+        return {
+          success: false,
+          session_id: result.output?.session_id,
+          output: result.output,
+          continuations,
+          error: `After hook failed: ${(err as Error).message}`,
+          error_category: "hook_failure",
+        };
+      }
+    }
+
     return {
       success: true,
       session_id: result.output?.session_id,
       output: result.output,
       continuations,
-      hitl_question: captured,
       permission_denials: result.output?.permission_denials,
+      hitl_question: hitlObserver?.getQuestion() ?? undefined,
     };
-  };
-  {
-    const early = hitlEarlyReturn();
-    if (early) return early;
+  } finally {
+    // FR-E80: clear the wall-clock budget timer on EVERY exit path —
+    // success, fail-fast, HITL early return, continuation exhaustion,
+    // hook failure, exception. Otherwise the timer leaks past runAgent
+    // and may incorrectly abort a later operation in the same process.
+    if (budgetTimer !== undefined) clearTimeout(budgetTimer);
   }
-
-  // Fail fast if initial invocation returned no output at all
-  if (result.error && !result.output) {
-    return {
-      success: false,
-      continuations,
-      error: result.error,
-      error_category: mapRuntimeErrorCategory(result.error_category),
-    };
-  }
-
-  // Continuation loop: runs when validate rules exist OR scope check is active
-  while (validationRules.length > 0 || node.allowed_paths !== undefined) {
-    const validationResults = await runValidations(validationRules, ctx, cwd);
-
-    // Inject scope_check result if out-of-scope modifications detected (FR-E37)
-    if (node.allowed_paths !== undefined && beforeSnapshot !== undefined) {
-      const afterSnapshot = await snapshotModifiedFiles(cwd);
-      const violations = findViolations(
-        beforeSnapshot,
-        afterSnapshot,
-        node.allowed_paths,
-      );
-      if (violations.length > 0) {
-        const scopeRule: ValidationRule = { type: "scope_check", path: "" };
-        validationResults.push({
-          rule: scopeRule,
-          passed: false,
-          message: `Out-of-scope modifications: ${violations.join(", ")}`,
-        });
-      }
-      // Update snapshot for next iteration (incremental detection)
-      beforeSnapshot = afterSnapshot;
-    }
-
-    // Verbose: show validation results
-    if (output && nodeId) {
-      output.verboseValidation(
-        nodeId,
-        toVerboseValidation(validationResults),
-      );
-    }
-
-    if (allPassed(validationResults)) {
-      break;
-    }
-
-    if (continuations >= settings.max_continuations) {
-      const failures = formatFailures(validationResults);
-      return {
-        success: false,
-        session_id: result.output?.session_id,
-        output: result.output,
-        continuations,
-        error:
-          `Continuation limit (${settings.max_continuations}) reached. Failures:\n${failures}`,
-        error_category: "continuations_exhausted",
-      };
-    }
-
-    continuations++;
-    const failures = formatFailures(validationResults);
-
-    // Verbose: show continuation context
-    if (output && nodeId) {
-      output.verboseContinuation(
-        nodeId,
-        continuations,
-        settings.max_continuations,
-        validationResults.filter((r) => !r.passed).map((r) =>
-          `${r.rule.type}: ${r.message}`
-        ),
-      );
-    }
-
-    const resumePrompt =
-      `Validation failed (continuation ${continuations}/${settings.max_continuations}):\n${failures}\nFix the issues.`;
-
-    if (!result.output?.session_id) {
-      return {
-        success: false,
-        output: result.output,
-        continuations,
-        error: "No session_id available for --resume continuation",
-        error_category: "unknown",
-      };
-    }
-
-    result = await adapter.invoke({
-      resumeSessionId: result.output.session_id,
-      taskPrompt: resumePrompt,
-      extraArgs,
-      permissionMode,
-      model,
-      // FR-E42: still forward — library skips emission on resume.
-      reasoningEffort,
-      allowedTools,
-      disallowedTools,
-      mcpServers,
-      onToolUseObserved: hitlObserver?.observer,
-      timeoutSeconds: settings.timeout_seconds,
-      maxRetries: settings.max_retries,
-      retryDelaySeconds: settings.retry_delay_seconds,
-      onOutput,
-      onCallbackError,
-      streamLogPath,
-      verbosity,
-      cwd,
-      processRegistry: processRegistry ?? defaultRegistry,
-      // FR-E77: forward resolved transport on resume so HITL replies and
-      // validation continuations land on the same transport as the
-      // initial invocation.
-      transport,
-    });
-
-    // Same short-circuit applies if the observer captures during a
-    // continuation: the artifact still cannot be produced without the
-    // user's reply, and any further continuation would race the
-    // observer's captured-once guard.
-    const earlyAfterResume = hitlEarlyReturn();
-    if (earlyAfterResume) return earlyAfterResume;
-  }
-
-  if (result.error) {
-    return {
-      success: false,
-      session_id: result.output?.session_id,
-      output: result.output,
-      continuations,
-      error: result.error,
-      error_category: mapRuntimeErrorCategory(result.error_category),
-    };
-  }
-
-  // Run after hook
-  if (node.after) {
-    const hookCmd = interpolate(node.after, ctx, cwd);
-    try {
-      await runShellCommand(hookCmd, "after hook", cwd);
-    } catch (err) {
-      return {
-        success: false,
-        session_id: result.output?.session_id,
-        output: result.output,
-        continuations,
-        error: `After hook failed: ${(err as Error).message}`,
-        error_category: "hook_failure",
-      };
-    }
-  }
-
-  return {
-    success: true,
-    session_id: result.output?.session_id,
-    output: result.output,
-    continuations,
-    permission_denials: result.output?.permission_denials,
-    hitl_question: hitlObserver?.getQuestion() ?? undefined,
-  };
 }
 
 // --- Internal helpers ---
