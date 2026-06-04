@@ -1,7 +1,8 @@
 ---
 date: "2026-05-25"
-status: in progress
+status: superseded
 implements: [FR-E74]
+superseded_by: 2026/06/plugin-binary-fallback.md
 tags: [plugin, launcher, refactor, cross-platform, deno]
 related_tasks:
   - 2026/05/plugin-self-contained-runtime.md

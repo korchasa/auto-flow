@@ -1,7 +1,8 @@
 ---
 date: "2026-05-01"
-status: to do
+status: superseded
 implements: [FR-E8, FR-E44]
+superseded_by: 2026/05/hitl-via-engine-mcp.md
 tags: [decision, engine, hitl, library, cross-repo]
 related_tasks:
   - 2026/05/hitl-detection-to-cli-lib.md

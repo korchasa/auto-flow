@@ -1,6 +1,6 @@
 ---
 date: "2026-05-01"
-status: to do
+status: superseded
 implements: [FR-E24, FR-E50, FR-E51, FR-E52, FR-E54, FR-E57, FR-E58]
 tags: [decision, engine, isolation, plugin, superseded]
 related_tasks:

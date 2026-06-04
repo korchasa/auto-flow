@@ -1,7 +1,8 @@
 ---
 date: "2026-05-24"
-status: in progress
+status: superseded
 implements: [FR-E74]
+superseded_by: 2026/06/plugin-binary-fallback.md
 tags: [distribution, claude-plugin, mcp, lazy-compile, self-contained]
 related_tasks:
   - 2026/05/plugin-first-distribution.md

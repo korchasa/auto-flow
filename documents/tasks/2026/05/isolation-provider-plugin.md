@@ -1,7 +1,8 @@
 ---
 date: "2026-05-01"
-status: to do
+status: superseded
 implements: [FR-E24, FR-E50, FR-E51, FR-E52, FR-E54, FR-E57, FR-E58, FR-E59, FR-E60, FR-E61]
+superseded_by: 2026/05/remove-git-from-engine.md
 tags: [refactor, isolation, plugin, engine, sdlc]
 related_tasks:
   - 2026/05/isolation-provider.md
