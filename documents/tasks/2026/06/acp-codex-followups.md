@@ -138,15 +138,20 @@ _(Filled with `(FR-ID, Test path, Evidence)` tuples after the user
 picks a variant for the engine cap. Provisional list of locked
 behaviours below — concrete test file paths land in `## Solution`.)_
 
-- [ ] **OQ1 probe** — direct `npx -y @zed-industries/codex-acp@0.15.0`
-      session: confirm whether `-32700` is parser-fail (size threshold)
-      or wrapped HTTP-4xx. Evidence: probe notes appended to
-      `acp-codex-transport-issues-report.md` "Open questions" section,
-      one paragraph per question. Manual — operator. (No FR.)
-- [ ] **OQ3 probe** — rerun LumaTale `tech-lead-review` with
-      `runtime: claude` + `transport: acp`. Capture PASS/FAIL + the
-      first failing turn's RPC error. Evidence: notes appended to the
-      same report. Manual — operator. (No FR.)
+- [x] **OQ1 probe** — driver `/tmp/oq1-probe.ts` (adapter-level repro
+      via `getRuntimeAdapter("codex")` with `transport: acp`,
+      `model: gpt-5.5`, sizes 10/25/40 KB). All sizes PASSED
+      (wallMs 18125 / 14918 / 11578, ok=true). `-32700` NOT a pure
+      size threshold; trigger narrowed to content-shape /
+      session-length / upstream-wrap. Evidence:
+      `acp-codex-transport-issues-report.md` "Empirical answers
+      (2026-06-04 probes)" subsection under "Open questions".
+- [x] **OQ3 probe** — driver `/tmp/oq3-probe.ts` (same payload,
+      `getRuntimeAdapter("claude")` + `transport: acp` +
+      `model: claude-sonnet-4-6`). Outcome (a) PASS — all three sizes
+      ok=true (wallMs 12465 / 14339 / 9150). Gap not ACP-wide; no
+      library FR warranted on this evidence. Evidence: same report
+      subsection.
 - [x] **FR-E80 schema** — `NodeSettings.max_retry_wall_clock_seconds?:
       number` typed and validated at config load. Reject ≤ 0 with the
       canonical diagnostic message. Evidence:

@@ -239,6 +239,54 @@ Three layers, two repo boundaries:
    - **How to answer**: rerun LumaTale workflow with `transport: acp` and
      `runtime: claude` for `tech-lead-review` only.
 
+### Empirical answers (2026-06-04 probes)
+
+OQ1 — codex-acp@0.15.0 + `gpt-5.5`, `transport: acp`, Lorem-ipsum prompts
+prefixed with the literal `tech-lead-review` system header. Driver:
+`/tmp/oq1-probe.ts` (deno + `jsr:@korchasa/ai-ide-cli@^0.8.8/runtime`,
+`maxRetries: 0`, `timeoutSeconds: 40`, fresh AbortController per size).
+
+- size=10000 → wallMs=18125, ok=true, no RPC error
+- size=25000 → wallMs=14918, ok=true, no RPC error
+- size=40000 → wallMs=11578, ok=true, no RPC error
+
+Outcome: **`-32700` was NOT reproduced by raw prompt size alone.** All
+three sizes (10/25/40 KB) round-tripped through codex-acp on the same
+runtime/model the LumaTale run used (codex+gpt-5.5+ACP), with sub-20 s
+wall-clock per attempt. The LumaTale failure (run
+`20260603T193151/tech-lead-review`, duration 7110241 ms ≈ 118 min) is
+therefore NOT a pure prompt-size threshold; the trigger involves
+something the Lorem-ipsum filler does not carry — likely the
+tech-lead-review payload's actual content (JSON-in-JSON, control
+chars, embedded code fences with backticks/braces), accumulated
+session state across continuations, OR an upstream backend hiccup
+codex-acp wrapped into `-32700` rather than `-32603`. OQ1 thus
+narrows the search away from byte count and toward content-shape /
+session-length / upstream-wrap hypotheses.
+
+OQ3 — Claude-front ACP parity (same three sizes, same prompt prefix,
+`runtime: claude` + `transport: acp` + `model: claude-sonnet-4-6`).
+Driver: `/tmp/oq3-probe.ts`.
+
+- size=10000 → wallMs=12465, ok=true, no RPC error
+- size=25000 → wallMs=14339, ok=true, no RPC error
+- size=40000 → wallMs=9150, ok=true, no RPC error
+
+Outcome: **(a) PASS** — Claude-front ACP handled all three sizes
+without RPC error. Combined with OQ1 PASS on the codex front, the
+ACP transport itself is not failing on equivalently-sized payloads;
+the LumaTale-specific `-32700` is not ACP-wide. No library FR
+warranted on this evidence; the defensive engine cap (FR-E80) stands
+on its own merits regardless.
+
+Caveat. Probes exercise the adapter end-to-end with synthetic payload
+and a fresh process per size; they do not reproduce the LumaTale
+session's continuation chain, tool-use round-trips, or the exact byte
+sequence of the failing prompt. A future probe ("OQ1.b") could replay
+the verbatim `tech-lead-review` artefact body from
+`runs/20260603T193151/tech-lead-review/` to exercise content shape;
+not in scope of this report.
+
 ## Cross-references
 
 - `ai-ide-cli/documents/tasks/2026/06/acp-parity-closeouts.md` — Gaps 1
