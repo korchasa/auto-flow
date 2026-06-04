@@ -944,6 +944,36 @@ function hostAgentEnv(
   };
 }
 
+/** FR-E78 helper: stage the acceptance workflow under
+ * `<projectDir>/.flowai-workflow/<ACCEPTANCE_WORKFLOW>/workflow.yaml` so the
+ * Codex MCP child can discover it via `resolveActiveWorkflow`'s cwd
+ * fallback when `FLOWAI_WORKFLOW` does not survive the host's env
+ * propagation. Idempotent — overwrites the destination if present. */
+async function seedProjectWorkflow(opts: {
+  projectDir: string;
+  pluginRoot: string;
+  reporter?: InstallReporter;
+}): Promise<void> {
+  const src = join(
+    opts.pluginRoot,
+    ".flowai-workflow",
+    ACCEPTANCE_WORKFLOW,
+    "workflow.yaml",
+  );
+  const destDir = join(
+    opts.projectDir,
+    ".flowai-workflow",
+    ACCEPTANCE_WORKFLOW,
+  );
+  await Deno.mkdir(destDir, { recursive: true });
+  const dest = join(destDir, "workflow.yaml");
+  await Deno.copyFile(src, dest);
+  report(
+    opts.reporter,
+    `codex: seeded workflow at ${dest} (FR-E78 cwd fallback)`,
+  );
+}
+
 function agentPrompt(host: HostKind): string {
   const prompt = [
     "This is a CI acceptance test for the installed flowai-workflow plugin.",
@@ -1261,6 +1291,19 @@ async function runHostInstallAcceptance(opts: {
       throw new Error("Codex install acceptance provider was not resolved.");
     }
     const projectDir = await opts.makeTempDir("flowai-codex-agent-project-");
+    // FR-E78: Codex's `.mcp.json` ships without `cwd`/`env`, so the MCP
+    // child inherits Codex's cwd (the empty `projectDir`). `FLOWAI_WORKFLOW`
+    // set in `hostAgentEnv` is consumed by Codex itself but is not
+    // guaranteed to propagate into the MCP child by every Codex release.
+    // Seed `projectDir/.flowai-workflow/<acceptance>/workflow.yaml` so
+    // `resolveActiveWorkflow` finds the workflow via the cwd fallback
+    // (`<cwd>/.flowai-workflow/<single-or-default>`) regardless of env
+    // passthrough behaviour.
+    await seedProjectWorkflow({
+      projectDir,
+      pluginRoot: installed.pluginRoot,
+      reporter: opts.reporter,
+    });
     if (codexProvider === "openai") {
       const apiKey = requireEnv("OPENAI_API_KEY");
       const login = await runEvidenceCommand(

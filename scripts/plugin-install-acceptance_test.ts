@@ -43,6 +43,23 @@ async function writeJson(path: string, value: unknown): Promise<void> {
   await Deno.writeTextFile(path, JSON.stringify(value, null, 2));
 }
 
+/** Stage `.flowai-workflow/github-inbox-opencode-test/workflow.yaml` inside a
+ * fake installed-plugin root. Mirrors what the real plugin payload contains —
+ * required by the FR-E78 Codex cwd-fallback seeder (`seedProjectWorkflow`)
+ * inside `runHostInstallAcceptance`. */
+async function seedInstalledWorkflow(installedRoot: string): Promise<void> {
+  const dir = join(
+    installedRoot,
+    ".flowai-workflow",
+    "github-inbox-opencode-test",
+  );
+  await Deno.mkdir(dir, { recursive: true });
+  await Deno.writeTextFile(
+    join(dir, "workflow.yaml"),
+    'name: acceptance\nversion: "1"\nnodes: {}\n',
+  );
+}
+
 async function fixturePayload(): Promise<{
   payloadDir: string;
   codexRoot: string;
@@ -410,6 +427,7 @@ Deno.test("install acceptance — codex openai logs in, installs plugin, and inv
       join(roots.codexRoot, ".mcp.json"),
       join(installedRoot, ".mcp.json"),
     );
+    await seedInstalledWorkflow(installedRoot);
 
     const result = await runPluginInstallAcceptance({
       payloadDir: roots.payloadDir,
@@ -517,6 +535,7 @@ Deno.test("install acceptance — codex openrouter uses provider config without 
       join(roots.codexRoot, ".mcp.json"),
       join(installedRoot, ".mcp.json"),
     );
+    await seedInstalledWorkflow(installedRoot);
 
     await runPluginInstallAcceptance({
       payloadDir: roots.payloadDir,
@@ -598,6 +617,7 @@ Deno.test("install acceptance — codex command execution is not MCP tool eviden
       join(roots.codexRoot, ".mcp.json"),
       join(installedRoot, ".mcp.json"),
     );
+    await seedInstalledWorkflow(installedRoot);
 
     await assertRejects(
       () =>
