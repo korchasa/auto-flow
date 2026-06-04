@@ -2,6 +2,54 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.8.0](https://github.com/korchasa/flowai-workflow/compare/v0.7.16...v0.8.0) (2026-06-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **engine:** plugin manifests changed shape. Operators must install
+`flowai-workflow` on PATH (`deno install -A jsr:@korchasa/flowai-workflow`
+or download a release binary) before installing the plugin. FR-E74
+(launcher + lazy compile) is superseded; existing installs need a
+re-sync.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+### Features
+
+* **engine:** add local HITL answer channel + unified command layer (FR-E75) ([586976c](https://github.com/korchasa/flowai-workflow/commit/586976c185c699af60925dc7d93197a505da79be))
+* **engine:** add transport selection (CLI vs ACP) via workflow config (FR-E77) ([f691bce](https://github.com/korchasa/flowai-workflow/commit/f691bcec5bb408962322b9aae0a62053f3ae28de))
+* **engine:** cumulative wall-clock retry cap per node (FR-E80) ([7299a27](https://github.com/korchasa/flowai-workflow/commit/7299a2763ce0fbb13279b92fbb9ca3521695e7a6))
+* **engine:** deliver Codex orchestrator/supervisor as skills (FR-E76) ([fac98fa](https://github.com/korchasa/flowai-workflow/commit/fac98facf0c365f7b45b13f34167c025dab4f58e))
+* **engine:** plugin precondition + release binary distribution (FR-E78) ([fd4240d](https://github.com/korchasa/flowai-workflow/commit/fd4240df88596e888249180f3f81340d1115c968))
+* **engine:** surface runtime onCallbackError as node-tagged WARN (FR-E79) ([3ab9154](https://github.com/korchasa/flowai-workflow/commit/3ab9154dea563348f3dc27fbb5620308c652314c))
+
+
+### Documentation
+
+* **engine:** rescope FR-E43 from per-model fallback to runtime fallback ([b1cca1a](https://github.com/korchasa/flowai-workflow/commit/b1cca1a62fd6788d7a60451e5a292aa1a62636d4))
+* **tasks:** annotate acp-codex-transport-issues-report with P1–P5 status ([9230ede](https://github.com/korchasa/flowai-workflow/commit/9230ede6b947e496421fe7f4d76c6041d94735f6))
+* **tasks:** flip engine-warn-on-runtime-degraded-options to done ([ca02b02](https://github.com/korchasa/flowai-workflow/commit/ca02b02262239efea002c7b6d91120d6610122ec))
+* **tasks:** mark verified DoD items for plugin-first-distribution + codex-subagents-as-skills ([e5049ce](https://github.com/korchasa/flowai-workflow/commit/e5049ceb7367d9c407f00bbac157db7cf9487d6b))
+
+
+### Continuous Integration
+
+* add real agent plugin smoke ([f8907d7](https://github.com/korchasa/flowai-workflow/commit/f8907d793a4e1c4fa88686765e1417fde1cfe5bb))
+* detect claude plugin tool evidence ([9e84c38](https://github.com/korchasa/flowai-workflow/commit/9e84c38bca76a61fe9dafffb75f8854ace53e568))
+* gate release on plugin acceptance ([71c30ad](https://github.com/korchasa/flowai-workflow/commit/71c30ad9b3dfb878d940a12cb6e1e58de4df97ca))
+* harden codex acceptance tool prompt ([db54e15](https://github.com/korchasa/flowai-workflow/commit/db54e1551913889778a1da5cefc9c034d5a3ee4b))
+* install flowai-workflow on PATH before plugin acceptance probe ([3b6a00b](https://github.com/korchasa/flowai-workflow/commit/3b6a00bfc8549fc96c5824ee30e3e9b051621adc))
+* log plugin smoke evidence ([a5674a0](https://github.com/korchasa/flowai-workflow/commit/a5674a072c6055ef07c91431bec5ba1812668faa))
+* make claude acceptance stream output verbose ([d7b334d](https://github.com/korchasa/flowai-workflow/commit/d7b334db8e8527a3178ca387ad6032f0a91ec04b))
+* redact real agent acceptance logs ([94304be](https://github.com/korchasa/flowai-workflow/commit/94304be53e5acfc4020e8f5526195c47dab18f4b))
+* replace plugin smoke with install acceptance ([caa6153](https://github.com/korchasa/flowai-workflow/commit/caa6153bcc4f5a9f492113134ec64374b3373e66))
+* run plugin host smoke on every push ([3443420](https://github.com/korchasa/flowai-workflow/commit/3443420cb8451f87436d7cb75a82bdc6be437774))
+* scope acceptance secrets to agent steps ([f82e423](https://github.com/korchasa/flowai-workflow/commit/f82e423745ddc855d03c1ca1b1b0236407da4cfd))
+* seed acceptance workflow into Codex projectDir (FR-E78 cwd fallback) ([cc92a1a](https://github.com/korchasa/flowai-workflow/commit/cc92a1acd8dfcbd83f46539e12a2bd83ec05201b))
+* trim acceptance command logs ([e984022](https://github.com/korchasa/flowai-workflow/commit/e98402251a54d1a19fd9bbca8df0c9fc40e4c79e))
+* use claude oauth token for acceptance ([67e14be](https://github.com/korchasa/flowai-workflow/commit/67e14becc8c3320dda52abd8339b7efb5263db78))
+
 ### [0.7.16](https://github.com/korchasa/flowai-workflow/compare/v0.7.15...v0.7.16) (2026-05-30)
 
 
