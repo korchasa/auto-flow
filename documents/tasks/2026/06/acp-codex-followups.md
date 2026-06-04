@@ -1,6 +1,6 @@
 ---
 date: "2026-06-04"
-status: in progress
+status: done
 implements: [FR-E80]
 tags: [engine, acp, codex, transport, retry, diagnosis, probe]
 related_tasks:
