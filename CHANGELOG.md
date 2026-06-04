@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.8.1](https://github.com/korchasa/flowai-workflow/compare/v0.8.0...v0.8.1) (2026-06-04)
+
+
+### Features
+
+* **engine:** gate claude-version probe, fail-fast on runtime is_error (FR-E81, FR-E82) ([ac8076d](https://github.com/korchasa/flowai-workflow/commit/ac8076d128cb0b3c100ae6ba29b6f3a839d9f88c))
+
+
+### Documentation
+
+* **tasks:** flip acp-codex-followups to done (FR-E80 shipped) ([c332960](https://github.com/korchasa/flowai-workflow/commit/c332960330ad70d4eeceef45e343e59088154d5b))
+* **tasks:** mark 6 superseded tasks (FR-E74→E78, isolation→remove-git, HITL→engine-mcp) ([28c36af](https://github.com/korchasa/flowai-workflow/commit/28c36afd0fa57bfd1c2e2d99239948debc1258bf))
+* **tasks:** OQ1/OQ3 probe findings — codex-acp -32700 not size-bound ([a0aa6ae](https://github.com/korchasa/flowai-workflow/commit/a0aa6ae3857958ed32a22301f0f1be37c235c070))
+
 ## [0.8.0](https://github.com/korchasa/flowai-workflow/compare/v0.7.16...v0.8.0) (2026-06-04)
 
 
