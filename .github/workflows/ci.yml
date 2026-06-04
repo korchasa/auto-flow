@@ -68,6 +68,19 @@ jobs:
           npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
           claude --version
 
+      - name: Install flowai-workflow CLI on PATH (FR-E78 precondition)
+        run: |
+          set -euo pipefail
+          # --minimum-dependency-age=0 disables the Deno 2.8 supply-chain
+          # delay so freshly-tagged ai-ide-cli versions are accepted
+          # against the source `deno.json` (locked via `deno.lock`).
+          deno install -A -g -f -n flowai-workflow \
+            --config ./deno.json \
+            --minimum-dependency-age=0 \
+            ./cli.ts
+          echo "$HOME/.deno/bin" >> "$GITHUB_PATH"
+          "$HOME/.deno/bin/flowai-workflow" --version
+
       - name: Run Claude Code install acceptance
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -97,6 +110,19 @@ jobs:
           set -euo pipefail
           npm install -g "@openai/codex@${CODEX_CLI_VERSION}"
           codex --version
+
+      - name: Install flowai-workflow CLI on PATH (FR-E78 precondition)
+        run: |
+          set -euo pipefail
+          # --minimum-dependency-age=0 disables the Deno 2.8 supply-chain
+          # delay so freshly-tagged ai-ide-cli versions are accepted
+          # against the source `deno.json` (locked via `deno.lock`).
+          deno install -A -g -f -n flowai-workflow \
+            --config ./deno.json \
+            --minimum-dependency-age=0 \
+            ./cli.ts
+          echo "$HOME/.deno/bin" >> "$GITHUB_PATH"
+          "$HOME/.deno/bin/flowai-workflow" --version
 
       - name: Run Codex install acceptance
         env:
