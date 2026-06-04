@@ -280,6 +280,21 @@ from the sibling checkout instead of the registry:
 `links` is intentionally NOT committed to keep CI and publish-dry-run
 honest about the JSR-published version.
 
+**Cross-repo edit checklist.** When this session edits files under
+`../ai-ide-cli/` (or any sibling repo the engine depends on via JSR),
+the engine code does NOT see those edits until either (a) the library
+is republished AND the engine's pin in `deno.json` bumped, OR (b) the
+local-dev `links` entry above is added. If neither happens,
+library-side fixes are dormant from the engine's perspective. Decide
+upfront whether the library edit is the primary fix or
+defense-in-depth — if primary, plan the publish + pin bump in the
+same session; if defense-in-depth, ensure an engine-side belt covers
+the gap before declaring the work done. (Surfaced by the
+FR-E82/FR-L41 split during the 2026-06 lumatale bug-hunter incident:
+the Codex `invalid_request` classifier shipped to `ai-ide-cli` was
+inert in the engine until republish, so a parallel `runAgent`
+fail-fast on `is_error` was added in-tree as the actual mitigation.)
+
 Publish gotchas honored in `deno.json#publish`:
 
 - **`publish.include` cannot reference files outside the package

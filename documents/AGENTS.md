@@ -20,11 +20,16 @@ folder also hosts:
 
 ### File size budget
 
-Every file under `documents/` must fit in `Read`'s 10k-token limit. Working
-budget ~8k tokens / ~30 KB per file. If a file grows past this, split it by
-functional area: keep the original path as a thin index, move sections into
-a sibling directory. FR-IDs are stable on move — never renumber.
-`scripts/check.ts` enforces this via `docsTokenBudget()`.
+Every file under `documents/` must fit in `Read`'s 10k-token limit.
+**Hard cap: 29 920 bytes per file** (enforced by
+`scripts/check.ts::docsTokenBudget()`; the failure message surfaces
+the actual byte count, but only AFTER the edit lands). Before editing
+a file that may be near the cap, probe its current size with `wc -c
+<path>` and reserve the delta of your intended addition. Files within
+5 % of the cap (`> 28 424 bytes`) should be split rather than grown —
+use the index-and-sections pattern at `documents/requirements-engine.md`
+(index file at the original path, section files in a sibling
+directory). FR-IDs are stable on move — never renumber.
 
 ## Rules
 
