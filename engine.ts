@@ -827,8 +827,12 @@ export class Engine {
     }
   }
 
-  /** Capture runtime version metadata after bootstrap facts are durable. */
+  /** Capture runtime version metadata after bootstrap facts are durable.
+   *  Skipped when no node uses runtime=claude — probing a CLI that the
+   *  workflow does not invoke leaks irrelevant metadata into the journal
+   *  and emits a misleading "claude may not be on PATH" warning. */
   private async captureCliVersion(): Promise<void> {
+    if (!workflowUsesClaude(this.config)) return;
     try {
       const versionResult = await new Deno.Command("claude", {
         args: ["--version"],
@@ -1033,4 +1037,34 @@ export function deriveWorkflowDir(configPath: string): string {
  * Merges over current process env; user-set value cannot override the safety flag. */
 export function buildSpawnEnv(): Record<string, string> {
   return { ...Deno.env.toObject(), DISABLE_AUTOUPDATER: "1" };
+}
+
+/**
+ * FR-E81: True iff any agent node (or its resolved defaults/parent loop)
+ * dispatches to `runtime: claude`. Used to gate the `claude --version`
+ * bootstrap probe so codex/opencode-only workflows do not record an
+ * irrelevant `claude_cli_version` in their journal or warn about a missing
+ * Claude CLI. Pure function over the loaded config — safe for tests.
+ */
+export function workflowUsesClaude(config: WorkflowConfig): boolean {
+  const defaults = config.defaults;
+  let used = false;
+  const walk = (
+    nodes: Record<string, NodeConfig>,
+    parent?: NodeConfig,
+  ): void => {
+    if (used) return;
+    for (const [, node] of Object.entries(nodes)) {
+      if (node.type === "agent") {
+        const rc = resolveRuntimeConfig({ defaults, node, parent });
+        if (rc.runtime === "claude") {
+          used = true;
+          return;
+        }
+      }
+      if (node.type === "loop" && node.nodes) walk(node.nodes, node);
+    }
+  };
+  walk(config.nodes);
+  return used;
 }

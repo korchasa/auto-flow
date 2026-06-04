@@ -425,3 +425,84 @@
     `parseConfig`).
   - [x] `@korchasa/ai-ide-cli` floor bumped to `^0.8.8`. Evidence:
     `deno.json:10`.
+
+
+
+### 3.81 FR-E81: Claude CLI Version Probe Gated on Runtime
+
+- **Description:** The engine bootstraps each run by probing
+  `claude --version` to capture the host CLI build into
+  `RunState.claude_cli_version` and the journal (`run_metadata_updated`).
+  That probe is gated on whether any agent node in the loaded workflow
+  resolves (after defaults / loop-parent cascade) to `runtime: claude`.
+  Codex-only and OpenCode-only workflows skip the probe entirely — no
+  subprocess spawn, no `claude_cli_version` field, no
+  "claude may not be on PATH" warning.
+
+  **Detection:** `engine.ts:workflowUsesClaude(config)` walks
+  `config.nodes` (including loop body nodes), evaluates
+  `resolveRuntimeConfig({ defaults, node, parent })` per agent node, and
+  short-circuits on the first claude hit. Pure function — exported for
+  test access.
+
+- **Motivation:** Codex-only workflows on hosts without the Claude CLI
+  installed printed a misleading "claude may not be on PATH" warning
+  and silently recorded an irrelevant `claude_cli_version` field when
+  a stale binary lingered (e.g., the lumatale-fairy-taler bug-hunter
+  run with `runtime: codex` for every node still wrote
+  `claude_cli_version: "2.1.161 (Claude Code)"` to the journal).
+  Probing a CLI the workflow never invokes leaks metadata and
+  generates noise in journals consumed by the dashboard and post-run
+  audit tooling.
+
+- **Dep:** FR-E2.
+- **Acceptance criteria:**
+  - **Tests:** `engine_test.ts` (FR-E81; regression-locked; codex-only
+    workflow, claude default, claude node override under codex default,
+    claude inside loop body).
+
+
+
+### 3.82 FR-E82: Fail-Fast on Runtime `is_error`
+
+- **Description:** When the runtime adapter returns
+  `RuntimeInvokeResult.output.is_error === true` from the INITIAL
+  invocation of an agent node, the engine terminates the node
+  immediately with `error_category` mapped from
+  `result.error_category` (`stream_stall` passthrough, otherwise
+  `cli_crash`). It does NOT enter the continuation /
+  `--resume` loop even when validation rules are declared.
+
+  **Rationale:** the continuation loop exists to recover from
+  validation failures after a SUCCESSFUL run produced an artefact
+  that fails a rule (file_exists, frontmatter_field, …). When the
+  runtime itself terminated the turn (model rejection, API error,
+  upstream 4xx), no artefact exists, the same prompt will fail the
+  next attempt, and the loop multiplies the cost by
+  `max_continuations × max_retries` per the resolved settings. The
+  fail-fast gate caps the blast radius at a single attempt and
+  surfaces the underlying error to the operator without burying it
+  under N identical retries.
+
+  **Cross-runtime contract:** any RuntimeAdapter setting
+  `output.is_error === true` is treated as terminal here; permanent
+  vs. transient classification is the adapter's responsibility via
+  `RuntimeInvokeResult.error_category` (FR-L41 in
+  `@korchasa/ai-ide-cli` adds `"invalid_request"` for Codex
+  HTTP 400). Engine code does NOT substring-match adapter error
+  text — it branches only on the typed category.
+
+- **Tasks:** see the lumatale-fairy-taler bug-hunter remediation note
+  (chat session 2026-06-04).
+- **Motivation:** the lumatale bug-hunter run with the wrong Codex
+  model (`gpt-5.3-codex`) emitted 22 identical
+  `invalid_request_error` events across one node because the engine
+  treated each `is_error: true` as a missing-artefact failure and
+  drove `max_continuations: 8 × max_retries: 2` worth of resumes.
+  The amplification cost real money and obscured the root cause.
+- **Dep:** FR-E1, FR-E2.
+- **Acceptance criteria:**
+  - **Tests:** `agent_test.ts` (FR-E82; regression-locked; mock
+    codex adapter returns `is_error: true`, runAgent returns
+    `success: false`, `continuations: 0`, single invocation, mapped
+    `error_category` non-`continuations_exhausted`).

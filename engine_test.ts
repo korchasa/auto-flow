@@ -9,7 +9,12 @@ import type {
 } from "./types.ts";
 import { resolveInputArtifacts, runAgent } from "./agent.ts";
 import { collectAllNodeIds, findNodeConfig } from "./config.ts";
-import { buildSpawnEnv, Engine, runPrepareCommand } from "./engine.ts";
+import {
+  buildSpawnEnv,
+  Engine,
+  runPrepareCommand,
+  workflowUsesClaude,
+} from "./engine.ts";
 import {
   collectPostWorkflowNodes,
   executePostWorkflow,
@@ -1790,4 +1795,77 @@ nodes:
       Deno.env.set("DISABLE_AUTOUPDATER", prevVal);
     }
   }
+});
+
+// --- FR-E81: claude --version probe gate ---
+
+Deno.test("FR-E81 workflowUsesClaude — codex-only workflow returns false", () => {
+  const cfg: WorkflowConfig = {
+    name: "x",
+    version: "1",
+    defaults: { runtime: "codex" },
+    nodes: {
+      a: { type: "agent", label: "a", prompt: "p" } as NodeConfig,
+      b: { type: "agent", label: "b", prompt: "p" } as NodeConfig,
+    },
+  };
+  assertEquals(workflowUsesClaude(cfg), false);
+});
+
+Deno.test("FR-E81 workflowUsesClaude — claude default detected", () => {
+  const cfg: WorkflowConfig = {
+    name: "x",
+    version: "1",
+    defaults: { runtime: "claude" },
+    nodes: {
+      a: { type: "agent", label: "a", prompt: "p" } as NodeConfig,
+    },
+  };
+  assertEquals(workflowUsesClaude(cfg), true);
+});
+
+Deno.test("FR-E81 workflowUsesClaude — node-level claude override detected under codex default", () => {
+  const cfg: WorkflowConfig = {
+    name: "x",
+    version: "1",
+    defaults: { runtime: "codex" },
+    nodes: {
+      a: { type: "agent", label: "a", prompt: "p" } as NodeConfig,
+      b: {
+        type: "agent",
+        label: "b",
+        prompt: "p",
+        runtime: "claude",
+      } as NodeConfig,
+    },
+  };
+  assertEquals(workflowUsesClaude(cfg), true);
+});
+
+Deno.test("FR-E81 workflowUsesClaude — loop body claude override detected", () => {
+  const cfg: WorkflowConfig = {
+    name: "x",
+    version: "1",
+    defaults: { runtime: "codex" },
+    nodes: {
+      loop: {
+        type: "loop",
+        label: "loop",
+        inputs: ["a"],
+        condition_node: "inner",
+        condition_field: "verdict",
+        exit_value: "PASS",
+        max_iterations: 1,
+        nodes: {
+          inner: {
+            type: "agent",
+            label: "inner",
+            prompt: "p",
+            runtime: "claude",
+          } as NodeConfig,
+        },
+      } as NodeConfig,
+    },
+  };
+  assertEquals(workflowUsesClaude(cfg), true);
 });

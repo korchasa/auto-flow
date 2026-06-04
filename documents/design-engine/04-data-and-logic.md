@@ -38,8 +38,8 @@
     — `total_cost_usd`: sum of all `nodes[*].cost_usd`, recomputed by
     `updateRunCost()` on each node completion (FR-E17).
     `claude_cli_version` (FR-E49): captured once at run start via
-    `claude --version`; `undefined` when CLI unavailable (e.g. OpenCode
-    runtime)
+    `claude --version`; `undefined` when CLI unavailable OR when no
+    node uses `runtime: claude` so the probe is gated off (FR-E81).
   - EngineOptions: `{ ..., budget_usd?: number, onNodeLifecycle?: (event) => void|Promise<void> }`
     — `budget_usd` is the workflow-wide USD cap from `--budget` (FR-E47).
     `onNodeLifecycle` is an embedding-only host callback (FR-E68); no YAML or

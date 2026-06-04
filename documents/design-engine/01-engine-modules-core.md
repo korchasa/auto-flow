@@ -179,6 +179,13 @@
     `links` field in the root `deno.json`. See the sibling repo's
     `documents/design.md` for full module descriptions.
   - `agent.ts` — runtime-agnostic agent invocation, continuation loop, retry.
+    **Adapter-error fail-fast (FR-E82):** after the initial
+    `adapter.invoke()`, if `result.output?.is_error === true`,
+    `runAgent` returns immediately with mapped `error_category`
+    instead of entering the continuation loop — re-running the
+    same prompt over an artefact the adapter never produced would
+    multiply attempts by `max_continuations × max_retries` for no
+    recovery, as seen on the lumatale `gpt-5.3-codex` incident.
     Agent context injected via `--agent`; Claude `system_prompt` is
     interpolated once, persisted at `<node-dir>/system-prompt.md`, and passed
     to `@korchasa/ai-ide-cli` through the typed `systemPromptFile` invoke
@@ -217,8 +224,14 @@
     node execution; `finally` block restores original value (or deletes
     if previously unset). Child processes inherit the env automatically.
     `claude --version` captured once at run start via `Deno.Command` →
-    stored in `RunState.claude_cli_version`. Failure (e.g. `claude` not
-    on PATH for OpenCode runtime) → warning, field remains `undefined`.
+    stored in `RunState.claude_cli_version`. **Probe gated on runtime
+    (FR-E81):** `workflowUsesClaude(config)` walks every agent node
+    (including loop bodies) through `resolveRuntimeConfig`; the probe
+    is skipped when no node resolves to `runtime: claude`, so
+    codex/opencode-only workflows produce no `claude_cli_version`
+    journal entry and no `claude may not be on PATH` warning. Probe
+    failure on a claude-using workflow → warning, field remains
+    `undefined`.
     **Runtime warn surface (FR-E79):** `runAgent()` builds an
     `onCallbackError` once when `output && nodeId` are both supplied
     and passes it into both `adapter.invoke()` call sites. The handler

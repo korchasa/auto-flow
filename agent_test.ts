@@ -1636,3 +1636,74 @@ Deno.test("FR-E79 omitted OutputManager keeps onCallbackError undefined", async 
     "library default must run when engine has no OutputManager",
   );
 });
+
+// --- FR-E82: fail-fast on runtime is_error (no continuation amplification) ---
+
+Deno.test("FR-E82 runAgent fails fast on result.output.is_error and skips continuation", async () => {
+  const dir = await Deno.makeTempDir();
+  let invocations = 0;
+  const adapter: RuntimeAdapter = {
+    id: "codex",
+    capabilities: {
+      permissionMode: false,
+      transcript: true,
+      interactive: false,
+      toolUseObservation: true,
+      session: false,
+      capabilityInventory: false,
+      toolFilter: false,
+      reasoningEffort: true,
+      mcpInjection: false,
+      sessionFidelity: "native",
+    },
+    invoke() {
+      invocations++;
+      return Promise.resolve({
+        output: {
+          runtime: "codex",
+          result:
+            '{"type":"error","status":400,"error":{"type":"invalid_request_error","message":"model not supported"}}',
+          session_id: "thread-1",
+          duration_ms: 1,
+          num_turns: 0,
+          is_error: true,
+        },
+        error: "Codex CLI returned error: model not supported",
+      });
+    },
+    launchInteractive() {
+      throw new Error("not used");
+    },
+  };
+  const ctx: TemplateContext = {
+    node_dir: `${dir}/node`,
+    run_dir: dir,
+    run_id: "t",
+    workDir: ".",
+    args: {},
+    env: {},
+    input: {},
+  };
+  await Deno.mkdir(ctx.node_dir, { recursive: true });
+
+  const result = await runAgent({
+    node: {
+      type: "agent",
+      label: "BugHunter",
+      prompt: "scan",
+      validate: [
+        { type: "file_exists", path: "{{node_dir}}/site-check-report.md" },
+      ],
+    } as NodeConfig,
+    ctx,
+    settings: { ...makeSettings(), max_continuations: 8 },
+    runtime: "codex",
+    runtimeAdapter: adapter,
+    cwd: dir,
+  });
+
+  assertEquals(result.success, false);
+  assertEquals(result.continuations, 0);
+  assertEquals(result.error_category, "cli_crash");
+  assertEquals(invocations, 1, "must NOT enter continuation/--resume loop");
+});

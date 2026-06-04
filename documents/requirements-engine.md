@@ -116,3 +116,5 @@ FR-IDs are stable — never renumber them on move.
 - FR-E78 (Plugin Precondition + Release Binary Distribution) → 07-mcp-and-plugin-runtime
 - FR-E79 (Runtime `onCallbackError` Surfaced as Engine WARN) → 05-cli-and-observability
 - FR-E80 (Cumulative Wall-Clock Retry Cap) → 05-cli-and-observability
+- FR-E81 (Claude CLI Version Probe Gated on Runtime) → 04-runtime-and-hooks
+- FR-E82 (Fail-Fast on Runtime `is_error`)            → 04-runtime-and-hooks

@@ -384,6 +384,26 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       };
     }
 
+    // Fail fast on runtime-reported error: the adapter ran but the model/API
+    // terminated the turn with is_error=true. The artifact this node was
+    // supposed to write does not exist, so continuation/--resume cannot
+    // satisfy validation — it would just resend the same broken prompt and
+    // burn `max_continuations × max_retries` invocations. Surface the error
+    // immediately. Permanent-category signals (e.g. Codex 400 invalid_request)
+    // are propagated through `error_category`; transient categories
+    // (`stream_stall`) keep their existing semantics.
+    if (result.output?.is_error) {
+      const detail = result.output.result ?? result.error ?? "is_error=true";
+      return {
+        success: false,
+        session_id: result.output.session_id,
+        output: result.output,
+        continuations,
+        error: `Runtime returned error: ${detail}`,
+        error_category: mapRuntimeErrorCategory(result.error_category),
+      };
+    }
+
     // Continuation loop: runs when validate rules exist OR scope check is active
     while (validationRules.length > 0 || node.allowed_paths !== undefined) {
       const validationResults = await runValidations(validationRules, ctx, cwd);
