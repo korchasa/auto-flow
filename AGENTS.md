@@ -52,6 +52,12 @@ example of engine usage.
   `deno lint`, `deno fmt` are hook-blocked
   (see `.claude/hooks/guard-deno-direct.ts`). For ad-hoc subset
   checking on one file, filter with `deno task check 2>&1 | grep <pattern>`.
+  **Reviving a removed dependency:** restore its `deno.lock` entry from the
+  last commit that had it (`git checkout HEAD -- deno.lock`) instead of
+  re-resolving — `deno.lock` caps resolution at a minimum dependency date,
+  so a dep version published after that date fails to resolve (`Could not
+  find version … newer than the specified minimum dependency date`) until
+  the lock is restored/updated.
 - Shell/Bash (legacy stage orchestration scripts)
 - Docker (devcontainer runtime environment)
 - Claude Code CLI (`claude`) (AI agent runtime)
@@ -285,6 +291,17 @@ reading capabilities through `adapter.capabilitiesFor("acp")`. ACP is thus
 the engine's sole runtime transport without any engine-level `transport`
 config knob. To change runtime behaviour, edit the sibling repo, publish a
 new JSR version, and bump the pin here — there is no in-tree runtime source.
+
+**Source of API truth = the PUBLISHED package, not the local sibling
+checkout.** When changing the pin or repointing imports, verify the
+imported symbols against the published version
+(`https://jsr.io/@korchasa/ai-ide-cli/<ver>/...` source +
+`https://jsr.io/@korchasa/ai-ide-cli/<ver>_meta.json` `exports`), NOT
+`../ai-ide-cli` on disk — the sibling working copy routinely carries
+unpublished, uncommitted divergence (e.g. extra `runtime/error-types`
+exports / `ERROR_CATEGORY_*` consts present locally but absent from
+`0.8.8`/`0.8.9`). Reading the local copy as ground truth produces
+imports that fail `deno check` against JSR.
 
 Publish gotchas honored in `deno.json#publish`:
 

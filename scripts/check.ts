@@ -620,19 +620,35 @@ export async function validateFrTestRefs(
       }
       if (!currentFr) continue;
 
-      // Multi-line Tests: blocks fold with continuation indents; collapse
-      // a few following lines for the parse so file refs after a wrap
-      // still match.
+      // Multi-line Tests: blocks fold with continuation indents. Collapse
+      // following indented lines until the parenthetical tag CLOSES — a
+      // fixed-size window would silently drop the anchor check for FRs whose
+      // `(FR-E<N>; …)` tag wraps past the window, yielding a false-green
+      // gate. File names never contain `)`, so the first `)` is the tag's
+      // close.
       let probe = line;
       let j = i + 1;
-      while (j < lines.length && j < i + 6 && !lines[j].match(testsLineRe)) {
-        if (/^\s+\S/.test(lines[j]) && !lines[j].match(/^\s{2,}-/)) {
-          probe += " " + lines[j].trim();
-          j++;
-        } else break;
+      while (
+        j < lines.length && !probe.includes(")") &&
+        /^\s+\S/.test(lines[j]) && !lines[j].match(/^\s{2,}-/)
+      ) {
+        probe += " " + lines[j].trim();
+        j++;
       }
       const testsMatch = probe.match(testsLineRe);
-      if (!testsMatch) continue;
+      if (!testsMatch) {
+        // A line that clearly opens a `**Tests:**` block but won't parse
+        // (unbalanced parenthetical / malformed tag) MUST surface — never
+        // pass silently, or the anchor check is skipped unnoticed.
+        if (/^\s{2,}-\s+\*\*Tests:\*\*/.test(line)) {
+          offenders.push(
+            `${name}:${i + 1} ${currentFr}: **Tests:** line could not be ` +
+              `parsed (unbalanced parenthetical or malformed tag) — ` +
+              `regression-lock anchor check skipped`,
+          );
+        }
+        continue;
+      }
 
       const fileList = [...probe.matchAll(fileRe)].map((m) => m[1]);
       if (fileList.length === 0) continue;
