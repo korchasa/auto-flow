@@ -357,12 +357,14 @@ the active workflow from `<cwd>/.flowai-workflow/` (single or
 
 Workflow behavior is defined in a YAML config file. Key settings under `defaults:`:
 
-- `runtime` — agent runtime: `claude` (default), `opencode`, or `cursor`
+- `runtime` — agent runtime: `claude` (default) or `opencode` (`cursor` is
+  not supported — its ACP front is unpiloted, so it is rejected at config
+  load; see FR-E77)
 - `runtime_args` — extra CLI args forwarded to the selected runtime
 - `max_continuations` — max agent re-invocations on validation failure (default: 3)
 - `max_parallel` — concurrent node execution limit (default: 2)
 - `timeout_seconds` — per-node timeout (default: 1800)
-- `permission_mode` — permission mode override (Claude: full support; opencode/cursor: only `bypassPermissions`)
+- `permission_mode` — permission mode override (Claude: full support; opencode: only `bypassPermissions`)
 - `hitl` — Human-in-the-Loop config: `ask_script`, `check_script`, `poll_interval`, `timeout` (used by Claude directly and by OpenCode via injected local MCP)
 
 Node-level overrides are supported for all defaults.

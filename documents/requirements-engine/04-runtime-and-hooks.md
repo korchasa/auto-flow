@@ -383,14 +383,29 @@
     throw.
   - HITL MCP injection is gated on `effectiveCaps.mcpInjection`.
 
-  **Capability-vector snapshot (`@korchasa/ai-ide-cli@0.8.8`, FR-L39).**
-  All three production runtimes (Claude / Codex / OpenCode) keep
-  `mcpInjection: true` and `toolUseObservation: true` on the ACP path —
-  HITL works under ACP. They downgrade `toolFilter: false` (already false
-  on Codex / OpenCode CLI baselines; Claude downgrades from `true`),
-  `transcript: false`, `interactive: false`, `capabilityInventory: false`.
-  Cursor's `capabilitiesFor("acp")` throws so config-load rejects the
-  runtime.
+  **Ignored / unsupported under ACP — single reference.** Capability vector
+  `@korchasa/ai-ide-cli@0.8.8` (FR-L39): Claude / Codex / OpenCode keep
+  `mcpInjection` + `toolUseObservation` + `session` + `reasoningEffort` true
+  (HITL, effort, resume work); they downgrade `toolFilter` / `transcript` /
+  `interactive` / `capabilityInventory` to false. Consequences:
+  - `allowed_tools` / `disallowed_tools` (and raw `runtime_args`
+    `--allowedTools` / `--disallowedTools` / `--tools`) — no-op on the wire;
+    `validateRuntimeCompatibility` warns `… is ignored under ACP
+    (toolFilter=false)`.
+  - `runtime: cursor` — rejected at config-load (`capabilitiesFor("acp")`
+    throws): `runtime 'cursor' does not support ACP execution`.
+  - Per-node `<id>.jsonl` (the Claude-CLI transcript copied from
+    `~/.claude/projects`, `state/log.ts`) — not produced (`transcript:
+    false`); emits a `[log] JSONL transcript not found` warning. The stream
+    log (`streamLogPath` / `onEvent`) is unaffected.
+  - `interactive` / `launchInteractive` and `capabilityInventory` /
+    `fetchCapabilitiesSlow` — unsupported on ACP; the engine never invokes
+    them during `run`, so no workflow impact.
+  - Removed knobs `defaults.transport` / `nodes.<id>.transport` — accepted
+    but silently ignored (the schema validator does not reject unknown keys).
+  Unaffected: `runtime` (claude / opencode / codex), `model`, `effort`,
+  `permission_mode`, MCP injection, session / resume, `budget`, `validate`,
+  `allowed_paths`, `memory_paths`.
 
 - **Tasks:** [acp-transport-config](../tasks/2026/06/acp-transport-config.md).
 - **Motivation:** the engine standardised on ACP as its only runtime
