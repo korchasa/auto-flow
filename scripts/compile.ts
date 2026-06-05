@@ -153,7 +153,7 @@ async function run(): Promise<void> {
           ...includeArgs,
           "--output",
           artifact,
-          "cli.ts",
+          "src/cli.ts",
         ],
         stdout: "inherit",
         stderr: "inherit",

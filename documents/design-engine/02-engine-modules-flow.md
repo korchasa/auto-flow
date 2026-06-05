@@ -355,34 +355,27 @@
 
 
 
-- **FR-E77 — Transport Selection (CLI vs ACP) data flow:**
-  - `types.ts` re-exports `TransportOption` from
-    `@korchasa/ai-ide-cli/runtime/types` and adds `transport?: TransportOption`
-    to both `WorkflowDefaults` and `NodeConfig`.
-  - `config.ts` parses the field, rejects unknown enum values, and exposes
-    `resolveTransport(node, defaults, loopParent?) → TransportOption`
-    (scalar-replace cascade: `node → loopParent → defaults → "cli"`).
-    `validateRuntimeCompatibility` rejects `transport: acp` for runtimes
-    whose adapter throws on `capabilitiesFor("acp")` (Cursor today) and
-    emits an `OutputManager.warn` warning when the resolved transport is
-    `"acp"` and a tool-filter field is set (toolFilter downgrade on ACP).
-  - `node-dispatch.ts:executeAgentNode` and `loop.ts` resolve the transport
-    alongside runtime/budget/tool-filter and forward it into both
-    `runAgent(...)` and `handleAgentHitl(...)` calls.
-  - `agent.ts:runAgent` threads `transport` into `RuntimeInvokeOptions` on
-    BOTH the initial invocation and the validation-continuation resume.
+- **FR-E77 — ACP as the sole runtime transport, data flow:**
+  - `TransportOption` is re-exported from `@korchasa/ai-ide-cli/runtime/types`
+    for type completeness, but there is NO `transport` field on
+    `WorkflowDefaults` / `NodeConfig` and NO `resolveTransport` cascade — ACP
+    is implicit, not configurable.
+  - `config.ts:validateRuntimeCompatibility` calls
+    `getRuntimeAdapter(runtime).capabilitiesFor?.("acp")` for every agent
+    node; it rejects runtimes whose adapter throws (Cursor today) or omits
+    `capabilitiesFor` with `does not support ACP execution`, and emits an
+    `OutputManager.warn` warning when a tool-filter field is set (toolFilter
+    downgrades to false on ACP).
+  - `agent.ts:runAgent` pins `transport: "acp"` into `RuntimeInvokeOptions`
+    on BOTH the initial invocation and the validation-continuation resume.
     The HITL MCP injection gate consults
-    `adapter.capabilitiesFor?.(transport ?? "cli") ?? adapter.capabilities`
-    so transport-specific downgrades automatically disable HITL wiring
-    instead of crashing at adapter.invoke.
-  - `hitl-handler.ts` / `hitl.ts:runHitlLoop` forward the transport on the
-    post-reply resume invocation, keeping the human round-trip on the same
-    transport as the original call.
-  - `engine.ts` dry-run path passes a `transportMap` to `OutputManager.dryRunPlan`
-    so each agent node prints with a `[transport: acp]` suffix when its
-    resolved transport is `"acp"`.
-  - Flow: `WorkflowDefaults.transport → resolveTransport → AgentRunOptions.transport
-    → adapter.invoke({ transport })`.
+    `adapter.capabilitiesFor?.("acp") ?? adapter.capabilities` so ACP
+    capability downgrades disable HITL wiring instead of crashing at
+    `adapter.invoke`.
+  - `hitl.ts:runHitlLoop` pins `transport: "acp"` on the post-reply resume
+    invocation, keeping the human round-trip on ACP.
+  - Flow: `getRuntimeAdapter(runtime).invoke({ transport: "acp", … })`; the
+    external package routes the call through its shared ACP client.
 
 - **FR-E80 — Cumulative Wall-Clock Retry Cap data flow:**
   - `types.ts` adds `max_retry_wall_clock_seconds?: number` to `NodeSettings`

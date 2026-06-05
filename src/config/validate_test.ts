@@ -1,0 +1,847 @@
+import { assertEquals } from "@std/assert";
+import { allPassed, formatFailures, runValidations } from "./validate.ts";
+import type { TemplateContext, ValidationRule } from "../types.ts";
+
+async function git(cwd: string, ...args: string[]): Promise<void> {
+  const out = await new Deno.Command("git", {
+    args,
+    cwd,
+    stdout: "null",
+    stderr: "piped",
+  }).output();
+  if (!out.success) {
+    const stderr = new TextDecoder().decode(out.stderr);
+    throw new Error(`git ${args.join(" ")} failed: ${stderr}`);
+  }
+}
+
+async function setupGitRepo(): Promise<{ root: string; repo: string }> {
+  const root = await Deno.makeTempDir();
+  const repo = `${root}/repo`;
+  const remote = `${root}/remote.git`;
+  await Deno.mkdir(repo);
+  await Deno.mkdir(remote);
+  await git(remote, "init", "--bare", "--initial-branch=main");
+  await git(repo, "init", "--initial-branch=main");
+  await git(repo, "config", "user.email", "test@test.com");
+  await git(repo, "config", "user.name", "Test");
+  await Deno.mkdir(`${repo}/.flowai-workflow/memory`, { recursive: true });
+  await Deno.writeTextFile(
+    `${repo}/.flowai-workflow/memory/agent-dev.md`,
+    "initial\n",
+  );
+  await Deno.writeTextFile(`${repo}/README.md`, "initial\n");
+  await git(repo, "add", ".");
+  await git(repo, "commit", "-m", "init");
+  await git(repo, "remote", "add", "origin", remote);
+  await git(repo, "push", "-u", "origin", "main");
+  await git(
+    repo,
+    "symbolic-ref",
+    "refs/remotes/origin/HEAD",
+    "refs/remotes/origin/main",
+  );
+  return { root, repo };
+}
+
+function makeCtx(nodeDir: string): TemplateContext {
+  return {
+    node_dir: nodeDir,
+    run_dir: "/tmp/test-run",
+    run_id: "test-run",
+    workDir: ".",
+    args: {},
+    env: {},
+    input: {},
+  };
+}
+
+Deno.test("file_exists — existing file passes", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/test.md`;
+  await Deno.writeTextFile(filePath, "content");
+
+  const rules: ValidationRule[] = [
+    { type: "file_exists", path: filePath },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results.length, 1);
+  assertEquals(results[0].passed, true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("file_exists — missing file fails", async () => {
+  const rules: ValidationRule[] = [
+    { type: "file_exists", path: "/tmp/nonexistent-file-abc123.md" },
+  ];
+  const results = await runValidations(rules, makeCtx("/tmp"));
+
+  assertEquals(results.length, 1);
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("not found"), true);
+});
+
+Deno.test("file_not_empty — non-empty file passes", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/test.md`;
+  await Deno.writeTextFile(filePath, "some content");
+
+  const rules: ValidationRule[] = [
+    { type: "file_not_empty", path: filePath },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("file_not_empty — empty file fails", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/empty.md`;
+  await Deno.writeTextFile(filePath, "");
+
+  const rules: ValidationRule[] = [
+    { type: "file_not_empty", path: filePath },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("empty"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("file_not_empty — missing file fails", async () => {
+  const rules: ValidationRule[] = [
+    { type: "file_not_empty", path: "/tmp/nonexistent-abc123.md" },
+  ];
+  const results = await runValidations(rules, makeCtx("/tmp"));
+
+  assertEquals(results[0].passed, false);
+});
+
+Deno.test("contains_section — section found passes", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/doc.md`;
+  await Deno.writeTextFile(
+    filePath,
+    "# Introduction\nSome text\n## Problem Statement\nDetails here\n",
+  );
+
+  const rules: ValidationRule[] = [
+    { type: "contains_section", path: filePath, value: "Problem Statement" },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("contains_section — section not found fails", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/doc.md`;
+  await Deno.writeTextFile(filePath, "# Introduction\nSome text\n");
+
+  const rules: ValidationRule[] = [
+    { type: "contains_section", path: filePath, value: "Missing Section" },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("not found"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("contains_section — missing value fails", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/doc.md`;
+  await Deno.writeTextFile(filePath, "# Title\n");
+
+  const rules: ValidationRule[] = [
+    { type: "contains_section", path: filePath },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("requires 'value'"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("custom_script — passing script", async () => {
+  const rules: ValidationRule[] = [
+    { type: "custom_script", path: "true" },
+  ];
+  const results = await runValidations(rules, makeCtx("/tmp"));
+
+  assertEquals(results[0].passed, true);
+});
+
+Deno.test("custom_script — failing script", async () => {
+  const rules: ValidationRule[] = [
+    { type: "custom_script", path: "false" },
+  ];
+  const results = await runValidations(rules, makeCtx("/tmp"));
+
+  assertEquals(results[0].passed, false);
+});
+
+Deno.test("FR-E67 git_worktree_clean — clean worktree passes", async () => {
+  const { root, repo } = await setupGitRepo();
+  try {
+    const rules: ValidationRule[] = [
+      {
+        type: "git_worktree_clean",
+      },
+    ];
+    const ctx = { ...makeCtx("runs/test/node"), workDir: repo };
+    const results = await runValidations(rules, ctx, repo);
+
+    assertEquals(results[0].passed, true);
+    assertEquals(results[0].message, "Git worktree is clean");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("FR-E67 git_worktree_clean — modified tracked path fails", async () => {
+  const { root, repo } = await setupGitRepo();
+  try {
+    await Deno.writeTextFile(`${repo}/README.md`, "dirty\n");
+    const rules: ValidationRule[] = [
+      {
+        type: "git_worktree_clean",
+      },
+    ];
+    const ctx = { ...makeCtx("runs/test/node"), workDir: repo };
+    const results = await runValidations(rules, ctx, repo);
+
+    assertEquals(results[0].passed, false);
+    assertEquals(results[0].message.includes("README.md"), true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("FR-E67 git_worktree_clean — untracked non-ignored path fails", async () => {
+  const { root, repo } = await setupGitRepo();
+  try {
+    await Deno.writeTextFile(`${repo}/new-file.md`, "new\n");
+    const rules: ValidationRule[] = [
+      {
+        type: "git_worktree_clean",
+      },
+    ];
+    const ctx = { ...makeCtx("runs/test/node"), workDir: repo };
+    const results = await runValidations(rules, ctx, repo);
+
+    assertEquals(results[0].passed, false);
+    assertEquals(results[0].message.includes("new-file.md"), true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("FR-E67 git_worktree_clean — ignored path passes", async () => {
+  const { root, repo } = await setupGitRepo();
+  try {
+    await Deno.writeTextFile(`${repo}/.gitignore`, "ignored.tmp\n");
+    await git(repo, "add", ".gitignore");
+    await git(repo, "commit", "-m", "ignore temp");
+    await git(repo, "push");
+    await Deno.writeTextFile(`${repo}/ignored.tmp`, "ignored\n");
+    const rules: ValidationRule[] = [{ type: "git_worktree_clean" }];
+    const ctx = { ...makeCtx("runs/test/node"), workDir: repo };
+    const results = await runValidations(rules, ctx, repo);
+
+    assertEquals(results[0].passed, true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("FR-E67 git_default_branch_checked_out — default branch passes", async () => {
+  const { root, repo } = await setupGitRepo();
+  try {
+    const rules: ValidationRule[] = [
+      { type: "git_default_branch_checked_out" },
+    ];
+    const ctx = { ...makeCtx("runs/test/node"), workDir: repo };
+    const results = await runValidations(rules, ctx, repo);
+
+    assertEquals(results[0].passed, true);
+    assertEquals(results[0].message.includes("main"), true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("FR-E67 git_default_branch_checked_out — feature branch fails", async () => {
+  const { root, repo } = await setupGitRepo();
+  try {
+    await git(repo, "checkout", "-b", "feature");
+    const rules: ValidationRule[] = [
+      { type: "git_default_branch_checked_out" },
+    ];
+    const ctx = { ...makeCtx("runs/test/node"), workDir: repo };
+    const results = await runValidations(rules, ctx, repo);
+
+    assertEquals(results[0].passed, false);
+    assertEquals(results[0].message.includes("feature"), true);
+    assertEquals(results[0].message.includes("main"), true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("FR-E67 git_no_unpushed_commits — pushed branch passes", async () => {
+  const { root, repo } = await setupGitRepo();
+  try {
+    const rules: ValidationRule[] = [{ type: "git_no_unpushed_commits" }];
+    const ctx = { ...makeCtx("runs/test/node"), workDir: repo };
+    const results = await runValidations(rules, ctx, repo);
+
+    assertEquals(results[0].passed, true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("FR-E67 git_no_unpushed_commits — local ahead commit fails", async () => {
+  const { root, repo } = await setupGitRepo();
+  try {
+    await Deno.writeTextFile(`${repo}/README.md`, "local\n");
+    await git(repo, "add", "README.md");
+    await git(repo, "commit", "-m", "local");
+    const rules: ValidationRule[] = [{ type: "git_no_unpushed_commits" }];
+    const ctx = { ...makeCtx("runs/test/node"), workDir: repo };
+    const results = await runValidations(rules, ctx, repo);
+
+    assertEquals(results[0].passed, false);
+    assertEquals(results[0].message.includes("1 unpushed"), true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("template variables in path are interpolated", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/output.md`;
+  await Deno.writeTextFile(filePath, "content");
+
+  const rules: ValidationRule[] = [
+    { type: "file_exists", path: "{{node_dir}}/output.md" },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("allPassed — all pass returns true", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/test.md`;
+  await Deno.writeTextFile(filePath, "content");
+
+  const rules: ValidationRule[] = [
+    { type: "file_exists", path: filePath },
+    { type: "file_not_empty", path: filePath },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(allPassed(results), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("allPassed — one failure returns false", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/test.md`;
+  await Deno.writeTextFile(filePath, "content");
+
+  const rules: ValidationRule[] = [
+    { type: "file_exists", path: filePath },
+    { type: "file_exists", path: "/tmp/nonexistent-xyz.md" },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(allPassed(results), false);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("formatFailures — formats only failures", () => {
+  const results = [
+    {
+      rule: { type: "file_exists" as const, path: "a.md" },
+      passed: true,
+      message: "File exists: a.md",
+    },
+    {
+      rule: { type: "file_exists" as const, path: "b.md" },
+      passed: false,
+      message: "File not found: b.md",
+    },
+    {
+      rule: { type: "file_not_empty" as const, path: "c.md" },
+      passed: false,
+      message: "File is empty: c.md",
+    },
+  ];
+  const output = formatFailures(results);
+  assertEquals(
+    output,
+    "- [file_exists] File not found: b.md\n- [file_not_empty] File is empty: c.md",
+  );
+});
+
+// --- frontmatter_field tests ---
+
+Deno.test("frontmatter_field — valid value passes", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(
+    filePath,
+    "---\nverdict: PASS\n---\n# Report\nContent here\n",
+  );
+
+  const rules: ValidationRule[] = [
+    {
+      type: "frontmatter_field",
+      path: filePath,
+      field: "verdict",
+      allowed: ["PASS", "FAIL"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, true);
+  assertEquals(results[0].message.includes("PASS"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("frontmatter_field — invalid value fails", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(
+    filePath,
+    "---\nverdict: MAYBE\n---\n# Report\n",
+  );
+
+  const rules: ValidationRule[] = [
+    {
+      type: "frontmatter_field",
+      path: filePath,
+      field: "verdict",
+      allowed: ["PASS", "FAIL"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("MAYBE"), true);
+  assertEquals(results[0].message.includes("allowed"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("frontmatter_field — missing field fails", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(
+    filePath,
+    "---\ntitle: Report\n---\n# Report\n",
+  );
+
+  const rules: ValidationRule[] = [
+    {
+      type: "frontmatter_field",
+      path: filePath,
+      field: "verdict",
+      allowed: ["PASS", "FAIL"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("not found"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("frontmatter_field — malformed frontmatter fails", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(filePath, "# No frontmatter here\nJust content\n");
+
+  const rules: ValidationRule[] = [
+    {
+      type: "frontmatter_field",
+      path: filePath,
+      field: "verdict",
+      allowed: ["PASS", "FAIL"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("frontmatter"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("frontmatter_field — missing file fails", async () => {
+  const rules: ValidationRule[] = [
+    {
+      type: "frontmatter_field",
+      path: "/tmp/nonexistent-fm-abc123.md",
+      field: "verdict",
+      allowed: ["PASS", "FAIL"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx("/tmp"));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("not found"), true);
+});
+
+Deno.test("frontmatter_field — missing config field fails", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(filePath, "---\nverdict: PASS\n---\n");
+
+  const rules: ValidationRule[] = [
+    {
+      type: "frontmatter_field",
+      path: filePath,
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("requires"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+// --- artifact tests ---
+
+Deno.test("artifact — file absent fails with path in message", async () => {
+  const rules: ValidationRule[] = [
+    {
+      type: "artifact",
+      path: "/tmp/nonexistent-artifact-abc123.md",
+      sections: ["Summary"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx("/tmp"));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(
+    results[0].message.includes("/tmp/nonexistent-artifact-abc123.md"),
+    true,
+  );
+});
+
+Deno.test("artifact — empty file fails", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/empty.md`;
+  await Deno.writeTextFile(filePath, "");
+
+  const rules: ValidationRule[] = [
+    { type: "artifact", path: filePath, sections: ["Summary"] },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("empty"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("artifact — all sections present passes", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(
+    filePath,
+    "## Summary\nsome text\n## Details\nmore text\n",
+  );
+
+  const rules: ValidationRule[] = [
+    { type: "artifact", path: filePath, sections: ["Summary", "Details"] },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("artifact — some sections missing → aggregate error listing all missing", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(filePath, "## Summary\nsome text\n");
+
+  const rules: ValidationRule[] = [
+    {
+      type: "artifact",
+      path: filePath,
+      sections: ["Summary", "Details", "Conclusion"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("Details"), true);
+  assertEquals(results[0].message.includes("Conclusion"), true);
+  assertEquals(results[0].message.includes("'Summary'"), false);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("artifact — all sections missing → aggregate error listing all", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(filePath, "# Title\nsome text\n");
+
+  const rules: ValidationRule[] = [
+    {
+      type: "artifact",
+      path: filePath,
+      sections: ["Summary", "Details"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("Summary"), true);
+  assertEquals(results[0].message.includes("Details"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("artifact — template path interpolation works", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  await Deno.writeTextFile(`${tmpDir}/output.md`, "## Summary\ncontent\n");
+
+  const rules: ValidationRule[] = [
+    {
+      type: "artifact",
+      path: "{{node_dir}}/output.md",
+      sections: ["Summary"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+// --- artifact fields tests (FR-E38) ---
+
+Deno.test("artifact fields — absent (no field check) — file without frontmatter passes sections check", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  // No YAML frontmatter, just sections — fields check skipped since fields absent
+  await Deno.writeTextFile(filePath, "## Summary\ncontent\n## Details\nmore\n");
+
+  const rules: ValidationRule[] = [
+    { type: "artifact", path: filePath, sections: ["Summary", "Details"] },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("artifact fields — all present with values — passes", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(
+    filePath,
+    '---\nvariant: "Variant A"\nscope: engine\n---\n## Summary\ncontent\n',
+  );
+
+  const rules: ValidationRule[] = [
+    {
+      type: "artifact",
+      path: filePath,
+      sections: ["Summary"],
+      fields: ["variant", "scope"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("artifact fields — one field missing from frontmatter — fails", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(
+    filePath,
+    '---\nvariant: "Variant A"\n---\n## Summary\ncontent\n',
+  );
+
+  const rules: ValidationRule[] = [
+    {
+      type: "artifact",
+      path: filePath,
+      sections: ["Summary"],
+      fields: ["variant", "scope"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("scope"), true);
+  assertEquals(results[0].message.includes("variant"), false);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("artifact fields — one field present but empty-valued — fails", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const filePath = `${tmpDir}/report.md`;
+  await Deno.writeTextFile(
+    filePath,
+    '---\nvariant: "Variant A"\nscope:\n---\n## Summary\ncontent\n',
+  );
+
+  const rules: ValidationRule[] = [
+    {
+      type: "artifact",
+      path: filePath,
+      sections: ["Summary"],
+      fields: ["variant", "scope"],
+    },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, false);
+  assertEquals(results[0].message.includes("scope"), true);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("multiple rules — mixed results", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  await Deno.writeTextFile(`${tmpDir}/exists.md`, "# Title\nContent");
+
+  const rules: ValidationRule[] = [
+    { type: "file_exists", path: `${tmpDir}/exists.md` },
+    { type: "file_not_empty", path: `${tmpDir}/exists.md` },
+    { type: "contains_section", path: `${tmpDir}/exists.md`, value: "Title" },
+    { type: "file_exists", path: `${tmpDir}/missing.md` },
+  ];
+  const results = await runValidations(rules, makeCtx(tmpDir));
+
+  assertEquals(results[0].passed, true);
+  assertEquals(results[1].passed, true);
+  assertEquals(results[2].passed, true);
+  assertEquals(results[3].passed, false);
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+// --- FR-E52 regression: validation under worktree isolation ---
+//
+// When ctx.workDir != ".", the engine runs from the original repo cwd while
+// agents run inside a sibling worktree and write artifacts at
+// `<workDir>/<node_dir>/...`. Validation MUST wrap the rule path with
+// `workPath(ctx.workDir, …)` before any FS access — otherwise it stat()s
+// the wrong location, fails (or worse: silently agrees) and the loop's
+// condition extraction sees a different file than validation does.
+// Issue #196 / run 20260501T020329 hit this: build wrote to the doubled
+// path, validate.ts checked the flat path, agents "fixed" by writing to
+// flat too, then loop.extractConditionValue (correctly wrapped) couldn't
+// find the QA report at the doubled path.
+Deno.test(
+  "FR-E52 — file_exists under worktree wraps path with workDir",
+  async () => {
+    const workDir = await Deno.makeTempDir();
+    const nodeDirRel = "runs/test/build";
+    await Deno.mkdir(`${workDir}/${nodeDirRel}`, { recursive: true });
+    await Deno.writeTextFile(
+      `${workDir}/${nodeDirRel}/04-impl-summary.md`,
+      "## Summary\nok\n",
+    );
+
+    const ctx: TemplateContext = {
+      node_dir: nodeDirRel,
+      run_dir: "runs/test",
+      run_id: "test",
+      workDir,
+      args: {},
+      env: {},
+      input: {},
+    };
+    const rules: ValidationRule[] = [
+      { type: "file_exists", path: "{{node_dir}}/04-impl-summary.md" },
+    ];
+    const results = await runValidations(rules, ctx);
+
+    assertEquals(results[0].passed, true);
+    // Display path remains workDir-relative so the agent's error/log
+    // message references a path it can write to from cwd = workDir.
+    assertEquals(
+      results[0].message,
+      `File exists: ${nodeDirRel}/04-impl-summary.md`,
+    );
+
+    await Deno.remove(workDir, { recursive: true });
+  },
+);
+
+Deno.test(
+  "FR-E52 — artifact + frontmatter_field under worktree wrap path",
+  async () => {
+    const workDir = await Deno.makeTempDir();
+    const nodeDirRel = "runs/test/verify";
+    await Deno.mkdir(`${workDir}/${nodeDirRel}`, { recursive: true });
+    await Deno.writeTextFile(
+      `${workDir}/${nodeDirRel}/05-qa-report.md`,
+      "---\nverdict: PASS\n---\n## Summary\nok\n",
+    );
+
+    const ctx: TemplateContext = {
+      node_dir: nodeDirRel,
+      run_dir: "runs/test",
+      run_id: "test",
+      workDir,
+      args: {},
+      env: {},
+      input: {},
+    };
+    const rules: ValidationRule[] = [
+      {
+        type: "artifact",
+        path: "{{node_dir}}/05-qa-report.md",
+        sections: ["Summary"],
+      },
+      {
+        type: "frontmatter_field",
+        path: "{{node_dir}}/05-qa-report.md",
+        field: "verdict",
+        allowed: ["PASS", "FAIL"],
+      },
+    ];
+    const results = await runValidations(rules, ctx);
+
+    assertEquals(results[0].passed, true);
+    assertEquals(results[1].passed, true);
+
+    await Deno.remove(workDir, { recursive: true });
+  },
+);

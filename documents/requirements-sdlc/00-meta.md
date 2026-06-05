@@ -155,9 +155,10 @@ Design ideas captured for discussion; not committed work. Promote to FR-S only a
         <node-id>.jsonl               # Full session transcript
       state.json                      # Run state (node statuses, session IDs)
   workflow.yaml                         # DAG-based workflow configuration
-engine/                                # Deno/TypeScript workflow engine
+src/                                   # Deno/TypeScript workflow engine
     cli.ts                             # Entry point: deno task run
-    engine.ts                          # DAG executor
+    engine/engine.ts                   # DAG executor
+    # ACP runtime = external @korchasa/ai-ide-cli dependency (JSR)
     ...
 ```
 

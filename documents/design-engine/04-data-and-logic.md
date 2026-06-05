@@ -427,7 +427,7 @@
     `Engine.run()` contract (FR-E60) makes `Deno.env` mutation race-free.
   - **Binary Compile Flow (FR-E39):** `scripts/compile.ts` iterates
     `TARGETS` array. Per target: construct `deno compile --allow-all --target
-    <denoTarget> --output dist/flowai-workflow-<os>-<arch> cli.ts`. If
+    <denoTarget> --output dist/flowai-workflow-<os>-<arch> src/cli.ts`. If
     `--dry-run`: print command string, skip execution. Otherwise:
     `new Deno.Command("deno", { args })` → `output()` → check
     `success`; on failure: throw with target + stderr. `dist/` dir created

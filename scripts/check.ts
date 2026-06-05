@@ -188,7 +188,7 @@ async function workflowIntegrity(): Promise<void> {
     return;
   }
 
-  const { loadConfig } = await import("../config.ts");
+  const { loadConfig } = await import("../src/config/config.ts");
   for (const dir of folders) {
     const shapeErrors = await assertWorkflowFolderShape(dir);
     if (shapeErrors.length > 0) {
@@ -295,7 +295,7 @@ async function hitlArtifactSource(): Promise<void> {
     console.log("  No workflow folders — skipped.");
     return;
   }
-  const { loadConfig } = await import("../config.ts");
+  const { loadConfig } = await import("../src/config/config.ts");
   for (const dir of folders) {
     const workflowPath = `${dir}/workflow.yaml`;
     let config;
@@ -711,19 +711,44 @@ export async function frFieldSet(): Promise<void> {
     return;
   }
   const offenders = validateFrFields(files);
-  const fileExists = async (p: string): Promise<boolean> => {
-    try {
-      await Deno.stat(p);
-      return true;
-    } catch (err) {
-      if (err instanceof Deno.errors.NotFound) return false;
-      throw err;
+
+  // Engine source moved under `src/<group>/` (engine/, config/, state/, …).
+  // SRS docs still cite tests by bare basename (`engine_test.ts`) or a
+  // short subdir-relative name (`init/mod_test.ts`). Resolve each cited
+  // reference against the real tree by path suffix so the docs stay
+  // location-agnostic. Index every `*_test.ts` under `src/` and `scripts/`.
+  const allTestPaths: string[] = [];
+  for await (const path of walkDir("src")) {
+    if (path.endsWith("_test.ts")) allTestPaths.push(path);
+  }
+  for await (const entry of Deno.readDir("scripts")) {
+    if (entry.isFile && entry.name.endsWith("_test.ts")) {
+      allTestPaths.push(`scripts/${entry.name}`);
     }
+  }
+  // Resolve a doc reference to a unique on-disk path, or null if it does
+  // not match exactly one file (missing, or ambiguous bare basename).
+  // Tie-break: a bare basename that matches multiple files resolves to the
+  // `src/`-root copy (e.g. engine `mod_test.ts` over `init/mod_test.ts`);
+  // nested duplicates must be cited with their subdir prefix.
+  const resolveTestRef = (ref: string): string | null => {
+    if (allTestPaths.includes(ref)) return ref;
+    const matches = allTestPaths.filter((p) => p.endsWith(`/${ref}`));
+    if (matches.length === 1) return matches[0];
+    if (matches.length > 1) {
+      const atRoot = `src/${ref}`;
+      return matches.includes(atRoot) ? atRoot : null;
+    }
+    return null;
   };
+  const fileExists = (p: string): Promise<boolean> =>
+    Promise.resolve(resolveTestRef(p) !== null);
+  const readFile = (p: string): Promise<string> =>
+    Deno.readTextFile(resolveTestRef(p) ?? p);
   const testRefOffenders = await validateFrTestRefs(
     files,
     fileExists,
-    Deno.readTextFile,
+    readFile,
   );
   offenders.push(...testRefOffenders);
   if (offenders.length > 0) {
@@ -798,21 +823,24 @@ if (import.meta.main) {
   await run("deno", ["fmt"], "Formatting (auto-fix)");
   await run("deno", ["lint"], "Linting");
 
-  // Type check root-level .ts files, scripts/*.ts, and .claude/hooks/*.ts.
-  // The ai-ide-cli library lives in a sibling repo and runs its own check
-  // there; flowai-workflow imports it via JSR. `.claude/hooks/` is in
+  // Type check all engine source under src/ (recursive — incl. the
+  // scaffolder src/init/; the ACP runtime layer is the external
+  // `@korchasa/ai-ide-cli` dependency), plus scripts/*.ts and
+  // .claude/hooks/*.ts. `.claude/hooks/` is in
   // publish.exclude (so `deno publish --dry-run` skips it) — listing it
   // here is the only thing that type-checks Deno-based hooks. Missing
   // directory is silently skipped so end-user projects that lack
   // `.claude/hooks/` still pass.
   const typeCheckFiles: string[] = [];
-  for (const dir of [".", "scripts", ".claude/hooks"]) {
+  // src/ is nested (engine/, config/, …) — walk recursively.
+  for await (const entry of walkDir("src")) {
+    if (entry.endsWith(".ts")) typeCheckFiles.push(entry);
+  }
+  for (const dir of ["scripts", ".claude/hooks"]) {
     try {
       for await (const entry of Deno.readDir(dir)) {
         if (entry.isFile && entry.name.endsWith(".ts")) {
-          typeCheckFiles.push(
-            dir === "." ? entry.name : `${dir}/${entry.name}`,
-          );
+          typeCheckFiles.push(`${dir}/${entry.name}`);
         }
       }
     } catch (err) {
@@ -824,7 +852,7 @@ if (import.meta.main) {
   // Smoke test: verify CLI entry point actually starts
   await run(
     "deno",
-    ["run", "-A", "cli.ts", "--help"],
+    ["run", "-A", "src/cli.ts", "--help"],
     "CLI Smoke Test",
   );
 
@@ -857,7 +885,7 @@ if (import.meta.main) {
   // Caveat: `deno doc --lint` validates ONLY symbols reachable from the
   // given entry. Public symbols exported via other barrels are not
   // visited — rely on `deno publish --dry-run` below for full coverage.
-  await run("deno", ["doc", "--lint", "mod.ts"], "Doc Lint");
+  await run("deno", ["doc", "--lint", "src/mod.ts"], "Doc Lint");
 
   // JSR publish dry-run — catches JSR `no-slow-types`, `missing-jsdoc`,
   // `private-type-ref`, and `invalid-path` errors that `deno check` and

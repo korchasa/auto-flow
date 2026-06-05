@@ -433,8 +433,16 @@ All 6 workflow agents are framework-independent Markdown files at
 ## Project Structure
 
 ```
-cli.ts, engine.ts, agent.ts, ... # DAG executor engine modules (root)
-init/                            # Project scaffolder (`flowai-workflow init`)
+src/                             # All engine source, grouped by domain
+  cli.ts, mod.ts, types.ts       # CLI entry, library entry, shared roots
+  engine/                        # DAG executor core (engine, agent, dag, loop)
+  config/                        # config load + validation + templates
+  state/                         # run state, lock, log, journal
+  isolation/                     # git worktree, guardrail, scope/memory checks
+  hitl/                          # human-in-the-loop + HITL MCP server
+  mcp/                           # engine MCP server + CLI commands
+  init/                          # Project scaffolder (`flowai-workflow init`)
+# ACP runtime layer = external @korchasa/ai-ide-cli dependency (JSR, ^0.8.8)
 scripts/                         # Dev tooling (check, compile, dashboard, release-notes)
 .flowai-workflow/                # One folder per workflow (FR-S47)
   github-inbox/                  # Workflow folder = portable unit

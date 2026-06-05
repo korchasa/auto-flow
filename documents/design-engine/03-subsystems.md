@@ -148,7 +148,7 @@
     `x86_64-apple-darwin`, `aarch64-apple-darwin`.
   - Output naming: `flowai-workflow-<os>-<arch>` (e.g., `flowai-workflow-linux-x86_64`).
   - Invokes: `deno compile --target <t> --env VERSION=<v> --output <name>
-    cli.ts` per target.
+    src/cli.ts` per target.
   - `--version` flag value: reads `VERSION` env var, falls back to `"dev"`.
 - **deno.json task:** `"compile": "deno run -A scripts/compile.ts"`.
 - **GitHub Actions Workflow** (`.github/workflows/release.yml`):
