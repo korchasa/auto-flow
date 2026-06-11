@@ -25,6 +25,7 @@ import {
   markNodeStarted,
   workPath,
 } from "../state/state.ts";
+import { resultExcerpt } from "../state/run-journal.ts";
 import type { OutputManager } from "../output.ts";
 import { resolveRuntimeConfig } from "@korchasa/ai-ide-cli/runtime";
 import { resolveBudget, resolveToolFilter } from "../config/config.ts";
@@ -252,26 +253,21 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
       await opts.onAttemptCompleted?.(bodyNodeId, iteration, result);
 
       if (result.success) {
-        const resultExcerpt = result.output
-          ? (result.output.result ?? "")
-            .split("\n")
-            .filter((l) => l.trim())
-            .slice(0, 3)
-            .join(" | ")
-            .slice(0, 400)
+        const excerpt = result.output
+          ? resultExcerpt(result.output.result ?? "")
           : undefined;
         if (opts.nodeCompleted) {
           await opts.nodeCompleted(
             bodyNodeId,
             result.output?.total_cost_usd,
-            resultExcerpt,
+            excerpt,
           );
         } else {
           markNodeCompleted(
             state,
             bodyNodeId,
             result.output?.total_cost_usd,
-            resultExcerpt,
+            excerpt,
           );
         }
 

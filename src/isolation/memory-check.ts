@@ -11,6 +11,7 @@
  * Domain-agnostic: globs come from workflow YAML, NOT from engine code.
  */
 
+import { globMatch } from "./glob.ts";
 import { snapshotModifiedFiles } from "./scope-check.ts";
 
 /**
@@ -50,30 +51,4 @@ export function formatMemoryViolation(
   return `[memory-check] node=${nodeId} left ${dirtyPaths.length} memory file(s) uncommitted: ${
     dirtyPaths.join(", ")
   }. Commit them or set 'memory_commit_deferred: true' on this node.`;
-}
-
-/** Glob match supporting `**`, `*`, `?`. Mirrors `scope-check.ts::globMatch`. */
-function globMatch(pattern: string, filePath: string): boolean {
-  let regexStr = "";
-  let i = 0;
-  while (i < pattern.length) {
-    if (
-      pattern[i] === "*" && i + 1 < pattern.length &&
-      pattern[i + 1] === "*"
-    ) {
-      regexStr += ".*";
-      i += 2;
-      if (i < pattern.length && pattern[i] === "/") i++;
-    } else if (pattern[i] === "*") {
-      regexStr += "[^/]*";
-      i++;
-    } else if (pattern[i] === "?") {
-      regexStr += "[^/]";
-      i++;
-    } else {
-      regexStr += pattern[i].replace(/[.+^${}()|[\]\\]/g, "\\$&");
-      i++;
-    }
-  }
-  return new RegExp(`^${regexStr}$`).test(filePath);
 }

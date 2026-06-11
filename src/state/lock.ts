@@ -93,6 +93,10 @@ export async function acquireLock(
       throw err;
     } else if (err instanceof SyntaxError) {
       // Corrupted lock file — overwrite
+    } else {
+      // Fail fast: any other error (permissions, IO, corrupt lock shape)
+      // must surface instead of silently reclaiming the lock.
+      throw err;
     }
     // For NotFound and SyntaxError, fall through to create new lock
   }

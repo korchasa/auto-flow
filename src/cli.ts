@@ -48,11 +48,12 @@ import {
   runFlowaiHitlMcpServer,
 } from "./hitl/hitl-mcp-server.ts";
 import { installSignalHandlers } from "./process-registry.ts";
-import { checkForUpdate } from "./version.ts";
+import { checkForUpdate, VERSION } from "./version.ts";
 import { runMcpServer } from "./mcp/mcp-server.ts";
 
-/** Version string embedded at compile time via VERSION env var. Defaults to "dev". */
-export const VERSION: string = Deno.env.get("VERSION") ?? "dev";
+/** Re-exported for back-compat: VERSION lives in `version.ts` (leaf module)
+ * so the library graph never imports this CLI entry point. */
+export { VERSION };
 
 /** Result of {@link extractCliFlags}: CLI-only flags plus the remaining args. */
 export interface CliFlags {

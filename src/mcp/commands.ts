@@ -14,18 +14,14 @@
  *   - {@link resumeRun} — the sole `Engine({resume:true})` construction site.
  */
 
-import { dirname, join } from "@std/path";
+import { dirname } from "@std/path";
 
 import type { Verbosity } from "../types.ts";
+import { workflowConfigPath } from "../config/config.ts";
 import { Engine } from "../engine/engine.ts";
 import { isRunLive } from "../state/lock.ts";
 import { replayRunJournal } from "../state/run-journal.ts";
 import { getHitlInboxPath, getRunDir } from "../state/state.ts";
-
-/** Resolve a workflow folder to its `workflow.yaml` config path. */
-function configPathOf(workflowDir: string): string {
-  return join(workflowDir, "workflow.yaml");
-}
 
 /** Parameters for {@link deliverHumanAnswer}. */
 export interface DeliverHumanAnswerParams {
@@ -128,7 +124,7 @@ export async function resumeRun(
 ): Promise<ResumeRunResult> {
   const { workflowDir, runId, verbosity = "quiet" } = params;
   const engine = new Engine({
-    config_path: configPathOf(workflowDir),
+    config_path: workflowConfigPath(workflowDir),
     run_id: runId,
     resume: true,
     dry_run: false,

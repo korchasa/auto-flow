@@ -64,7 +64,6 @@ export type { ValidationResult } from "./config/validate.ts";
 export {
   createRunState,
   generateRunId,
-  getJournalFilePath,
   getNodeDir,
   getRunDir,
   PhaseRegistry,

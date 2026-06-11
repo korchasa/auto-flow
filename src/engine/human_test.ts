@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import { runHuman } from "./human.ts";
 import type { UserInput } from "./human.ts";
 import type { NodeConfig, TemplateContext } from "../types.ts";
@@ -123,6 +123,23 @@ Deno.test("runHuman — template variables in question", async () => {
     true,
   );
   assertEquals(capturedMessage.includes("fix login"), true);
+});
+
+Deno.test("runHuman — artifact write failure propagates (fail fast)", async () => {
+  // Parent of node_dir is a regular file → mkdir fails. The error must
+  // surface immediately: a swallowed write would resurface later as an
+  // opaque missing-artifact failure in the next dependent node.
+  const tmpFile = await Deno.makeTempFile();
+  const node: NodeConfig = {
+    type: "human",
+    label: "Review",
+    question: "Approve?",
+  };
+  const ctx = { ...makeCtx(), node_dir: `${tmpFile}/nested` };
+
+  await assertRejects(() => runHuman(node, ctx, mockInput("ok")));
+
+  await Deno.remove(tmpFile);
 });
 
 Deno.test("runHuman — option index out of range uses raw input", async () => {

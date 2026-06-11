@@ -3,7 +3,6 @@ import {
   createRunState,
   generateRunId,
   getHitlInboxPath,
-  getJournalFilePath,
   getNodeDir,
   getNodesByStatus,
   getResumableNodes,
@@ -23,7 +22,11 @@ import {
 } from "./state.ts";
 import type { WorkflowConfig } from "../types.ts";
 import { nodeCompleted, nodeStarted } from "../engine/node-lifecycle.ts";
-import { replayRunJournal, RunJournalWriter } from "./run-journal.ts";
+import {
+  getJournalPath,
+  replayRunJournal,
+  RunJournalWriter,
+} from "./run-journal.ts";
 
 Deno.test("generateRunId — format YYYYMMDDTHHMMSS without label", () => {
   const id = generateRunId();
@@ -72,7 +75,7 @@ Deno.test("createRunState — initializes all nodes as pending", () => {
   assertEquals(state.nodes.developer.status, "pending");
 });
 
-Deno.test("getRunDir / getNodeDir / getJournalFilePath — defaults preserved", () => {
+Deno.test("getRunDir / getNodeDir / getJournalPath — defaults preserved", () => {
   assertEquals(
     getRunDir("20260308T143022"),
     ".flowai-workflow/runs/20260308T143022",
@@ -81,8 +84,9 @@ Deno.test("getRunDir / getNodeDir / getJournalFilePath — defaults preserved", 
     getNodeDir("20260308T143022", "spec"),
     ".flowai-workflow/runs/20260308T143022/spec",
   );
+  // Single journal-path source: getJournalPath(runDir) composed with getRunDir.
   assertEquals(
-    getJournalFilePath("20260308T143022"),
+    getJournalPath(getRunDir("20260308T143022")),
     ".flowai-workflow/runs/20260308T143022/journal.jsonl",
   );
 });
@@ -117,9 +121,9 @@ Deno.test("getNodeDir — workflow-aware: nests under <workflowDir>/runs/", () =
   );
 });
 
-Deno.test("getJournalFilePath — workflow-aware: journal.jsonl under explicit workflowDir", () => {
+Deno.test("getJournalPath — workflow-aware: journal.jsonl under explicit workflowDir", () => {
   assertEquals(
-    getJournalFilePath("X", ".flowai-workflow/foo"),
+    getJournalPath(getRunDir("X", ".flowai-workflow/foo")),
     ".flowai-workflow/foo/runs/X/journal.jsonl",
   );
 });

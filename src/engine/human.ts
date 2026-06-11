@@ -85,13 +85,11 @@ export async function runHuman(
 
   // Save response to artifact file. ctx.node_dir is workDir-relative
   // (see TemplateContext) — reconstruct cwd-correct path for FS access.
+  // Fail fast: a swallowed write error would resurface later as an opaque
+  // missing-artifact failure in the next dependent node.
   const nodeDir = workPath(ctx.workDir, ctx.node_dir);
-  try {
-    await Deno.mkdir(nodeDir, { recursive: true });
-    await Deno.writeTextFile(`${nodeDir}/response.txt`, response + "\n");
-  } catch {
-    // Best effort — directory might not be writable in tests
-  }
+  await Deno.mkdir(nodeDir, { recursive: true });
+  await Deno.writeTextFile(`${nodeDir}/response.txt`, response + "\n");
 
   // Check abort conditions
   const aborted = (node.abort_on ?? []).includes(response);

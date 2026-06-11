@@ -7,7 +7,7 @@
  */
 
 import { parse as parseYaml } from "@std/yaml";
-import { dirname } from "@std/path";
+import { dirname, join } from "@std/path";
 import {
   getRuntimeAdapter,
   resolveRuntimeConfig,
@@ -112,6 +112,12 @@ export function parseConfig(
     workflowDir,
     warnSink,
   );
+}
+
+/** Resolve a workflow folder to its `workflow.yaml` config path. Single
+ * source of the config-filename convention shared by MCP and CLI layers. */
+export function workflowConfigPath(workflowDir: string): string {
+  return join(workflowDir, "workflow.yaml");
 }
 
 /** Load and parse workflow config from a file path.
@@ -1182,18 +1188,31 @@ export function collectAllNodeIds(config: WorkflowConfig): string[] {
   return ids;
 }
 
-/** Extract NodeSettings fields from WorkflowDefaults (exclude workflow-only fields). */
+/** Extract NodeSettings fields from WorkflowDefaults via explicit pick.
+ * Explicit so that workflow-only fields (`on_failure_script`,
+ * `prepare_command`, `memory_paths`, …) and any future WorkflowDefaults
+ * additions can never silently leak into per-node settings — the previous
+ * rest-spread subtraction did exactly that. */
 function extractNodeSettings(defaults: WorkflowDefaults): NodeSettings {
-  const {
-    max_parallel: _,
-    runtime: _rt,
-    runtime_args: _ra,
-    hitl: _hitl,
-    model: _model,
-    effort: _effort,
-    permission_mode: _pm,
-    worktree_disabled: _wd,
-    ...settings
-  } = defaults;
+  const settings: NodeSettings = {};
+  if (defaults.max_continuations !== undefined) {
+    settings.max_continuations = defaults.max_continuations;
+  }
+  if (defaults.timeout_seconds !== undefined) {
+    settings.timeout_seconds = defaults.timeout_seconds;
+  }
+  if (defaults.on_error !== undefined) {
+    settings.on_error = defaults.on_error;
+  }
+  if (defaults.max_retries !== undefined) {
+    settings.max_retries = defaults.max_retries;
+  }
+  if (defaults.retry_delay_seconds !== undefined) {
+    settings.retry_delay_seconds = defaults.retry_delay_seconds;
+  }
+  if (defaults.max_retry_wall_clock_seconds !== undefined) {
+    settings.max_retry_wall_clock_seconds =
+      defaults.max_retry_wall_clock_seconds;
+  }
   return settings;
 }

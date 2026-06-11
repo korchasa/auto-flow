@@ -78,7 +78,9 @@
     - `findViolations(before: Set<string>, after: Set<string>, allowedPaths: string[]): string[]`
       — pure function. Computes `after − before` (new modifications since
       snapshot), filters against `allowedPaths` globs. Returns violation paths
-      (empty = no violations). Glob matching via path prefix or pattern.
+      (empty = no violations). Glob matching via shared
+      `isolation/glob.ts::globMatch` (`**`, `*`, `?`) — single matcher also
+      used by `guardrail.ts` and `memory-check.ts`.
     Integration: `agent.ts` calls `snapshotModifiedFiles()` before each
     `invokeClaudeCli()` when `node.allowed_paths` exists. After invocation,
     snapshots again, calls `findViolations()`. Violations → synthetic
@@ -104,8 +106,9 @@
     line 1: `[HH:MM:SS] <nodeId padded>  RESULT:` (header),
     lines 2..N: each non-empty line of `output.result` indented 2 spaces,
     last line: `  cost=$X.XXXX | duration=Xs | turns=N` (footer).
-    `extractResultExcerpt()` removed — excerpt logic inlined at state-
-    persistence call sites in `engine.ts` and `node-dispatch.ts`.
+    `extractResultExcerpt()` removed — excerpt logic centralized in
+    `state/run-journal.ts::resultExcerpt()`, shared by `engine.ts`,
+    `node-dispatch.ts`, and `loop.ts`.
     `RunSummary.nodeResults?: Record<string, string>` (FR-E22): optional
     per-node result excerpts. `summary()` renders per-node result lines after
     "Nodes:" when `nodeResults` present: `  <nodeId padded>  <excerpt>`.
@@ -241,7 +244,9 @@
     fail-fast on the first non-`completed` state; banner
     `=== Cycle k/N ===` on stderr (suppressed under `-q`). `--cycles >1`
     + `--resume` rejected at parse time.
-    `VERSION` constant: `Deno.env.get("VERSION") ?? "dev"`.
+    `VERSION` constant (`Deno.env.get("VERSION") ?? "dev"`) is defined in
+    `version.ts` (leaf module — keeps the library graph free of the CLI
+    entry point) and re-exported from `cli.ts` for back-compat.
   - ~~`repl/mod.ts`~~ — removed (FR-E46 retired). Interactive REPL and
     bundled management skills (`flowai-workflow-init`,
     `flowai-workflow-adapt-agents`) no longer ship; runtime persistence at

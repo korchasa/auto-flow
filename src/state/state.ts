@@ -156,14 +156,6 @@ export function getHitlInboxPath(runDir: string, nodeId: string): string {
   return `${runDir}/.hitl-inbox/${nodeId}.txt`;
 }
 
-/** Get the journal.jsonl file path for a run. */
-export function getJournalFilePath(
-  runId: string,
-  workflowDir: string = DEFAULT_WORKFLOW_DIR,
-): string {
-  return `${getRunDir(runId, workflowDir)}/journal.jsonl`;
-}
-
 /** Get the logs directory for a run. */
 export function getLogsDir(
   runId: string,

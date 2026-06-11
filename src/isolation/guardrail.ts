@@ -10,6 +10,8 @@
  * `git checkout` / `git clean` and fails the run.
  */
 
+import { globMatch } from "./glob.ts";
+
 /**
  * Find paths newly modified outside the assigned `workDir` and outside
  * `allowedPaths` globs. Pure function — no I/O.
@@ -206,32 +208,4 @@ export async function runWithGuardrail<T>(
   const message = formatLeakMessage(opts.nodeId, leakedPaths);
   opts.log?.(message);
   return { result, leak: { paths: leakedPaths, message } };
-}
-
-/**
- * Glob match supporting `**`, `*`, `?`. Mirrors `scope-check.ts::globMatch`.
- */
-function globMatch(pattern: string, filePath: string): boolean {
-  let regexStr = "";
-  let i = 0;
-  while (i < pattern.length) {
-    if (
-      pattern[i] === "*" && i + 1 < pattern.length &&
-      pattern[i + 1] === "*"
-    ) {
-      regexStr += ".*";
-      i += 2;
-      if (i < pattern.length && pattern[i] === "/") i++;
-    } else if (pattern[i] === "*") {
-      regexStr += "[^/]*";
-      i++;
-    } else if (pattern[i] === "?") {
-      regexStr += "[^/]";
-      i++;
-    } else {
-      regexStr += pattern[i].replace(/[.+^${}()|[\]\\]/g, "\\$&");
-      i++;
-    }
-  }
-  return new RegExp(`^${regexStr}$`).test(filePath);
 }

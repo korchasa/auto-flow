@@ -37,7 +37,7 @@ import { z } from "zod";
 import { join } from "@std/path";
 import { parse as parseYaml, stringify as stringifyYaml } from "@std/yaml";
 
-import { loadConfig } from "../config/config.ts";
+import { loadConfig, workflowConfigPath } from "../config/config.ts";
 import { deliverHumanAnswer, resumeRun } from "./commands.ts";
 import { defaultLockPath, readLockInfo } from "../state/lock.ts";
 import { replayRunJournal } from "../state/run-journal.ts";
@@ -143,10 +143,6 @@ function err(message: string): ToolResponse {
   };
 }
 
-function configPathOf(workflowDir: string): string {
-  return join(workflowDir, "workflow.yaml");
-}
-
 /**
  * No-workflow mode (FR-E74): register the same eight tool names so
  * `tools/list` matches the full surface, but every handler returns the
@@ -182,7 +178,7 @@ function registerGetWorkflow(server: McpServer, workflowDir: string): void {
     {},
     async () => {
       try {
-        const config = await loadConfig(configPathOf(workflowDir));
+        const config = await loadConfig(workflowConfigPath(workflowDir));
         return ok(config);
       } catch (e) {
         return err((e as Error).message);
@@ -410,7 +406,7 @@ function registerApplyWorkflowPatch(
       { operations }: { operations: JsonPointerOp[] },
     ) => {
       try {
-        const path = configPathOf(workflowDir);
+        const path = workflowConfigPath(workflowDir);
         const text = await Deno.readTextFile(path);
         const doc = parseYaml(text) as Record<string, unknown>;
         for (const op of operations) {

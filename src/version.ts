@@ -9,9 +9,11 @@
  */
 
 import { greaterThan, parse } from "@std/semver";
-import { VERSION } from "./cli.ts";
 
-export { VERSION };
+/** Version string embedded at compile time via VERSION env var. Defaults to
+ * "dev". Defined here (leaf module) so both the CLI entry point and library
+ * consumers read it without pulling the CLI into the import graph. */
+export const VERSION: string = Deno.env.get("VERSION") ?? "dev";
 
 /** JSR registry meta endpoint for this package. */
 const JSR_META_URL = "https://jsr.io/@korchasa/flowai-workflow/meta.json";

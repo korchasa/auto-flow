@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import {
   acquireLock,
   defaultLockPath,
@@ -7,6 +7,20 @@ import {
   readLockInfo,
   releaseLock,
 } from "./lock.ts";
+
+Deno.test("acquireLock — unexpected lock-read errors propagate (fail fast)", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const lockPath = `${tmpDir}/.lock`;
+
+  // Valid JSON with a corrupt shape: `isLockAlive(null)` throws a TypeError —
+  // neither NotFound, nor SyntaxError, nor "already running". Such an
+  // unanticipated error must surface, NOT silently reclaim the lock.
+  await Deno.writeTextFile(lockPath, "null");
+
+  await assertRejects(() => acquireLock(lockPath, "run-unexpected"));
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
 
 Deno.test("acquireLock — creates lock file with pid, hostname, and run_id", async () => {
   const tmpDir = await Deno.makeTempDir();

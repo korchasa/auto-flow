@@ -5,6 +5,8 @@
  * then identifies violations against the node's allowed_paths glob patterns.
  */
 
+import { globMatch } from "./glob.ts";
+
 /**
  * Snapshot the set of modified and untracked files using git.
  *
@@ -68,38 +70,4 @@ export function findViolations(
     }
   }
   return violations;
-}
-
-/**
- * Match a file path against a glob pattern.
- *
- * Supported syntax:
- * - `**` — matches any sequence of path segments (including none)
- * - `*` — matches any sequence of characters within a single path segment
- * - `?` — matches a single character (non-separator)
- * - All other characters match literally
- */
-function globMatch(pattern: string, filePath: string): boolean {
-  let regexStr = "";
-  let i = 0;
-  while (i < pattern.length) {
-    if (
-      pattern[i] === "*" && i + 1 < pattern.length &&
-      pattern[i + 1] === "*"
-    ) {
-      regexStr += ".*";
-      i += 2;
-      if (i < pattern.length && pattern[i] === "/") i++;
-    } else if (pattern[i] === "*") {
-      regexStr += "[^/]*";
-      i++;
-    } else if (pattern[i] === "?") {
-      regexStr += "[^/]";
-      i++;
-    } else {
-      regexStr += pattern[i].replace(/[.+^${}()|[\]\\]/g, "\\$&");
-      i++;
-    }
-  }
-  return new RegExp(`^${regexStr}$`).test(filePath);
 }
