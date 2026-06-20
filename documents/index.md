@@ -2,6 +2,8 @@
 
 ## FR
 
+- [FR-E18](requirements-engine/05-cli-and-observability.md#318-fr-e18-stream-log-timestamps) — Stream-log lines prefixed with `[HH:MM:SS]` wall-clock timestamp (engine-owned write under ACP) — [x]
+- [FR-E20](requirements-engine/05-cli-and-observability.md#320-fr-e20-repeated-file-read-warning) — Stream-log `[WARN]` when same file path read >2 times in one node run — [x]
 - [FR-E39](requirements-engine/06-distribution-and-housekeeping.md#339-fr-e39-standalone-binary-distribution) — Standalone binary distribution via `deno compile` + GitHub Release assets — [x]
 - [FR-E41](requirements-engine/06-distribution-and-housekeeping.md#341-fr-e41-cli-auto-update-and-automated-release-pipeline) — Automated CI release pipeline with conventional-commit version bumping — [x]
 - [FR-E43](requirements-engine/02-nodes-and-models.md#343-fr-e43-runtime-fallback-fallback) — Runtime fallback (`defaults.fallback`): switch entire runtime on overload / quota / availability errors — [ ]

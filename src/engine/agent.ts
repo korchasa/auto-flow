@@ -46,6 +46,7 @@ import {
   snapshotModifiedFiles,
 } from "../isolation/scope-check.ts";
 import { workPath } from "../state/state.ts";
+import { createStreamLogWriter, type StreamLogWriter } from "./stream-log.ts";
 
 /**
  * Resolve input artifact file paths and sizes from input directories.
@@ -308,6 +309,34 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     ctx,
     cwd,
   });
+
+  // FR-E18/FR-E20: the engine is the SOLE writer of `${node_dir}/stream.log`.
+  // Under ACP the library persists nothing — it only forwards raw
+  // `session/update` params via `onEvent`. Open the writer once here (before
+  // the first invoke) so a single append handle spans the initial invoke AND
+  // every continuation. A synchronous open failure fails the node fast with
+  // `cli_crash` (fail-fast); async write rejections surface via
+  // `takeWriteError()` after each invoke and after `close()`.
+  let streamLog: StreamLogWriter | undefined;
+  if (streamLogPath) {
+    try {
+      streamLog = createStreamLogWriter(streamLogPath, {
+        onParseError: onCallbackError,
+      });
+    } catch (err) {
+      if (budgetTimer !== undefined) clearTimeout(budgetTimer);
+      return {
+        success: false,
+        continuations: 0,
+        error: (err as Error).message,
+        error_category: "cli_crash",
+      };
+    }
+  }
+  const onEvent = streamLog
+    ? (params: Record<string, unknown>) => streamLog!.handleEvent(params)
+    : undefined;
+
   const initialInvokeOptions: Parameters<RuntimeAdapter["invoke"]>[0] = {
     // ACP is the engine's only runtime transport — request it explicitly so
     // `@korchasa/ai-ide-cli` adapters route through the shared ACP client
@@ -330,7 +359,10 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     retryDelaySeconds: settings.retry_delay_seconds,
     onOutput,
     onCallbackError,
-    streamLogPath,
+    // FR-E18/E20: subscribe to the raw ACP event stream — the engine persists
+    // it to `stream.log`. `streamLogPath` is intentionally NOT forwarded (the
+    // library drops it under ACP and would report a spurious FR-E79 WARN).
+    onEvent,
     verbosity,
     cwd,
     processRegistry: processRegistry ?? defaultRegistry,
@@ -338,6 +370,14 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     signal: budgetController?.signal,
   };
   let attempts = 0;
+
+  /** Flush + close the stream-log writer and surface any deferred write
+   * rejection. Idempotent close; safe to call once before the success return. */
+  const flushStreamLog = async (): Promise<Error | null> => {
+    if (!streamLog) return null;
+    await streamLog.close();
+    return streamLog.takeWriteError();
+  };
 
   try {
     attempts++;
@@ -347,6 +387,20 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     }
 
     let continuations = 0;
+    // FR-E18: fail fast if persisting the event stream already rejected.
+    {
+      const we = streamLog?.takeWriteError();
+      if (we) {
+        return {
+          success: false,
+          session_id: result.output?.session_id,
+          output: result.output,
+          continuations,
+          error: `stream-log write failed: ${we.message}`,
+          error_category: "cli_crash",
+        };
+      }
+    }
     const validationRules = node.validate ?? [];
 
     // FR-L35 / hitl-via-engine-mcp: HITL question captured by `onToolUseObserved` is the
@@ -502,7 +556,9 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
         retryDelaySeconds: settings.retry_delay_seconds,
         onOutput,
         onCallbackError,
-        streamLogPath,
+        // FR-E18/E20: same engine-owned writer as the initial invoke —
+        // events append to one handle across all continuations.
+        onEvent,
         verbosity,
         cwd,
         processRegistry: processRegistry ?? defaultRegistry,
@@ -512,6 +568,20 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       });
       if (budgetController?.signal.aborted) {
         return buildBudgetExceeded(attempts);
+      }
+      // FR-E18: fail fast on a deferred stream-log write rejection.
+      {
+        const we = streamLog?.takeWriteError();
+        if (we) {
+          return {
+            success: false,
+            session_id: result.output?.session_id,
+            output: result.output,
+            continuations,
+            error: `stream-log write failed: ${we.message}`,
+            error_category: "cli_crash",
+          };
+        }
       }
 
       // Same short-circuit applies if the observer captures during a
@@ -550,6 +620,21 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       }
     }
 
+    // FR-E18: flush the stream log before declaring success; a deferred
+    // write rejection that only surfaces on the final flush fails the node
+    // `cli_crash` (persistence failure is fatal — never swallowed).
+    const writeErr = await flushStreamLog();
+    if (writeErr) {
+      return {
+        success: false,
+        session_id: result.output?.session_id,
+        output: result.output,
+        continuations,
+        error: `stream-log write failed: ${writeErr.message}`,
+        error_category: "cli_crash",
+      };
+    }
+
     return {
       success: true,
       session_id: result.output?.session_id,
@@ -564,6 +649,9 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     // hook failure, exception. Otherwise the timer leaks past runAgent
     // and may incorrectly abort a later operation in the same process.
     if (budgetTimer !== undefined) clearTimeout(budgetTimer);
+    // FR-E18: guarantee the stream-log fd is released on every exit path
+    // (close is idempotent — the success path already flushed it).
+    if (streamLog) await streamLog.close();
   }
 }
 

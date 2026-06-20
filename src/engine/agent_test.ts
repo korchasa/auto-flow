@@ -655,6 +655,163 @@ Deno.test("FR-E79 omitted OutputManager keeps onCallbackError undefined", async 
 
 // --- FR-E82: fail-fast on runtime is_error (no continuation amplification) ---
 
+// --- FR-E18 / FR-E20: engine-owned stream.log writer over ACP onEvent ---
+
+function claudeAcpAdapter(
+  invoke: RuntimeAdapter["invoke"],
+): RuntimeAdapter {
+  return {
+    id: "claude",
+    capabilities: {
+      permissionMode: true,
+      transcript: true,
+      interactive: false,
+      toolUseObservation: true,
+      session: false,
+      capabilityInventory: false,
+      toolFilter: true,
+      reasoningEffort: true,
+      mcpInjection: false,
+      sessionFidelity: "native",
+    },
+    launchInteractive() {
+      throw new Error("not used");
+    },
+    invoke,
+  };
+}
+
+Deno.test("FR-E18 engine persists ACP onEvent stream to stream.log", async () => {
+  const dir = await Deno.makeTempDir();
+  const streamLogPath = `${dir}/stream.log`;
+  const seen: Record<string, unknown>[] = [];
+  const adapter = claudeAcpAdapter((opts) => {
+    seen.push(opts as unknown as Record<string, unknown>);
+    // The library's ACP invoke path forwards raw `session/update` params.
+    opts.onEvent?.({
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text: "hi from agent" },
+    });
+    return Promise.resolve({
+      output: {
+        result: "ok",
+        session_id: "s",
+        duration_ms: 1,
+        num_turns: 1,
+        is_error: false,
+      },
+    });
+  });
+
+  const result = await runAgent({
+    node: { type: "agent", label: "T", prompt: "go" },
+    ctx: { ...makeCtx(), workDir: dir },
+    settings: makeSettings(),
+    runtime: "claude",
+    runtimeAdapter: adapter,
+    streamLogPath,
+    cwd: dir,
+  });
+
+  assertEquals(result.success, true);
+  // Engine now owns the write — streamLogPath must NOT be forwarded to the
+  // adapter (it is dropped under ACP and would trigger a spurious FR-E79 WARN).
+  assertEquals(seen[0].streamLogPath, undefined);
+  assertEquals(typeof seen[0].onEvent, "function");
+
+  const content = await Deno.readTextFile(streamLogPath);
+  assertEquals(content.includes("[stream] text: hi from agent"), true);
+  assertEquals(
+    /^\[\d{2}:\d{2}:\d{2}\] /.test(content.split("\n")[0]),
+    true,
+    `first line not timestamped: ${content.split("\n")[0]}`,
+  );
+  assertEquals(content.includes("--- end ---"), true);
+});
+
+Deno.test("FR-E18 stream.log appended across continuations", async () => {
+  const dir = await Deno.makeTempDir();
+  const streamLogPath = `${dir}/stream.log`;
+  let invokeCount = 0;
+  const adapter = claudeAcpAdapter((opts) => {
+    invokeCount++;
+    opts.onEvent?.({
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text: `turn ${invokeCount}` },
+    });
+    return Promise.resolve({
+      output: {
+        result: "ok",
+        session_id: "s",
+        duration_ms: 1,
+        num_turns: 1,
+        is_error: false,
+      },
+    });
+  });
+
+  const result = await runAgent({
+    node: {
+      type: "agent",
+      label: "T",
+      prompt: "go",
+      // Validation never passes → forces the continuation loop.
+      validate: [{ type: "file_exists", path: "{{node_dir}}/never.md" }],
+    },
+    ctx: { ...makeCtx(), node_dir: "node", workDir: dir },
+    settings: { ...makeSettings(), max_continuations: 1 },
+    runtime: "claude",
+    runtimeAdapter: adapter,
+    streamLogPath,
+    cwd: dir,
+  });
+
+  // Initial invoke + one continuation, both emitting to the SAME handle.
+  assertEquals(result.success, false);
+  assertEquals(invokeCount, 2);
+  const content = await Deno.readTextFile(streamLogPath);
+  assertEquals(content.includes("[stream] text: turn 1"), true);
+  assertEquals(
+    content.includes("[stream] text: turn 2"),
+    true,
+    "continuation must append, not truncate prior turns",
+  );
+});
+
+Deno.test("FR-E18 stream-log open failure fails node with cli_crash", async () => {
+  const dir = await Deno.makeTempDir();
+  // Parent path is a regular file → opening a child fails (ENOTDIR).
+  await Deno.writeTextFile(`${dir}/blocker`, "file");
+  const seen: Record<string, unknown>[] = [];
+  const adapter = claudeAcpAdapter((opts) => {
+    seen.push(opts as unknown as Record<string, unknown>);
+    return Promise.resolve({
+      output: {
+        result: "ok",
+        session_id: "s",
+        duration_ms: 1,
+        num_turns: 1,
+        is_error: false,
+      },
+    });
+  });
+
+  const result = await runAgent({
+    node: { type: "agent", label: "T", prompt: "go" },
+    ctx: { ...makeCtx(), workDir: dir },
+    settings: makeSettings(),
+    runtime: "claude",
+    runtimeAdapter: adapter,
+    streamLogPath: `${dir}/blocker/stream.log`,
+    cwd: dir,
+  });
+
+  assertEquals(result.success, false);
+  assertEquals(result.error_category, "cli_crash");
+  assertEquals(result.continuations, 0);
+  assertEquals(seen.length, 0, "must fail before reaching adapter.invoke");
+});
+
 Deno.test("FR-E82 runAgent fails fast on result.output.is_error and skips continuation", async () => {
   const dir = await Deno.makeTempDir();
   let invocations = 0;
