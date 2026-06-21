@@ -4,10 +4,11 @@
 
 Embedded MCP server (FR-E73), the plugin's self-contained runtime that
 auto-registers it (FR-E74, superseded by FR-E78), Codex subagent
-delivery as skills (FR-E76), and the engine binary precondition +
-release distribution model (FR-E78). All depend on FR-E70 (plugin
-payload shape) but are kept here to fit within the per-file token
-budget.
+delivery as skills (FR-E76), the engine binary precondition +
+release distribution model (FR-E78), and the parent-death watchdog that
+keeps stdio MCP servers from leaking as orphans (FR-E83). All depend on
+FR-E70 (plugin payload shape) but are kept here to fit within the
+per-file token budget.
 
 
 ### 3.73 FR-E73: Embedded MCP Server Over Engine
@@ -222,3 +223,44 @@ budget.
     round. Evidence: Description above — "Verified live against
     `codex-cli 0.135.0`: a Codex worker auto-discovers and loads a
     skill by name in its isolated thread".
+
+
+
+### 3.83 FR-E83: Parent-Death Watchdog for stdio MCP Entrypoints
+
+- **Description:** Both long-lived stdio MCP entrypoints —
+  `flowai-workflow mcp` (`runMcpServer`, FR-E73) and the internal HITL
+  server (`runFlowaiHitlMcpServer`, `--internal-hitl-mcp`) — install a
+  cross-platform parent-death watchdog (`src/parent-watchdog.ts`). The
+  watchdog polls the parent PID every {@link PARENT_WATCHDOG_INTERVAL_MS}
+  (5 s); when the process is reparented to init/launchd (`Deno.ppid === 1`)
+  the host that spawned it is gone, so it runs `killAll()` and exits with
+  code 143 (128 + SIGTERM).
+
+  Rationale: before this FR the two entrypoints terminated on only stdin
+  EOF or SIGTERM/SIGINT. Neither fires when the ACP host dies
+  non-gracefully — `kill -9` delivers no SIGTERM, and stdin EOF never
+  arrives while any process in the pipe chain still holds the write end
+  open (an orphaned `codex-acp`, an intermediate launcher fd dup). The
+  server then lingered for days as a `ppid=1` orphan; on the reporting
+  host 251 stray processes had accumulated, pinning swap and the memory
+  compressor.
+
+  **Invariants:**
+  - The watchdog timer is unref'd (`Deno.unrefTimer`) — it never keeps the
+    event loop alive on its own; a natural exit is already the desired
+    outcome.
+  - It fires `onParentDeath` exactly once, then clears its own timer.
+  - Installed only on the real stdio path; the test transport branch
+    (`options.transport`, `InMemoryTransport`) gets no watchdog.
+  - `Deno.ppid` is the portable baseline (covers macOS, the leak host);
+    Linux-only `PR_SET_PDEATHSIG` is out of scope.
+
+- **Tasks:** [mcp-orphan-watchdog](../tasks/2026/06/mcp-orphan-watchdog.md)
+- **Motivation:** GitHub issue #240 — embedded MCP servers leaked as
+  `ppid=1` orphans when the ACP host died non-gracefully, accumulating
+  into hundreds of stray processes that pinned swap + the memory
+  compressor.
+- **Dep:** FR-E73, FR-E78
+- **Acceptance criteria:**
+  - **Tests:** `parent-watchdog_test.ts` (FR-E83; regression-locked).

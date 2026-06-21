@@ -102,6 +102,33 @@
   cancellation, not `Deno.exit`) is not blindsided by an engine call to
   `Deno.exit(130|143)`.
 
+### 3.3c Parent-Death Watchdog (`parent-watchdog.ts`) — FR-E83
+
+- **Status:** Implemented.
+- **Purpose:** Keep the two long-lived stdio MCP entrypoints
+  (`runMcpServer`, `runFlowaiHitlMcpServer`) from leaking as `ppid=1`
+  orphans when the ACP host that spawned them dies non-gracefully (no
+  SIGTERM, no stdin EOF). Polls the parent PID; once reparented to
+  init/launchd it runs `killAll()` + `Deno.exit(143)`.
+- **Interfaces:**
+  - `parentIsOrphaned(getParentPid = () => Deno.ppid): boolean` — pure
+    predicate, `getParentPid() === 1`. Injectable for tests.
+  - `installParentDeathWatchdog({ intervalMs?, getParentPid?,
+    onParentDeath? }): { stop() }` — `setInterval` poll (default 5 s)
+    that fires `onParentDeath` exactly once then clears its timer; the
+    timer is `Deno.unrefTimer`'d so it never keeps the loop alive on its
+    own. Default `onParentDeath` = `killAll().finally(() =>
+    Deno.exit(143))`.
+- **Integration points:** `mcp-server.ts` stdio branch installs after
+  `server.connect` and `stop()`s on transport close; `hitl-mcp-server.ts`
+  installs at entry and `stop()`s in a `finally`. The test transport path
+  (`options.transport`) installs no watchdog.
+- **Deps:** `process-registry.ts` (`killAll`).
+- **Design rationale:** `Deno.ppid` poll is the portable baseline (covers
+  macOS, the observed leak host); Linux-only `PR_SET_PDEATHSIG` is out of
+  scope. Injectable `getParentPid`/`onParentDeath` keep the logic unit-
+  testable without real reparenting or `Deno.exit`.
+
 ### 3.3a Workflow Lock (`lock.ts`) — FR-E25, FR-E54
 
 - **Status:** Implemented.

@@ -42,6 +42,7 @@ import { deliverHumanAnswer, resumeRun } from "./commands.ts";
 import { defaultLockPath, readLockInfo } from "../state/lock.ts";
 import { replayRunJournal } from "../state/run-journal.ts";
 import { getNodeDir, getRunDir } from "../state/state.ts";
+import { installParentDeathWatchdog } from "../parent-watchdog.ts";
 import { VERSION } from "../version.ts";
 
 /** Options for {@link runMcpServer}. */
@@ -117,6 +118,9 @@ export async function runMcpServer(
   // while stdin is open; we resolve the outer promise on stdin EOF.
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  // FR-E83: shut down if the ACP host that spawned us dies non-gracefully
+  // (no SIGTERM, no stdin EOF) instead of lingering forever as a ppid=1 orphan.
+  const watchdog = installParentDeathWatchdog();
   await new Promise<void>((resolve) => {
     const prev = transport.onclose;
     transport.onclose = () => {
@@ -124,6 +128,7 @@ export async function runMcpServer(
       resolve();
     };
   });
+  watchdog.stop();
 }
 
 // --- Tool registrations ---

@@ -123,7 +123,10 @@ Internal helper `applyJsonPointerOp(doc, op)` (exported for tests):
 - **stdio** (default, dispatched by `cli.ts mcp`): the SDK's
   `StdioServerTransport` keeps the event loop alive while stdin is
   open. The `onclose` chain resolves the outer Promise on stdin EOF,
-  so the CLI exits cleanly with `Deno.exit(0)`.
+  so the CLI exits cleanly with `Deno.exit(0)`. A parent-death watchdog
+  (FR-E83, `parent-watchdog.ts` — see SDS §3.3c) is installed on this
+  path only and stopped on transport close, so an abruptly-killed host
+  (no SIGTERM, no EOF) does not leave the server orphaned.
 - **InMemoryTransport** (tests): paired via
   `InMemoryTransport.createLinkedPair()`. The server returns
   immediately after `server.connect(transport)` so the test can

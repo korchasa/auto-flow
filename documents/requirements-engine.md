@@ -118,3 +118,4 @@ FR-IDs are stable — never renumber them on move.
 - FR-E80 (Cumulative Wall-Clock Retry Cap) → 05-cli-and-observability
 - FR-E81 (Claude CLI Version Probe Gated on Runtime) → 04-runtime-and-hooks
 - FR-E82 (Fail-Fast on Runtime `is_error`)            → 04-runtime-and-hooks
+- FR-E83 (Parent-Death Watchdog for stdio MCP)        → 07-mcp-and-plugin-runtime

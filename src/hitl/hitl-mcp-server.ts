@@ -21,6 +21,7 @@
 
 import { basename, fromFileUrl } from "@std/path";
 import type { HumanInputOption, HumanInputRequest } from "../types.ts";
+import { installParentDeathWatchdog } from "../parent-watchdog.ts";
 
 /** CLI dispatch flag that runs the MCP server in-process. */
 export const INTERNAL_HITL_MCP_ARG: string = "--internal-hitl-mcp";
@@ -88,26 +89,33 @@ export async function runFlowaiHitlMcpServer(): Promise<void> {
   const decoder = new TextDecoder();
   let buffer = "";
 
-  for await (const chunk of Deno.stdin.readable) {
-    buffer += decoder.decode(chunk, { stream: true });
+  // FR-E83: shut down if the host that spawned us dies non-gracefully (no
+  // SIGTERM, no stdin EOF) instead of lingering forever as a ppid=1 orphan.
+  const watchdog = installParentDeathWatchdog();
+  try {
+    for await (const chunk of Deno.stdin.readable) {
+      buffer += decoder.decode(chunk, { stream: true });
 
-    while (true) {
-      const newlineIndex = buffer.indexOf("\n");
-      if (newlineIndex === -1) break;
+      while (true) {
+        const newlineIndex = buffer.indexOf("\n");
+        if (newlineIndex === -1) break;
 
-      const line = buffer.slice(0, newlineIndex).trim();
-      buffer = buffer.slice(newlineIndex + 1);
-      if (!line) continue;
+        const line = buffer.slice(0, newlineIndex).trim();
+        buffer = buffer.slice(newlineIndex + 1);
+        if (!line) continue;
 
-      const message = JSON.parse(line) as JsonRpcMessage;
+        const message = JSON.parse(line) as JsonRpcMessage;
+        await handleMessage(message);
+      }
+    }
+
+    const trailing = buffer.trim();
+    if (trailing) {
+      const message = JSON.parse(trailing) as JsonRpcMessage;
       await handleMessage(message);
     }
-  }
-
-  const trailing = buffer.trim();
-  if (trailing) {
-    const message = JSON.parse(trailing) as JsonRpcMessage;
-    await handleMessage(message);
+  } finally {
+    watchdog.stop();
   }
 }
 
