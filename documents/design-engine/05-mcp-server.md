@@ -83,11 +83,17 @@ err((e as Error).message) }`. `ok(payload)` returns
   detached child is independent of the MCP server's lifecycle (survives the
   FR-E83 watchdog). New CLI flag `--run-id` (fresh, non-resume) carries the
   allocated id; the engine already honours `options.run_id` on the fresh path.
-- **`resume_node({ run_id })`** — delegates to
-  `commands.resumeRun({ workflowDir, run_id, verbosity: "quiet" })`
-  (FR-E75: the single `Engine({resume:true})` construction site,
-  shared with CLI `run --resume`), returns `{ run_id, status,
-  total_cost_usd }`. Blocks the MCP request for the entire engine run.
+- **`resume_node({ run_id, wait? })`** — `wait` defaults to `true`:
+  delegates to `commands.resumeRun({ workflowDir, run_id, verbosity:
+  "quiet" })` (FR-E75: the single blocking `Engine({resume:true})`
+  construction site, shared with CLI `run --resume`), returns
+  `{ run_id, status, total_cost_usd }`, blocks the MCP request for the
+  entire engine run. `wait:false` (FR-E85) delegates to
+  `commands.resumeRunBackground` — pre-checks `lock.liveLockHolder`
+  (reject if a live run holds the lock: that is attach-live, not
+  resume), spawns a detached `… run <wf> --resume <id>` via the shared
+  `buildEngineRunCommand`, `child.unref()`, returns `{ run_id, pid,
+  wait:false }` WITHOUT blocking.
 - **`provide_human_input({ run_id, node_id, text })`** (FR-E75) —
   delegates to `commands.deliverHumanAnswer({ workflowDir, run_id,
   node_id, text })`. Validates the node is `waiting`, atomically writes
@@ -184,6 +190,6 @@ Internal helper `applyJsonPointerOp(doc, op)` (exported for tests):
   for embedded hosts.
 - Migrating `hitl-mcp-server.ts` (hand-rolled NDJSON) onto the SDK.
 - Auth / authz on the MCP surface (stdio is local-only).
-- Non-blocking `resume_node` variant (run-id-then-poll model). NOTE:
-  FR-E84 realises this model for the *start* path (`start_run` with
-  `wait:false`); a non-blocking *resume* remains deferred.
+- Non-blocking run launch (run-id-then-poll model) — REALISED:
+  FR-E84 for the *start* path (`start_run wait:false`) and FR-E85 for
+  the *resume* path (`resume_node wait:false`). No longer deferred.

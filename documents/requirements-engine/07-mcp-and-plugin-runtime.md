@@ -325,3 +325,38 @@ per-file token budget.
   - **Tests:** `src/mcp/commands_test.ts`, `src/state/lock_test.ts`,
     `src/cli_test.ts`, `src/mcp/mcp-server_test.ts` (FR-E84;
     regression-locked).
+
+
+
+### 3.85 FR-E85: Non-Blocking `resume_node` (`wait` flag)
+
+- **Description:** The MCP `resume_node` tool (FR-E73/E75) gains a `wait`
+  parameter so a run can be resumed WITHOUT blocking the MCP request for the
+  whole run — the non-blocking counterpart of FR-E84 `start_run`.
+
+  **Tool:** `resume_node({ run_id, wait? })`.
+  - `wait?` defaults to `true` — the historical blocking behaviour
+    (`commands.resumeRun` → in-process `Engine({resume:true})`, returns the
+    final `{ run_id, status, total_cost_usd }`). Back-compatible: existing
+    callers are unchanged.
+  - `wait:false` — launch the resume as an **independent detached process**
+    (`commands.resumeRunBackground`) and return `{ run_id, pid, wait:false }`
+    immediately; the caller polls `get_state` / `tail_artifacts`. The detached
+    child survives the MCP server / host dying (FR-E83). Rejects when a LIVE
+    run already holds the workflow lock (`lock.liveLockHolder`) — that is the
+    attach-live case (the engine is already running this run), not a resume.
+
+  **Shared core.** `commands.resumeRun` stays the single blocking
+  `Engine({resume:true})` site; `commands.resumeRunBackground` is its
+  detached, non-blocking sibling. Both the background start (FR-E84) and the
+  background resume share one re-exec builder, `buildEngineRunCommand`, which
+  emits `--run-id <id>` for a fresh start and `--resume <id>` for a resume.
+- **Tasks:** [supervisor-mcp-wiring](../tasks/2026/06/supervisor-mcp-wiring.md)
+- **Motivation:** A supervisor resumes a failed run as often as it starts a
+  fresh one. With only a blocking `resume_node`, recovery still required the
+  Bash `nohup … --resume &` daemon dance; a non-blocking resume lets the
+  supervisor drive recovery through MCP too (SDS §5.7 had deferred this).
+- **Dep:** FR-E73, FR-E84
+- **Acceptance criteria:**
+  - **Tests:** `src/mcp/commands_test.ts`, `src/mcp/mcp-server_test.ts`
+    (FR-E85; regression-locked).

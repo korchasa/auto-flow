@@ -11,7 +11,10 @@
  * Exports:
  *   - {@link deliverHumanAnswer} — write a HITL reply into the run's local
  *     inbox file (transport-independent; the live poll loop reads it).
- *   - {@link resumeRun} — the sole `Engine({resume:true})` construction site.
+ *   - {@link resumeRun} — the sole `Engine({resume:true})` construction site
+ *     (blocking, in-process).
+ *   - {@link resumeRunBackground} — non-blocking resume (FR-E85): launches a
+ *     detached engine process and returns `{ run_id, pid }` immediately.
  *   - {@link startRun} — the sole `Engine({resume:false})` construction site
  *     (FR-E84). `wait:true` runs in-process and blocks; `wait:false` (default)
  *     launches an independent detached engine process and returns immediately.
@@ -227,7 +230,7 @@ export async function startRun(
   }
 
   const runId = generateRunId(basename(workflowDir));
-  const { exec, args } = buildEngineRunCommand(workflowDir, runId, prompt);
+  const { exec, args } = buildEngineRunCommand(workflowDir, runId, { prompt });
   // Detached daemon: no stdio pipes (observability is via run artifacts +
   // tail_artifacts), unref'd so it outlives this process and the FR-E83
   // parent-death watchdog (which only reaps the MCP server's own group).
@@ -241,22 +244,37 @@ export async function startRun(
   return { run_id: runId, pid: child.pid, wait: false };
 }
 
+/** Options for {@link buildEngineRunCommand}. */
+export interface BuildEngineRunCommandOptions {
+  /** Extra context forwarded as `--prompt` (fresh start only). */
+  prompt?: string;
+  /** Resume an existing run (`--resume <id>`) instead of starting a fresh one
+   * (`--run-id <id>`). Resume inherits args/env from the journal, so `prompt`
+   * is ignored when `resume` is true. */
+  resume?: boolean;
+}
+
 /**
  * Build the argv to re-exec the engine `run` subcommand for a background
- * start. Two explicit environment branches (NOT an error-recovery fallback):
- * a compiled binary IS the engine (`Deno.execPath()` runs `flowai-workflow
- * run …` directly); under `deno run` (dev/tests, `VERSION === "dev"`) the
- * exec is the `deno` binary, so we re-run `src/cli.ts` through it. The fresh
- * `--run-id` flag (FR-E84) pins the engine to the id this function allocated,
- * so `startRun` can return it before the run completes.
+ * start (FR-E84) or background resume (FR-E85). Two explicit environment
+ * branches (NOT an error-recovery fallback): a compiled binary IS the engine
+ * (`Deno.execPath()` runs `flowai-workflow run …` directly); under `deno run`
+ * (dev/tests, `VERSION === "dev"`) the exec is the `deno` binary, so we re-run
+ * `src/cli.ts` through it. Fresh starts pass `--run-id <id>` to pin the engine
+ * to a caller-allocated id (so the caller can return it before completion);
+ * resume passes `--resume <id>`.
  */
 export function buildEngineRunCommand(
   workflowDir: string,
   runId: string,
-  prompt?: string,
+  options: BuildEngineRunCommandOptions = {},
 ): { exec: string; args: string[] } {
-  const promptArgs = prompt ? ["--prompt", prompt] : [];
-  const runArgs = ["run", workflowDir, "--run-id", runId, ...promptArgs];
+  const { prompt, resume = false } = options;
+  const idArgs = resume
+    ? ["--resume", runId]
+    // Resume inherits the journal's prompt; --prompt only applies to fresh.
+    : ["--run-id", runId, ...(prompt ? ["--prompt", prompt] : [])];
+  const runArgs = ["run", workflowDir, ...idArgs];
   if (VERSION === "dev") {
     const cliPath = fromFileUrl(import.meta.resolve("../cli.ts"));
     return {
@@ -265,4 +283,58 @@ export function buildEngineRunCommand(
     };
   }
   return { exec: Deno.execPath(), args: runArgs };
+}
+
+/** Parameters for {@link resumeRunBackground}. */
+export interface ResumeRunBackgroundParams {
+  /** Workflow folder containing `workflow.yaml`. */
+  workflowDir: string;
+  /** Run id to resume. */
+  runId: string;
+}
+
+/** Result of {@link resumeRunBackground}. */
+export interface ResumeRunBackgroundResult {
+  run_id: string;
+  /** PID of the detached engine process. */
+  pid: number;
+  wait: false;
+}
+
+/**
+ * Resume a previously-started run as an INDEPENDENT detached process (FR-E85)
+ * — the non-blocking counterpart to {@link resumeRun}. Returns
+ * `{ run_id, pid }` immediately so a supervisor can poll via
+ * `get_state`/`tail_artifacts` instead of blocking the MCP request for the
+ * whole run.
+ *
+ * Fail-fast: rejects when a LIVE run already holds the workflow lock — that is
+ * the attach-live case (the engine is already running this run), NOT a resume.
+ * The detached child survives the MCP server / host dying (FR-E83 reaps only
+ * the server's own group).
+ */
+export async function resumeRunBackground(
+  params: ResumeRunBackgroundParams,
+): Promise<ResumeRunBackgroundResult> {
+  const { workflowDir, runId } = params;
+
+  const holder = await liveLockHolder(workflowDir);
+  if (holder) {
+    throw new Error(
+      `a run is already live (run_id: ${holder.run_id}, pid: ${holder.pid}); ` +
+        `it is already executing — attach and poll instead of resuming`,
+    );
+  }
+
+  const { exec, args } = buildEngineRunCommand(workflowDir, runId, {
+    resume: true,
+  });
+  const child = new Deno.Command(exec, {
+    args,
+    stdin: "null",
+    stdout: "null",
+    stderr: "null",
+  }).spawn();
+  child.unref();
+  return { run_id: runId, pid: child.pid, wait: false };
 }

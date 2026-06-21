@@ -13,6 +13,7 @@ import {
   buildEngineRunCommand,
   deliverHumanAnswer,
   resumeRun,
+  resumeRunBackground,
   startRun,
 } from "./commands.ts";
 import type { LockInfo } from "../state/lock.ts";
@@ -279,7 +280,9 @@ Deno.test("FR-E84 startRun wait:false — returns a run_id + pid without blockin
 
 Deno.test("FR-E84 buildEngineRunCommand — dev path re-execs cli.ts with --run-id", () => {
   // Tests run under `deno run` → VERSION === "dev".
-  const { exec, args } = buildEngineRunCommand("/tmp/wf", "run-xyz", "hello");
+  const { exec, args } = buildEngineRunCommand("/tmp/wf", "run-xyz", {
+    prompt: "hello",
+  });
   assertEquals(exec, Deno.execPath());
   assertEquals(args[0], "run");
   assertEquals(args.includes("--run-id"), true);
@@ -288,4 +291,64 @@ Deno.test("FR-E84 buildEngineRunCommand — dev path re-execs cli.ts with --run-
   assertEquals(args[args.indexOf("--prompt") + 1], "hello");
   // Positional workflow dir is forwarded to the `run` subcommand.
   assertEquals(args.includes("/tmp/wf"), true);
+});
+
+// --- resumeRunBackground (FR-E85) ---
+
+Deno.test("FR-E85 buildEngineRunCommand — resume mode emits --resume, not --run-id", () => {
+  const { args } = buildEngineRunCommand("/tmp/wf", "run-abc", {
+    resume: true,
+  });
+  assertEquals(args.includes("--resume"), true);
+  assertEquals(args[args.indexOf("--resume") + 1], "run-abc");
+  assertEquals(args.includes("--run-id"), false);
+  // Resume inherits the journal's prompt — no --prompt forwarded.
+  assertEquals(args.includes("--prompt"), false);
+});
+
+Deno.test("FR-E85 resumeRunBackground — returns run_id + pid without blocking (detached spawn)", async () => {
+  const workflowDir = await Deno.makeTempDir({ prefix: "fr-e85-bg-" });
+  try {
+    await Deno.writeTextFile(join(workflowDir, "workflow.yaml"), WORKFLOW_YAML);
+    const res = await resumeRunBackground({
+      workflowDir,
+      runId: "run-resume-1",
+    });
+    assertEquals(res.wait, false);
+    assertEquals(res.run_id, "run-resume-1");
+    assertEquals(typeof res.pid, "number");
+    // Reap the detached child (it fails fast resuming a nonexistent journal).
+    try {
+      Deno.kill(res.pid, "SIGKILL");
+    } catch {
+      // Already exited — fine.
+    }
+  } finally {
+    await Deno.remove(workflowDir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E85 resumeRunBackground — rejects when the run is already live (attach, not resume)", async () => {
+  const workflowDir = await Deno.makeTempDir({ prefix: "fr-e85-live-" });
+  try {
+    await Deno.writeTextFile(join(workflowDir, "workflow.yaml"), WORKFLOW_YAML);
+    await Deno.mkdir(join(workflowDir, "runs"), { recursive: true });
+    const held: LockInfo = {
+      pid: Deno.pid, // alive by definition
+      hostname: Deno.hostname(),
+      run_id: "run-live-1",
+      started_at: "2026-06-22T00:00:00.000Z",
+    };
+    await Deno.writeTextFile(
+      join(workflowDir, "runs", ".lock"),
+      JSON.stringify(held),
+    );
+    await assertRejects(
+      () => resumeRunBackground({ workflowDir, runId: "run-live-1" }),
+      Error,
+      "already live",
+    );
+  } finally {
+    await Deno.remove(workflowDir, { recursive: true });
+  }
 });

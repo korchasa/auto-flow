@@ -121,3 +121,4 @@ FR-IDs are stable — never renumber them on move.
 - FR-E82 (Fail-Fast on Runtime `is_error`)            → 04-runtime-and-hooks
 - FR-E83 (Parent-Death Watchdog for stdio MCP)        → 07-mcp-and-plugin-runtime
 - FR-E84 (MCP start_run Tool)                          → 07-mcp-and-plugin-runtime
+- FR-E85 (Non-Blocking resume_node)                    → 07-mcp-and-plugin-runtime

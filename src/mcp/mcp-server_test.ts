@@ -579,3 +579,34 @@ Deno.test(
     }
   },
 );
+
+Deno.test(
+  "FR-E85 resume_node wait:false returns the background shape { run_id, pid }",
+  async () => {
+    const fixture = await setupFixtureWorkflow();
+    try {
+      const { client, shutdown } = await startServerWithClient(
+        fixture.workflowDir,
+      );
+      const result = await client.callTool({
+        name: "resume_node",
+        arguments: { run_id: fixture.completedRunId, wait: false },
+      });
+      const parsed = parseToolJson(
+        result as { content: Array<{ text: string }> },
+      ) as { run_id: string; pid: number; wait: boolean };
+      assertEquals(parsed.run_id, fixture.completedRunId);
+      assertEquals(parsed.wait, false);
+      assertEquals(typeof parsed.pid, "number");
+      // Reap the detached resume child.
+      try {
+        Deno.kill(parsed.pid, "SIGKILL");
+      } catch {
+        // Already exited — fine.
+      }
+      await shutdown();
+    } finally {
+      await fixture.cleanup();
+    }
+  },
+);
