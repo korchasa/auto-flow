@@ -75,6 +75,17 @@ example of engine usage.
   `deno task check` via `AUTO_INSTALL_PLUGINS=true` (literal `true`
   only). Both retired predecessors are gone: `deno task
   sync-claude-plugin` and `deno task sync-plugins -- --install-local`.
+  **Local dogfood MCP = working-tree source, no `flowai-workflow`
+  binary.** `sync-plugins-local` rewrites the emitted payload's
+  `.mcp.json` (Claude + Codex) so the server command is `deno run -A
+  --no-check --config <repo>/deno.json <repo>/src/cli.ts mcp` (Claude
+  keeps `cwd: ${CLAUDE_PROJECT_DIR}`), via
+  `sync-plugins-local.ts#directSourceMcpServer`. Engine stays fully
+  dynamic — every MCP launch reads live `src/`, no rebuild/reinstall on
+  code edits. The SHIPPED `plugin-src/.../.mcp.json` is untouched
+  (FR-E78, `command: flowai-workflow`); the divergence lives only in the
+  local `flowai-workflow-local` payload, mirroring the
+  local-vs-published marketplace-name split.
 
 ## Architecture
 

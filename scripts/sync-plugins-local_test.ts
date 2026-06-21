@@ -2,6 +2,8 @@ import { assertEquals, assertThrows } from "@std/assert";
 import {
   autoInstallEnabled,
   detectCodexPluginMcpNameCollisions,
+  directSourceMcpFile,
+  directSourceMcpServer,
   ENV_AUTO_INSTALL_PLUGINS,
   localPayloadRoots,
   parseAndStripFlowaiTables,
@@ -277,6 +279,43 @@ Deno.test("FR-E71 local sync uses host-specific payload roots", () => {
     claude: "dist/plugin-payload/claude",
     codex: "dist/plugin-payload/codex",
   });
+});
+
+// ---------------------------------------------------------------------------
+// directSourceMcpServer / directSourceMcpFile (FR-E72 local dogfood)
+// ---------------------------------------------------------------------------
+
+Deno.test("FR-E72 directSourceMcpServer runs working-tree src/cli.ts, no flowai-workflow binary", () => {
+  const s = directSourceMcpServer("/repo", "claude");
+  assertEquals(s.command, "deno");
+  // No intermediate `flowai-workflow` binary anywhere in the invocation.
+  assertEquals(s.command === "flowai-workflow", false);
+  assertEquals(s.args.includes("flowai-workflow"), false);
+  // Direct invocation of the live source tree + its import map.
+  assertEquals(s.args.includes("/repo/src/cli.ts"), true);
+  assertEquals(s.args.includes("/repo/deno.json"), true);
+  assertEquals(s.args.includes("--no-check"), true);
+  assertEquals(s.args[s.args.length - 1], "mcp");
+});
+
+Deno.test("FR-E72 directSourceMcpServer pins Claude cwd, omits it for Codex", () => {
+  assertEquals(
+    directSourceMcpServer("/repo", "claude").cwd,
+    "${CLAUDE_PROJECT_DIR}",
+  );
+  assertEquals(directSourceMcpServer("/repo", "codex").cwd, undefined);
+});
+
+Deno.test("FR-E72 directSourceMcpFile wraps Claude under mcpServers, Codex flat", () => {
+  const claude = directSourceMcpFile("/repo", "claude") as {
+    mcpServers: Record<string, unknown>;
+  };
+  assertEquals(Object.keys(claude.mcpServers), ["flowai-workflow"]);
+  const codex = directSourceMcpFile("/repo", "codex") as Record<
+    string,
+    unknown
+  >;
+  assertEquals(Object.keys(codex), ["flowai-workflow"]);
 });
 
 // ---------------------------------------------------------------------------
