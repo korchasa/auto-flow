@@ -165,14 +165,19 @@ per-file token budget.
     `scripts/plugin-install-acceptance_test.ts`, `cli_test.ts`
     (FR-E78; regression-locked).
   - [ ] Manual acceptance (manual — korchasa): in a fresh Claude
-    Code session with the plugin installed via `deno task
-    sync-plugins-local` and `flowai-workflow` on PATH, `/mcp` lists
-    `flowai-workflow` with the seven FR-E73 tools and the first call
-    returns the expected JSON payload.
+    Code session with the plugin installed from a REAL `flowai-workflow`
+    binary on PATH (release binary or `deno install -A
+    jsr:@korchasa/flowai-workflow`) and a marketplace pointed at the
+    SHIPPED payload, `/mcp` lists `flowai-workflow` with the nine
+    FR-E73 tools and the first call returns the expected JSON payload.
   - [ ] Manual acceptance (manual — korchasa): a fresh Codex session
     with the plugin installed and `flowai-workflow` on PATH spawns
-    the MCP server, lists tools, and runs `get_workflow` without
-    error.
+    the MCP server, lists the nine tools, and runs `get_workflow`
+    without error.
+  - NB: `deno task sync-plugins-local` rewrites the LOCAL dogfood
+    payload's `.mcp.json` to `deno run … src/cli.ts mcp` and does NOT
+    exercise the `flowai-workflow` binary — use it for live-source
+    dogfood, not for the FR-E78 binary-path verification above.
   - [ ] Release artefact verification (manual — korchasa): the
     GitHub release for the FR-E78-shipping tag contains
     `flowai-workflow-linux-x86_64`, `…-linux-arm64`,
