@@ -16,8 +16,8 @@ import {
   renderHtml,
   renderTimeline,
 } from "./generate-dashboard.ts";
-import type { CliRunOutput, NodeState, RunState } from "../types.ts";
-import { RunJournalWriter } from "../run-journal.ts";
+import type { CliRunOutput, NodeState, RunState } from "../src/types.ts";
+import { RunJournalWriter } from "../src/state/run-journal.ts";
 
 // --- escHtml ---
 

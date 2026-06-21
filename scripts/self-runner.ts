@@ -6,9 +6,9 @@
  * (30 s → 4 h) when the queue is empty. Run via: deno task loop
  */
 
-import { Engine } from "../engine.ts";
-import { parseArgs } from "../cli.ts";
-import { installSignalHandlers } from "../process-registry.ts";
+import { Engine } from "../src/engine/engine.ts";
+import { parseArgs } from "../src/cli.ts";
+import { installSignalHandlers } from "../src/process-registry.ts";
 import { MIN_PAUSE_SEC, nextPause } from "./backoff.ts";
 
 /** Query open issues excluding "in-progress" label via gh CLI. */

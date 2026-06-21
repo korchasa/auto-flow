@@ -112,7 +112,7 @@ FR-IDs are stable — never renumber them on move.
 - FR-E74 (Plugin Self-Contained Runtime)   → 07-mcp-and-plugin-runtime
 - FR-E75 (Local HITL Answer + Command Layer) → 04-runtime-and-hooks
 - FR-E76 (Codex Subagent Delivery as Skills)  → 07-mcp-and-plugin-runtime
-- FR-E77 (Transport Selection CLI vs ACP)     → 04-runtime-and-hooks
+- FR-E77 (ACP as the sole runtime transport)  → 04-runtime-and-hooks
 - FR-E78 (Plugin Precondition + Release Binary Distribution) → 07-mcp-and-plugin-runtime
 - FR-E79 (Runtime `onCallbackError` Surfaced as Engine WARN) → 05-cli-and-observability
 - FR-E80 (Cumulative Wall-Clock Retry Cap) → 05-cli-and-observability

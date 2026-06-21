@@ -52,6 +52,12 @@ example of engine usage.
   `deno lint`, `deno fmt` are hook-blocked
   (see `.claude/hooks/guard-deno-direct.ts`). For ad-hoc subset
   checking on one file, filter with `deno task check 2>&1 | grep <pattern>`.
+  **Reviving a removed dependency:** restore its `deno.lock` entry from the
+  last commit that had it (`git checkout HEAD -- deno.lock`) instead of
+  re-resolving — `deno.lock` caps resolution at a minimum dependency date,
+  so a dep version published after that date fails to resolve (`Could not
+  find version … newer than the specified minimum dependency date`) until
+  the lock is restored/updated.
 - Shell/Bash (legacy stage orchestration scripts)
 - Docker (devcontainer runtime environment)
 - Claude Code CLI (`claude`) (AI agent runtime)
@@ -72,8 +78,9 @@ example of engine usage.
 
 ## Architecture
 
-- **Core:** Domain-agnostic DAG executor engine (root-level Deno/TypeScript
-  modules). Reads YAML workflow configs. Entry: `deno task run [--prompt "..."]`
+- **Core:** Domain-agnostic DAG executor engine (Deno/TypeScript modules
+  under `src/`, grouped by domain — see Repo Layout). Reads YAML workflow
+  configs. Entry: `deno task run [--prompt "..."]`
 - **Node types:** `agent` (Claude CLI), `merge` (combine outputs), `loop`
   (iterative body with exit condition), `human` (terminal prompt)
 - **Inter-agent communication:** Structured artifacts in
@@ -208,7 +215,7 @@ example of engine usage.
   directory is gone). Select one by passing it as the mandatory
   positional argument: `flowai-workflow run <workflow>`.
   **`deno task run` is hardcoded to `github-inbox`.** To run a different
-  variant: `deno run -A --no-check cli.ts run .flowai-workflow/<variant>` —
+  variant: `deno run -A --no-check src/cli.ts run .flowai-workflow/<variant>` —
   or add a per-variant task to `deno.json`.
   **Config validation:** use `--dry-run` (not `--validate` — it doesn't
   exist; unknown flags are accepted silently and trigger worktree creation
@@ -247,8 +254,24 @@ example of engine usage.
 Single-package repository:
 
 - Root `deno.json` defines the `@korchasa/flowai-workflow` JSR package.
-  Source files (engine modules, CLI entry, init scaffolder, HITL) live
-  at repo root — no `engine/` subfolder.
+  All source lives under `src/`, grouped by domain (no flat repo-root
+  layout, no `engine/` subfolder):
+  - `src/cli.ts` — CLI entry (JSR `.` export). `src/mod.ts` — library
+    entry (JSR `./engine` export). `src/types.ts`, `src/output.ts`,
+    `src/process-registry.ts`, `src/version.ts` — shared roots.
+  - `src/engine/` — DAG executor core (`engine.ts`, `agent.ts`, `dag.ts`,
+    `loop.ts`, `human.ts`, node dispatch/lifecycle).
+  - `src/config/` — config load + validation + templates
+    (`config.ts`, `validate.ts`, `template.ts`).
+  - `src/state/` — run state, lock, log, journal (`state.ts`, `lock.ts`,
+    `run-journal.ts`).
+  - `src/isolation/` — git worktree, guardrail, scope/memory checks.
+  - `src/hitl/` — human-in-the-loop handling + HITL MCP server.
+  - `src/mcp/` — engine MCP server + CLI commands.
+  - `src/init/` — verbatim-copy scaffolder for `flowai-workflow init`.
+  - The ACP runtime layer is **not** in `src/` — it is the external
+    `@korchasa/ai-ide-cli` JSR dependency (import-map alias
+    `@korchasa/ai-ide-cli`, pinned `^0.8.8` in `deno.json#imports`).
 - `scripts/` — dev tooling (check, compile, dashboard, release-notes,
   loop runners). Excluded from the JSR tarball.
 - `documents/` — SRS/SDS and task notes. Excluded from the tarball.
@@ -258,42 +281,27 @@ Single-package repository:
   verbatim into client projects. No separate `init/templates/` tree —
   `init/` is just the verbatim-copy scaffolder.
 
-The Claude/OpenCode/Cursor CLI wrapper library
-(`@korchasa/ai-ide-cli`) lives in the sibling repo
-[`korchasa/ai-ide-cli`](https://github.com/korchasa/ai-ide-cli).
-flowai-workflow depends on it one-way via JSR
-(`jsr:@korchasa/ai-ide-cli@^0.8.2`, pinned in `deno.json`).
+The ACP runtime layer is the external `@korchasa/ai-ide-cli` JSR package
+(pinned `^0.8.8`), developed in the sibling repo
+`/Users/korchasa/www/flowai/ai-ide-cli` and consumed here purely via JSR.
+The package is multi-transport (CLI default, ACP opt-in); the engine drives
+it ACP-only by passing `transport: "acp"` at every `adapter.invoke()` /
+`runtimeRun()` call boundary (`src/engine/agent.ts`, `src/hitl/hitl.ts`) and
+reading capabilities through `adapter.capabilitiesFor("acp")`. ACP is thus
+the engine's sole runtime transport without any engine-level `transport`
+config knob. To change runtime behaviour, edit the sibling repo, publish a
+new JSR version, and bump the pin here — there is no in-tree runtime source.
 
-For local cross-repo iteration (edit library, see effect here without a
-JSR republish), clone both repos side by side under one parent dir and
-add a `links` entry to `deno.json` — Deno resolves the JSR specifier
-from the sibling checkout instead of the registry:
-
-```jsonc
-{
-  "name": "@korchasa/flowai-workflow",
-  // ...
-  "links": ["../ai-ide-cli"]  // local dev only — do not commit
-}
-```
-
-`links` is intentionally NOT committed to keep CI and publish-dry-run
-honest about the JSR-published version.
-
-**Cross-repo edit checklist.** When this session edits files under
-`../ai-ide-cli/` (or any sibling repo the engine depends on via JSR),
-the engine code does NOT see those edits until either (a) the library
-is republished AND the engine's pin in `deno.json` bumped, OR (b) the
-local-dev `links` entry above is added. If neither happens,
-library-side fixes are dormant from the engine's perspective. Decide
-upfront whether the library edit is the primary fix or
-defense-in-depth — if primary, plan the publish + pin bump in the
-same session; if defense-in-depth, ensure an engine-side belt covers
-the gap before declaring the work done. (Surfaced by the
-FR-E82/FR-L41 split during the 2026-06 lumatale bug-hunter incident:
-the Codex `invalid_request` classifier shipped to `ai-ide-cli` was
-inert in the engine until republish, so a parallel `runAgent`
-fail-fast on `is_error` was added in-tree as the actual mitigation.)
+**Source of API truth = the PUBLISHED package, not the local sibling
+checkout.** When changing the pin or repointing imports, verify the
+imported symbols against the published version
+(`https://jsr.io/@korchasa/ai-ide-cli/<ver>/...` source +
+`https://jsr.io/@korchasa/ai-ide-cli/<ver>_meta.json` `exports`), NOT
+`../ai-ide-cli` on disk — the sibling working copy routinely carries
+unpublished, uncommitted divergence (e.g. extra `runtime/error-types`
+exports / `ERROR_CATEGORY_*` consts present locally but absent from
+`0.8.8`/`0.8.9`). Reading the local copy as ground truth produces
+imports that fail `deno check` against JSR.
 
 Publish gotchas honored in `deno.json#publish`:
 
@@ -362,10 +370,11 @@ follow with `deno task check`.
 
 Two scopes with strict boundaries:
 
-- **Engine** (`scope: engine`) — domain-agnostic DAG executor (root-level
-  `*.ts` modules: `cli.ts`, `engine.ts`, `agent.ts`, `dag.ts`, `config.ts`,
-  `validate.ts`, `hitl.ts`, `loop.ts`, `state.ts`, `template.ts`, etc.).
-  Node types, validation, continuation, resume, HITL, CLI, templates.
+- **Engine** (`scope: engine`) — domain-agnostic DAG executor (`src/`
+  modules: `src/cli.ts`, `src/engine/`, `src/config/`, `src/state/`,
+  `src/isolation/`, `src/hitl/`, `src/mcp/`). Node types, validation,
+  continuation, resume, HITL, CLI, templates. The ACP runtime is the
+  external `@korchasa/ai-ide-cli` dependency, not engine source.
   SRS: `documents/requirements-engine.md`. SDS: `documents/design-engine.md`.
   GitHub label: `scope: engine`.
 - **SDLC Workflow** (`scope: sdlc`) — example workflow using the engine.
@@ -373,13 +382,14 @@ Two scopes with strict boundaries:
   SRS: `documents/requirements-sdlc.md`. SDS: `documents/design-sdlc.md`.
   GitHub label: `scope: sdlc`.
 
-The CLI wrapper library (`@korchasa/ai-ide-cli`) is maintained in the
-sibling repo [`korchasa/ai-ide-cli`](https://github.com/korchasa/ai-ide-cli)
-— file issues there for library changes, not here.
+The ACP runtime layer is the external `@korchasa/ai-ide-cli` JSR package,
+maintained in the sibling repo `/Users/korchasa/www/flowai/ai-ide-cli` —
+file runtime-layer issues there, engine issues here.
 
-FR numbering: `FR-E<N>` (engine), `FR-S<N>` (SDLC). Library FRs live in
-the sibling repo as `FR-L<N>`. Existing `FR-<N>` kept as aliases during
-migration.
+FR numbering: `FR-E<N>` (engine), `FR-S<N>` (SDLC). Legacy library FRs
+(`FR-L<N>`) from the former `ai-ide-cli` repo remain as historical
+references in commit/task history. Existing `FR-<N>` kept as aliases
+during migration.
 
 ## GitHub Issue Rules
 
@@ -406,8 +416,8 @@ for full context, alternatives, and consequences.
   implemented exclusively via agent nodes wired in workflow YAML configs.
   See [isolation-provider](documents/tasks/2026/05/isolation-provider.md) (isolation
   provider plugin) and [hitl-detection-boundary](documents/tasks/2026/05/hitl-detection-boundary.md)
-  (HITL detection in `@korchasa/ai-ide-cli`) for the boundary fixes
-  in flight.
+  (HITL detection in the ACP layer, external `@korchasa/ai-ide-cli`) for the
+  boundary fixes in flight.
 - **Engine is workflow-independent:** MUST NOT depend on any specific workflow
   config. One engine, many workflows. Engine code must not reference concrete
   node names, artifact filenames, or workflow structure.
@@ -428,7 +438,7 @@ for full context, alternatives, and consequences.
 - Engine never installs OS signal handlers; bin entry points only —
   [signal-handler-boundary](documents/tasks/2026/05/signal-handler-boundary.md).
 - Budget enforcement is coupled to the CLI runtime today; planned
-  move into `@korchasa/ai-ide-cli` —
+  move into the external `@korchasa/ai-ide-cli` ACP layer —
   [budget-cli-runtime-coupling](documents/tasks/2026/05/budget-cli-runtime-coupling.md).
 - JSR publish surface: `.versionrc.json`, `publish.exclude`,
   `--dry-run` verification —
@@ -440,12 +450,12 @@ for full context, alternatives, and consequences.
 1. **`AGENTS.md`**: Project vision, constraints, mandatory rules. READ-ONLY reference.
 2. **SRS** — "What" & "Why". Source of truth for requirements. Index + section files pattern — read the index first, then only the section(s) you need.
    - Engine: `documents/requirements-engine.md` + `documents/requirements-engine/*.md`
+     (the ACP runtime layer is the external `@korchasa/ai-ide-cli` dependency).
    - SDLC: `documents/requirements-sdlc.md` + `documents/requirements-sdlc/*.md`
-   - AI IDE CLI: lives in the sibling repo `korchasa/ai-ide-cli`.
 3. **SDS** — "How". Architecture and implementation. Same index + sections pattern. Depends on SRS.
    - Engine: `documents/design-engine.md` + `documents/design-engine/*.md`
+     (the ACP runtime layer is the external `@korchasa/ai-ide-cli` dependency).
    - SDLC: `documents/design-sdlc.md` + `documents/design-sdlc/*.md`
-   - AI IDE CLI: sibling repo.
 4. **Tasks** (`documents/tasks/<YYYY-MM-DD>-<slug>.md`): Temporary plans/notes per task.
 5. **`README.md`**: Public-facing overview. Installation, usage, quick start. Derived from AGENTS.md + SRS + SDS.
 

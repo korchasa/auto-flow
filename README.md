@@ -357,12 +357,14 @@ the active workflow from `<cwd>/.flowai-workflow/` (single or
 
 Workflow behavior is defined in a YAML config file. Key settings under `defaults:`:
 
-- `runtime` — agent runtime: `claude` (default), `opencode`, or `cursor`
+- `runtime` — agent runtime: `claude` (default) or `opencode` (`cursor` is
+  not supported — its ACP front is unpiloted, so it is rejected at config
+  load; see FR-E77)
 - `runtime_args` — extra CLI args forwarded to the selected runtime
 - `max_continuations` — max agent re-invocations on validation failure (default: 3)
 - `max_parallel` — concurrent node execution limit (default: 2)
 - `timeout_seconds` — per-node timeout (default: 1800)
-- `permission_mode` — permission mode override (Claude: full support; opencode/cursor: only `bypassPermissions`)
+- `permission_mode` — permission mode override (Claude: full support; opencode: only `bypassPermissions`)
 - `hitl` — Human-in-the-Loop config: `ask_script`, `check_script`, `poll_interval`, `timeout` (used by Claude directly and by OpenCode via injected local MCP)
 
 Node-level overrides are supported for all defaults.
@@ -433,8 +435,16 @@ All 6 workflow agents are framework-independent Markdown files at
 ## Project Structure
 
 ```
-cli.ts, engine.ts, agent.ts, ... # DAG executor engine modules (root)
-init/                            # Project scaffolder (`flowai-workflow init`)
+src/                             # All engine source, grouped by domain
+  cli.ts, mod.ts, types.ts       # CLI entry, library entry, shared roots
+  engine/                        # DAG executor core (engine, agent, dag, loop)
+  config/                        # config load + validation + templates
+  state/                         # run state, lock, log, journal
+  isolation/                     # git worktree, guardrail, scope/memory checks
+  hitl/                          # human-in-the-loop + HITL MCP server
+  mcp/                           # engine MCP server + CLI commands
+  init/                          # Project scaffolder (`flowai-workflow init`)
+# ACP runtime layer = external @korchasa/ai-ide-cli dependency (JSR, ^0.8.8)
 scripts/                         # Dev tooling (check, compile, dashboard, release-notes)
 .flowai-workflow/                # One folder per workflow (FR-S47)
   github-inbox/                  # Workflow folder = portable unit

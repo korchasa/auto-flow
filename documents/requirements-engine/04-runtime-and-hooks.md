@@ -345,85 +345,83 @@
 
 
 
-### 3.77 FR-E77: Transport Selection (CLI vs ACP)
+### 3.77 FR-E77: ACP as the Sole Runtime Transport
 
-- **Description:** Workflow authors opt agent invocations into the Agent
-  Client Protocol (ACP) transport shipped by `@korchasa/ai-ide-cli` v0.8.8
-  by declaring `transport: <option>` in `workflow.yaml`. Field is typed as
-  `TransportOption = "cli" | "acp"` (re-exported from
-  `@korchasa/ai-ide-cli/runtime/types`). Declared at `defaults.transport`
-  (workflow-wide) and/or per-node (`nodes.<id>.transport`). Cascade —
-  SCALAR REPLACE: `node → enclosing loop parent → defaults → "cli"` (first
-  level that declares wins). Omitting the field everywhere reproduces the
-  legacy `"cli"` transport byte-identically; `RuntimeInvokeOptions.transport
-  === undefined` is library-equivalent to `"cli"`.
+- **Description:** The engine drives every agent invocation over the Agent
+  Client Protocol (ACP) transport shipped by `@korchasa/ai-ide-cli`
+  (`^0.8.8`). ACP is implicit and non-configurable — there is NO workflow- or
+  node-level `transport` knob, no cascade, and no `"cli"` fallback exposed to
+  workflow authors. The package itself is multi-transport and defaults to
+  `"cli"` when `RuntimeInvokeOptions.transport` is omitted, so the engine
+  pins `transport: "acp"` explicitly at every call boundary to force the ACP
+  front. `TransportOption = "cli" | "acp"` is re-exported from
+  `@korchasa/ai-ide-cli/runtime/types`.
 
-  **Config-load validation.**
-  - Enum: any value other than `"cli"` / `"acp"` is rejected with
-    `defaults.transport has invalid value '<x>'. Must be one of: cli, acp`
-    (and analogous per-node message).
-  - Runtime compatibility: for every agent node whose resolved transport is
-    `"acp"`, `config.ts:validateRuntimeCompatibility` calls
+  **Transport pinning.**
+  - `agent.ts:runAgent` sets `transport: "acp"` on both `adapter.invoke()`
+    call sites — the initial invocation and the validation continuation /
+    `--resume` — so the session stays on ACP for its lifetime.
+  - `hitl.ts:runHitlLoop` sets `transport: "acp"` on the post-reply resume
+    invocation.
+
+  **Capability gating.** Because the package's CLI-baseline `adapter.capabilities`
+  differs from the ACP vector, `agent.ts:runAgent`, `hitl.ts:runHitlLoop`, and
+  `config.ts:validateRuntimeCompatibility` read capabilities through
+  `adapter.capabilitiesFor("acp")` (falling back to `adapter.capabilities`
+  only for test stubs that omit the method).
+  - Runtime compatibility: `validateRuntimeCompatibility` calls
     `getRuntimeAdapter(resolvedRuntime).capabilitiesFor?.("acp")` inside a
-    try block. If the call throws (today: Cursor stays `pilot: false` in
-    the library) OR `capabilitiesFor` is missing, the load fails with
-    `Node '<id>': runtime '<runtime>' does not support transport 'acp'`.
-    Catches the misconfiguration at load time instead of at first invoke.
-  - Tool-filter downgrade warning: when resolved transport is `"acp"` AND
-    `allowed_tools` / `disallowed_tools` is declared at the same level OR
-    workflow defaults, the engine emits a one-shot warning via the
-    `OutputManager.warn` channel (config-load `warnSink` callback) — the
-    runtime adapter advertises `capabilitiesFor("acp").toolFilter === false`
-    for Claude / Codex / OpenCode, so the typed tool-filter fields are
-    no-ops on the ACP path. Warning text mentions the affected runtime by
-    field name; emission does NOT throw.
+    try block for every agent node. If the call throws (today: Cursor stays
+    `pilot: false` in the package) OR `capabilitiesFor` is missing, config
+    load fails with `Node '<id>': runtime '<runtime>' does not support ACP
+    execution`. Caught at load time instead of at first invoke.
+  - Tool-filter downgrade warning: when `allowed_tools` / `disallowed_tools`
+    is declared at node or workflow-defaults level, the engine emits a
+    one-shot warning via the `warnSink` callback — under ACP
+    `capabilitiesFor("acp").toolFilter === false` for Claude / Codex /
+    OpenCode, so the typed tool-filter fields are no-ops. Emission does NOT
+    throw.
+  - HITL MCP injection is gated on `effectiveCaps.mcpInjection`.
 
-  **Runtime forwarding.**
-  - `agent.ts:runAgent` accepts `transport?: TransportOption` on
-    `AgentRunOptions`, derives `effectiveCaps =
-    adapter.capabilitiesFor?.(transport ?? "cli") ?? adapter.capabilities`,
-    and gates HITL MCP injection on `effectiveCaps.mcpInjection`. The
-    resolved transport is forwarded into both `adapter.invoke()` call sites
-    — initial invocation and validation continuation / `--resume` — so the
-    session sticks to one transport for its lifetime.
-  - `hitl-handler.ts` / `hitl.ts:runHitlLoop` accept the same field and
-    forward it on the post-reply resume invocation, plus consult
-    `capabilitiesFor(transport)` for the early `mcpInjection` precondition.
-  - `node-dispatch.ts:executeAgentNode` and `loop.ts` resolve the transport
-    via `resolveTransport(node, defaults, parent?)` (alongside
-    `resolveRuntimeConfig` / `resolveToolFilter` / `resolveBudget`) and pass
-    it into `runAgent` AND `handleAgentHitl`.
-
-  **Dry-run observability.** `--dry-run` renders `[transport: acp]` next to
-  every agent node whose resolved transport is `"acp"`; `"cli"` (default)
-  nodes render without a suffix to keep noiseless plans noiseless.
-
-  **Capability-vector snapshot (`@korchasa/ai-ide-cli@0.8.8`, FR-L39).**
-  All three production runtimes (Claude / Codex / OpenCode) keep
-  `mcpInjection: true` and `toolUseObservation: true` on the ACP path —
-  HITL works under ACP. They downgrade `toolFilter: false` (already false
-  on Codex / OpenCode CLI baselines; Claude downgrades from `true`),
-  `transcript: false`, `interactive: false`, `capabilityInventory: false`.
-  Cursor's `capabilitiesFor("acp")` throws so config-load rejects the
-  combination.
+  **Ignored / unsupported under ACP — single reference.** Capability vector
+  `@korchasa/ai-ide-cli@0.8.8` (FR-L39): Claude / Codex / OpenCode keep
+  `mcpInjection` + `toolUseObservation` + `session` + `reasoningEffort` true
+  (HITL, effort, resume work); they downgrade `toolFilter` / `transcript` /
+  `interactive` / `capabilityInventory` to false. Consequences:
+  - `allowed_tools` / `disallowed_tools` (and raw `runtime_args`
+    `--allowedTools` / `--disallowedTools` / `--tools`) — no-op on the wire;
+    `validateRuntimeCompatibility` warns `… is ignored under ACP
+    (toolFilter=false)`.
+  - `runtime: cursor` — rejected at config-load (`capabilitiesFor("acp")`
+    throws): `runtime 'cursor' does not support ACP execution`.
+  - Per-node `<id>.jsonl` (the Claude-CLI transcript copied from
+    `~/.claude/projects`, `state/log.ts`) — not produced (`transcript:
+    false`); emits a `[log] JSONL transcript not found` warning. The stream
+    log (`streamLogPath` / `onEvent`) is unaffected.
+  - `interactive` / `launchInteractive` and `capabilityInventory` /
+    `fetchCapabilitiesSlow` — unsupported on ACP; the engine never invokes
+    them during `run`, so no workflow impact.
+  - Removed knobs `defaults.transport` / `nodes.<id>.transport` — accepted
+    but silently ignored (the schema validator does not reject unknown keys).
+  Unaffected: `runtime` (claude / opencode / codex), `model`, `effort`,
+  `permission_mode`, MCP injection, session / resume, `budget`, `validate`,
+  `allowed_paths`, `memory_paths`.
 
 - **Tasks:** [acp-transport-config](../tasks/2026/06/acp-transport-config.md).
-- **Motivation:** v0.8.8 of the library exposes the ACP front via
-  `RuntimeInvokeOptions.transport`, but the engine hard-coded the implicit
-  `"cli"` default — no project could switch transports without forking
-  `agent.ts`. Operators need one declarative knob to switch transports per
-  workflow or per node, with config-load validation that the picked
-  transport is supported by the picked runtime.
+- **Motivation:** the engine standardised on ACP as its only runtime
+  transport. The earlier CLI-vs-ACP selection knob (`defaults.transport` /
+  per-node `transport`, with cascade and a `--dry-run` suffix) was removed so
+  workflows cannot pick a transport the engine no longer drives end-to-end;
+  the engine consumes the external package's ACP front directly by pinning
+  `transport: "acp"` rather than exposing a config option.
 - **Dep:** FR-E2, FR-E8, FR-E48.
 - **Acceptance criteria:**
   - **Tests:** `runtime_test.ts`, `config_test.ts`, `agent_runtime_test.ts`,
-    `agent_test.ts`, `output_test.ts`, `engine_test.ts`
-    (FR-E77; regression-locked; cascade, enum rejection,
-    runtime-mismatch rejection, tool-filter downgrade warning, transport
-    forwarded on initial + resume, HITL capability gate consults
-    `capabilitiesFor`, dry-run suffix, defaults-cascade through
-    `parseConfig`).
-  - [x] `@korchasa/ai-ide-cli` floor bumped to `^0.8.8`. Evidence:
+    `agent_test.ts`, `engine_test.ts`
+    (FR-E77; regression-locked; ACP-support rejection at config load,
+    tool-filter downgrade warning, `transport: "acp"` pinned on initial +
+    resume, HITL capability gate consults `capabilitiesFor("acp")`).
+  - [x] `@korchasa/ai-ide-cli` floor pinned `^0.8.8`. Evidence:
     `deno.json:10`.
 
 
@@ -487,10 +485,12 @@
   **Cross-runtime contract:** any RuntimeAdapter setting
   `output.is_error === true` is treated as terminal here; permanent
   vs. transient classification is the adapter's responsibility via
-  `RuntimeInvokeResult.error_category` (FR-L41 in
-  `@korchasa/ai-ide-cli` adds `"invalid_request"` for Codex
-  HTTP 400). Engine code does NOT substring-match adapter error
-  text — it branches only on the typed category.
+  `RuntimeInvokeResult.error_category`. The pinned `@korchasa/ai-ide-cli`
+  `^0.8.8` only emits `"stream_stall"` as a typed category; any future
+  category (e.g. an `"invalid_request"` for Codex HTTP 400) maps through
+  `mapRuntimeErrorCategory` to `"cli_crash"` until the engine learns it.
+  Engine code does NOT substring-match adapter error text — it branches
+  only on the typed category.
 
 - **Tasks:** see the lumatale-fairy-taler bug-hunter remediation note
   (chat session 2026-06-04).

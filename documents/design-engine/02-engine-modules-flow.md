@@ -78,7 +78,9 @@
     - `findViolations(before: Set<string>, after: Set<string>, allowedPaths: string[]): string[]`
       — pure function. Computes `after − before` (new modifications since
       snapshot), filters against `allowedPaths` globs. Returns violation paths
-      (empty = no violations). Glob matching via path prefix or pattern.
+      (empty = no violations). Glob matching via shared
+      `isolation/glob.ts::globMatch` (`**`, `*`, `?`) — single matcher also
+      used by `guardrail.ts` and `memory-check.ts`.
     Integration: `agent.ts` calls `snapshotModifiedFiles()` before each
     `invokeClaudeCli()` when `node.allowed_paths` exists. After invocation,
     snapshots again, calls `findViolations()`. Violations → synthetic
@@ -104,8 +106,9 @@
     line 1: `[HH:MM:SS] <nodeId padded>  RESULT:` (header),
     lines 2..N: each non-empty line of `output.result` indented 2 spaces,
     last line: `  cost=$X.XXXX | duration=Xs | turns=N` (footer).
-    `extractResultExcerpt()` removed — excerpt logic inlined at state-
-    persistence call sites in `engine.ts` and `node-dispatch.ts`.
+    `extractResultExcerpt()` removed — excerpt logic centralized in
+    `state/run-journal.ts::resultExcerpt()`, shared by `engine.ts`,
+    `node-dispatch.ts`, and `loop.ts`.
     `RunSummary.nodeResults?: Record<string, string>` (FR-E22): optional
     per-node result excerpts. `summary()` renders per-node result lines after
     "Nodes:" when `nodeResults` present: `  <nodeId padded>  <excerpt>`.
@@ -241,7 +244,9 @@
     fail-fast on the first non-`completed` state; banner
     `=== Cycle k/N ===` on stderr (suppressed under `-q`). `--cycles >1`
     + `--resume` rejected at parse time.
-    `VERSION` constant: `Deno.env.get("VERSION") ?? "dev"`.
+    `VERSION` constant (`Deno.env.get("VERSION") ?? "dev"`) is defined in
+    `version.ts` (leaf module — keeps the library graph free of the CLI
+    entry point) and re-exported from `cli.ts` for back-compat.
   - ~~`repl/mod.ts`~~ — removed (FR-E46 retired). Interactive REPL and
     bundled management skills (`flowai-workflow-init`,
     `flowai-workflow-adapt-agents`) no longer ship; runtime persistence at
@@ -355,34 +360,27 @@
 
 
 
-- **FR-E77 — Transport Selection (CLI vs ACP) data flow:**
-  - `types.ts` re-exports `TransportOption` from
-    `@korchasa/ai-ide-cli/runtime/types` and adds `transport?: TransportOption`
-    to both `WorkflowDefaults` and `NodeConfig`.
-  - `config.ts` parses the field, rejects unknown enum values, and exposes
-    `resolveTransport(node, defaults, loopParent?) → TransportOption`
-    (scalar-replace cascade: `node → loopParent → defaults → "cli"`).
-    `validateRuntimeCompatibility` rejects `transport: acp` for runtimes
-    whose adapter throws on `capabilitiesFor("acp")` (Cursor today) and
-    emits an `OutputManager.warn` warning when the resolved transport is
-    `"acp"` and a tool-filter field is set (toolFilter downgrade on ACP).
-  - `node-dispatch.ts:executeAgentNode` and `loop.ts` resolve the transport
-    alongside runtime/budget/tool-filter and forward it into both
-    `runAgent(...)` and `handleAgentHitl(...)` calls.
-  - `agent.ts:runAgent` threads `transport` into `RuntimeInvokeOptions` on
-    BOTH the initial invocation and the validation-continuation resume.
+- **FR-E77 — ACP as the sole runtime transport, data flow:**
+  - `TransportOption` is re-exported from `@korchasa/ai-ide-cli/runtime/types`
+    for type completeness, but there is NO `transport` field on
+    `WorkflowDefaults` / `NodeConfig` and NO `resolveTransport` cascade — ACP
+    is implicit, not configurable.
+  - `config.ts:validateRuntimeCompatibility` calls
+    `getRuntimeAdapter(runtime).capabilitiesFor?.("acp")` for every agent
+    node; it rejects runtimes whose adapter throws (Cursor today) or omits
+    `capabilitiesFor` with `does not support ACP execution`, and emits an
+    `OutputManager.warn` warning when a tool-filter field is set (toolFilter
+    downgrades to false on ACP).
+  - `agent.ts:runAgent` pins `transport: "acp"` into `RuntimeInvokeOptions`
+    on BOTH the initial invocation and the validation-continuation resume.
     The HITL MCP injection gate consults
-    `adapter.capabilitiesFor?.(transport ?? "cli") ?? adapter.capabilities`
-    so transport-specific downgrades automatically disable HITL wiring
-    instead of crashing at adapter.invoke.
-  - `hitl-handler.ts` / `hitl.ts:runHitlLoop` forward the transport on the
-    post-reply resume invocation, keeping the human round-trip on the same
-    transport as the original call.
-  - `engine.ts` dry-run path passes a `transportMap` to `OutputManager.dryRunPlan`
-    so each agent node prints with a `[transport: acp]` suffix when its
-    resolved transport is `"acp"`.
-  - Flow: `WorkflowDefaults.transport → resolveTransport → AgentRunOptions.transport
-    → adapter.invoke({ transport })`.
+    `adapter.capabilitiesFor?.("acp") ?? adapter.capabilities` so ACP
+    capability downgrades disable HITL wiring instead of crashing at
+    `adapter.invoke`.
+  - `hitl.ts:runHitlLoop` pins `transport: "acp"` on the post-reply resume
+    invocation, keeping the human round-trip on ACP.
+  - Flow: `getRuntimeAdapter(runtime).invoke({ transport: "acp", … })`; the
+    external package routes the call through its shared ACP client.
 
 - **FR-E80 — Cumulative Wall-Clock Retry Cap data flow:**
   - `types.ts` adds `max_retry_wall_clock_seconds?: number` to `NodeSettings`

@@ -67,32 +67,43 @@
 
 ### 3.18 FR-E18: Stream Log Timestamps
 
-- **Description:** Each non-empty line written to the stream log file
-  (`.flowai-workflow/runs/<run-id>/logs/<node-id>.jsonl`) is prefixed with a wall-clock
-  timestamp in `[HH:MM:SS]` format (24-hour, zero-padded). Empty lines pass
-  through without prefix. Terminal output via `onOutput` callback is NOT
-  prefixed — timestamps appear in persisted logs only.
-- **Motivation:** Raw JSONL log files lack temporal context, making it hard to
+- **Description:** Each non-empty line written to the per-node stream-log
+  file (`${node_dir}/stream.log`) is prefixed with a wall-clock timestamp in
+  `[HH:MM:SS]` format (24-hour, zero-padded). Empty lines pass through without
+  prefix. Terminal output via `onOutput` callback is NOT prefixed — timestamps
+  appear in persisted logs only.
+
+  **Engine-owned write (FR-E77 ACP-only).** The external
+  `@korchasa/ai-ide-cli` ACP path persists nothing — it only forwards raw
+  `session/update` params via `onEvent`. The engine (`src/engine/stream-log.ts`,
+  wired in `src/engine/agent.ts::runAgent`) is the SOLE writer: it subscribes
+  via `onEvent`, parses content through the library's public
+  `extractSessionContent`, and writes timestamped `[stream] text:/tool:/result:`
+  lines to one append handle spanning the initial invoke and every
+  continuation. `streamLogPath` is NOT forwarded to `adapter.invoke` (dropped
+  under ACP; forwarding triggers a spurious FR-E79 WARN). An FS open/write
+  failure fails the node fast with `error_category: "cli_crash"`. Turn markers
+  are best-effort (no sound per-turn boundary on the ACP stream).
+- **Tasks:** [stream-log-owned-by-engine](../tasks/2026/06/stream-log-owned-by-engine.md).
+- **Motivation:** Stream-log files lack temporal context, making it hard to
   correlate log entries with real-world events during post-incident analysis.
 - **Acceptance criteria:**
-  - **Tests:** `agent_test.ts` (regression-locked; `tsPrefix` and
-    `stampLines` cases at lines 391-442 cover format, single-line,
-    multi-line, and empty-line passthrough).
+  - **Tests:** `src/engine/stream-log_test.ts`, `src/engine/agent_test.ts`
+    (FR-E18; regression-locked).
 
 
 
 ### 3.20 FR-E20: Repeated File Read Warning
 
-- **Description:** Stream log emits a `[WARN]` line when the same file path is read more than 2 times within one agent session (`executeClaudeProcess()` invocation). Warning includes the file path and read count. Informational only — does not block execution. Enables meta-agent to detect and diagnose repeated-read anti-patterns from log analysis.
+- **Description:** Stream log emits a `[WARN]` line when the same file path is read more than 2 times within one node run. Warning includes the file path and read count. Informational only — does not block execution. Enables meta-agent to detect and diagnose repeated-read anti-patterns from log analysis.
 
-  **Implementation:** `FileReadTracker` class in `agent.ts`. Instantiated per `executeClaudeProcess()` call (counters reset per invocation). In event loop: for `tool_use` blocks with `name === "Read"`, calls `tracker.track(block.input.file_path)`. Non-null result written to log via `stampLines()`. Terminal `onOutput` callback unchanged (log-file-only).
+  **Implementation:** `FileReadTracker` class in `src/engine/stream-log.ts`. Instantiated once per `createStreamLogWriter` call, i.e. **per node run** — counters span the initial invoke and every continuation (a deliberate divergence from the original per-invocation CLI scope; repeated reads across `--resume` attempts are also worth surfacing). On each normalized ACP tool item with `name === "Read"` and a string `file_path`, calls `tracker.track(file_path)`; a non-null result is appended to the stream log via `stampLines()`. Terminal `onOutput` callback unchanged (log-file-only).
 
   **Warning format:** `[WARN] repeated file read: <path> (<N> times)`.
+- **Tasks:** [stream-log-owned-by-engine](../tasks/2026/06/stream-log-owned-by-engine.md).
 - **Motivation:** Agents were silently re-reading the same file 3-4 times per session (run `20260313T025203`: PM agent read `documents/requirements-sdlc.md` 4 times consecutively), wasting tokens. The pattern was invisible to logging and prompt optimization tooling.
 - **Acceptance criteria:**
-  - **Tests:** `agent_test.ts` (regression-locked; `FileReadTracker`
-    cases at lines 790-855 cover threshold, per-path independence,
-    warning format, consecutive warnings, reset).
+  - **Tests:** `src/engine/stream-log_test.ts` (FR-E20; regression-locked).
 
 
 
