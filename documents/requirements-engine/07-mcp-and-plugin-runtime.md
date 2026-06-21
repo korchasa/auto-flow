@@ -14,8 +14,9 @@ per-file token budget.
 ### 3.73 FR-E73: Embedded MCP Server Over Engine
 
 - **Description:** The engine exposes an embedded Model Context Protocol
-  (MCP) server with eight engine-control tools (the eighth,
-  `provide_human_input`, added by FR-E75), accessible via the
+  (MCP) server with nine engine-control tools (the eighth,
+  `provide_human_input`, added by FR-E75; the ninth, `start_run`, added by
+  FR-E84), accessible via the
   `flowai-workflow mcp <workflow>` subcommand. Default transport is stdio;
   the server core is transport-agnostic so future HTTP/SSE consumers swap
   transports without touching tool handlers. Built on
@@ -35,6 +36,13 @@ per-file token budget.
   - `tail_artifacts({ run_id, node_id, filename, lines? })` — read the
     artifact file under the node directory and return the last N lines
     (default 50).
+  - `start_run({ prompt?, wait? })` — start a FRESH run (FR-E84).
+    `wait:false` (default) launches the engine as an independent detached
+    process and returns `{ run_id, pid }` immediately; `wait:true` runs
+    in-process, blocks until completion, and returns `{ run_id, status,
+    total_cost_usd }`. Rejects when a run already holds the workflow lock.
+    Delegates to the shared `commands.startRun` (the single
+    `Engine({resume:false})` construction site).
   - `resume_node({ run_id })` — resume a run and return the final
     `RunState` summary. Delegates to the shared `commands.resumeRun`
     (FR-E75: the single `Engine({resume:true})` construction site, also
@@ -75,8 +83,8 @@ per-file token budget.
   - **Tests:** `mcp-server_test.ts`, `cli_test.ts`, `mod_test.ts`
     (FR-E73; regression-locked).
   - [ ] `flowai-workflow mcp <workflow>` starts a server that advertises
-    exactly the eight tools above via `tools/list`. Evidence:
-    `mcp-server_test.ts::FR-E73 mcp-server registers all eight tools…`.
+    exactly the nine tools above via `tools/list`. Evidence:
+    `mcp-server_test.ts::FR-E73 mcp-server registers all nine tools…`.
   - [ ] Integration smoke (manual — korchasa): `npx
     @modelcontextprotocol/inspector` against the running server lists
     tools, calls `list_runs`, calls `tail_artifacts` against a known
@@ -264,3 +272,56 @@ per-file token budget.
 - **Dep:** FR-E73, FR-E78
 - **Acceptance criteria:**
   - **Tests:** `parent-watchdog_test.ts` (FR-E83; regression-locked).
+
+
+
+### 3.84 FR-E84: MCP `start_run` Tool (Background + Blocking Fresh Run)
+
+- **Description:** The embedded MCP server (FR-E73) gains a ninth tool,
+  `start_run`, to begin a FRESH workflow run — closing the one lifecycle gap
+  in the tool surface (observe / resume / cancel / patch / answer existed; a
+  start did not). The host no longer has to spawn `flowai-workflow run` as a
+  background CLI subprocess and scrape the run-id from a log.
+
+  **Tool:** `start_run({ prompt?, wait? })`.
+  - `prompt?` — optional extra context forwarded as `args.prompt` (mirrors the
+    CLI `--prompt`); it is the ONLY run-input parameter (no `args`/`env`).
+  - `wait?` (default `false`) — mode selector.
+    - `wait:false` — launch the engine as an **independent detached process**
+      (re-exec of the engine binary, child `unref()`) and return
+      `{ run_id, pid, wait:false }` immediately; the caller polls `get_state`
+      / `tail_artifacts`. The run is independent: it survives the MCP server /
+      host dying (the FR-E83 watchdog reaps only the server's own group). This
+      lifts the `supervisor` agent's prior `nohup … &` launch into a real tool.
+    - `wait:true` — construct the engine in-process, block until completion,
+      return `{ run_id, status, total_cost_usd, wait:true }`. The run dies with
+      the MCP server if the host exits — the caller chose to wait.
+
+  **Shared core.** Logic lives in `commands.startRun` — the single
+  `Engine({resume:false})` construction site, beside `commands.resumeRun`
+  (FR-E75), so start behaviour cannot drift between surfaces.
+
+  **Lock / concurrency.** Background start pre-checks the per-workflow lock
+  (`lock.liveLockHolder`) and fail-fast rejects when a run is already active
+  (FR-E60: no parallel `Engine.run()` per workflow). The blocking path relies
+  on the engine's own `acquireLock`.
+
+  **CLI mechanism.** A new fresh-run flag `--run-id <id>` (distinct from
+  `--resume`) pins the engine to a caller-allocated id, so background
+  `start_run` can return the id before the run completes. `--run-id` combined
+  with `--cycles > 1` is rejected (one id cannot span fresh cycles).
+
+  **Spawn portability.** A compiled binary IS the engine, so re-exec is
+  `Deno.execPath() run <wf> --run-id <id> …`; under `deno run` (dev/tests,
+  `VERSION === "dev"`) the exec is `deno`, so it re-runs `src/cli.ts`. This is
+  an explicit environment branch, not an error-recovery fallback.
+- **Tasks:** [add-mcp-start-run](../tasks/2026/06/add-mcp-start-run.md)
+- **Motivation:** The FR-E73 surface could observe and resume but not start a
+  run; starting was left to the `supervisor` agent spawning a background CLI
+  and grepping the run-id from a log. SDS §5.7 had deferred the non-blocking
+  run-id-then-poll model; this FR realises it for the start path.
+- **Dep:** FR-E73, FR-E54, FR-E60, FR-E78
+- **Acceptance criteria:**
+  - **Tests:** `src/mcp/commands_test.ts`, `src/state/lock_test.ts`,
+    `src/cli_test.ts`, `src/mcp/mcp-server_test.ts` (FR-E84;
+    regression-locked).

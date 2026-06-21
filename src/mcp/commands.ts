@@ -12,16 +12,20 @@
  *   - {@link deliverHumanAnswer} — write a HITL reply into the run's local
  *     inbox file (transport-independent; the live poll loop reads it).
  *   - {@link resumeRun} — the sole `Engine({resume:true})` construction site.
+ *   - {@link startRun} — the sole `Engine({resume:false})` construction site
+ *     (FR-E84). `wait:true` runs in-process and blocks; `wait:false` (default)
+ *     launches an independent detached engine process and returns immediately.
  */
 
-import { dirname } from "@std/path";
+import { basename, dirname, fromFileUrl } from "@std/path";
 
 import type { Verbosity } from "../types.ts";
 import { workflowConfigPath } from "../config/config.ts";
 import { Engine } from "../engine/engine.ts";
-import { isRunLive } from "../state/lock.ts";
+import { isRunLive, liveLockHolder } from "../state/lock.ts";
 import { replayRunJournal } from "../state/run-journal.ts";
-import { getHitlInboxPath, getRunDir } from "../state/state.ts";
+import { generateRunId, getHitlInboxPath, getRunDir } from "../state/state.ts";
+import { VERSION } from "../version.ts";
 
 /** Parameters for {@link deliverHumanAnswer}. */
 export interface DeliverHumanAnswerParams {
@@ -138,4 +142,127 @@ export async function resumeRun(
     status: state.status,
     total_cost_usd: state.total_cost_usd,
   };
+}
+
+/** Parameters for {@link startRun}. */
+export interface StartRunParams {
+  /** Workflow folder containing `workflow.yaml`. */
+  workflowDir: string;
+  /** Optional extra context forwarded to the workflow as `args.prompt`
+   * (mirrors the CLI `--prompt` flag). */
+  prompt?: string;
+  /** Blocking mode selector (default false). `false` → launch a detached
+   * background engine process and return `{ run_id, pid }` immediately.
+   * `true` → run in-process, block until completion, return the final
+   * `{ run_id, status, total_cost_usd }`. */
+  wait?: boolean;
+  /** Output verbosity for the blocking (`wait:true`) path (default `quiet`). */
+  verbosity?: Verbosity;
+}
+
+/** Result of {@link startRun}. `wait` echoes the chosen mode so the caller
+ * does not have to remember which fields are populated. */
+export interface StartRunResult {
+  run_id: string;
+  wait: boolean;
+  /** Populated only for `wait:true` (final engine state). */
+  status?: string;
+  /** Populated only for `wait:true`. */
+  total_cost_usd?: number;
+  /** PID of the detached engine process — populated only for `wait:false`. */
+  pid?: number;
+}
+
+/**
+ * Start a FRESH workflow run (FR-E84) — the SINGLE `Engine({resume:false})`
+ * construction site, shared by MCP `start_run` and (the blocking path) any
+ * future CLI delegate so start behaviour cannot drift.
+ *
+ * `wait:false` (default) is the supervisor's primary need: it launches the
+ * engine as an INDEPENDENT detached process (re-exec of the engine binary,
+ * `child.unref()`) that survives the MCP server / host dying, and returns
+ * `{ run_id, pid }` before the run completes so the caller polls via
+ * `get_state`/`tail_artifacts`. It pre-checks the per-workflow lock and
+ * fail-fast rejects when a run is already active (FR-E60: no parallel
+ * `Engine.run()` per workflow).
+ *
+ * `wait:true` runs the engine in-process and blocks until completion — usable
+ * for short workflows where the caller genuinely wants the final state; the
+ * run dies with the MCP server if the host exits.
+ */
+export async function startRun(
+  params: StartRunParams,
+): Promise<StartRunResult> {
+  const { workflowDir, prompt, wait = false, verbosity = "quiet" } = params;
+
+  if (wait) {
+    const runId = generateRunId(basename(workflowDir));
+    const engine = new Engine({
+      config_path: workflowConfigPath(workflowDir),
+      run_id: runId,
+      resume: false,
+      dry_run: false,
+      verbosity,
+      args: prompt ? { prompt } : {},
+      env_overrides: {},
+    });
+    const state = await engine.run();
+    return {
+      run_id: state.run_id,
+      status: state.status,
+      total_cost_usd: state.total_cost_usd,
+      wait: true,
+    };
+  }
+
+  // Background: reject up-front if a run already holds the workflow lock so
+  // the caller gets a clear error instead of a doomed detached process that
+  // would fail later on `acquireLock` (FR-E60).
+  const holder = await liveLockHolder(workflowDir);
+  if (holder) {
+    throw new Error(
+      `a run is already active (run_id: ${holder.run_id}, pid: ${holder.pid}); ` +
+        `cannot start a parallel run for this workflow`,
+    );
+  }
+
+  const runId = generateRunId(basename(workflowDir));
+  const { exec, args } = buildEngineRunCommand(workflowDir, runId, prompt);
+  // Detached daemon: no stdio pipes (observability is via run artifacts +
+  // tail_artifacts), unref'd so it outlives this process and the FR-E83
+  // parent-death watchdog (which only reaps the MCP server's own group).
+  const child = new Deno.Command(exec, {
+    args,
+    stdin: "null",
+    stdout: "null",
+    stderr: "null",
+  }).spawn();
+  child.unref();
+  return { run_id: runId, pid: child.pid, wait: false };
+}
+
+/**
+ * Build the argv to re-exec the engine `run` subcommand for a background
+ * start. Two explicit environment branches (NOT an error-recovery fallback):
+ * a compiled binary IS the engine (`Deno.execPath()` runs `flowai-workflow
+ * run …` directly); under `deno run` (dev/tests, `VERSION === "dev"`) the
+ * exec is the `deno` binary, so we re-run `src/cli.ts` through it. The fresh
+ * `--run-id` flag (FR-E84) pins the engine to the id this function allocated,
+ * so `startRun` can return it before the run completes.
+ */
+export function buildEngineRunCommand(
+  workflowDir: string,
+  runId: string,
+  prompt?: string,
+): { exec: string; args: string[] } {
+  const promptArgs = prompt ? ["--prompt", prompt] : [];
+  const runArgs = ["run", workflowDir, "--run-id", runId, ...promptArgs];
+  if (VERSION === "dev") {
+    const cliPath = fromFileUrl(import.meta.resolve("../cli.ts"));
+    return {
+      exec: Deno.execPath(),
+      args: ["run", "-A", "--no-check", cliPath, ...runArgs],
+    };
+  }
+  return { exec: Deno.execPath(), args: runArgs };
 }

@@ -14,12 +14,13 @@ subcommand (`flowai-workflow mcp <workflow>`).
 `runMcpServer(workflowDir, options)`:
 
 1. Construct `new McpServer({ name: "flowai-workflow", version: VERSION })`.
-2. Register the eight tools (one helper per tool, all on the root
+2. Register the nine tools (one helper per tool, all on the root
    `workflowDir`):
    - `registerGetWorkflow`
    - `registerGetState`
    - `registerListRuns`
    - `registerTailArtifacts`
+   - `registerStartRun` (FR-E84)
    - `registerResumeNode`
    - `registerCancelRun`
    - `registerApplyWorkflowPatch`
@@ -69,6 +70,19 @@ err((e as Error).message) }`. `ok(payload)` returns
   read text, split on `\n`, strip a single trailing empty entry from
   the file's terminator newline, slice last `lines` entries
   (default 50).
+- **`start_run({ prompt?, wait? })`** (FR-E84) — delegates to
+  `commands.startRun({ workflowDir, prompt, wait })` (the single
+  `Engine({resume:false})` site). `wait:false` (default) pre-checks
+  `lock.liveLockHolder` (reject if a run is active), allocates
+  `generateRunId(basename(workflowDir))`, spawns a detached engine subprocess
+  via `buildEngineRunCommand` (re-exec `… run <wf> --run-id <id> [--prompt …]`;
+  `Deno.execPath()` is the binary in prod, `deno run src/cli.ts` when
+  `VERSION === "dev"`), `child.unref()`, returns `{ run_id, pid, wait:false }`
+  WITHOUT blocking. `wait:true` builds the engine in-process, `await
+  engine.run()`, returns `{ run_id, status, total_cost_usd, wait:true }`. The
+  detached child is independent of the MCP server's lifecycle (survives the
+  FR-E83 watchdog). New CLI flag `--run-id` (fresh, non-resume) carries the
+  allocated id; the engine already honours `options.run_id` on the fresh path.
 - **`resume_node({ run_id })`** — delegates to
   `commands.resumeRun({ workflowDir, run_id, verbosity: "quiet" })`
   (FR-E75: the single `Engine({resume:true})` construction site,
@@ -134,7 +148,7 @@ Internal helper `applyJsonPointerOp(doc, op)` (exported for tests):
   transport's lifecycle.
 - **Future HTTP/SSE**: deferred follow-up. Replacing the
   `StdioServerTransport` constructor with `new HttpServerTransport(...)`
-  (or similar) requires zero changes inside the seven handlers — the
+  (or similar) requires zero changes inside the nine handlers — the
   schema/handler contracts are transport-agnostic.
 
 ### 5.5 Process model invariants
@@ -170,4 +184,6 @@ Internal helper `applyJsonPointerOp(doc, op)` (exported for tests):
   for embedded hosts.
 - Migrating `hitl-mcp-server.ts` (hand-rolled NDJSON) onto the SDK.
 - Auth / authz on the MCP surface (stdio is local-only).
-- Non-blocking `resume_node` variant (run-id-then-poll model).
+- Non-blocking `resume_node` variant (run-id-then-poll model). NOTE:
+  FR-E84 realises this model for the *start* path (`start_run` with
+  `wait:false`); a non-blocking *resume* remains deferred.

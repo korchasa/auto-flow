@@ -3,6 +3,7 @@ import {
   acquireLock,
   defaultLockPath,
   isRunLive,
+  liveLockHolder,
   type LockInfo,
   readLockInfo,
   releaseLock,
@@ -235,6 +236,48 @@ Deno.test("FR-E75 isRunLive — false when lock run_id does not match", async ()
 Deno.test("FR-E75 isRunLive — false when no lock file exists", async () => {
   const wf = await Deno.makeTempDir();
   assertEquals(await isRunLive(wf, "run-x"), false);
+  await Deno.remove(wf, { recursive: true });
+});
+
+// FR-E84: pre-check for `startRun` background launch — "is ANY run active
+// for this workflow folder", independent of a specific run_id.
+Deno.test("FR-E84 liveLockHolder — returns info when a live process holds the lock", async () => {
+  const wf = await Deno.makeTempDir();
+  const held: LockInfo = {
+    pid: Deno.pid, // current process is alive by definition
+    hostname: Deno.hostname(),
+    run_id: "run-live",
+    started_at: new Date().toISOString(),
+  };
+  await Deno.mkdir(`${wf}/runs`, { recursive: true });
+  await Deno.writeTextFile(defaultLockPath(wf), JSON.stringify(held));
+
+  const holder = await liveLockHolder(wf);
+  assertEquals(holder?.run_id, "run-live");
+  assertEquals(holder?.pid, Deno.pid);
+
+  await Deno.remove(wf, { recursive: true });
+});
+
+Deno.test("FR-E84 liveLockHolder — null when lock PID is dead", async () => {
+  const wf = await Deno.makeTempDir();
+  const dead: LockInfo = {
+    pid: 99999999,
+    hostname: Deno.hostname(),
+    run_id: "run-dead",
+    started_at: new Date().toISOString(),
+  };
+  await Deno.mkdir(`${wf}/runs`, { recursive: true });
+  await Deno.writeTextFile(defaultLockPath(wf), JSON.stringify(dead));
+
+  assertEquals(await liveLockHolder(wf), null);
+
+  await Deno.remove(wf, { recursive: true });
+});
+
+Deno.test("FR-E84 liveLockHolder — null when no lock file exists", async () => {
+  const wf = await Deno.makeTempDir();
+  assertEquals(await liveLockHolder(wf), null);
   await Deno.remove(wf, { recursive: true });
 });
 

@@ -9,7 +9,13 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import { join } from "@std/path";
 
-import { deliverHumanAnswer, resumeRun } from "./commands.ts";
+import {
+  buildEngineRunCommand,
+  deliverHumanAnswer,
+  resumeRun,
+  startRun,
+} from "./commands.ts";
+import type { LockInfo } from "../state/lock.ts";
 import { RunJournalWriter } from "../state/run-journal.ts";
 import { createRunState, getHitlInboxPath, getRunDir } from "../state/state.ts";
 import {
@@ -210,4 +216,76 @@ Deno.test("FR-E75 resumeRun — surfaces an error for a nonexistent run (engine-
   } finally {
     await fx.cleanup();
   }
+});
+
+// --- startRun (FR-E84) ---
+
+Deno.test("FR-E84 startRun wait:true — surfaces an error when the workflow is missing (fresh engine path)", async () => {
+  // Empty temp dir → no workflow.yaml → loadConfig inside the engine fails.
+  // Proves the blocking Engine({resume:false}) construction + error envelope.
+  const workflowDir = await Deno.makeTempDir({ prefix: "fr-e84-wait-" });
+  try {
+    await assertRejects(() => startRun({ workflowDir, wait: true }));
+  } finally {
+    await Deno.remove(workflowDir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E84 startRun wait:false — rejects when a run already holds the lock", async () => {
+  const workflowDir = await Deno.makeTempDir({ prefix: "fr-e84-locked-" });
+  try {
+    await Deno.writeTextFile(join(workflowDir, "workflow.yaml"), WORKFLOW_YAML);
+    await Deno.mkdir(join(workflowDir, "runs"), { recursive: true });
+    const held: LockInfo = {
+      pid: Deno.pid, // alive by definition
+      hostname: Deno.hostname(),
+      run_id: "run-already",
+      started_at: "2026-06-21T00:00:00.000Z",
+    };
+    await Deno.writeTextFile(
+      join(workflowDir, "runs", ".lock"),
+      JSON.stringify(held),
+    );
+    await assertRejects(
+      () => startRun({ workflowDir, wait: false }),
+      Error,
+      "already active",
+    );
+  } finally {
+    await Deno.remove(workflowDir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E84 startRun wait:false — returns a run_id + pid without blocking (detached spawn)", async () => {
+  const workflowDir = await Deno.makeTempDir({ prefix: "fr-e84-bg-" });
+  try {
+    await Deno.writeTextFile(join(workflowDir, "workflow.yaml"), WORKFLOW_YAML);
+    const res = await startRun({ workflowDir, wait: false });
+    assertEquals(res.wait, false);
+    assertEquals(typeof res.run_id, "string");
+    assertEquals(res.run_id.length > 0, true);
+    assertEquals(typeof res.pid, "number");
+    // Reap the detached child (it fails fast on the non-git temp worktree;
+    // killing it deterministically avoids a stray process in the suite).
+    try {
+      Deno.kill(res.pid!, "SIGKILL");
+    } catch {
+      // Already exited — fine.
+    }
+  } finally {
+    await Deno.remove(workflowDir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E84 buildEngineRunCommand — dev path re-execs cli.ts with --run-id", () => {
+  // Tests run under `deno run` → VERSION === "dev".
+  const { exec, args } = buildEngineRunCommand("/tmp/wf", "run-xyz", "hello");
+  assertEquals(exec, Deno.execPath());
+  assertEquals(args[0], "run");
+  assertEquals(args.includes("--run-id"), true);
+  assertEquals(args[args.indexOf("--run-id") + 1], "run-xyz");
+  assertEquals(args.includes("--prompt"), true);
+  assertEquals(args[args.indexOf("--prompt") + 1], "hello");
+  // Positional workflow dir is forwarded to the `run` subcommand.
+  assertEquals(args.includes("/tmp/wf"), true);
 });

@@ -27,6 +27,7 @@
  * Options:
  *   --prompt <text>       Additional context for PM agent (sets args.prompt)
  *   --resume <run-id>     Resume a previous run from its state
+ *   --run-id <id>         Start a fresh run pinned to this id (FR-E84)
  *   --dry-run             Print execution plan without running
  *   -v, --verbose         Show full streaming output
  *   -s, --semi-verbose    Show text output only (suppress tool calls)
@@ -279,6 +280,13 @@ export function parseArgs(args: string[]): EngineOptions {
         resume = true;
         runId = args[++i];
         break;
+      case "--run-id":
+        // FR-E84: pin a FRESH run to an explicit id (no resume). Lets a
+        // caller (MCP `start_run` background launch) allocate the id and
+        // return it before the run completes. Engine honours
+        // `options.run_id` on the fresh path (engine.ts).
+        runId = args[++i];
+        break;
       case "--dry-run":
         dryRun = true;
         break;
@@ -402,6 +410,7 @@ Run positional:
 Run options:
   --prompt <text>       Additional context for PM agent (optional)
   --resume <run-id>     Resume a previous run
+  --run-id <id>         Start a fresh run pinned to this id (FR-E84)
   --dry-run             Print execution plan without running
   -v, --verbose         Show full streaming output from agents
   -s, --semi-verbose    Show text output only (suppress tool calls)
@@ -467,6 +476,15 @@ async function runEngine(args: string[]): Promise<never> {
       throw new Error(
         "--cycles cannot be combined with --resume: resume targets a " +
           "single run-id, while --cycles starts fresh runs.",
+      );
+    }
+
+    // FR-E84: an explicit fresh `--run-id` pins ONE id; --cycles starts
+    // multiple fresh runs that would collide on it.
+    if (cycles > 1 && options.run_id && !options.resume) {
+      throw new Error(
+        "--cycles cannot be combined with --run-id: an explicit run-id " +
+          "would collide across fresh cycles.",
       );
     }
 
