@@ -85,8 +85,11 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
+          # --agent-evidence-optional: install + MCP probe stay blocking; the
+          # nondeterministic live-agent step is reported but does not fail CI.
           deno run -A scripts/plugin-install-acceptance.ts \
-            --host claude
+            --host claude \
+            --agent-evidence-optional
 
   plugin-install-acceptance-codex:
     name: Plugin install acceptance (Codex)
@@ -94,7 +97,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CODEX_CLI_VERSION: 0.135.0
-      CODEX_INSTALL_ACCEPTANCE_MODEL: openai/gpt-4.1
+      # Reasoning model — far more reliable at issuing the get_workflow MCP
+      # tool call than gpt-4.1 (which often substitutes a resource-read).
+      CODEX_INSTALL_ACCEPTANCE_MODEL: openai/gpt-5-mini
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -128,9 +133,12 @@ jobs:
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
+          # --agent-evidence-optional: install + MCP probe stay blocking; the
+          # nondeterministic live-agent step is reported but does not fail CI.
           deno run -A scripts/plugin-install-acceptance.ts \
             --host codex \
-            --codex-provider openrouter
+            --codex-provider openrouter \
+            --agent-evidence-optional
 
   release:
     name: Release

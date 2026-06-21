@@ -117,6 +117,8 @@ Deno.test("CI workflow — every push runs build and plugin install acceptance p
     true,
   );
   assertEquals(claudeJob.includes("--host claude"), true);
+  // Live-agent step is non-blocking (deterministic install + MCP probe gate).
+  assertEquals(claudeJob.includes("--agent-evidence-optional"), true);
   assertEquals(claudeJob.includes("Build plugin payload"), false);
   assertEquals(claudeJob.includes("--payload-dir"), false);
 
@@ -139,7 +141,7 @@ Deno.test("CI workflow — every push runs build and plugin install acceptance p
     true,
   );
   assertEquals(
-    codexJob.includes("CODEX_INSTALL_ACCEPTANCE_MODEL: openai/gpt-4.1"),
+    codexJob.includes("CODEX_INSTALL_ACCEPTANCE_MODEL: openai/gpt-5-mini"),
     true,
   );
   assertEquals(
@@ -157,6 +159,8 @@ Deno.test("CI workflow — every push runs build and plugin install acceptance p
   assertEquals(codexJob.includes("scripts/plugin-install-acceptance.ts"), true);
   assertEquals(codexJob.includes("--host codex"), true);
   assertEquals(codexJob.includes("--codex-provider openrouter"), true);
+  // Live-agent step is non-blocking (deterministic install + MCP probe gate).
+  assertEquals(codexJob.includes("--agent-evidence-optional"), true);
   assertEquals(codexJob.includes("Build plugin payload"), false);
   assertEquals(codexJob.includes("--payload-dir"), false);
   assertEquals(workflow.includes("plugin-real-agent-smoke"), false);

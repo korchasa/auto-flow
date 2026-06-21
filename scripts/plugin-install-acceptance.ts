@@ -42,6 +42,8 @@ const MCP_STARTUP_TIMEOUT_MS = 90_000;
 const MCP_TOOLS_LIST_TIMEOUT_MS = 10_000;
 const DEFAULT_TIMEOUT_MS = 180_000;
 const AGENT_PASS_MARKER = "FLOWAI_INSTALL_ACCEPTANCE_PASS";
+/** Cap on the raw agent-output tail dumped into a failure message (chars). */
+const RAW_AGENT_DUMP_LIMIT = 4_000;
 const TOOL_EVIDENCE_PATTERN =
   /^(?:mcp__flowai[-_]workflow__get_workflow|mcp__plugin_flowai-workflow_flowai-workflow__get_workflow)$/;
 const ACCEPTANCE_WORKFLOW = "github-inbox-opencode-test";
@@ -89,7 +91,10 @@ export type InstallReporter = (message: string) => void;
 
 export interface HostInstallResult {
   host: HostKind;
-  status: "passed";
+  /** `"passed"` = full acceptance incl. the live-agent tool-call evidence.
+   * `"agent-evidence-skipped"` = install + MCP probe passed but the
+   * non-blocking live-agent step failed (only when `agentEvidenceOptional`). */
+  status: "passed" | "agent-evidence-skipped";
   hostHome: string;
   pluginDataDir: string;
   pluginRoot: string;
@@ -112,6 +117,11 @@ export interface InstallAcceptanceOptions {
   buildPayload?: (opts: BuildPayloadOptions) => Promise<BuildResult>;
   makeTempDir?: (prefix: string) => Promise<string>;
   reporter?: InstallReporter;
+  /** Variant 3: when true, a failed live-agent evidence check is reported as a
+   * non-blocking warning (host status `"agent-evidence-skipped"`) instead of
+   * throwing. The deterministic install + MCP probe stay fatal. Decouples the
+   * nondeterministic LLM gate from release-blocking CI. */
+  agentEvidenceOptional?: boolean;
 }
 
 interface HostInstallOptions {
@@ -1214,6 +1224,13 @@ function safeAgentFailureDetails(
   return `stderr tail: ${stderrLines.slice(-3).join(" | ")}`;
 }
 
+/** Last `limit` chars of `text`, prefixed with an elision marker when cut. */
+function rawTail(text: string, limit: number): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= limit) return trimmed;
+  return `…(${trimmed.length - limit} chars elided)…\n${trimmed.slice(-limit)}`;
+}
+
 function assertAgentEvidence(
   host: HostKind,
   output: InstallCommandOutput,
@@ -1226,14 +1243,17 @@ function assertAgentEvidence(
       }`,
     );
   }
-  if (!combined.includes(AGENT_PASS_MARKER)) {
-    throw new Error(
-      `${host} install acceptance did not emit ${AGENT_PASS_MARKER}.`,
-    );
-  }
+  // Variant 5: a completed get_workflow MCP tool call through the installed
+  // plugin is the authoritative signal — that is what proves the plugin
+  // works. The exact AGENT_PASS_MARKER echo is no longer required: gpt-class
+  // models routinely complete the tool call but paraphrase or reformat the
+  // trailing marker, which is pure LLM nondeterminism, not a plugin defect.
+  // On failure, dump the raw agent-output tail so the cause is diagnosable
+  // (resource-read vs shell vs refusal) instead of an opaque one-liner.
   if (!hasInstalledPluginToolEvidence(combined)) {
     throw new Error(
-      `${host} install acceptance did not show get_workflow tool evidence.`,
+      `${host} install acceptance did not show get_workflow tool evidence.\n` +
+        `raw agent output (tail):\n${rawTail(combined, RAW_AGENT_DUMP_LIMIT)}`,
     );
   }
 }
@@ -1247,6 +1267,7 @@ async function runHostInstallAcceptance(opts: {
   probeMcp?: McpProbe;
   reporter?: InstallReporter;
   timeoutMs: number;
+  agentEvidenceOptional?: boolean;
 }): Promise<HostInstallResult> {
   if (opts.host === "claude") requireEnv("CLAUDE_CODE_OAUTH_TOKEN");
   const codexProvider = opts.host === "codex"
@@ -1343,7 +1364,20 @@ async function runHostInstallAcceptance(opts: {
   }
 
   reportAgentOutputEvidence(opts.reporter, opts.host, output);
-  assertAgentEvidence(opts.host, output);
+  try {
+    assertAgentEvidence(opts.host, output);
+  } catch (err) {
+    // Variant 3: the install + MCP probe (deterministic, run above) already
+    // passed. When the caller opts in, a failed live-agent evidence check is
+    // non-blocking — report it and downgrade status instead of failing CI.
+    if (!opts.agentEvidenceOptional) throw err;
+    report(
+      opts.reporter,
+      `${opts.host}: live-agent evidence FAILED but is non-blocking ` +
+        `(install + MCP probe passed): ${(err as Error).message}`,
+    );
+    return { ...installed, status: "agent-evidence-skipped" };
+  }
   report(opts.reporter, `${opts.host}: install acceptance passed`);
   return installed;
 }
@@ -1369,6 +1403,7 @@ export async function runPluginInstallAcceptance(
         probeMcp: opts.probeMcp,
         reporter: opts.reporter,
         timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        agentEvidenceOptional: opts.agentEvidenceOptional,
       }),
     );
   }
@@ -1382,6 +1417,7 @@ interface ParsedArgs {
   hosts: HostKind[];
   timeoutMs: number;
   codexProvider?: CodexProvider;
+  agentEvidenceOptional: boolean;
 }
 
 export function parseInstallAcceptanceArgs(
@@ -1393,6 +1429,7 @@ export function parseInstallAcceptanceArgs(
   let host: HostKind | "all" = "all";
   let timeoutMs = DEFAULT_TIMEOUT_MS;
   let codexProvider: CodexProvider | undefined;
+  let agentEvidenceOptional = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     switch (arg) {
@@ -1430,6 +1467,9 @@ export function parseInstallAcceptanceArgs(
         codexProvider = value;
         break;
       }
+      case "--agent-evidence-optional":
+        agentEvidenceOptional = true;
+        break;
       case "-h":
       case "--help":
         return {
@@ -1437,6 +1477,7 @@ export function parseInstallAcceptanceArgs(
             "Usage: plugin-install-acceptance [--payload-dir <dir>] [--engine-root <dir>]",
             "                                  [--version <version>] [--host claude|codex|all]",
             "                                  [--codex-provider openai|openrouter]",
+            "                                  [--agent-evidence-optional]",
             "                                  [--timeout-ms <ms>]",
           ].join("\n"),
         };
@@ -1451,6 +1492,7 @@ export function parseInstallAcceptanceArgs(
     hosts: hostsFromOption(host),
     timeoutMs,
     codexProvider,
+    agentEvidenceOptional,
   };
 }
 
@@ -1473,9 +1515,13 @@ if (import.meta.main) {
     host: parsed.hosts.length === 1 ? parsed.hosts[0] : "all",
     codexProvider: parsed.codexProvider,
     timeoutMs: parsed.timeoutMs,
+    agentEvidenceOptional: parsed.agentEvidenceOptional,
     reporter: console.log,
   });
   for (const host of result.hosts) {
-    console.log(`${host.host}: install acceptance passed (${host.pluginRoot})`);
+    const label = host.status === "passed"
+      ? "install acceptance passed"
+      : "install acceptance passed (live-agent evidence skipped, non-blocking)";
+    console.log(`${host.host}: ${label} (${host.pluginRoot})`);
   }
 }

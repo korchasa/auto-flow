@@ -718,3 +718,136 @@ Deno.test("install acceptance — argument parser selects hosts, provider, and t
   assertEquals(parsed.codexProvider, "openrouter");
   assertEquals(parsed.timeoutMs, 1234);
 });
+
+// --- Hardening: variants 3 (non-blocking) + 5 (relaxed marker / raw dump) ---
+
+/** Build a fake installed Codex plugin root with workflow + mcp config. */
+async function stageCodexInstalledRoot(
+  roots: { codexRoot: string },
+): Promise<string> {
+  const installedRoot = await Deno.makeTempDir({
+    prefix: "installed-codex-harden-",
+  });
+  await writeJson(join(installedRoot, ".codex-plugin", "plugin.json"), {
+    name: "flowai-workflow",
+  });
+  await Deno.copyFile(
+    join(roots.codexRoot, ".mcp.json"),
+    join(installedRoot, ".mcp.json"),
+  );
+  await seedInstalledWorkflow(installedRoot);
+  return installedRoot;
+}
+
+Deno.test("install acceptance — V5: completed get_workflow tool call passes without the exact marker", async () => {
+  const oldKey = Deno.env.get("OPENROUTER_API_KEY");
+  const oldModel = Deno.env.get("CODEX_INSTALL_ACCEPTANCE_MODEL");
+  Deno.env.set("OPENROUTER_API_KEY", "test-openrouter-key");
+  Deno.env.set("CODEX_INSTALL_ACCEPTANCE_MODEL", "openai/gpt-5-mini");
+  try {
+    const roots = await fixturePayload();
+    const installedRoot = await stageCodexInstalledRoot(roots);
+    const result = await runPluginInstallAcceptance({
+      payloadDir: roots.payloadDir,
+      host: "codex",
+      codexProvider: "openrouter",
+      timeoutMs: 1_000,
+      makeTempDir: async () =>
+        await Deno.makeTempDir({ prefix: "agent-home-" }),
+      probeMcp: () =>
+        Promise.resolve({
+          serverName: "flowai-workflow",
+          tools: expectedTools,
+        }),
+      runCommand: (_command, args) => {
+        if (args[0] === "--version") {
+          return Promise.resolve(ok("codex 0.135.0"));
+        }
+        if (args[0] === "plugin" && args[1] === "add") {
+          return Promise.resolve(ok(`Installed plugin root: ${installedRoot}`));
+        }
+        if (args.includes("exec")) {
+          // Real MCP tool call completed, but NO trailing pass marker echo.
+          return Promise.resolve(
+            ok(
+              '{"type":"item.completed","item":{"type":"mcp_tool_call","server":"flowai-workflow","tool":"get_workflow","error":null,"status":"completed"}}\n' +
+                "Done. I called the get_workflow tool successfully.",
+            ),
+          );
+        }
+        return Promise.resolve(ok());
+      },
+    });
+    assertEquals(result.hosts[0].status, "passed");
+  } finally {
+    if (oldKey === undefined) Deno.env.delete("OPENROUTER_API_KEY");
+    else Deno.env.set("OPENROUTER_API_KEY", oldKey);
+    if (oldModel === undefined) {
+      Deno.env.delete("CODEX_INSTALL_ACCEPTANCE_MODEL");
+    } else Deno.env.set("CODEX_INSTALL_ACCEPTANCE_MODEL", oldModel);
+  }
+});
+
+Deno.test("install acceptance — V3: missing tool evidence is non-blocking when agentEvidenceOptional is set", async () => {
+  const oldKey = Deno.env.get("OPENROUTER_API_KEY");
+  const oldModel = Deno.env.get("CODEX_INSTALL_ACCEPTANCE_MODEL");
+  Deno.env.set("OPENROUTER_API_KEY", "test-openrouter-key");
+  Deno.env.set("CODEX_INSTALL_ACCEPTANCE_MODEL", "openai/gpt-5-mini");
+  const evidence: string[] = [];
+  try {
+    const roots = await fixturePayload();
+    const installedRoot = await stageCodexInstalledRoot(roots);
+    const result = await runPluginInstallAcceptance({
+      payloadDir: roots.payloadDir,
+      host: "codex",
+      codexProvider: "openrouter",
+      timeoutMs: 1_000,
+      agentEvidenceOptional: true,
+      reporter: (line) => evidence.push(line),
+      makeTempDir: async () =>
+        await Deno.makeTempDir({ prefix: "agent-home-" }),
+      probeMcp: () =>
+        Promise.resolve({
+          serverName: "flowai-workflow",
+          tools: expectedTools,
+        }),
+      runCommand: (_command, args) => {
+        if (args[0] === "--version") {
+          return Promise.resolve(ok("codex 0.135.0"));
+        }
+        if (args[0] === "plugin" && args[1] === "add") {
+          return Promise.resolve(ok(`Installed plugin root: ${installedRoot}`));
+        }
+        if (args.includes("exec")) {
+          // No MCP tool call at all (model ran a shell command instead).
+          return Promise.resolve(
+            ok(
+              '{"type":"item.completed","item":{"type":"command_execution","command":"flowai-workflow get_workflow"}}',
+            ),
+          );
+        }
+        return Promise.resolve(ok());
+      },
+    });
+    assertEquals(result.hosts[0].status, "agent-evidence-skipped");
+    assertStringIncludes(evidence.join("\n"), "non-blocking");
+  } finally {
+    if (oldKey === undefined) Deno.env.delete("OPENROUTER_API_KEY");
+    else Deno.env.set("OPENROUTER_API_KEY", oldKey);
+    if (oldModel === undefined) {
+      Deno.env.delete("CODEX_INSTALL_ACCEPTANCE_MODEL");
+    } else Deno.env.set("CODEX_INSTALL_ACCEPTANCE_MODEL", oldModel);
+  }
+});
+
+Deno.test("install acceptance — argument parser accepts --agent-evidence-optional", () => {
+  const parsed = parseInstallAcceptanceArgs([
+    "--host",
+    "codex",
+    "--codex-provider",
+    "openrouter",
+    "--agent-evidence-optional",
+  ]);
+  if ("help" in parsed) throw new Error("unexpected help");
+  assertEquals(parsed.agentEvidenceOptional, true);
+});
