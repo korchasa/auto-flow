@@ -1,6 +1,6 @@
 ---
 date: "2026-06-04"
-status: in progress
+status: done
 implements: []
 tags: [report, acp, codex, transport, reliability, diagnosis]
 related_tasks:
@@ -15,17 +15,28 @@ related_tasks:
 causes, and component-level scoping. Fix surface is enumerated as
 follow-ups, not committed as a Solution.
 
-## Status snapshot (as of 2026-06-04)
+## Status snapshot (original: 2026-06-04; closed-out: 2026-06-21)
 
-- P1 (`-32700` from codex-acp on heavy prompt) — **open**. Upstream,
-  requires Open Question 1 to be answered before any fix is designed.
-- P2 (`streamLogPath` silent drop on ACP) — **partially mitigated**.
-  Engine now surfaces the library's `degradedOptions` warning for it
-  via FR-E79 → operator sees `runtime onEvent: ... streamLogPath ...`
-  WARN, but the file itself is still not written under
-  `${node_dir}/stream.log` (library work in `acp-parity-closeouts.md`
-  + engine-side ownership in `stream-log-owned-by-engine.md` still
-  pending).
+All engine-owned items are now closed; the only remaining open work is
+upstream (`codex-acp`) or in the sibling library repo
+(`@korchasa/ai-ide-cli`). Report flipped to `done` — it tracked the
+engine share, which is complete.
+
+- P1 (`-32700` from codex-acp on heavy prompt) — **open (upstream,
+  out of our reach)**. OQ1/OQ3 probes (below) ruled out a pure
+  prompt-size threshold (10/25/40 KB round-tripped on both codex and
+  claude ACP fronts). Root cause un-localised (content-shape /
+  session-length / upstream-wrap) and lives in `codex-acp@0.15.0`;
+  the only engine-side levers are version pinning or per-node
+  transport downgrade. Optional follow-up probe "OQ1.b" (replay the
+  verbatim `tech-lead-review` body) remains out of scope.
+- P2 (`streamLogPath` silent drop on ACP) — **closed (engine-side)**.
+  `stream.log` is now written by the engine itself — the engine is the
+  sole owner of the per-node events file under ACP
+  ([stream-log-owned-by-engine](stream-log-owned-by-engine.md), `done`;
+  FR-E18/E20; engine-owns-write commit `0bfe611`). FR-E79 additionally
+  surfaces the library `degradedOptions` WARN. The earlier "file not
+  written by anyone" gap no longer exists.
 - P3 (`systemPrompt` inlined into `prompt[0].text`) — **engine-side
   diagnostic surface closed** by FR-E79
   ([engine-warn-on-runtime-degraded-options](engine-warn-on-runtime-degraded-options.md),
@@ -34,18 +45,21 @@ follow-ups, not committed as a Solution.
   is no longer silent — each invoke now emits a node-tagged WARN line
   before the wire send. Upper bound + fail-fast on prompt size still
   open (library side).
-- P4 (engine retries `-32700` / `-32603` for 2 h) — **open**. No
-  wall-clock cap on cumulative retry duration added in the engine yet;
-  retry classification still owned by `ai-ide-cli`
-  (`shouldRetry` + `runtime-error-analysis.ts`). A new engine FR
-  for a cumulative wall-clock cap is a candidate follow-up but was
-  deliberately deferred — see "What this report deliberately does not
-  do".
+- P4 (engine retries `-32700` / `-32603` for 2 h) — **closed
+  (engine-side)** by **FR-E80**
+  ([acp-codex-followups](acp-codex-followups.md), `done`): a cumulative
+  per-node wall-clock cap (`NodeSettings.max_retry_wall_clock_seconds`)
+  aborts the in-flight invoke via a shared `AbortController`/`signal`
+  and returns `error_category: "retry_budget_exceeded"`, bounding a
+  deterministic-failure node to minutes regardless of how the library
+  classifies the error. The library's `-32700` retryability
+  classification is an optional, separate library-side improvement.
 - P5 (`resumeSessionId` / capability advertisements silent drops on
-  ACP-codex) — **open**. All four gaps live in
-  `ai-ide-cli/documents/tasks/2026/06/acp-parity-closeouts.md`
-  (Gaps 1, 3, 4) plus FR-E79's WARN surface giving operators visibility
-  into Gap 2 entries when they fire.
+  ACP-codex) — **library-side**. Resume is closed there via
+  `ai-ide-cli/.../acp-resume-via-session-load.md` (`done`, `session/load`
+  gate); `acp-parity-closeouts.md` is now `superseded`. Remaining gaps
+  (`onInit.model`, `capabilityInventory`) stay in the sibling repo. No
+  engine action.
 
 ## Summary
 
