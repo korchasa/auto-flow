@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.8.3](https://github.com/korchasa/flowai-workflow/compare/v0.8.2...v0.8.3) (2026-06-21)
+
+
+### Bug Fixes
+
+* **engine:** add parent-death watchdog to stdio MCP entrypoints (FR-E83) ([886b04e](https://github.com/korchasa/flowai-workflow/commit/886b04e8702459ef3ea028fedbb01c6252303087)), closes [#240](https://github.com/korchasa/flowai-workflow/issues/240)
+
+
+### Tests
+
+* **sdlc:** harden codex install-acceptance against LLM-gate flakiness ([2913e32](https://github.com/korchasa/flowai-workflow/commit/2913e32a760f4eadf1f9b65171beb437303c2e65))
+
 ### [0.8.2](https://github.com/korchasa/flowai-workflow/compare/v0.8.1...v0.8.2) (2026-06-21)
 
 ### [0.8.1](https://github.com/korchasa/flowai-workflow/compare/v0.8.0...v0.8.1) (2026-06-04)
