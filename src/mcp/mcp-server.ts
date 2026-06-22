@@ -1,6 +1,6 @@
 /**
  * @module
- * Embedded MCP server exposing eight engine-control tools over a generic
+ * Embedded MCP server exposing nine engine-control tools over a generic
  * transport (default stdio). Built on `@modelcontextprotocol/sdk`. The
  * server is transport-agnostic — the `mcp` CLI subcommand wires
  * `StdioServerTransport`; future HTTP/SSE consumers swap the transport
@@ -11,7 +11,12 @@
  *   - get_state            — `replayRunJournal` → RunState JSON
  *   - list_runs            — walk `runs/`, replay each → summary array
  *   - tail_artifacts       — read artifact file → last N lines
- *   - resume_node          — `commands.resumeRun` (single Engine-resume site)
+ *   - start_run            — `commands.startRun` (single Engine-fresh site;
+ *                            FR-E84: background detached by default, or
+ *                            blocking with `wait:true`)
+ *   - resume_node          — `commands.resumeRun` (blocking) or
+ *                            `resumeRunBackground` (FR-E85: `wait:false`,
+ *                            detached non-blocking resume)
  *   - cancel_run           — read lock → SIGTERM lock owner
  *   - apply_workflow_patch — apply add/replace/remove ops to workflow.yaml
  *   - provide_human_input  — `commands.deliverHumanAnswer` (FR-E75 local
@@ -38,7 +43,12 @@ import { join } from "@std/path";
 import { parse as parseYaml, stringify as stringifyYaml } from "@std/yaml";
 
 import { loadConfig, workflowConfigPath } from "../config/config.ts";
-import { deliverHumanAnswer, resumeRun } from "./commands.ts";
+import {
+  deliverHumanAnswer,
+  resumeRun,
+  resumeRunBackground,
+  startRun,
+} from "./commands.ts";
 import { defaultLockPath, readLockInfo } from "../state/lock.ts";
 import { replayRunJournal } from "../state/run-journal.ts";
 import { getNodeDir, getRunDir } from "../state/state.ts";
@@ -101,6 +111,7 @@ export async function runMcpServer(
     registerGetState(server, workflowDir);
     registerListRuns(server, workflowDir);
     registerTailArtifacts(server, workflowDir);
+    registerStartRun(server, workflowDir);
     registerResumeNode(server, workflowDir);
     registerCancelRun(server, workflowDir);
     registerApplyWorkflowPatch(server, workflowDir);
@@ -149,7 +160,7 @@ function err(message: string): ToolResponse {
 }
 
 /**
- * No-workflow mode (FR-E74): register the same eight tool names so
+ * No-workflow mode (FR-E74): register the same nine tool names so
  * `tools/list` matches the full surface, but every handler returns the
  * structured missing-workflow diagnostic. The MCP handshake completes
  * normally so Claude Code reports the server as up; the user sees the
@@ -161,6 +172,7 @@ function registerAllToolsNoWorkflow(server: McpServer): void {
     "get_state",
     "list_runs",
     "tail_artifacts",
+    "start_run",
     "resume_node",
     "cancel_run",
     "apply_workflow_patch",
@@ -296,17 +308,50 @@ function registerTailArtifacts(server: McpServer, workflowDir: string): void {
   );
 }
 
+function registerStartRun(server: McpServer, workflowDir: string): void {
+  server.tool(
+    "start_run",
+    "Start a FRESH workflow run (FR-E84). Default (wait=false) launches the " +
+      "engine as an INDEPENDENT background process and returns " +
+      "{ run_id, pid } immediately — poll get_state/tail_artifacts to track " +
+      "it. wait=true runs in-process, blocks until the run completes (may " +
+      "take minutes), and returns { run_id, status, total_cost_usd }. " +
+      "Rejects when a run already holds the workflow lock.",
+    {
+      prompt: z.string().optional(),
+      wait: z.boolean().default(false),
+    },
+    async ({ prompt, wait }: { prompt?: string; wait: boolean }) => {
+      try {
+        // Thin delegate (FR-E84): commands.startRun is the single
+        // Engine({resume:false}) construction site.
+        return ok(await startRun({ workflowDir, prompt, wait }));
+      } catch (e) {
+        return err((e as Error).message);
+      }
+    },
+  );
+}
+
 function registerResumeNode(server: McpServer, workflowDir: string): void {
   server.tool(
     "resume_node",
     "Resume a previously-started run from its journal state. " +
-      "Blocks until the engine run completes (may take minutes).",
-    { run_id: z.string() },
-    async ({ run_id }: { run_id: string }) => {
+      "wait=true (default) blocks until the engine run completes (may take " +
+      "minutes) and returns the final RunState. wait=false (FR-E85) launches " +
+      "the resume as an INDEPENDENT background process and returns " +
+      "{ run_id, pid } immediately — poll get_state/tail_artifacts. Rejects " +
+      "with wait=false when the run is already live (attach instead).",
+    { run_id: z.string(), wait: z.boolean().default(true) },
+    async ({ run_id, wait }: { run_id: string; wait: boolean }) => {
       try {
-        // Thin delegate (FR-E75): commands.resumeRun is the single
-        // Engine({resume}) construction site, shared with CLI `run --resume`.
-        return ok(await resumeRun({ workflowDir, runId: run_id }));
+        // Thin delegate: commands.resumeRun is the single blocking
+        // Engine({resume}) construction site (shared with CLI `run --resume`);
+        // resumeRunBackground (FR-E85) is its non-blocking detached counterpart.
+        if (wait) {
+          return ok(await resumeRun({ workflowDir, runId: run_id }));
+        }
+        return ok(await resumeRunBackground({ workflowDir, runId: run_id }));
       } catch (e) {
         return err((e as Error).message);
       }

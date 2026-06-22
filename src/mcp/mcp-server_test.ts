@@ -132,7 +132,7 @@ function parseToolJson(result: { content: Array<{ text: string }> }): unknown {
 
 // --- Tests ---
 
-Deno.test("FR-E73 mcp-server registers all eight tools with expected names", async () => {
+Deno.test("FR-E73 mcp-server registers all nine tools with expected names", async () => {
   const fixture = await setupFixtureWorkflow();
   try {
     const { client, shutdown } = await startServerWithClient(
@@ -140,7 +140,7 @@ Deno.test("FR-E73 mcp-server registers all eight tools with expected names", asy
     );
     const tools = await client.listTools();
     const names = tools.tools.map((t: { name: string }) => t.name).sort();
-    // FR-E75 adds provide_human_input as the eighth tool.
+    // FR-E75 adds provide_human_input; FR-E84 adds start_run.
     assertEquals(names, [
       "apply_workflow_patch",
       "cancel_run",
@@ -149,6 +149,7 @@ Deno.test("FR-E73 mcp-server registers all eight tools with expected names", asy
       "list_runs",
       "provide_human_input",
       "resume_node",
+      "start_run",
       "tail_artifacts",
     ]);
     await shutdown();
@@ -518,11 +519,11 @@ Deno.test(
     const client = new Client({ name: "fr-e74-test-client", version: "0" });
     await client.connect(clientTransport);
     try {
-      // All eight tools must still be advertised so the MCP handshake
+      // All nine tools must still be advertised so the MCP handshake
       // completes; otherwise Claude Code shows an opaque "server crashed"
       // diagnostic instead of the missing-workflow message.
       const tools = await client.listTools();
-      assertEquals(tools.tools.length, 8);
+      assertEquals(tools.tools.length, 9);
 
       const result = await client.callTool({
         name: "get_workflow",
@@ -543,6 +544,69 @@ Deno.test(
       }
     } finally {
       await client.close();
+    }
+  },
+);
+
+Deno.test(
+  "FR-E84 start_run is advertised and returns the missing-workflow error in no-workflow mode",
+  async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport
+      .createLinkedPair();
+    await runMcpServer(undefined, {
+      transport: serverTransport,
+      noWorkflow: true,
+    });
+    const client = new Client({ name: "fr-e84-test-client", version: "0" });
+    await client.connect(clientTransport);
+    try {
+      const tools = await client.listTools();
+      const names = tools.tools.map((t: { name: string }) => t.name);
+      assertEquals(names.includes("start_run"), true);
+
+      const result = await client.callTool({
+        name: "start_run",
+        arguments: { wait: false },
+      });
+      const r = result as {
+        isError?: boolean;
+        content: Array<{ text: string }>;
+      };
+      // No-workflow mode short-circuits before any engine spawn.
+      assertEquals(r.isError, true);
+    } finally {
+      await client.close();
+    }
+  },
+);
+
+Deno.test(
+  "FR-E85 resume_node wait:false returns the background shape { run_id, pid }",
+  async () => {
+    const fixture = await setupFixtureWorkflow();
+    try {
+      const { client, shutdown } = await startServerWithClient(
+        fixture.workflowDir,
+      );
+      const result = await client.callTool({
+        name: "resume_node",
+        arguments: { run_id: fixture.completedRunId, wait: false },
+      });
+      const parsed = parseToolJson(
+        result as { content: Array<{ text: string }> },
+      ) as { run_id: string; pid: number; wait: boolean };
+      assertEquals(parsed.run_id, fixture.completedRunId);
+      assertEquals(parsed.wait, false);
+      assertEquals(typeof parsed.pid, "number");
+      // Reap the detached resume child.
+      try {
+        Deno.kill(parsed.pid, "SIGKILL");
+      } catch {
+        // Already exited — fine.
+      }
+      await shutdown();
+    } finally {
+      await fixture.cleanup();
     }
   },
 );

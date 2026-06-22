@@ -35,8 +35,9 @@ FR-IDs are stable — never renumber them on move.
 - [07-mcp-and-plugin-runtime.md](requirements-engine/07-mcp-and-plugin-runtime.md)
   — Embedded MCP server (FR-E73), the plugin's self-contained runtime
   with lazy binary compile + auto-MCP registration (FR-E74, superseded
-  by FR-E78), Codex subagent delivery as skills (FR-E76), and engine
-  binary precondition + release distribution (FR-E78).
+  by FR-E78), Codex subagent delivery as skills (FR-E76), engine
+  binary precondition + release distribution (FR-E78), and the MCP
+  `start_run` tool (FR-E84).
 
 ## FR-E ID → Section File
 
@@ -119,3 +120,5 @@ FR-IDs are stable — never renumber them on move.
 - FR-E81 (Claude CLI Version Probe Gated on Runtime) → 04-runtime-and-hooks
 - FR-E82 (Fail-Fast on Runtime `is_error`)            → 04-runtime-and-hooks
 - FR-E83 (Parent-Death Watchdog for stdio MCP)        → 07-mcp-and-plugin-runtime
+- FR-E84 (MCP start_run Tool)                          → 07-mcp-and-plugin-runtime
+- FR-E85 (Non-Blocking resume_node)                    → 07-mcp-and-plugin-runtime

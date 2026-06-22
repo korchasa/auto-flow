@@ -17,6 +17,12 @@ Deno.test("parseArgs — --prompt sets args.prompt", () => {
   assertEquals(opts.args.prompt, "Fix the login bug");
 });
 
+Deno.test("FR-E84 parseArgs — --run-id pins a fresh run id without resume", () => {
+  const opts = parseArgs(["wf", "--run-id", "run-xyz"]);
+  assertEquals(opts.run_id, "run-xyz");
+  assertEquals(opts.resume, false);
+});
+
 Deno.test("parseArgs — no args leaves config_path empty (runEngine enforces)", () => {
   const opts = parseArgs([]);
   assertEquals(opts.args.prompt, undefined);

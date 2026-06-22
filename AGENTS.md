@@ -75,6 +75,17 @@ example of engine usage.
   `deno task check` via `AUTO_INSTALL_PLUGINS=true` (literal `true`
   only). Both retired predecessors are gone: `deno task
   sync-claude-plugin` and `deno task sync-plugins -- --install-local`.
+  **Local dogfood MCP = working-tree source, no `flowai-workflow`
+  binary.** `sync-plugins-local` rewrites the emitted payload's
+  `.mcp.json` (Claude + Codex) so the server command is `deno run -A
+  --no-check --config <repo>/deno.json <repo>/src/cli.ts mcp` (Claude
+  keeps `cwd: ${CLAUDE_PROJECT_DIR}`), via
+  `sync-plugins-local.ts#directSourceMcpServer`. Engine stays fully
+  dynamic — every MCP launch reads live `src/`, no rebuild/reinstall on
+  code edits. The SHIPPED `plugin-src/.../.mcp.json` is untouched
+  (FR-E78, `command: flowai-workflow`); the divergence lives only in the
+  local `flowai-workflow-local` payload, mirroring the
+  local-vs-published marketplace-name split.
 
 ## Architecture
 
@@ -171,11 +182,23 @@ example of engine usage.
     machine-parseable fenced contracts; missing fields break the
     loop. Some hosts (Claude Code as a subagent) cannot launch
     nested subagents, so dispatch always goes through the parent.
-  - **Supervisor attach modes:** `fresh` (no run id, launch engine
-    in background, capture run id), `attach-live` (run id given +
-    `runs/.lock` PID alive — do NOT relaunch, just poll),
+  - **Supervisor attach modes:** `fresh` (no run id, launch engine,
+    capture run id), `attach-live` (run id given + run already
+    executing — do NOT relaunch, just poll),
     `resume-after-fail` (run id + engine dead + non-terminal state
-    — patch root cause outside `runs/<run-id>/`, then `--resume`).
+    — patch root cause outside `runs/<run-id>/`, then resume).
+    **MCP-first (FR-E84/E85):** the `supervisor` agent drives the
+    engine through MCP tools — `start_run {wait:false}` (fresh),
+    `resume_node {wait:false}` (resume; rejects when the run is live),
+    `get_state`/`tail_artifacts`/`list_runs` (poll), `cancel_run`
+    (stop), `provide_human_input` (HITL). Its `tools:` frontmatter
+    grants both install-dependent server prefixes (`mcp__flowai-workflow`
+    and `mcp__plugin_flowai-workflow_flowai-workflow`). The legacy
+    `nohup flowai-workflow run … &` daemon protocol (SIGPIPE-avoidance,
+    log-scrape, `kill -0`) is retained ONLY as a Bash fallback for
+    hosts where the MCP server is unreachable from the isolated
+    subagent thread. The `orchestrator` agent is policy-only
+    (forbidden from `runs/**`) and intentionally uses NO MCP tools.
     Long workflows exceed `supervisor.maxTurns` × poll cadence, so
     the supervisor exits via a turn-budget guard at ~2/3 of
     `maxTurns` with `status: running, repeat: true` and the

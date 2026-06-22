@@ -68,6 +68,25 @@ export async function isRunLive(
   return info.run_id === runId && isProcessAlive(info.pid);
 }
 
+/** Return the lock holder for `workflowDir` iff a live process holds it
+ * (FR-E84). Unlike {@link isRunLive} it does NOT match a specific run_id —
+ * it answers "is ANY run currently active for this workflow folder", the
+ * pre-check {@link startRun} needs before launching a fresh background run.
+ * Returns null (never throws) when the lock is absent, corrupted, or held
+ * by a dead PID. */
+export async function liveLockHolder(
+  workflowDir: string,
+): Promise<LockInfo | null> {
+  let info: LockInfo;
+  try {
+    info = await readLockInfo(defaultLockPath(workflowDir));
+  } catch {
+    // NotFound (no lock) or SyntaxError (corrupted lock) → not active.
+    return null;
+  }
+  return isProcessAlive(info.pid) ? info : null;
+}
+
 /** Acquire workflow lock. Throws if another live process holds it.
  * Reclaims stale locks (dead PID on same host) automatically. */
 export async function acquireLock(

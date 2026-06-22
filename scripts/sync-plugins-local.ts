@@ -20,6 +20,10 @@
  *   marketplace`) are reported and skipped, not fatal.
  * - `AUTO_INSTALL_PLUGINS=true` (env var OR `.env`) opts the dev hook
  *   in via {@link runIfAutoInstallEnabled}; any other value is a no-op.
+ * - Rewrites the emitted `.mcp.json` so the local MCP server runs the
+ *   working-tree engine directly (`deno run … src/cli.ts mcp`) with no
+ *   intermediate `flowai-workflow` binary — see
+ *   {@link directSourceMcpServer}. The shipped payload is unaffected.
  */
 
 import { fromFileUrl, isAbsolute, join, resolve } from "@std/path";
@@ -47,6 +51,96 @@ export function localPayloadRoots(
     claude: join(outDir, "claude"),
     codex: join(outDir, "codex"),
   };
+}
+
+/** Plugin host whose payload carries a host-shaped `.mcp.json`. */
+export type PluginHost = "claude" | "codex";
+
+/**
+ * Local dogfood ONLY: the MCP-server definition that runs the
+ * working-tree engine DIRECTLY via `deno run … src/cli.ts mcp`, with NO
+ * intermediate `flowai-workflow` binary on PATH. Keeps engine code fully
+ * dynamic — every server launch reads the live source tree, so a code
+ * edit takes effect on the next session with no rebuild/reinstall step.
+ *
+ * The shipped `plugin-src/{claude,codex}/.../.mcp.json` (FR-E78,
+ * `command: flowai-workflow`) stays untouched — this divergence lives
+ * only in the local `flowai-workflow-local` payload, mirroring the
+ * existing local-vs-published marketplace-name split
+ * ({@link MARKETPLACE_NAME}).
+ *
+ * Claude pins `cwd` to `${CLAUDE_PROJECT_DIR}` so the engine resolves the
+ * *host project's* workflow, not the engine repo; Codex inherits the
+ * session cwd and therefore carries no `cwd`. `--no-check` keeps startup
+ * snappy and prevents a transient working-tree type error from blocking
+ * the MCP handshake.
+ */
+export function directSourceMcpServer(
+  engineRoot: string,
+  host: PluginHost,
+): { command: string; args: string[]; cwd?: string } {
+  const server = {
+    command: "deno",
+    args: [
+      "run",
+      "-A",
+      "--no-check",
+      "--config",
+      join(engineRoot, "deno.json"),
+      join(engineRoot, "src", "cli.ts"),
+      "mcp",
+    ],
+  };
+  return host === "claude"
+    ? { ...server, cwd: "${CLAUDE_PROJECT_DIR}" }
+    : server;
+}
+
+/**
+ * Full `.mcp.json` document for {@link directSourceMcpServer}: Claude
+ * wraps the server under `mcpServers`; Codex uses a flat `{ name: server }`
+ * map (its manifest reads the server table without the wrapper key).
+ */
+export function directSourceMcpFile(
+  engineRoot: string,
+  host: PluginHost,
+): unknown {
+  const server = directSourceMcpServer(engineRoot, host);
+  return host === "claude"
+    ? { mcpServers: { "flowai-workflow": server } }
+    : { "flowai-workflow": server };
+}
+
+/**
+ * Overwrite the emitted `.mcp.json` in every host payload so the local
+ * dogfood install talks to the working-tree engine directly. Idempotent;
+ * soft-skips a host whose payload was not emitted.
+ */
+async function applyDirectSourceMcp(
+  outDir: string,
+  engineRoot: string,
+): Promise<void> {
+  const roots = localPayloadRoots(outDir);
+  const hosts: Array<{ root: string; host: PluginHost }> = [
+    { root: roots.claude, host: "claude" },
+    { root: roots.codex, host: "codex" },
+  ];
+  for (const { root, host } of hosts) {
+    const mcpPath = join(root, "plugins", "flowai-workflow", ".mcp.json");
+    try {
+      await Deno.stat(mcpPath);
+    } catch (error) {
+      if (error instanceof Deno.errors.NotFound) continue;
+      throw error;
+    }
+    await Deno.writeTextFile(
+      mcpPath,
+      JSON.stringify(directSourceMcpFile(engineRoot, host), null, 2) + "\n",
+    );
+    console.log(
+      `[sync-plugins-local] ${host} MCP → working-tree src/cli.ts (no flowai-workflow binary)`,
+    );
+  }
 }
 
 function parseDotenv(content: string): Record<string, string> {
@@ -666,6 +760,10 @@ async function main(): Promise<void> {
   const { outDir, skipBuild } = parseArgs(Deno.args);
   await ensureBuild(outDir, skipBuild);
   const absoluteOutDir = isAbsolute(outDir) ? outDir : resolve(outDir);
+  // Local dogfood: point the emitted MCP server straight at the
+  // working-tree engine (no `flowai-workflow` PATH binary). Shipped
+  // payload (CI) is unaffected — this only rewrites the local build.
+  await applyDirectSourceMcp(absoluteOutDir, engineRoot());
   const roots = localPayloadRoots(absoluteOutDir);
   await syncClaude(roots.claude);
   await syncCodex(roots.codex);
