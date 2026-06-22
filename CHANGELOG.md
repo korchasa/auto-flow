@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.8.4](https://github.com/korchasa/flowai-workflow/compare/v0.8.3...v0.8.4) (2026-06-22)
+
+
+### Features
+
+* **engine:** add MCP start_run tool for fresh workflow launch (FR-E84) ([2ea3647](https://github.com/korchasa/flowai-workflow/commit/2ea3647fb784bd6f41e7e2a65f8bbda307bbbff0))
+* **engine:** add non-blocking resume_node via wait flag (FR-E85) ([a4d4cb2](https://github.com/korchasa/flowai-workflow/commit/a4d4cb25a2ac9a76830452232c9538c93a952874))
+* **sdlc:** wire supervisor to MCP tools, keep Bash as fallback (FR-E84/E85) ([b5609f3](https://github.com/korchasa/flowai-workflow/commit/b5609f37866faa9c0f87ac44bab1457fbcd86220))
+
+
+### Chores
+
+* **sdlc:** point local dogfood MCP at working-tree src/cli.ts ([88d74bf](https://github.com/korchasa/flowai-workflow/commit/88d74bfacdd339ad1572b82703d66eb4e5b36c41))
+
+
+### Documentation
+
+* **engine:** fix stale FR-E78 manual acceptance (tool count + dogfood path) ([56c9eb9](https://github.com/korchasa/flowai-workflow/commit/56c9eb9ee6b578a23a0408c9d0ac9c2893c0a8ed))
+
 ### [0.8.3](https://github.com/korchasa/flowai-workflow/compare/v0.8.2...v0.8.3) (2026-06-21)
 
 
