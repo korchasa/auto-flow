@@ -399,6 +399,11 @@
     `~/.claude/projects`, `state/log.ts`) — not produced (`transcript:
     false`); emits a `[log] JSONL transcript not found` warning. The stream
     log (`streamLogPath` / `onEvent`) is unaffected.
+  - Session resume RESUMES since `0.8.11`: `^0.8.8` dropped
+    `resumeSessionId` on ACP, so continuation / HITL resume silently
+    started a fresh session. FR-L19 routes `session/load` when the front
+    advertises `loadSession` (verified live: claude-agent-acp 0.37.0,
+    opencode 1.16.2), else throws `AcpUnsupportedOptionError`.
   - `interactive` / `launchInteractive` — unsupported on ACP; never invoked
     during `run`.
   - `capabilityInventory` / `fetchCapabilitiesSlow` (ACP-routed since
@@ -491,13 +496,12 @@
   vs. transient classification is the adapter's responsibility via
   `RuntimeInvokeResult.error_category`. The pinned `@korchasa/ai-ide-cli`
   `^0.8.11` emits two typed categories: `"stream_stall"` and
-  `"invalid_request"` (added `0.8.9`, FR-L41, for permanent Codex HTTP
-  400s). `mapRuntimeErrorCategory` passes `"stream_stall"` through and
-  folds the rest — `"invalid_request"` included — into `"cli_crash"`; the
-  fail-fast gate already stopped the node, so only journal category
-  fidelity is lost. Engine code does NOT substring-match adapter error
-  text. `runtime/error-types` (`ERROR_CATEGORY_*`) is absent from the
-  published `exports` map, so the engine compares string literals.
+  `"invalid_request"` (added `0.8.9`, FR-L41, permanent Codex HTTP 400s).
+  `mapRuntimeErrorCategory` passes the former through and folds the rest
+  into `"cli_crash"`; the fail-fast gate already stopped the node, so only
+  journal category fidelity is lost. Engine code does NOT substring-match
+  adapter error text. `runtime/error-types` (`ERROR_CATEGORY_*`) is absent
+  from the published `exports` map, so the engine compares literals.
 
 - **Tasks:** see the lumatale-fairy-taler bug-hunter remediation note
   (chat session 2026-06-04).
