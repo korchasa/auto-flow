@@ -302,7 +302,9 @@ Single-package repository:
     agent. Test-only: excluded from the JSR tarball.
   - The ACP runtime layer is **not** in `src/` — it is the external
     `@korchasa/ai-ide-cli` JSR dependency (import-map alias
-    `@korchasa/ai-ide-cli`, pinned `^0.8.8` in `deno.json#imports`).
+    `@korchasa/ai-ide-cli`, pinned `^0.8.11` in `deno.json#imports`).
+    External to this tree, NOT external to your ownership — see
+    "Runtime-layer ownership" below.
 - `scripts/` — dev tooling (check, compile, dashboard, release-notes,
   loop runners). Excluded from the JSR tarball.
 - `documents/` — SRS/SDS and task notes. Excluded from the tarball.
@@ -313,15 +315,59 @@ Single-package repository:
   `init/` is just the verbatim-copy scaffolder.
 
 The ACP runtime layer is the external `@korchasa/ai-ide-cli` JSR package
-(pinned `^0.8.8`), developed in the sibling repo
+(pinned `^0.8.11`), developed in the sibling repo
 `/Users/korchasa/www/flowai/ai-ide-cli` and consumed here purely via JSR.
 The package is multi-transport (CLI default, ACP opt-in); the engine drives
 it ACP-only by passing `transport: "acp"` at every `adapter.invoke()` /
 `runtimeRun()` call boundary (`src/engine/agent.ts`, `src/hitl/hitl.ts`) and
 reading capabilities through `adapter.capabilitiesFor("acp")`. ACP is thus
 the engine's sole runtime transport without any engine-level `transport`
-config knob. To change runtime behaviour, edit the sibling repo, publish a
-new JSR version, and bump the pin here — there is no in-tree runtime source.
+config knob. There is no in-tree runtime source: runtime behaviour changes
+land in the sibling repo, get published to JSR, and only then arrive here
+via a pin bump.
+
+### Runtime-layer ownership
+
+`@korchasa/ai-ide-cli` is YOUR responsibility, not a third-party
+dependency you merely consume. A runtime-layer defect or gap is never
+"out of scope" and never something to hand back to the user — treat the
+sibling repo as a second working tree of the same job. Concretely:
+
+- Diagnose runtime symptoms down into the sibling repo's source, not
+  only up to the engine boundary.
+- Fix there under that repo's own AGENTS.md rules (its own TDD flow and
+  `deno task check`), publish a new JSR version, bump the pin here, and
+  re-run `deno task check` in this repo. The change is done only when
+  BOTH repos are green and the pin points at the published version.
+- Own the whole chain in one session when the fix spans both repos.
+  Don't stop at "filed upstream".
+- FR numbering there stays `FR-L<N>`; requirements/design for the
+  runtime live in the sibling repo's `documents/`, not here.
+
+**Update-check procedure** (for "check ACP updates"-class requests):
+read the latest published version from
+`https://jsr.io/@korchasa/ai-ide-cli/meta.json`, diff the `exports`
+lists of the pinned and latest `<ver>_meta.json`, read the sibling
+repo's release history for what each version changed, then bump
+`deno.json#imports`, refresh the lock with `deno install`, and run
+`deno task check`.
+
+**Lock pins the resolution; the caret alone never upgrades.**
+`deno.lock` normalises a `^0.8.x` specifier to the equivalent `~0.8.x`
+form (identical range for `0.x`) and freezes the resolved version, so a
+newer published release is picked up only after `deno install` rewrites
+the lock. A `~0.8.x` key in `deno.lock` is therefore NOT evidence of a
+stale specifier.
+
+**A minor bump can break consumer types even when `exports` are
+unchanged.** `RuntimeCapabilities` gains REQUIRED boolean flags over
+time (`0.8.10` added `commandsFastChannel`), so every full capability
+literal in engine tests fails `deno check` until the new flag is added.
+Compare the interface in
+`https://jsr.io/@korchasa/ai-ide-cli/<ver>/runtime/capability-types.ts`
+between versions instead of trusting the `exports` diff. Test fixtures
+that build a full literal are the blast radius; `src/testing/fake-runtime.ts`
+is immune because it spreads a real adapter's capabilities.
 
 **Source of API truth = the PUBLISHED package, not the local sibling
 checkout.** When changing the pin or repointing imports, verify the
@@ -329,10 +375,14 @@ imported symbols against the published version
 (`https://jsr.io/@korchasa/ai-ide-cli/<ver>/...` source +
 `https://jsr.io/@korchasa/ai-ide-cli/<ver>_meta.json` `exports`), NOT
 `../ai-ide-cli` on disk — the sibling working copy routinely carries
-unpublished, uncommitted divergence (e.g. extra `runtime/error-types`
-exports / `ERROR_CATEGORY_*` consts present locally but absent from
-`0.8.8`/`0.8.9`). Reading the local copy as ground truth produces
-imports that fail `deno check` against JSR.
+unpublished, uncommitted divergence. Reading the local copy as ground
+truth produces imports that fail `deno check` against JSR. A module
+present in `<ver>_meta.json#moduleGraph2` is NOT importable either;
+only keys of `exports` are (`runtime/error-types` with its
+`ERROR_CATEGORY_*` consts exists in `0.8.11`'s graph but is absent
+from `exports`, so the engine compares category string literals
+instead). This is a verification rule, not a scope rule — you still
+edit and publish that repo.
 
 Publish gotchas honored in `deno.json#publish`:
 
@@ -414,8 +464,11 @@ Two scopes with strict boundaries:
   GitHub label: `scope: sdlc`.
 
 The ACP runtime layer is the external `@korchasa/ai-ide-cli` JSR package,
-maintained in the sibling repo `/Users/korchasa/www/flowai/ai-ide-cli` —
-file runtime-layer issues there, engine issues here.
+maintained in the sibling repo `/Users/korchasa/www/flowai/ai-ide-cli`.
+Track runtime-layer issues there and engine issues here, but the two
+repos share ONE owner: you. A scope boundary decides where code and
+tickets live, not whether you are allowed to fix it — see
+"Runtime-layer ownership" under Repo Layout.
 
 FR numbering: `FR-E<N>` (engine), `FR-S<N>` (SDLC). Legacy library FRs
 (`FR-L<N>`) from the former `ai-ide-cli` repo remain as historical
