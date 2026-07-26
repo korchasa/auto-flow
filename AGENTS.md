@@ -352,6 +352,20 @@ repo's release history for what each version changed, then bump
 `deno.json#imports`, refresh the lock with `deno install`, and run
 `deno task check`.
 
+**A freshly published version is not resolvable immediately.** JSR serves
+`https://jsr.io/@korchasa/ai-ide-cli/meta.json` (the version index Deno
+reads) from a CDN cache that lags publication by tens of minutes, while
+`<ver>_meta.json`, the version's module URLs, and
+`https://jsr.io/api/scopes/korchasa/packages/ai-ide-cli/versions` already
+show the new release. Confirm publication through those three, then WAIT
+— `deno install --reload` does not help, because the stale answer comes
+from the CDN, not the local cache. Appending a cache-busting query
+(`meta.json?cb=<ts>`) proves the index is fine upstream but does NOT make
+Deno resolve. **A failed `deno install` rewrites `deno.lock` and drops
+unrelated specifiers** — restore it with `git checkout HEAD -- deno.lock`
+before retrying, and do not leave the pin raised while it cannot resolve
+(`deno task check` goes red repo-wide).
+
 **Lock pins the resolution; the caret alone never upgrades.**
 `deno.lock` normalises a `^0.8.x` specifier to the equivalent `~0.8.x`
 form (identical range for `0.x`) and freezes the resolved version, so a
