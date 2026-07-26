@@ -349,7 +349,7 @@
 
 - **Description:** The engine drives every agent invocation over the Agent
   Client Protocol (ACP) transport shipped by `@korchasa/ai-ide-cli`
-  (`^0.8.11`). ACP is implicit and non-configurable — there is NO workflow- or
+  (`^0.8.12`). ACP is implicit and non-configurable — there is NO workflow- or
   node-level `transport` knob, no cascade, and no `"cli"` fallback exposed to
   workflow authors. The package itself is multi-transport and defaults to
   `"cli"` when `RuntimeInvokeOptions.transport` is omitted, so the engine
@@ -384,7 +384,7 @@
   - HITL MCP injection is gated on `effectiveCaps.mcpInjection`.
 
   **Ignored / unsupported under ACP — single reference.** Capability vector
-  `@korchasa/ai-ide-cli@0.8.11` (FR-L39/L20/L42): Claude / Codex / OpenCode keep
+  `@korchasa/ai-ide-cli@0.8.12` (FR-L39/L20/L42): Claude / Codex / OpenCode keep
   `permissionMode` + `mcpInjection` + `toolUseObservation` + `session` +
   `reasoningEffort` + `capabilityInventory` + `commandsFastChannel` true
   (HITL, effort, resume work); they downgrade `toolFilter` / `transcript` /
@@ -430,7 +430,7 @@
     (FR-E77; regression-locked; ACP-support rejection at config load,
     tool-filter downgrade warning, `transport: "acp"` pinned on initial +
     resume, HITL capability gate consults `capabilitiesFor("acp")`).
-  - [x] `@korchasa/ai-ide-cli` floor pinned `^0.8.11`. Evidence:
+  - [x] `@korchasa/ai-ide-cli` floor pinned `^0.8.12`. Evidence:
     `deno.json:10`.
 
 
@@ -495,7 +495,7 @@
   `output.is_error === true` is treated as terminal here; permanent
   vs. transient classification is the adapter's responsibility via
   `RuntimeInvokeResult.error_category`. The pinned `@korchasa/ai-ide-cli`
-  `^0.8.11` emits two typed categories: `"stream_stall"` and
+  `^0.8.12` emits two typed categories: `"stream_stall"` and
   `"invalid_request"` (added `0.8.9`, FR-L41, permanent Codex HTTP 400s).
   `mapRuntimeErrorCategory` passes the former through and folds the rest
   into `"cli_crash"`; the fail-fast gate already stopped the node, so only

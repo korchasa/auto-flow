@@ -302,7 +302,7 @@ Single-package repository:
     agent. Test-only: excluded from the JSR tarball.
   - The ACP runtime layer is **not** in `src/` — it is the external
     `@korchasa/ai-ide-cli` JSR dependency (import-map alias
-    `@korchasa/ai-ide-cli`, pinned `^0.8.11` in `deno.json#imports`).
+    `@korchasa/ai-ide-cli`, pinned `^0.8.12` in `deno.json#imports`).
     External to this tree, NOT external to your ownership — see
     "Runtime-layer ownership" below.
 - `scripts/` — dev tooling (check, compile, dashboard, release-notes,
@@ -315,7 +315,7 @@ Single-package repository:
   `init/` is just the verbatim-copy scaffolder.
 
 The ACP runtime layer is the external `@korchasa/ai-ide-cli` JSR package
-(pinned `^0.8.11`), developed in the sibling repo
+(pinned `^0.8.12`), developed in the sibling repo
 `/Users/korchasa/www/flowai/ai-ide-cli` and consumed here purely via JSR.
 The package is multi-transport (CLI default, ACP opt-in); the engine drives
 it ACP-only by passing `transport: "acp"` at every `adapter.invoke()` /
@@ -366,6 +366,21 @@ unrelated specifiers** — restore it with `git checkout HEAD -- deno.lock`
 before retrying, and do not leave the pin raised while it cannot resolve
 (`deno task check` goes red repo-wide).
 
+**Workaround while the index is stale: hand-write the lock entry.** Deno
+skips `meta.json` altogether once `deno.lock` already resolves the
+specifier, so the bump can land before the CDN heals. Patch three places
+by hand and do NOT run `deno install` (it re-resolves and fails):
+`specifiers` (`jsr:@korchasa/ai-ide-cli@~<ver>` → `<ver>`), the `jsr`
+entry key plus its `integrity` (= sha256 of the version metadata:
+`curl -s https://jsr.io/@korchasa/ai-ide-cli/<ver>_meta.json | shasum -a 256`),
+and `workspace.dependencies`. Carry over the previous version's
+`dependencies` array when the new version imports the same externals
+(grep `<ver>_meta.json` for `jsr:` / `npm:` specifiers). `deno task check`
+and `deno publish --dry-run` then pass against the new version, but
+`deno install -g` IGNORES the lock — even with `--lock --frozen` — and
+re-resolves, so CI's plugin-install-acceptance jobs still fail from a
+stale edge node. Hold the push until the index serves the version.
+
 **Lock pins the resolution; the caret alone never upgrades.**
 `deno.lock` normalises a `^0.8.x` specifier to the equivalent `~0.8.x`
 form (identical range for `0.x`) and freezes the resolved version, so a
@@ -393,7 +408,7 @@ unpublished, uncommitted divergence. Reading the local copy as ground
 truth produces imports that fail `deno check` against JSR. A module
 present in `<ver>_meta.json#moduleGraph2` is NOT importable either;
 only keys of `exports` are (`runtime/error-types` with its
-`ERROR_CATEGORY_*` consts exists in `0.8.11`'s graph but is absent
+`ERROR_CATEGORY_*` consts exists in `0.8.12`'s graph but is absent
 from `exports`, so the engine compares category string literals
 instead). This is a verification rule, not a scope rule — you still
 edit and publish that repo.
