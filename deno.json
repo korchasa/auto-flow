@@ -58,6 +58,7 @@
       ".flowai-workflow/*/.template.json",
       ".github/**",
       "plugin-src",
+      "src/testing",
       "dist/**",
       "documents/**",
       "scripts/**",

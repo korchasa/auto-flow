@@ -297,6 +297,9 @@ Single-package repository:
   - `src/hitl/` — human-in-the-loop handling + HITL MCP server.
   - `src/mcp/` — engine MCP server + CLI commands.
   - `src/init/` — verbatim-copy scaffolder for `flowai-workflow init`.
+  - `src/testing/` — handler-driven fake runtime adapter (FR-E86) injected
+    via `EngineOptions.runtimeAdapter` to run whole workflows without an
+    agent. Test-only: excluded from the JSR tarball.
   - The ACP runtime layer is **not** in `src/` — it is the external
     `@korchasa/ai-ide-cli` JSR dependency (import-map alias
     `@korchasa/ai-ide-cli`, pinned `^0.8.8` in `deno.json#imports`).

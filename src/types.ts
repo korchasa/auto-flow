@@ -17,7 +17,10 @@ import type {
   RuntimeId,
   Verbosity,
 } from "@korchasa/ai-ide-cli/types";
-import type { ExtraArgsMap } from "@korchasa/ai-ide-cli/runtime/types";
+import type {
+  ExtraArgsMap,
+  RuntimeAdapter,
+} from "@korchasa/ai-ide-cli/runtime/types";
 import type { ReasoningEffort } from "@korchasa/ai-ide-cli/runtime/reasoning-effort";
 import type { ProcessRegistry } from "@korchasa/ai-ide-cli/process-registry";
 
@@ -763,4 +766,12 @@ export interface EngineOptions {
   /** Optional embedding-host callback invoked after node lifecycle mutations.
    * The callback is awaited. Rejection fails the run clearly. */
   onNodeLifecycle?: NodeLifecycleCallback;
+  /** Runtime adapter substituted for every agent invocation of this run
+   * (FR-E86) — top-level agent nodes, loop-body nodes, and HITL resume
+   * turns alike. Omit in production: the engine then resolves the real
+   * adapter per node from `resolveRuntimeConfig`. Tests inject
+   * `createFakeRuntime()` (`src/testing/fake-runtime.ts`) to exercise the
+   * whole run without an agent; embedding hosts may inject their own
+   * adapter implementation. */
+  runtimeAdapter?: RuntimeAdapter;
 }

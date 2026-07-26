@@ -4,12 +4,15 @@ import {
   extractConditionValue,
   extractFrontmatterField,
   hitlFailure,
+  runLoop,
 } from "./loop.ts";
 import type { LoopRunOptions } from "./loop.ts";
 import { OutputManager } from "../output.ts";
+import { createFakeRuntime } from "../testing/fake-runtime.ts";
 import type {
   CliRunOutput,
   NodeConfig,
+  ResolvedNodeSettings,
   TemplateContext,
   WorkflowConfig,
 } from "../types.ts";
@@ -545,4 +548,93 @@ Deno.test("hitlFailure — an unrouted question ignores any recorded cause", () 
     failed.error,
     "Body node 'developer' requested human input but the loop has no HITL router configured",
   );
+});
+
+// --- FR-E86: real runLoop integration through an injected runtime adapter ---
+
+Deno.test("FR-E86 runLoop iterates body nodes until the exit value", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  try {
+    const settings: ResolvedNodeSettings = {
+      max_continuations: 0,
+      timeout_seconds: 30,
+      on_error: "fail",
+      max_retries: 1,
+      retry_delay_seconds: 1,
+    };
+    const config: WorkflowConfig = {
+      name: "loop-fake",
+      version: "1",
+      nodes: {
+        "impl-loop": {
+          type: "loop",
+          label: "Impl Loop",
+          condition_node: "verify",
+          condition_field: "verdict",
+          exit_value: "PASS",
+          max_iterations: 3,
+          nodes: {
+            verify: {
+              type: "agent",
+              label: "Verify",
+              prompt: "verify the work",
+              settings,
+            } as NodeConfig,
+          },
+        } as NodeConfig,
+      },
+    };
+    const state = createRunState(
+      "run-loop",
+      "cfg.yaml",
+      ["impl-loop", "verify"],
+      {},
+      {},
+    );
+
+    // Iteration 1 reports FAIL, iteration 2 reports PASS — the loop's exit
+    // condition is driven entirely by what the handler writes.
+    const adapter = createFakeRuntime(async (call) => {
+      const verdict = call.index === 1 ? "FAIL" : "PASS";
+      await call.write(
+        `${tmpDir}/verify-${call.index}/report.md`,
+        `---\nverdict: ${verdict}\n---\n`,
+      );
+      return call.reply({ result: verdict, costUsd: 0.02 });
+    });
+
+    const result = await runLoop({
+      loopNodeId: "impl-loop",
+      config,
+      state,
+      runtimeAdapter: adapter,
+      buildCtx: (nodeId, iteration) => {
+        const nodeDir = `${tmpDir}/${nodeId}-${iteration}`;
+        Deno.mkdirSync(nodeDir, { recursive: true });
+        return {
+          node_dir: nodeDir,
+          run_dir: tmpDir,
+          run_id: "run-loop",
+          workDir: ".",
+          args: {},
+          env: {},
+          input: {},
+        };
+      },
+    });
+
+    assertEquals(result.success, true);
+    assertEquals(result.iterations, 2);
+    assertEquals(result.lastConditionValue, "PASS");
+    assertEquals(result.exit_reason, "exit_value");
+    assertEquals(adapter.calls.length, 2);
+    assertEquals(state.nodes.verify.iteration, 2);
+    // Current behaviour, not an endorsement: `markNodeCompleted` OVERWRITES
+    // `cost_usd` per iteration, so a loop body's run-level cost reflects only
+    // its last iteration ($0.02 of the $0.04 actually spent). Locked here so
+    // any change to loop cost aggregation is a deliberate one.
+    assertEquals(state.total_cost_usd, 0.02);
+  } finally {
+    await Deno.remove(tmpDir, { recursive: true });
+  }
 });

@@ -17,6 +17,7 @@ import type {
   Verbosity,
   WorkflowConfig,
 } from "../types.ts";
+import type { RuntimeAdapter } from "@korchasa/ai-ide-cli/runtime/types";
 import { buildLoopBodyOrder } from "./dag.ts";
 import { runAgent } from "./agent.ts";
 import type { AgentResult } from "./agent.ts";
@@ -110,6 +111,9 @@ export interface LoopRunOptions {
    * loop-body subprocesses too — without it they registered in the
    * `ai-ide-cli` default singleton and escaped the host's scope. */
   processRegistry?: ProcessRegistry;
+  /** Runtime adapter substituted for every body-node invocation (FR-E86).
+   * Omit to let `runAgent` resolve the real adapter per node. */
+  runtimeAdapter?: RuntimeAdapter;
   /**
    * Route a HITL question raised by a body node (FR-L35).
    *
@@ -309,6 +313,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         allowedTools: toolFilter.allowedTools,
         disallowedTools: toolFilter.disallowedTools,
         hitlConfig: config.defaults?.hitl,
+        runtimeAdapter: opts.runtimeAdapter,
         output: opts.output,
         nodeId: bodyNodeId,
         streamLogPath,

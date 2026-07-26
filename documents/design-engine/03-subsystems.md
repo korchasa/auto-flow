@@ -296,3 +296,40 @@
 - **Supersedes:** FR-E74 (launcher + lazy compile retired).
 
 
+
+### 3.8 Test Runtime Seam (`testing/fake-runtime.ts`) — FR-E86
+
+- **Status:** Implemented. FR-E86.
+- **Purpose:** Run whole workflows with no agent. `EngineOptions.runtimeAdapter`
+  overrides the adapter for every agent invocation of a run; `createFakeRuntime`
+  builds one from a TypeScript handler.
+- **Injection path:** 6 sites. `EngineOptions.runtimeAdapter` →
+  `node-dispatch.ts` (`runAgent`; all THREE `handleAgentHitl` sites —
+  top-level resume, top-level detect, loop-body detect; `runLoop`) →
+  `LoopRunOptions.runtimeAdapter` → `loop.ts` `runAgent` →
+  `hitl-handler.ts` → `hitl.ts`. Every site already had
+  `runtimeAdapter ?? getRuntimeAdapter(runtime)`, so omission preserves
+  production behaviour byte-for-byte.
+- **Regression-lock coverage is partial.** Mutation-deleting each injection
+  site and running the suite kills only 2 of 6: `runAgent` in
+  `node-dispatch.ts` (top-level agent node) and `runAgent` in `loop.ts`
+  (loop body). The three `handleAgentHitl` sites and the `runLoop` site in
+  `executeLoopNode` survive — `loop_test.ts` calls `runLoop` directly and so
+  bypasses the dispatch site. A broken site fails LOUDLY (the engine falls
+  back to the real adapter and tries to spawn an agent process), so the gap
+  costs a confusing failure, not a silent pass.
+- **Handler contract:** `(call) => RuntimeInvokeResult | Promise<…>` where
+  `call` carries `opts` (assert on it), `index`/`history` (turn number and
+  prior invocations), `reply()`/`fail()` (reply builders — with and without
+  `CliRunOutput`), `write()` (artifact relative to the invocation `cwd`), and
+  `sleep()` (rejects on `opts.signal`, so FR-E80 abort paths are testable
+  without dangling timers). Throwing emulates an adapter crash; `invoke` is
+  `async` so the throw surfaces as a rejection.
+- **Anti-drift:** capabilities default to
+  `getRuntimeAdapter(id).capabilitiesFor("acp")` with per-test overrides.
+  Default id is `opencode` — it keeps the `claude --version` preflight
+  (FR-E81) out of tests.
+- **Boundary:** no workflow-config surface (`workflow.yaml` cannot select a
+  fake) and excluded from the JSR tarball via `deno.json#publish.exclude`.
+  ACP-front behaviour (handshake, wire errors, real process kill) is
+  deliberately NOT emulated — that band belongs to `@korchasa/ai-ide-cli`.

@@ -169,3 +169,48 @@
   - **Tests:** `engine_test.ts` (FR-E34; regression-locked; 5 cases
     cover the 4 interaction rules + log-message format).
 
+
+
+
+### 3.86 FR-E86: Runtime Adapter Injection Seam
+
+- **Description:** `EngineOptions.runtimeAdapter?: RuntimeAdapter` substitutes
+  the runtime for EVERY agent invocation of a run — top-level agent nodes
+  (`node-dispatch.ts`), loop-body nodes (`LoopRunOptions.runtimeAdapter` →
+  `loop.ts`), and HITL resume turns (`hitl-handler.ts`). Omitting it keeps
+  production behaviour: each node resolves its real adapter through
+  `resolveRuntimeConfig` + `getRuntimeAdapter`. The seam carries no workflow
+  config surface — `workflow.yaml` cannot select it, so a real run cannot
+  silently execute against a fake.
+
+  **Test runtime (`src/testing/fake-runtime.ts`).** `createFakeRuntime(handler)`
+  builds an adapter driven by a TypeScript handler rather than a scripted data
+  file: the handler asserts on the `RuntimeInvokeOptions` it receives and
+  generates the reply, with full control over timing (`call.sleep()` rejects on
+  the FR-E80 abort signal), artifacts (`call.write()`), replies
+  (`call.reply()`), output-less runtime death (`call.fail()`), and adapter
+  crashes (throw). `adapter.calls` exposes the invocation history, making the
+  engine↔`@korchasa/ai-ide-cli` contract (pinned `transport: "acp"`,
+  `resumeSessionId`, injected `mcpServers`, tool filters, budget signal)
+  directly assertable. Capabilities default to the REAL adapter's vector for
+  the same runtime id, so a library capability change surfaces in fakes instead
+  of drifting. The module is excluded from the JSR tarball
+  (`deno.json#publish.exclude`).
+- **Motivation:** The engine's own logic — validation, continuation, resume,
+  scope guardrail, HITL routing, state, journal, cost aggregation — sat above
+  `adapter.invoke()` with no way to exercise it end-to-end: `Engine.run()` and
+  `runLoop()` had no adapter seam, so integration tests "required the claude
+  CLI" and were never written. Every engine-side failure closed in the ACP
+  transport report (`stream.log` ownership, degraded-options WARN, FR-E80
+  runaway retries) lived in exactly that band. Emulating the ACP front instead
+  was rejected: a fake front can only encode our beliefs about the protocol,
+  and the observed front-level defects (`-32700`, silently dropped
+  `resumeSessionId`) were precisely where those beliefs were wrong.
+- **Dep:** FR-E60
+- **Acceptance criteria:**
+  - **Tests:** `fake-runtime_test.ts`, `engine_test.ts`, `loop_test.ts`
+    (FR-E86; regression-locked). Locks the helper contract, the top-level
+    agent-node injection site and the loop-body one; the three
+    `handleAgentHitl` sites and the `runLoop` dispatch site in
+    `executeLoopNode` are wired but NOT yet regression-locked — see
+    design-engine §3.8 for the mutation evidence.

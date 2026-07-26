@@ -131,6 +131,7 @@ export async function executeAgentNode(
       reasoningEffort: runtimeConfig.reasoningEffort,
       allowedTools: toolFilter.allowedTools,
       disallowedTools: toolFilter.disallowedTools,
+      runtimeAdapter: eng.options.runtimeAdapter,
       output: eng.output,
       cwd,
       maxTurns: resolveBudget(node, eng.config.defaults)?.max_turns,
@@ -174,6 +175,7 @@ export async function executeAgentNode(
         allowedTools: toolFilter.allowedTools,
         disallowedTools: toolFilter.disallowedTools,
         hitlConfig,
+        runtimeAdapter: eng.options.runtimeAdapter,
         output: eng.output,
         nodeId,
         streamLogPath,
@@ -264,6 +266,7 @@ export async function executeAgentNode(
       reasoningEffort: runtimeConfig.reasoningEffort,
       allowedTools: toolFilter.allowedTools,
       disallowedTools: toolFilter.disallowedTools,
+      runtimeAdapter: eng.options.runtimeAdapter,
       output: eng.output,
       cwd,
       maxTurns: resolveBudget(node, eng.config.defaults)?.max_turns,
@@ -358,6 +361,7 @@ export async function executeLoopNode(
     state: eng.state,
     budgetUsd: eng.options.budget_usd,
     processRegistry: eng.options.processRegistry,
+    runtimeAdapter: eng.options.runtimeAdapter,
     // Body-node HITL takes the same route as a top-level agent node
     // (executeAgentNode above): ask the human, poll, resume the session.
     // Returning null obliges this router to have recorded the cause on the
@@ -408,6 +412,7 @@ export async function executeLoopNode(
         reasoningEffort: runtimeConfig.reasoningEffort,
         allowedTools: toolFilter.allowedTools,
         disallowedTools: toolFilter.disallowedTools,
+        runtimeAdapter: eng.options.runtimeAdapter,
         output: eng.output,
         cwd,
         maxTurns: resolveBudget(bodyNode, eng.config.defaults, loopNode)

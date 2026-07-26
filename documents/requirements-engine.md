@@ -11,7 +11,8 @@ FR-IDs are stable — never renumber them on move.
   general description, NFR, interfaces, proposals (P1..P4).
 - [01-execution-model.md](requirements-engine/01-execution-model.md) —
   Continuation, artifact versioning, project layout, run folder structure,
-  separation invariant, graceful shutdown, phase mechanism, error precedence.
+  separation invariant, graceful shutdown, phase mechanism, error precedence,
+  runtime adapter injection seam (FR-E86).
 - [02-nodes-and-models.md](requirements-engine/02-nodes-and-models.md) —
   Loop body nesting, `run_on`, per-node model/effort/fallback, loop input
   forwarding and condition-field validation.
@@ -122,3 +123,4 @@ FR-IDs are stable — never renumber them on move.
 - FR-E83 (Parent-Death Watchdog for stdio MCP)        → 07-mcp-and-plugin-runtime
 - FR-E84 (MCP start_run Tool)                          → 07-mcp-and-plugin-runtime
 - FR-E85 (Non-Blocking resume_node)                    → 07-mcp-and-plugin-runtime
+- FR-E86 (Runtime Adapter Injection Seam)              → 01-execution-model

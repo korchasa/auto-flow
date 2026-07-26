@@ -40,6 +40,7 @@ import type {
   RuntimeAdapter,
   RuntimeInvokeOptions,
 } from "@korchasa/ai-ide-cli/runtime/types";
+import { createFakeRuntime, FAKE_SESSION_ID } from "../testing/fake-runtime.ts";
 import {
   nodeCompleted,
   nodeFailed,
@@ -1849,4 +1850,108 @@ Deno.test("FR-E81 workflowUsesClaude — loop body claude override detected", ()
     },
   };
   assertEquals(workflowUsesClaude(cfg), true);
+});
+
+// --- FR-E86: injected runtime adapter reaches a whole run ---
+
+Deno.test("FR-E86 Engine.run() drives agent nodes through the injected runtime adapter", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  await Deno.writeTextFile(
+    `${tmpDir}/workflow.yaml`,
+    [
+      "name: fake-runtime",
+      "version: '1'",
+      "defaults:",
+      "  runtime: opencode",
+      "  worktree_disabled: true",
+      "nodes:",
+      "  build:",
+      "    type: agent",
+      "    label: Build",
+      "    prompt: build it",
+      "    validate:",
+      "      - type: file_exists",
+      "        path: artifacts/result.md",
+      "",
+    ].join("\n"),
+  );
+
+  // First turn writes nothing, so validation fails and the engine continues
+  // the session; the second turn produces the artifact. Both branches are
+  // engine logic — no agent involved.
+  const adapter = createFakeRuntime(async (call) => {
+    if (call.index === 2) {
+      await call.write("artifacts/result.md", "# built\n");
+    }
+    return call.reply({ result: `turn ${call.index}`, costUsd: 0.01 });
+  });
+
+  try {
+    Deno.chdir(tmpDir);
+    const engine = new Engine(makeOptions({
+      config_path: "workflow.yaml",
+      lock_path: "test.lock",
+      runtimeAdapter: adapter,
+    }));
+
+    const state = await engine.run();
+
+    assertEquals(state.nodes.build.status, "completed");
+    assertEquals(state.nodes.build.continuations, 1);
+    assertEquals(adapter.calls.length, 2);
+    assertEquals(adapter.calls[0].transport, "acp");
+    assertEquals(adapter.calls[0].resumeSessionId, undefined);
+    assertEquals(adapter.calls[1].resumeSessionId, FAKE_SESSION_ID);
+  } finally {
+    Deno.chdir(origCwd);
+    await Deno.remove(tmpDir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E86 Engine.run() surfaces a runtime failure without touching a real agent", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  await Deno.writeTextFile(
+    `${tmpDir}/workflow.yaml`,
+    [
+      "name: fake-runtime-failure",
+      "version: '1'",
+      "defaults:",
+      "  runtime: opencode",
+      "  worktree_disabled: true",
+      "nodes:",
+      "  build:",
+      "    type: agent",
+      "    label: Build",
+      "    prompt: build it",
+      "",
+    ].join("\n"),
+  );
+
+  const adapter = createFakeRuntime((call) =>
+    call.fail("acp front exited before handshake", "stream_stall")
+  );
+
+  try {
+    Deno.chdir(tmpDir);
+    const engine = new Engine(makeOptions({
+      config_path: "workflow.yaml",
+      lock_path: "test.lock",
+      runtimeAdapter: adapter,
+    }));
+
+    const state = await engine.run();
+
+    assertEquals(state.status, "failed");
+    assertEquals(state.nodes.build.status, "failed");
+    assertEquals(
+      state.nodes.build.error,
+      "acp front exited before handshake",
+    );
+    assertEquals(state.nodes.build.error_category, "stream_stall");
+  } finally {
+    Deno.chdir(origCwd);
+    await Deno.remove(tmpDir, { recursive: true });
+  }
 });
