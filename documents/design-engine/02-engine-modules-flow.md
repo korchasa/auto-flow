@@ -138,7 +138,16 @@
     try/catch which flips `workflowSuccess=false`.
     Resume entry check: `runWithLock` calls `checkWorkflowBudget("resume")`
     before the level loop — aborts immediately when a loaded
-    `state.total_cost_usd` already exceeds the cap.
+    `state.total_cost_usd` already exceeds the cap. The call is wrapped so
+    the run is marked failed and a terminal journal fact is recorded before
+    the error is rethrown; an unwrapped throw escaped past the status
+    bookkeeping and left `run_started` as the journal's last word, i.e. a
+    run that looks alive forever.
+    `warnUnsafeParallelism(levels)` runs alongside it: inside a worktree,
+    a `max_parallel` allowing two or more concurrent nodes emits a WARN
+    because the FR-E50 guardrail cannot attribute main-tree changes per
+    node and may roll back a sibling's work. `max_parallel` defaults to
+    `1`; `0` still means unlimited.
     `warnBudgetCaveats()` runs once at workflow start (after phase registry
     init): (1) for every node with resolved `budget.max_turns` whose runtime
     is not `claude` emits `budget.max_turns ignored: runtime=<id> (node
@@ -189,10 +198,15 @@
     `printSummary()`: builds `nodeResults` from `state.nodes[*].result`,
     passes to `summary()` for per-node result rendering.
   - `mcp-server.ts` — embedded MCP server (FR-E73). Exports
-    `runMcpServer(workflowDir, options?)`; registers eight tools
+    `runMcpServer(workflowDir, options?)`; registers nine tools
     (`get_workflow`, `get_state`, `list_runs`, `tail_artifacts`,
-    `resume_node`, `cancel_run`, `apply_workflow_patch`,
-    `provide_human_input`) on the SDK's `McpServer`. Transport-agnostic
+    `start_run`, `resume_node`, `cancel_run`, `apply_workflow_patch`,
+    `provide_human_input`) on the SDK's `McpServer`.
+    Every externally supplied `run_id`/`node_id` passes
+    `assertSafeSegment` and every `filename` passes
+    `assertSafeRelativePath` before reaching a path helper — `join`
+    normalises `..`, so an unchecked argument escaped `runs/` and made
+    `tail_artifacts` an arbitrary file read. Transport-agnostic
     — `cli.ts mcp` wires `StdioServerTransport`; tests wire
     `InMemoryTransport`.
     Per-tool envelope: `try { … } catch { return { isError: true, …} }`
@@ -212,7 +226,7 @@
     `run` → `runEngine(args)` (DAG workflow),
     `init` → `runInit(args)` (project scaffolder),
     `mcp <workflow>` → `runMcpServer(workflowDir)` (FR-E73: embedded
-    MCP server over stdio, eight tools for workflow inspection and
+    MCP server over stdio, nine tools for workflow inspection and
     control; statically imported — a dynamic `await import()` of
     `mcp-server.ts` deadlocks in Deno 2.8 once the cli.ts static
     graph has pulled `@modelcontextprotocol/sdk` via `Engine →

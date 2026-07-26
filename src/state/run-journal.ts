@@ -198,7 +198,11 @@ function applyJournalEvents(events: RunJournalEvent[]): RunState {
           started_at: event.started_at,
           status: "running",
           args: event.args,
-          env: event.env,
+          // Env VALUES are not durable (secrets). `event.env` is only present
+          // in journals written before the redaction change; fresh journals
+          // carry `env_keys` and replay to an empty map that the engine
+          // refills from the live environment on resume.
+          env: event.env ?? {},
           nodes: state?.nodes ?? {},
           total_cost_usd: state?.total_cost_usd,
           claude_cli_version: state?.claude_cli_version,

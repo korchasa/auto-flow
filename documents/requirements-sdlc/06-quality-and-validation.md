@@ -21,6 +21,7 @@
   **Rules:**
   - Add a check only when evidence of a real recurring problem exists (not speculative).
   - New checks MUST follow existing `check.ts` architecture: standalone function + call in main flow + `Deno.exit(1)` on failure.
+  - Exception — a check MAY warn instead of exiting non-zero when its subject is outside version control AND the remedy is an operator decision the build must not force. Such a check MUST repeat its alarm after the `=== All checks passed! ===` line so it cannot be scrolled past. Sole current member: `runArtifactSecretScan()`, which scans gitignored `.flowai-workflow/<name>/runs/` — files that never reach the remote, whose cleanup means rotating a live credential and deleting run history.
   - Each check MUST print a clear label to stdout (`--- Check Name ---`).
   - New checks MUST NOT produce false positives on the current codebase at time of addition.
   - QA MUST run the extended suite after adding any check to confirm zero false positives.

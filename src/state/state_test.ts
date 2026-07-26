@@ -1,5 +1,7 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import {
+  assertSafeRelativePath,
+  assertSafeSegment,
   createRunState,
   generateRunId,
   getHitlInboxPath,
@@ -292,7 +294,7 @@ Deno.test("journal replay — run state roundtrip", async () => {
       config_path: "cfg.yaml",
       started_at: state.started_at,
       args: state.args,
-      env: state.env,
+      env_keys: Object.keys(state.env).sort(),
     });
     await writer.append({
       kind: "node_declared",
@@ -549,7 +551,7 @@ Deno.test("markNodeCompleted — result round-trip via journal replay", async ()
       config_path: "cfg.yaml",
       started_at: state.started_at,
       args: {},
-      env: {},
+      env_keys: [],
     });
     await writer.append({
       kind: "node_declared",
@@ -596,7 +598,7 @@ Deno.test("RunState — claude_cli_version roundtrip via journal replay (FR-E49)
       config_path: "cfg.yaml",
       started_at: state.started_at,
       args: {},
-      env: {},
+      env_keys: [],
     });
     await writer.append({
       kind: "run_metadata_updated",
@@ -606,5 +608,39 @@ Deno.test("RunState — claude_cli_version roundtrip via journal replay (FR-E49)
     assertEquals(loaded.claude_cli_version, "claude 1.2.3");
   } finally {
     await Deno.remove(tmpDir, { recursive: true });
+  }
+});
+
+// --- Path-safety guards for externally supplied identifiers ---
+
+Deno.test("assertSafeSegment — rejects ids that escape the runs/ subtree", () => {
+  // getRunDir/getNodeDir concatenate strings, so any separator or dot-dot in
+  // an id reaches outside the run directory once joined.
+  for (const bad of ["..", ".", "", "a/b", "../etc", "a\\b", "a\0b"]) {
+    assertThrows(() => assertSafeSegment(bad, "run_id"), Error, "run_id");
+  }
+});
+
+Deno.test("assertSafeSegment — accepts ordinary run and node ids", () => {
+  for (const good of ["20260726T101500", "20260726T101500-fix-login", "spec"]) {
+    assertSafeSegment(good, "run_id");
+  }
+});
+
+Deno.test("assertSafeRelativePath — rejects absolute paths and dot-dot segments", () => {
+  for (
+    const bad of ["", "/etc/passwd", "../../secret", "logs/../../x", "a\0b"]
+  ) {
+    assertThrows(
+      () => assertSafeRelativePath(bad, "filename"),
+      Error,
+      "filename",
+    );
+  }
+});
+
+Deno.test("assertSafeRelativePath — accepts nested artifact paths", () => {
+  for (const good of ["result.md", "logs/agent.json", "a.b/c.d"]) {
+    assertSafeRelativePath(good, "filename");
   }
 });

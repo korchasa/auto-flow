@@ -57,7 +57,7 @@ async function setupRun(
     started_at: "2026-05-30T00:00:00.000Z",
     ts: "2026-05-30T00:00:00.000Z",
     args: {},
-    env: {},
+    env_keys: [],
   });
   await writer.append({
     kind: "node_declared",

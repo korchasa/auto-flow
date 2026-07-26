@@ -24,7 +24,7 @@ async function appendRunStart(
     started_at: "2026-05-17T00:00:00.000Z",
     ts: "2026-05-17T00:00:00.000Z",
     args: { issue: "218" },
-    env: { MODE: "test" },
+    env_keys: ["MODE"],
   });
   await writer.append({
     kind: "workflow_loaded",
@@ -265,7 +265,10 @@ Deno.test("lifecycle replay — replay reconstructs host recovery snapshot", asy
     const replay = await replayRunJournal(dir);
     assertEquals(replay.state.status, "completed");
     assertEquals(replay.state.args, { issue: "218" });
-    assertEquals(replay.state.env, { MODE: "test" });
+    // Env VALUES are never durable — the journal records only key names, so a
+    // replayed snapshot starts with an empty map that the engine refills from
+    // the live environment on resume.
+    assertEquals(replay.state.env, {});
     assertEquals(replay.state.nodes.build.status, "completed");
     assertEquals(replay.state.nodes.build.iteration, 1);
     assertEquals(replay.state.nodes.build.session_id, "sess-1");
@@ -318,7 +321,7 @@ Deno.test("lifecycle replay — terminal workflow record wins over stale running
       config_path: "workflow.yaml",
       started_at: "2026-05-17T00:00:00.000Z",
       args: {},
-      env: {},
+      env_keys: [],
     });
 
     const replay = await replayRunJournal(dir);
@@ -338,6 +341,64 @@ Deno.test("lifecycle replay — replay uses only run directory lifecycle data", 
     assertEquals(replay.state.run_id, "run-7");
   } finally {
     await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E69 lifecycle replay — Engine.run journals env names, never env values", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  // Distinctive enough that a substring scan of the whole journal cannot
+  // collide with unrelated content.
+  const yamlSecret = "yaml-s3cr3t-8f21ba";
+  const overrideSecret = "override-s3cr3t-4d90ce";
+  try {
+    await Deno.writeTextFile(
+      `${tmpDir}/workflow.yaml`,
+      [
+        "name: journal-env",
+        "version: '1'",
+        "env:",
+        `  TELEGRAM_BOT_TOKEN: ${yamlSecret}`,
+        "defaults:",
+        "  worktree_disabled: true",
+        "nodes:",
+        "  merge:",
+        "    type: merge",
+        "    label: Merge",
+        "    merge_strategy: copy_all",
+        "",
+      ].join("\n"),
+    );
+    Deno.chdir(tmpDir);
+
+    const engine = new Engine({
+      config_path: "workflow.yaml",
+      run_id: "run-env",
+      verbosity: "quiet",
+      args: {},
+      env_overrides: { OPENAI_API_KEY: overrideSecret },
+      lock_path: "test.lock",
+    });
+    await engine.run();
+
+    const journal = await Deno.readTextFile(getJournalPath("runs/run-env"));
+    const runStarted = journal.trim().split("\n")
+      .map((line) => JSON.parse(line) as RunJournalEvent)
+      .find((event) => event.kind === "run_started");
+    assert(runStarted?.kind === "run_started");
+
+    // Names are durable: a post-mortem still shows which variables the run saw.
+    assert(runStarted.env_keys.includes("TELEGRAM_BOT_TOKEN"));
+    assert(runStarted.env_keys.includes("OPENAI_API_KEY"));
+    // The legacy `env` field is read-only back-compat and must never be
+    // written; `get_state` hands the replayed record straight to a model.
+    assertEquals(runStarted.env, undefined);
+    // Belt and braces: no record of any kind may carry the values.
+    assertEquals(journal.includes(yamlSecret), false);
+    assertEquals(journal.includes(overrideSecret), false);
+  } finally {
+    Deno.chdir(origCwd);
+    await Deno.remove(tmpDir, { recursive: true });
   }
 });
 

@@ -217,6 +217,13 @@ export class Engine {
       this.journal = await RunJournalWriter.open(runDir, this.options.run_id);
       this.state.status = "running";
       delete this.state.completed_at;
+      // Env values are deliberately absent from the journal (secrets), so a
+      // resumed run re-derives them from the live environment: workflow
+      // `env:` block plus `--env` / `.env` overrides, exactly as a fresh run
+      // does. A key that disappeared since the original run now fails fast at
+      // `{{env.X}}` interpolation instead of silently resolving to stale or
+      // redacted text.
+      this.state.env = env;
     } else {
       const allNodeIds = collectAllNodeIds(this.config);
       this.state = createRunState(
@@ -286,10 +293,21 @@ export class Engine {
     }
     await this.captureCliVersion();
 
-    // FR-E47: pre-execution budget check (applies to fresh and resumed runs)
-    this.checkWorkflowBudget("resume");
+    // FR-E47: pre-execution budget check (applies to fresh and resumed runs).
+    // Wrapped so an over-budget resume still records a terminal fact — an
+    // unwrapped throw here escaped `run()` past the status bookkeeping and
+    // left the journal's last word as `run_started`, i.e. a run that looks
+    // alive forever.
+    try {
+      this.checkWorkflowBudget("resume");
+    } catch (err) {
+      markRunFailed(this.state);
+      await this.recordRunTerminal("run_failed");
+      throw err;
+    }
     // FR-E47: one-time warnings before the level loop
     this.warnBudgetCaveats();
+    this.warnUnsafeParallelism(levels);
 
     // Run prepare_command before level loop (skip on resume)
     const prepareCmd = this.config.defaults?.prepare_command ?? "";
@@ -445,8 +463,8 @@ export class Engine {
 
     if (filtered.length === 0) return true;
 
-    // Respect max_parallel
-    const maxParallel = this.config.defaults?.max_parallel ?? 0;
+    // Respect max_parallel (default 1 = sequential; 0 = unlimited)
+    const maxParallel = this.config.defaults?.max_parallel ?? 1;
     if (maxParallel > 0 && filtered.length > maxParallel) {
       // Execute in chunks
       for (let i = 0; i < filtered.length; i += maxParallel) {
@@ -770,7 +788,9 @@ export class Engine {
       started_at: this.state.started_at,
       ts: this.state.started_at,
       args: this.state.args,
-      env: this.state.env,
+      // Only the key set — env values are secrets (`.env` tokens, API keys)
+      // and must not become durable state. See RunStartedJournalEvent.
+      env_keys: Object.keys(this.state.env).sort(),
     });
     await this.journal.append({
       kind: "workflow_loaded",
@@ -911,6 +931,35 @@ export class Engine {
         );
       }
     }
+  }
+
+  /**
+   * Warn when a level can run more than one node at a time inside a worktree.
+   *
+   * All nodes of a run share ONE worktree, and the FR-E50 guardrail brackets
+   * every agent node with a `git status` snapshot of the main tree. Run two
+   * nodes concurrently and each sees the other's writes in its "after"
+   * snapshot, reports them as its own leak, and rolls them back. The engine
+   * does not forbid the configuration — an author may have a workflow with no
+   * agent nodes, or worktrees disabled — but it must not stay silent about it.
+   */
+  private warnUnsafeParallelism(levels: string[][]): void {
+    if (this.workDir === ".") return;
+    const maxParallel = this.config.defaults?.max_parallel ?? 1;
+    if (maxParallel === 1) return;
+    const widest = levels.reduce(
+      (max, level) => Math.max(max, level.length),
+      0,
+    );
+    const concurrency = maxParallel === 0
+      ? widest
+      : Math.min(maxParallel, widest);
+    if (concurrency <= 1) return;
+    this.output.warn(
+      `max_parallel=${maxParallel} runs up to ${concurrency} nodes at once in one shared worktree — ` +
+        `the FR-E50 guardrail cannot attribute file changes per node and may roll back a sibling's work. ` +
+        `Set defaults.max_parallel: 1 unless the level's nodes are known not to touch the repo.`,
+    );
   }
 
   /** Create a dry-run state (no actual execution). */

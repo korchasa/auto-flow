@@ -1,5 +1,10 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { extractConditionValue, extractFrontmatterField } from "./loop.ts";
+import {
+  carriesHitlQuestion,
+  extractConditionValue,
+  extractFrontmatterField,
+  hitlFailure,
+} from "./loop.ts";
 import type { LoopRunOptions } from "./loop.ts";
 import { OutputManager } from "../output.ts";
 import type {
@@ -458,4 +463,86 @@ Deno.test("LoopResult — exit_reason includes budget_preempt literal type", () 
     "budget_preempt",
   ];
   assertEquals(values.length, 3);
+});
+
+// --- HITL inside a loop body (review fix) ---
+
+const HITL_OUTPUT: CliRunOutput = {
+  session_id: "sess-loop",
+  is_error: false,
+  result: "",
+} as CliRunOutput;
+
+Deno.test("carriesHitlQuestion — a paused HITL turn is not real progress", () => {
+  assertEquals(
+    carriesHitlQuestion({
+      success: true,
+      continuations: 0,
+      output: HITL_OUTPUT,
+      hitl_question: { question: "which option?" } as never,
+    }),
+    true,
+  );
+});
+
+Deno.test("carriesHitlQuestion — an ordinary success is untouched", () => {
+  assertEquals(
+    carriesHitlQuestion({
+      success: true,
+      continuations: 0,
+      output: HITL_OUTPUT,
+    }),
+    false,
+  );
+});
+
+Deno.test("hitlFailure — an unrouted question fails the body node explicitly", () => {
+  const failed = hitlFailure(
+    "developer",
+    { success: true, continuations: 0, output: HITL_OUTPUT },
+    "unrouted",
+  );
+  assertEquals(failed.success, false);
+  assertEquals(failed.error_category, "unknown");
+  assertEquals(
+    failed.error,
+    "Body node 'developer' requested human input but the loop has no HITL router configured",
+  );
+});
+
+Deno.test("hitlFailure — a router that gives up also fails the node", () => {
+  const failed = hitlFailure(
+    "developer",
+    { success: true, continuations: 0, output: HITL_OUTPUT },
+    "routing",
+  );
+  assertEquals(failed.success, false);
+  assertEquals(failed.error, "HITL handling failed for body node 'developer'");
+});
+
+Deno.test("hitlFailure — the cause the router recorded survives to the loop error", () => {
+  const failed = hitlFailure(
+    "developer",
+    { success: true, continuations: 0, output: HITL_OUTPUT },
+    "routing",
+    "Agent called request_human_input but defaults.hitl not configured in workflow.yaml",
+  );
+  assertEquals(failed.success, false);
+  assertEquals(
+    failed.error,
+    "Agent called request_human_input but defaults.hitl not configured in workflow.yaml",
+  );
+});
+
+Deno.test("hitlFailure — an unrouted question ignores any recorded cause", () => {
+  const failed = hitlFailure(
+    "developer",
+    { success: true, continuations: 0, output: HITL_OUTPUT },
+    "unrouted",
+    "stale cause from an earlier node",
+  );
+  assertEquals(
+    failed.error,
+    "Body node 'developer' requested human input but the loop has no HITL router configured",
+  );
 });

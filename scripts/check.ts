@@ -778,6 +778,117 @@ export async function frFieldSet(): Promise<void> {
   console.log(`  FR field set valid (${files.length} section file(s)).`);
 }
 
+/** One gitleaks JSON report entry, narrowed to the fields this scan reports.
+ * Secret values (`Secret`, `Match`, `Line`) are deliberately NOT read — the
+ * point of the scan is to name the file, never to reprint the credential. */
+export interface GitleaksFinding {
+  RuleID: string;
+  File: string;
+  StartLine: number;
+}
+
+/**
+ * Select the run-artefact findings worth reporting and render them.
+ *
+ * Drops anything under a run's `worktree/`: that directory is a git checkout
+ * of the project plus the operator's own `.env`, so a hit there is an INPUT
+ * the run legitimately needs, not state the engine derived and persisted. Its
+ * tracked content is already covered by the repo-wide scan. Everything else
+ * under `runs/` is engine-produced and must never carry a credential.
+ *
+ * Pure — the caller supplies findings and the prefix to strip — so the
+ * selection rule is unit-testable without gitleaks or the filesystem.
+ */
+export function formatRunArtifactFindings(
+  findings: GitleaksFinding[],
+  stripPrefix: string,
+): string[] {
+  const lines: string[] = [];
+  for (const finding of findings) {
+    const path = finding.File.startsWith(stripPrefix)
+      ? finding.File.slice(stripPrefix.length)
+      : finding.File;
+    if (path.includes("/worktree/")) continue;
+    lines.push(`${finding.RuleID}  ${path}:${finding.StartLine}`);
+  }
+  return lines.sort();
+}
+
+/**
+ * Scan per-run artefacts for secrets and WARN — never fail.
+ *
+ * `.flowai-workflow/<name>/runs/` is gitignored, and `gitleaks detect
+ * --no-git` honours `.gitignore`, so the repo-wide scan is structurally blind
+ * to run output. That blind spot is how a live bot token sat in a committed
+ * run journal unnoticed. Pointing `--source` straight at the runs directory
+ * lifts it.
+ *
+ * Warn rather than exit non-zero, deliberately: these files never reach the
+ * remote, so this is not a supply-chain gate, and the remedy — rotating a live
+ * credential and deleting run history — is an operator decision a build tool
+ * must not force. A hard gate would also make `deno task check` unusable on
+ * any machine holding historical runs until they were purged.
+ *
+ * Returns the number of findings so the caller can repeat the alarm after the
+ * summary line, where it cannot be scrolled past.
+ */
+async function runArtifactSecretScan(): Promise<number> {
+  console.log("\n--- Run Artifact Secret Scan ---");
+  const folders = await listWorkflowFolders(".flowai-workflow");
+  const lines: string[] = [];
+  const repoRoot = `${Deno.cwd()}/`;
+
+  for (const folder of folders) {
+    const runsDir = `${folder}/runs`;
+    try {
+      const stat = await Deno.stat(runsDir);
+      if (!stat.isDirectory) continue;
+    } catch (err) {
+      if (err instanceof Deno.errors.NotFound) continue;
+      throw err;
+    }
+
+    const reportPath = await Deno.makeTempFile({ suffix: ".json" });
+    try {
+      // gitleaks exits 1 when it finds leaks, so the exit code carries no
+      // error signal here — the report file is the result.
+      await new Deno.Command("gitleaks", {
+        args: [
+          "detect",
+          "--no-git",
+          "--source",
+          runsDir,
+          "--report-format",
+          "json",
+          "--report-path",
+          reportPath,
+        ],
+        stdout: "null",
+        stderr: "null",
+      }).output();
+      const raw = await Deno.readTextFile(reportPath);
+      const findings = raw.trim() === ""
+        ? []
+        : JSON.parse(raw) as GitleaksFinding[];
+      lines.push(...formatRunArtifactFindings(findings, repoRoot));
+    } finally {
+      await Deno.remove(reportPath).catch(() => {});
+    }
+  }
+
+  if (lines.length === 0) {
+    console.log("  No secrets in run artifacts.");
+    return 0;
+  }
+  for (const line of lines) console.warn(`  ${line}`);
+  console.warn(
+    `WARNING: ${lines.length} secret(s) found in gitignored run artifacts. ` +
+      `Rotate the credential, then delete the offending run directories. ` +
+      `Not a build failure: these files never leave this machine.`,
+  );
+  return lines.length;
+}
+
 /** Render the CLI help text for `deno task check`. */
 export function printUsage(): string {
   return `Full project verification: fmt, lint, test, comment-scan
@@ -791,6 +902,7 @@ Checks performed:
   - Type check (deno check — all .ts files incl. tests)
   - CLI smoke test (cli.ts --help)
   - Secret scan (gitleaks)
+  - Run artifact secret scan (gitleaks over gitignored runs/; warns, never fails)
   - Tests (deno test)
   - Doc lint: JSDoc, private-type-ref, circular deps (deno doc --lint)
   - Workflow integrity check
@@ -919,8 +1031,17 @@ if (import.meta.main) {
   await docsTokenBudget();
   await frFieldSet();
   await commentScan();
+  const runArtifactLeaks = await runArtifactSecretScan();
 
   console.log("\n=== All checks passed! ===");
+  if (runArtifactLeaks > 0) {
+    // Repeated after the summary on purpose: a warning buried mid-log is how
+    // the original leak went unnoticed for weeks.
+    console.warn(
+      `\n!!! ${runArtifactLeaks} secret(s) still sit in run artifacts — see ` +
+        `"Run Artifact Secret Scan" above.`,
+    );
+  }
 
   // Opt-in dev hook (FR-E72): when AUTO_INSTALL_PLUGINS=true in env or
   // .env, rebuild the plugin payload and reinstall it into Claude Code /

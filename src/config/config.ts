@@ -61,7 +61,13 @@ export const DEFAULT_WORKFLOW_DEFAULTS: Required<
 > = {
   ...DEFAULT_SETTINGS,
   worktree_disabled: false,
-  max_parallel: 0,
+  // Sequential by default. `0` (unlimited) used to be the default, which put
+  // every node of a DAG level into one `Promise.allSettled` — but all nodes of
+  // a run share ONE worktree, and the FR-E50 guardrail snapshots the main tree
+  // before/after each node. Concurrent nodes therefore see each other's writes
+  // as their own leaks and roll them back. Parallelism stays available, but it
+  // is now an explicit opt-in that the engine warns about.
+  max_parallel: 1,
   runtime: "claude",
   runtime_args: {},
   model: "",
@@ -265,6 +271,16 @@ function validateSchema(config: Record<string, unknown>): void {
     if (defaults.budget !== undefined) {
       validateBudget("defaults", defaults.budget);
     }
+    if (defaults.max_parallel !== undefined) {
+      const value = defaults.max_parallel;
+      if (
+        typeof value !== "number" || !Number.isInteger(value) || value < 0
+      ) {
+        throw new Error(
+          `defaults.max_parallel must be a non-negative integer (got '${value}'); 0 means unlimited`,
+        );
+      }
+    }
     validateToolFilterLevel("defaults", defaults);
 
     // FR-E80: validate defaults.max_retry_wall_clock_seconds if present.
@@ -320,11 +336,67 @@ function validateSchema(config: Record<string, unknown>): void {
  * inputs can resolve against both namespaces. Passing only `allNodeIds` would
  * falsely reject valid body-node cross-references.
  */
+/**
+ * Every key `NodeConfig` accepts. Mirrors the interface in `types.ts` — keep
+ * both in sync when adding a field.
+ *
+ * Unknown keys are rejected rather than ignored: a mistyped `validat:` used to
+ * pass validation and silently disable all of a node's output checks, and a
+ * mistyped `prompts:` produced a confusing "requires a 'prompt' field" instead
+ * of naming the actual typo. `settings` and `budget` already worked this way;
+ * this extends the same strictness to the node itself.
+ */
+const NODE_CONFIG_KEYS: readonly string[] = [
+  "type",
+  "label",
+  "inputs",
+  "agent",
+  "prompt",
+  "system_prompt",
+  "model",
+  "effort",
+  "runtime",
+  "runtime_args",
+  "permission_mode",
+  "settings",
+  "validate",
+  "before",
+  "after",
+  "nodes",
+  "condition_node",
+  "condition_field",
+  "exit_value",
+  "max_iterations",
+  "merge_strategy",
+  "question",
+  "options",
+  "abort_on",
+  "phase",
+  "run_on",
+  "run_always",
+  "env",
+  "allowed_paths",
+  "budget",
+  "allowed_tools",
+  "disallowed_tools",
+  "memory_commit_deferred",
+];
+
 function validateNode(
   id: string,
   node: Record<string, unknown>,
   allNodeIds: string[],
 ): void {
+  for (const key of Object.keys(node)) {
+    if (!NODE_CONFIG_KEYS.includes(key)) {
+      throw new Error(
+        `Node '${id}' has unknown key '${key}'. Valid keys: ${
+          NODE_CONFIG_KEYS.join(", ")
+        }`,
+      );
+    }
+  }
+
   const validTypes = ["agent", "merge", "loop", "human"];
   if (!validTypes.includes(node.type as string)) {
     throw new Error(
@@ -939,6 +1011,31 @@ function validateHitlConfig(hitl: unknown): void {
       "defaults.hitl.check_script must be a non-empty string",
     );
   }
+  const validKeys = [
+    "ask_script",
+    "check_script",
+    "artifact_source",
+    "poll_interval",
+    "timeout",
+    "exclude_login",
+  ];
+  for (const key of Object.keys(config)) {
+    if (!validKeys.includes(key)) {
+      throw new Error(`defaults.hitl has unknown key '${key}'`);
+    }
+  }
+  // Both knobs feed arithmetic in the poll loop (`poll_interval * 1000`,
+  // `Date.now() + timeout * 1000`). A non-number silently produces NaN and a
+  // loop that never runs, so reject it here instead.
+  for (const key of ["poll_interval", "timeout"] as const) {
+    const value = config[key];
+    if (value === undefined) continue;
+    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+      throw new Error(
+        `defaults.hitl.${key} must be a positive number (got '${value}')`,
+      );
+    }
+  }
 }
 
 /**
@@ -964,6 +1061,20 @@ function mergeDefaults(
     ...DEFAULT_WORKFLOW_DEFAULTS,
     ...config.defaults,
   };
+
+  // `hitl` needs a per-FIELD merge, not the shallow object replace the spread
+  // above performs. A workflow that declares only `ask_script`/`check_script`
+  // used to wipe the `poll_interval`/`timeout` defaults, leaving them
+  // undefined: `runHitlLoop` then computed `Date.now() + NaN` for its deadline,
+  // skipped the poll loop entirely, and reported an instant
+  // "HITL timeout after undefineds" — the question was delivered but never
+  // awaited.
+  if (config.defaults?.hitl) {
+    workflowDefaults.hitl = {
+      ...DEFAULT_WORKFLOW_DEFAULTS.hitl,
+      ...config.defaults.hitl,
+    };
+  }
 
   const nodeDefaults = extractNodeSettings(workflowDefaults);
 

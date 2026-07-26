@@ -2218,3 +2218,150 @@ nodes:
     "Node 'n' settings.max_retry_wall_clock_seconds must be a positive integer (got '0')",
   );
 });
+
+// --- Defaults merging and schema strictness (review fixes) ---
+
+Deno.test("parseConfig — partial defaults.hitl keeps poll_interval and timeout", () => {
+  // A shallow object replace used to wipe these, leaving the HITL poll loop
+  // computing `Date.now() + NaN`: the question was delivered and then
+  // "timed out" instantly without a single poll.
+  const config = parseConfig(`name: t
+version: "1"
+defaults:
+  worktree_disabled: true
+  hitl:
+    ask_script: ./ask.sh
+    check_script: ./check.sh
+nodes:
+  n1:
+    type: agent
+    label: L
+    prompt: p
+`);
+  assertEquals(config.defaults?.hitl?.ask_script, "./ask.sh");
+  assertEquals(config.defaults?.hitl?.poll_interval, 60);
+  assertEquals(config.defaults?.hitl?.timeout, 7200);
+});
+
+Deno.test("parseConfig — defaults.hitl rejects non-positive poll_interval/timeout", () => {
+  for (const [key, value] of [["poll_interval", "0"], ["timeout", '"soon"']]) {
+    assertThrows(
+      () =>
+        parseConfig(`name: t
+version: "1"
+defaults:
+  hitl:
+    ask_script: ./ask.sh
+    check_script: ./check.sh
+    ${key}: ${value}
+nodes:
+  n1:
+    type: agent
+    label: L
+    prompt: p
+`),
+      Error,
+      `defaults.hitl.${key} must be a positive number`,
+    );
+  }
+});
+
+Deno.test("parseConfig — defaults.hitl rejects unknown keys", () => {
+  assertThrows(
+    () =>
+      parseConfig(`name: t
+version: "1"
+defaults:
+  hitl:
+    ask_script: ./ask.sh
+    check_script: ./check.sh
+    poll_intervall: 30
+nodes:
+  n1:
+    type: agent
+    label: L
+    prompt: p
+`),
+    Error,
+    "defaults.hitl has unknown key 'poll_intervall'",
+  );
+});
+
+Deno.test("parseConfig — unknown node key is rejected, not ignored", () => {
+  // `validat:` used to pass validation and silently disable every output
+  // check the author believed they had configured.
+  assertThrows(
+    () =>
+      parseConfig(`name: t
+version: "1"
+nodes:
+  n1:
+    type: agent
+    label: L
+    prompt: p
+    validat:
+      - type: file_exists
+        path: x.md
+`),
+    Error,
+    "Node 'n1' has unknown key 'validat'",
+  );
+});
+
+Deno.test("parseConfig — unknown key inside a loop body node is rejected", () => {
+  assertThrows(
+    () =>
+      parseConfig(`name: t
+version: "1"
+nodes:
+  l1:
+    type: loop
+    label: L
+    condition_node: body
+    condition_field: status
+    exit_value: done
+    nodes:
+      body:
+        type: agent
+        label: B
+        prompt: p
+        prmopt: typo
+`),
+    Error,
+    "Node 'body' has unknown key 'prmopt'",
+  );
+});
+
+Deno.test("parseConfig — max_parallel defaults to 1 (sequential)", () => {
+  // All nodes of a run share one worktree and the FR-E50 guardrail brackets
+  // each node with a main-tree snapshot, so concurrency is opt-in.
+  const config = parseConfig(`name: t
+version: "1"
+nodes:
+  n1:
+    type: agent
+    label: L
+    prompt: p
+`);
+  assertEquals(config.defaults?.max_parallel, 1);
+});
+
+Deno.test("parseConfig — max_parallel must be a non-negative integer", () => {
+  for (const bad of ["-1", "1.5", '"two"']) {
+    assertThrows(
+      () =>
+        parseConfig(`name: t
+version: "1"
+defaults:
+  max_parallel: ${bad}
+nodes:
+  n1:
+    type: agent
+    label: L
+    prompt: p
+`),
+      Error,
+      "defaults.max_parallel must be a non-negative integer",
+    );
+  }
+});

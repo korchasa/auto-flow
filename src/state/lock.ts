@@ -24,20 +24,45 @@ export function defaultLockPath(workflowDir: string): string {
   return `${workflowDir}/runs/.lock`;
 }
 
-/** Check if a process with given PID is alive on this host. */
+/** Check if a process with given PID is alive on this host.
+ *
+ * `PermissionDenied` (POSIX `EPERM`) means the process EXISTS but belongs to
+ * another user — it must count as alive. Treating it as dead (the previous
+ * behaviour of a blanket `catch`) let one user reclaim a lock still held by
+ * another user's running engine. Only `NotFound` (`ESRCH`) proves the PID is
+ * gone; anything else is surfaced as "alive" because we cannot prove
+ * otherwise and reclaiming on a guess is the destructive option. */
 function isProcessAlive(pid: number): boolean {
   try {
     Deno.kill(pid, "SIGCONT");
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    if (err instanceof Deno.errors.NotFound) return false;
+    return true;
   }
 }
 
-/** Read lock info from lock file. Throws if file doesn't exist. */
+/** Read lock info from lock file.
+ *
+ * Throws `Deno.errors.NotFound` when the file is absent and `SyntaxError`
+ * when its contents are not a well-formed {@link LockInfo} — including
+ * syntactically valid JSON of the wrong shape (`null`, an array, a record
+ * missing `pid`). Callers rely on that single "corrupt" category to decide
+ * between reclaiming debris and surfacing a genuine I/O failure, so shape
+ * validation must not be left to the first property access. */
 export async function readLockInfo(lockPath: string): Promise<LockInfo> {
   const text = await Deno.readTextFile(lockPath);
-  return JSON.parse(text) as LockInfo;
+  const parsed = JSON.parse(text);
+  if (
+    !parsed || typeof parsed !== "object" || Array.isArray(parsed) ||
+    typeof (parsed as LockInfo).pid !== "number" ||
+    typeof (parsed as LockInfo).run_id !== "string"
+  ) {
+    throw new SyntaxError(
+      `Malformed lock file at ${lockPath}: expected {pid, hostname, run_id, started_at}`,
+    );
+  }
+  return parsed as LockInfo;
 }
 
 /** Check if an existing lock is still held by a live process.
@@ -87,45 +112,33 @@ export async function liveLockHolder(
   return isProcessAlive(info.pid) ? info : null;
 }
 
-/** Acquire workflow lock. Throws if another live process holds it.
- * Reclaims stale locks (dead PID on same host) automatically. */
+/**
+ * Acquire the workflow lock. Throws if another live process holds it.
+ * Reclaims stale locks (dead PID) and corrupted lock files automatically.
+ *
+ * Creation is ATOMIC: the lock file is opened with `createNew: true`, so the
+ * kernel — not this process — decides the winner when two engines race. The
+ * previous read-then-write shape had a window between "no lock found" and
+ * "lock written" in which both racers concluded the folder was free and both
+ * proceeded, defeating FR-E54's serialization guarantee.
+ *
+ * On `AlreadyExists` the holder is inspected once: a live PID is a hard
+ * failure; a dead PID or an unparseable file is removed and creation is
+ * retried. A single retry is enough — a third party winning the re-created
+ * slot is itself a live holder and surfaces as the normal "already running"
+ * error.
+ */
 export async function acquireLock(
   lockPath: string,
   runId: string,
 ): Promise<void> {
-  // Check existing lock
-  try {
-    const existing = await readLockInfo(lockPath);
-    if (isLockAlive(existing)) {
-      throw new Error(
-        `Workflow is already running (run_id: ${existing.run_id}, pid: ${existing.pid}, host: ${existing.hostname}). ` +
-          `Remove ${lockPath} manually if the process is stuck.`,
-      );
-    }
-    // Stale lock — reclaim it
-  } catch (err) {
-    if (err instanceof Deno.errors.NotFound) {
-      // No lock file — proceed
-    } else if (
-      err instanceof Error && err.message.includes("already running")
-    ) {
-      throw err;
-    } else if (err instanceof SyntaxError) {
-      // Corrupted lock file — overwrite
-    } else {
-      // Fail fast: any other error (permissions, IO, corrupt lock shape)
-      // must surface instead of silently reclaiming the lock.
-      throw err;
-    }
-    // For NotFound and SyntaxError, fall through to create new lock
-  }
-
   const info: LockInfo = {
     pid: Deno.pid,
     hostname: Deno.hostname(),
     run_id: runId,
     started_at: new Date().toISOString(),
   };
+  const payload = JSON.stringify(info, null, 2) + "\n";
 
   // Ensure parent directory exists
   const dir = lockPath.substring(0, lockPath.lastIndexOf("/"));
@@ -133,7 +146,64 @@ export async function acquireLock(
     await Deno.mkdir(dir, { recursive: true });
   }
 
-  await Deno.writeTextFile(lockPath, JSON.stringify(info, null, 2) + "\n");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await createLockFile(lockPath, payload);
+      return;
+    } catch (err) {
+      if (!(err instanceof Deno.errors.AlreadyExists)) throw err;
+    }
+
+    // Someone holds the file. Decide whether it is a live run or debris.
+    let existing: LockInfo | undefined;
+    try {
+      existing = await readLockInfo(lockPath);
+    } catch (err) {
+      if (err instanceof Deno.errors.NotFound) {
+        // Holder released between create and read — retry the create.
+        continue;
+      }
+      if (!(err instanceof SyntaxError)) throw err;
+      // Corrupted lock file — treated as debris below (existing stays undefined).
+    }
+
+    if (existing && isLockAlive(existing)) {
+      throw new Error(
+        `Workflow is already running (run_id: ${existing.run_id}, pid: ${existing.pid}, host: ${existing.hostname}). ` +
+          `Remove ${lockPath} manually if the process is stuck.`,
+      );
+    }
+
+    // Stale (dead PID) or corrupted — drop it and retry once.
+    await releaseLock(lockPath);
+  }
+
+  throw new Error(
+    `Failed to acquire workflow lock at ${lockPath}: contended by another process`,
+  );
+}
+
+/**
+ * Publish the lock file exclusively. Throws `AlreadyExists` when taken.
+ *
+ * Staged through a sibling temp file plus `Deno.link`, NOT a plain
+ * `Deno.open({createNew: true})`. `createNew` publishes an EMPTY file and
+ * fills it a moment later, so a racer that loses the create can still read
+ * the empty file, classify it as corrupt debris, delete it and acquire the
+ * lock — both processes then believe they hold it. A hard link makes the
+ * name appear only when the content behind it is already complete.
+ */
+async function createLockFile(
+  lockPath: string,
+  payload: string,
+): Promise<void> {
+  const tmpPath = `${lockPath}.${Deno.pid}.tmp`;
+  await Deno.writeTextFile(tmpPath, payload);
+  try {
+    await Deno.link(tmpPath, lockPath);
+  } finally {
+    await Deno.remove(tmpPath).catch(() => {});
+  }
 }
 
 /** Release workflow lock. No-op if lock file doesn't exist. */

@@ -51,7 +51,12 @@ import {
 } from "./commands.ts";
 import { defaultLockPath, readLockInfo } from "../state/lock.ts";
 import { replayRunJournal } from "../state/run-journal.ts";
-import { getNodeDir, getRunDir } from "../state/state.ts";
+import {
+  assertSafeRelativePath,
+  assertSafeSegment,
+  getNodeDir,
+  getRunDir,
+} from "../state/state.ts";
 import { installParentDeathWatchdog } from "../parent-watchdog.ts";
 import { VERSION } from "../version.ts";
 
@@ -62,7 +67,7 @@ export interface RunMcpServerOptions {
   /**
    * No-workflow mode (FR-E74). Set true when the plugin launcher cannot
    * resolve a `.flowai-workflow/<name>/` folder in the project; the
-   * server still completes the MCP handshake and advertises all seven
+   * server still completes the MCP handshake and advertises all nine
    * tools so Claude Code shows the server as up, but every tool handler
    * short-circuits with a structured missing-workflow diagnostic so the
    * user sees an actionable "run init" error rather than an opaque
@@ -211,6 +216,7 @@ function registerGetState(server: McpServer, workflowDir: string): void {
     { run_id: z.string() },
     async ({ run_id }: { run_id: string }) => {
       try {
+        assertSafeSegment(run_id, "run_id");
         const runDir = getRunDir(run_id, workflowDir);
         const { state } = await replayRunJournal(runDir);
         return ok(state);
@@ -289,6 +295,9 @@ function registerTailArtifacts(server: McpServer, workflowDir: string): void {
       },
     ) => {
       try {
+        assertSafeSegment(run_id, "run_id");
+        assertSafeSegment(node_id, "node_id");
+        assertSafeRelativePath(filename, "filename");
         const nodeDir = getNodeDir(run_id, node_id, workflowDir);
         const path = join(nodeDir, filename);
         const text = await Deno.readTextFile(path);
@@ -345,6 +354,7 @@ function registerResumeNode(server: McpServer, workflowDir: string): void {
     { run_id: z.string(), wait: z.boolean().default(true) },
     async ({ run_id, wait }: { run_id: string; wait: boolean }) => {
       try {
+        assertSafeSegment(run_id, "run_id");
         // Thin delegate: commands.resumeRun is the single blocking
         // Engine({resume}) construction site (shared with CLI `run --resume`);
         // resumeRunBackground (FR-E85) is its non-blocking detached counterpart.
@@ -378,6 +388,8 @@ function registerProvideHumanInput(
       },
     ) => {
       try {
+        assertSafeSegment(run_id, "run_id");
+        assertSafeSegment(node_id, "node_id");
         // Thin delegate (FR-E75): same core as CLI `answer`.
         return ok(
           await deliverHumanAnswer({
@@ -402,6 +414,7 @@ function registerCancelRun(server: McpServer, workflowDir: string): void {
     { run_id: z.string() },
     async ({ run_id }: { run_id: string }) => {
       try {
+        assertSafeSegment(run_id, "run_id");
         const lockPath = defaultLockPath(workflowDir);
         const info = await readLockInfo(lockPath);
         if (info.run_id !== run_id) {

@@ -488,8 +488,24 @@ export interface RunStartedJournalEvent extends RunJournalEventBase {
   started_at: string;
   /** CLI arguments resolved for this run. */
   args: Record<string, string>;
-  /** Environment values resolved for this run. */
-  env: Record<string, string>;
+  /**
+   * Names of the environment variables resolved for this run — VALUES ARE
+   * NEVER PERSISTED. The engine's env map is fed from `.env` and `--env`, so
+   * it routinely carries API tokens; writing it verbatim leaked those secrets
+   * into `journal.jsonl` and, through the MCP `get_state` tool, into the
+   * calling model's context. Recording only the key set keeps the journal
+   * useful for post-mortems ("was OPENROUTER_API_KEY set?") while making the
+   * file safe to read and ship. On resume the engine re-derives the values
+   * from the live environment; a key that is no longer set surfaces as a
+   * fail-fast `Unknown env variable` at template interpolation.
+   */
+  env_keys: string[];
+  /**
+   * Legacy full env map written by engines before the redaction change.
+   * Read-only back-compat for replaying old journals — never written.
+   * @deprecated Use {@link RunStartedJournalEvent.env_keys}.
+   */
+  env?: Record<string, string>;
 }
 
 /** Run metadata update fact. */

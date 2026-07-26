@@ -142,12 +142,20 @@
 - **Lock content (`LockInfo`):** `{ pid, hostname, run_id, started_at }`.
   Hostname stored for diagnostics only — local FS implies a shared PID
   namespace, so `Deno.kill(pid, "SIGCONT")` is the authoritative liveness
-  check (FR-E25). Stale-on-dead-PID lock is reclaimed transparently.
+  check (FR-E25). Only `NotFound` (`ESRCH`) proves a dead PID;
+  `PermissionDenied` (`EPERM`) means the process exists under another user
+  and counts as alive. Stale-on-dead-PID lock is reclaimed transparently.
 - **Interfaces:**
   - `defaultLockPath(workflowDir: string): string` — pure helper, returns
     `<workflowDir>/runs/.lock`.
   - `acquireLock(lockPath, runId)` — throws when a live PID holds the file;
     reclaims on dead PID; rewrites on `SyntaxError` (corrupted file).
+    Publication is ATOMIC: the payload is staged in a sibling temp file and
+    linked into place with `Deno.link`, so the lock name appears only when
+    its content is complete. A read-then-write shape let two racers both
+    conclude the folder was free; `Deno.open({createNew})` alone is not
+    enough either — it publishes an empty file that a racer reads as
+    corrupt debris, deletes, and then acquires.
   - `releaseLock(lockPath)` — idempotent unlink.
   - `readLockInfo(lockPath)` — debug helper.
 - **Integration points:**

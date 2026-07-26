@@ -9,17 +9,66 @@ import {
   releaseLock,
 } from "./lock.ts";
 
-Deno.test("acquireLock — unexpected lock-read errors propagate (fail fast)", async () => {
+Deno.test("FR-E54 readLockInfo — valid JSON of the wrong shape is a SyntaxError", async () => {
   const tmpDir = await Deno.makeTempDir();
   const lockPath = `${tmpDir}/.lock`;
 
-  // Valid JSON with a corrupt shape: `isLockAlive(null)` throws a TypeError —
-  // neither NotFound, nor SyntaxError, nor "already running". Such an
-  // unanticipated error must surface, NOT silently reclaim the lock.
+  // `null`, arrays and pid-less records parse as JSON but are not locks.
+  // Classifying them up front keeps "corrupt" a single, handled category
+  // instead of a TypeError thrown from the first property access.
+  for (const body of ["null", "[]", '{"run_id":"x"}']) {
+    await Deno.writeTextFile(lockPath, body);
+    await assertRejects(() => readLockInfo(lockPath), SyntaxError);
+  }
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("FR-E54 acquireLock — reclaims a structurally corrupt lock file", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const lockPath = `${tmpDir}/.lock`;
+
+  // Debris from a crashed writer names no PID, so it cannot be proven live.
+  // Reclaiming it is the documented behaviour for corrupted locks.
   await Deno.writeTextFile(lockPath, "null");
 
-  await assertRejects(() => acquireLock(lockPath, "run-unexpected"));
+  await acquireLock(lockPath, "run-after-corrupt");
 
+  assertEquals((await readLockInfo(lockPath)).run_id, "run-after-corrupt");
+
+  await releaseLock(lockPath);
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("FR-E54 acquireLock — genuine I/O errors propagate (fail fast)", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  // A directory at the lock path: `Deno.open(createNew)` reports
+  // AlreadyExists, then reading it fails with an I/O error that is neither
+  // NotFound nor SyntaxError. It must surface rather than be reclaimed —
+  // reclaiming on an unexplained error is the destructive option.
+  const lockPath = `${tmpDir}/.lock`;
+  await Deno.mkdir(lockPath);
+
+  await assertRejects(() => acquireLock(lockPath, "run-io-error"));
+
+  await Deno.remove(tmpDir, { recursive: true });
+});
+
+Deno.test("FR-E54 acquireLock — creation is atomic against a concurrent racer", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const lockPath = `${tmpDir}/.lock`;
+
+  // Both callers observe an empty folder before either writes. With the old
+  // read-then-write shape both concluded the workflow was free and both
+  // "acquired" it; exclusive creation makes the kernel pick one winner.
+  const results = await Promise.allSettled([
+    acquireLock(lockPath, "run-a"),
+    acquireLock(lockPath, "run-b"),
+  ]);
+  const granted = results.filter((r) => r.status === "fulfilled");
+  assertEquals(granted.length, 1);
+
+  await releaseLock(lockPath);
   await Deno.remove(tmpDir, { recursive: true });
 });
 

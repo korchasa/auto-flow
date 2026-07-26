@@ -10,6 +10,7 @@
 import type {
   ErrorCategory,
   NodeConfig,
+  ProcessRegistry,
   ResolvedNodeSettings,
   RunState,
   TemplateContext,
@@ -104,6 +105,33 @@ export interface LoopRunOptions {
   /** Workflow-wide USD cap (FR-E47). When set, enforced after each body node
    * and consulted for the pre-iteration preempt heuristic. */
   budgetUsd?: number;
+  /** Caller-supplied process tracker scope (FR-E60). Forwarded to every
+   * body-node `runAgent` call so an embedding host's `killAll()` reaches
+   * loop-body subprocesses too — without it they registered in the
+   * `ai-ide-cli` default singleton and escaped the host's scope. */
+  processRegistry?: ProcessRegistry;
+  /**
+   * Route a HITL question raised by a body node (FR-L35).
+   *
+   * `runAgent` returns `{success: true, hitl_question}` when the observer
+   * intercepts `request_human_input`: the artifact is deliberately absent
+   * until the human replies. Without this hook the loop treated that as a
+   * plain success, moved on, and failed later on a missing condition field —
+   * the human was never asked. The engine wires it to `handleAgentHitl`;
+   * when it is absent the loop fails the node explicitly rather than
+   * continuing on an answer that will never arrive.
+   *
+   * Return an `AgentResult` when the question was answered and the body node
+   * produced its artifact. Return `null` ONLY after recording the failure on
+   * the node yourself — the loop then skips its own `nodeFailed` call and
+   * reuses the cause you recorded, so one failed transition yields exactly one
+   * lifecycle record.
+   */
+  onHitl?: (
+    nodeId: string,
+    result: AgentResult,
+    iteration: number,
+  ) => Promise<AgentResult | null>;
   /** Mark a body node as running and publish optional lifecycle callback. */
   nodeStarted?: (nodeId: string) => Promise<void>;
   /** Mark a body node as completed and publish optional lifecycle callback. */
@@ -138,6 +166,46 @@ export function shouldPreemptLoop(
   const remaining = budgetUsd - totalRunCost;
   const avgIterCost = totalLoopCost / completedIterations;
   return avgIterCost > remaining;
+}
+
+/**
+ * True when a body-node result is a paused HITL turn rather than real work.
+ *
+ * `runAgent` reports `success: true` with `hitl_question` set once the
+ * observer intercepts `request_human_input` and aborts the turn — the node's
+ * artifact is deliberately absent until the human replies. Taking that at face
+ * value let the loop advance to the next body node and fail several steps
+ * later on a missing condition field, with the human never asked.
+ */
+export function carriesHitlQuestion(result: AgentResult): boolean {
+  return result.hitl_question !== undefined && result.output !== undefined;
+}
+
+/**
+ * Turn an unanswered HITL turn into an explicit body-node failure.
+ *
+ * @param reason `"unrouted"` — no router wired, so nobody can ever deliver the
+ * answer; `"routing"` — the router ran and gave up.
+ * @param recordedError the cause the router already wrote onto the node. Used
+ * verbatim for `"routing"` so the loop-level error names the real problem
+ * ("defaults.hitl not configured", an ask-script failure, a poll timeout)
+ * instead of a generic restatement. Falls back to a generic message when the
+ * router recorded nothing.
+ */
+export function hitlFailure(
+  nodeId: string,
+  result: AgentResult,
+  reason: "unrouted" | "routing",
+  recordedError?: string,
+): AgentResult {
+  return {
+    ...result,
+    success: false,
+    error: reason === "unrouted"
+      ? `Body node '${nodeId}' requested human input but the loop has no HITL router configured`
+      : recordedError ?? `HITL handling failed for body node '${nodeId}'`,
+    error_category: "unknown",
+  };
 }
 
 /**
@@ -229,7 +297,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         loopNode,
       );
 
-      const result = await runAgent({
+      let result = await runAgent({
         node: bodyNode,
         ctx,
         settings,
@@ -247,7 +315,34 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         verbosity: opts.verbosity,
         cwd: opts.cwd,
         maxTurns: resolvedBudget?.max_turns,
+        processRegistry: opts.processRegistry,
       });
+
+      // The agent asked a human something. Its artifact does not exist yet,
+      // so treating this as success would corrupt the iteration.
+      let routerOwnsFailure = false;
+      if (carriesHitlQuestion(result)) {
+        if (!opts.onHitl) {
+          result = hitlFailure(bodyNodeId, result, "unrouted");
+        } else {
+          const routed = await opts.onHitl(bodyNodeId, result, iteration);
+          if (routed) {
+            result = routed;
+          } else {
+            // Null means the router already recorded the specific cause on the
+            // node. Failing it again below would append a second `node_failed`
+            // record for one transition and overwrite that cause with a
+            // generic message, so carry the recorded cause forward instead.
+            result = hitlFailure(
+              bodyNodeId,
+              result,
+              "routing",
+              state.nodes[bodyNodeId]?.error,
+            );
+            routerOwnsFailure = true;
+          }
+        }
+      }
 
       bodyResults.push(result);
       await opts.onAttemptCompleted?.(bodyNodeId, iteration, result);
@@ -302,7 +397,7 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
             bodyResults,
           };
         }
-      } else {
+      } else if (!routerOwnsFailure) {
         if (opts.nodeFailed) {
           await opts.nodeFailed(
             bodyNodeId,

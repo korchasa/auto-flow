@@ -126,7 +126,7 @@ pipeline. Only the literal string `true` enables the hook; `1` / `yes`
 graph TD
     CLI["CLI<br/>deno task run"] --> ConfigLoader["Config Loader<br/>YAML → WorkflowConfig"]
     ConfigLoader --> DAG["DAG Builder<br/>toposort → levels"]
-    DAG --> Executor["Level Executor<br/>sequential per level"]
+    DAG --> Executor["Level Executor<br/>sequential; opt-in max_parallel"]
 
     Executor --> Dispatch{Node Type?}
     Dispatch -->|agent| Agent["Agent Runner<br/>Claude / OpenCode"]
@@ -147,7 +147,9 @@ graph TD
 
 ## Core Concepts
 
-The engine (Deno/TypeScript modules at repo root) reads a YAML workflow config and builds a directed acyclic graph (DAG) of nodes. Nodes are topologically sorted into levels and executed sequentially.
+The engine (Deno/TypeScript modules at repo root) reads a YAML workflow config and builds a directed acyclic graph (DAG) of nodes. Nodes are topologically sorted into levels; levels run in order and, by default, one node at a time.
+
+Concurrency within a level is available but opt-in via `defaults.max_parallel`. It is not the default because every node of a run shares one git worktree, and the FR-E50 guardrail brackets each agent node with a snapshot of the main working tree — two nodes running at once see each other's writes as their own leaks. The engine warns when the configuration allows concurrent nodes inside a worktree.
 
 Four node types:
 
@@ -306,7 +308,7 @@ Options:
 ## Embedded MCP Server
 
 `flowai-workflow mcp <workflow>` starts an embedded Model Context Protocol
-server (FR-E73) exposing seven engine-control tools over stdio. Any
+server (FR-E73) exposing nine engine-control tools over stdio. Any
 MCP-capable agent (Claude Code / Codex / Cursor) can inspect workflows,
 tail artifacts, and drive runs without spawning a CLI subprocess per call.
 Built on `npm:@modelcontextprotocol/sdk`; the server core is
@@ -362,7 +364,7 @@ Workflow behavior is defined in a YAML config file. Key settings under `defaults
   load; see FR-E77)
 - `runtime_args` — extra CLI args forwarded to the selected runtime
 - `max_continuations` — max agent re-invocations on validation failure (default: 3)
-- `max_parallel` — concurrent node execution limit (default: 2)
+- `max_parallel` — concurrent node executions per level (default: 1 = sequential; 0 = unlimited). Values above 1 are unsafe while the FR-E50 worktree guardrail is active — see Core Concepts
 - `timeout_seconds` — per-node timeout (default: 1800)
 - `permission_mode` — permission mode override (Claude: full support; opencode: only `bypassPermissions`)
 - `hitl` — Human-in-the-Loop config: `ask_script`, `check_script`, `poll_interval`, `timeout` (used by Claude directly and by OpenCode via injected local MCP)
@@ -513,7 +515,7 @@ emits separate `dist/plugin-payload/claude` and
 
 ```bash
 deno task run              # Run the dogfood SDLC workflow (github-inbox)
-deno task check            # Full verification: fmt, lint, test, gitleaks, FR field set
+deno task check            # Full verification: fmt, lint, test, gitleaks (incl. run artifacts), FR field set
 deno task test             # Run all tests
 deno task fmt              # Format code
 deno task dashboard        # Render an HTML run dashboard

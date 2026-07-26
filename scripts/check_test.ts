@@ -3,6 +3,7 @@ import { join } from "@std/path";
 import {
   assertWorkflowFolderShape,
   checkArgs,
+  formatRunArtifactFindings,
   FR_CANONICAL_ORDER,
   printUsage,
   validateAgentListContent,
@@ -10,6 +11,51 @@ import {
   validateFrFields,
   validateHitlArtifactSource,
 } from "./check.ts";
+
+// --- formatRunArtifactFindings ---
+
+Deno.test("formatRunArtifactFindings — reports engine-produced artifacts", () => {
+  const lines = formatRunArtifactFindings([
+    {
+      RuleID: "telegram-bot-api-token",
+      File: "/repo/.flowai-workflow/wf/runs/20260524T015927/journal.jsonl",
+      StartLine: 1,
+    },
+    {
+      RuleID: "generic-api-key",
+      File: "/repo/.flowai-workflow/wf/runs/20260501T020329/state.json",
+      StartLine: 8,
+    },
+  ], "/repo/");
+  assertEquals(lines, [
+    "generic-api-key  .flowai-workflow/wf/runs/20260501T020329/state.json:8",
+    "telegram-bot-api-token  .flowai-workflow/wf/runs/20260524T015927/journal.jsonl:1",
+  ]);
+});
+
+Deno.test("formatRunArtifactFindings — a run's worktree is an input, not a leak", () => {
+  const lines = formatRunArtifactFindings([
+    {
+      RuleID: "telegram-bot-api-token",
+      File: "/repo/.flowai-workflow/wf/runs/20260501T020329/worktree/.env",
+      StartLine: 1,
+    },
+    {
+      RuleID: "telegram-bot-api-token",
+      File:
+        "/repo/.flowai-workflow/wf/runs/20260501T020329/worktree/.flowai-workflow/wf/runs/20260501T020329/state.json",
+      StartLine: 8,
+    },
+  ], "/repo/");
+  assertEquals(lines, []);
+});
+
+Deno.test("formatRunArtifactFindings — a path outside the repo keeps its full form", () => {
+  const lines = formatRunArtifactFindings([
+    { RuleID: "generic-api-key", File: "/elsewhere/state.json", StartLine: 3 },
+  ], "/repo/");
+  assertEquals(lines, ["generic-api-key  /elsewhere/state.json:3"]);
+});
 
 // --- printUsage ---
 
