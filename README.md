@@ -515,7 +515,7 @@ emits separate `dist/plugin-payload/claude` and
 
 ```bash
 deno task run              # Run the dogfood SDLC workflow (github-inbox)
-deno task check            # Full verification: fmt, lint, test, gitleaks, FR field set
+deno task check            # Full verification: fmt, lint, test, gitleaks (incl. run artifacts), FR field set
 deno task test             # Run all tests
 deno task fmt              # Format code
 deno task dashboard        # Render an HTML run dashboard
