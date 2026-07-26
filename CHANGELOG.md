@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.8.5](https://github.com/korchasa/flowai-workflow/compare/v0.8.4...v0.8.5) (2026-07-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* **engine:** workflow arguments must use the attached form
+`--key=value`. The detached form made every mistyped engine flag silent:
+`--dryrun` was read as a workflow argument and swallowed the next token.
+* **engine:** `defaults.max_parallel` defaults to 1 (sequential) instead
+of unlimited. All nodes of a run share one worktree, so the FR-E50
+guardrail cannot attribute file changes across concurrent nodes; set the
+value explicitly to opt back into concurrency.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+### Bug Fixes
+
+* **ci:** refresh the gitleaks allowlist and scan gitignored run artifacts ([26088ee](https://github.com/korchasa/flowai-workflow/commit/26088ee16ad8ef600a18d078fb26aa629e263466))
+* **engine:** close review findings on secrets, path traversal and silent failures ([251171c](https://github.com/korchasa/flowai-workflow/commit/251171c17360870702803645f3c6c3d80948aec1))
+
 ### [0.8.4](https://github.com/korchasa/flowai-workflow/compare/v0.8.3...v0.8.4) (2026-06-22)
 
 
