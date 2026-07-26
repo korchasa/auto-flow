@@ -349,7 +349,7 @@
 
 - **Description:** The engine drives every agent invocation over the Agent
   Client Protocol (ACP) transport shipped by `@korchasa/ai-ide-cli`
-  (`^0.8.8`). ACP is implicit and non-configurable — there is NO workflow- or
+  (`^0.8.11`). ACP is implicit and non-configurable — there is NO workflow- or
   node-level `transport` knob, no cascade, and no `"cli"` fallback exposed to
   workflow authors. The package itself is multi-transport and defaults to
   `"cli"` when `RuntimeInvokeOptions.transport` is omitted, so the engine
@@ -384,10 +384,11 @@
   - HITL MCP injection is gated on `effectiveCaps.mcpInjection`.
 
   **Ignored / unsupported under ACP — single reference.** Capability vector
-  `@korchasa/ai-ide-cli@0.8.8` (FR-L39): Claude / Codex / OpenCode keep
-  `mcpInjection` + `toolUseObservation` + `session` + `reasoningEffort` true
+  `@korchasa/ai-ide-cli@0.8.11` (FR-L39/L20/L42): Claude / Codex / OpenCode keep
+  `permissionMode` + `mcpInjection` + `toolUseObservation` + `session` +
+  `reasoningEffort` + `capabilityInventory` + `commandsFastChannel` true
   (HITL, effort, resume work); they downgrade `toolFilter` / `transcript` /
-  `interactive` / `capabilityInventory` to false. Consequences:
+  `interactive` to false. Consequences:
   - `allowed_tools` / `disallowed_tools` (and raw `runtime_args`
     `--allowedTools` / `--disallowedTools` / `--tools`) — no-op on the wire;
     `validateRuntimeCompatibility` warns `… is ignored under ACP
@@ -398,9 +399,12 @@
     `~/.claude/projects`, `state/log.ts`) — not produced (`transcript:
     false`); emits a `[log] JSONL transcript not found` warning. The stream
     log (`streamLogPath` / `onEvent`) is unaffected.
-  - `interactive` / `launchInteractive` and `capabilityInventory` /
-    `fetchCapabilitiesSlow` — unsupported on ACP; the engine never invokes
-    them during `run`, so no workflow impact.
+  - `interactive` / `launchInteractive` — unsupported on ACP; never invoked
+    during `run`.
+  - `capabilityInventory` / `fetchCapabilitiesSlow` (ACP-routed since
+    `0.8.11`, FR-L20) and `commandsFastChannel` / `fetchCommands` (ACP
+    `available_commands_update`, FR-L42) — supported by the package,
+    unused by the engine.
   - Removed knobs `defaults.transport` / `nodes.<id>.transport` — accepted
     but silently ignored (the schema validator does not reject unknown keys).
   Unaffected: `runtime` (claude / opencode / codex), `model`, `effort`,
@@ -421,7 +425,7 @@
     (FR-E77; regression-locked; ACP-support rejection at config load,
     tool-filter downgrade warning, `transport: "acp"` pinned on initial +
     resume, HITL capability gate consults `capabilitiesFor("acp")`).
-  - [x] `@korchasa/ai-ide-cli` floor pinned `^0.8.8`. Evidence:
+  - [x] `@korchasa/ai-ide-cli` floor pinned `^0.8.11`. Evidence:
     `deno.json:10`.
 
 
@@ -486,11 +490,14 @@
   `output.is_error === true` is treated as terminal here; permanent
   vs. transient classification is the adapter's responsibility via
   `RuntimeInvokeResult.error_category`. The pinned `@korchasa/ai-ide-cli`
-  `^0.8.8` only emits `"stream_stall"` as a typed category; any future
-  category (e.g. an `"invalid_request"` for Codex HTTP 400) maps through
-  `mapRuntimeErrorCategory` to `"cli_crash"` until the engine learns it.
-  Engine code does NOT substring-match adapter error text — it branches
-  only on the typed category.
+  `^0.8.11` emits two typed categories: `"stream_stall"` and
+  `"invalid_request"` (added `0.8.9`, FR-L41, for permanent Codex HTTP
+  400s). `mapRuntimeErrorCategory` passes `"stream_stall"` through and
+  folds the rest — `"invalid_request"` included — into `"cli_crash"`; the
+  fail-fast gate already stopped the node, so only journal category
+  fidelity is lost. Engine code does NOT substring-match adapter error
+  text. `runtime/error-types` (`ERROR_CATEGORY_*`) is absent from the
+  published `exports` map, so the engine compares string literals.
 
 - **Tasks:** see the lumatale-fairy-taler bug-hunter remediation note
   (chat session 2026-06-04).

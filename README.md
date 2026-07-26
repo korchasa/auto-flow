@@ -446,7 +446,7 @@ src/                             # All engine source, grouped by domain
   hitl/                          # human-in-the-loop + HITL MCP server
   mcp/                           # engine MCP server + CLI commands
   init/                          # Project scaffolder (`flowai-workflow init`)
-# ACP runtime layer = external @korchasa/ai-ide-cli dependency (JSR, ^0.8.8)
+# ACP runtime layer = external @korchasa/ai-ide-cli dependency (JSR, ^0.8.11)
 scripts/                         # Dev tooling (check, compile, dashboard, release-notes)
 .flowai-workflow/                # One folder per workflow (FR-S47)
   github-inbox/                  # Workflow folder = portable unit

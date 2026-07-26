@@ -61,6 +61,7 @@ function makeCapturingAdapter(
       toolUseObservation: false,
       session: false,
       capabilityInventory: false,
+      commandsFastChannel: false,
       toolFilter: false,
       reasoningEffort: false,
     },
