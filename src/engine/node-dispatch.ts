@@ -319,8 +319,22 @@ export async function executeMergeNode(
     const targetDir = `${nodeDir}/${inputId}`;
     try {
       await copyDir(inputDir, targetDir);
-    } catch {
-      // Input may not have produced files
+    } catch (err) {
+      // A node that produced no artifacts leaves no directory — that is the
+      // one benign case. Everything else (permissions, full disk, unreadable
+      // file) used to be swallowed by a bare `catch`, so a merge node
+      // reported success while silently dropping its inputs.
+      if (!(err instanceof Deno.errors.NotFound)) {
+        throw new Error(
+          `Merge node '${nodeId}': failed to copy input '${inputId}' from ${inputDir}: ${
+            (err as Error).message
+          }`,
+        );
+      }
+      eng.output.status(
+        nodeId,
+        `input '${inputId}' produced no artifacts — nothing to merge`,
+      );
     }
   }
 
@@ -331,13 +345,78 @@ export async function executeMergeNode(
 export async function executeLoopNode(
   eng: EngineContext,
   nodeId: string,
-  _node: NodeConfig,
+  loopNode: NodeConfig,
 ): Promise<boolean> {
+  const hitlConfig = isHitlConfigured(eng.config.defaults?.hitl)
+    ? eng.config.defaults.hitl
+    : undefined;
+  const cwd = eng.workDir !== "." ? eng.workDir : undefined;
+
   const result = await runLoop({
     loopNodeId: nodeId,
     config: eng.config,
     state: eng.state,
     budgetUsd: eng.options.budget_usd,
+    processRegistry: eng.options.processRegistry,
+    // Body-node HITL takes the same route as a top-level agent node
+    // (executeAgentNode above): ask the human, poll, resume the session.
+    // Returning null obliges this router to have recorded the cause on the
+    // node first — see `LoopRunOptions.onHitl`. Every early exit below does.
+    onHitl: async (bodyNodeId, bodyResult, iteration) => {
+      const bodyNode = loopNode.nodes?.[bodyNodeId];
+      if (!bodyNode || !bodyResult.hitl_question || !bodyResult.output) {
+        await eng.nodeFailed(
+          bodyNodeId,
+          `Cannot route HITL for body node '${bodyNodeId}': it is not declared under loop '${nodeId}' or its turn carried no session to resume`,
+          "unknown",
+        );
+        return null;
+      }
+      if (!hitlConfig) {
+        await eng.nodeFailed(
+          bodyNodeId,
+          "Agent called request_human_input but defaults.hitl not configured in workflow.yaml",
+          "unknown",
+        );
+        return null;
+      }
+      const runtimeConfig = resolveRuntimeConfig({
+        defaults: eng.config.defaults,
+        node: bodyNode,
+        parent: loopNode,
+      });
+      const toolFilter = resolveToolFilter(
+        bodyNode,
+        eng.config.defaults,
+        loopNode,
+      );
+      return await handleAgentHitl({
+        mode: "detect",
+        nodeId: bodyNodeId,
+        hitlQuestion: bodyResult.hitl_question,
+        agentSessionId: bodyResult.output.session_id,
+        hitlConfig,
+        state: eng.state,
+        workflowDir: eng.workflowDir,
+        node: bodyNode,
+        ctx: eng.buildContext(bodyNodeId, iteration),
+        settings: bodyNode.settings as ResolvedNodeSettings,
+        runtime: runtimeConfig.runtime,
+        runtimeArgs: runtimeConfig.args,
+        permissionMode: runtimeConfig.permissionMode,
+        model: runtimeConfig.model,
+        reasoningEffort: runtimeConfig.reasoningEffort,
+        allowedTools: toolFilter.allowedTools,
+        disallowedTools: toolFilter.disallowedTools,
+        output: eng.output,
+        cwd,
+        maxTurns: resolveBudget(bodyNode, eng.config.defaults, loopNode)
+          ?.max_turns,
+        processRegistry: eng.options.processRegistry,
+        nodeFailed: eng.nodeFailed,
+        nodeWaiting: eng.nodeWaiting,
+      });
+    },
     buildCtx: (bodyNodeId, iteration) =>
       eng.buildContext(bodyNodeId, iteration),
     onNodeStart: (id, iteration) =>

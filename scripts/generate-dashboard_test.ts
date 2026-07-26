@@ -43,7 +43,7 @@ Deno.test("readRunState — replays valid journal.jsonl", async () => {
       config_path: ".flowai-workflow/workflow.yaml",
       started_at: "2024-01-01T00:00:00.000Z",
       args: {},
-      env: {},
+      env_keys: [],
     });
     await writer.append({
       kind: "node_declared",

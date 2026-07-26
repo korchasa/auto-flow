@@ -39,8 +39,16 @@ export async function createWorktree(
   workflowDir: string,
   ref = "origin/main",
 ): Promise<string> {
-  // Fetch latest
-  await runGit(["fetch", "origin", "main"], "git fetch origin main failed");
+  // Fetch the branch `ref` actually names. The fetch used to be hardcoded to
+  // `origin main` regardless of `ref`, so any caller passing another branch
+  // checked out whatever stale copy happened to be in the local object store.
+  const { remote, branch } = parseRemoteRef(ref);
+  if (remote && branch) {
+    await runGit(
+      ["fetch", remote, branch],
+      `git fetch ${remote} ${branch} failed`,
+    );
+  }
 
   const worktreePath = getWorktreePath(runId, workflowDir);
 
@@ -55,6 +63,23 @@ export async function createWorktree(
   );
 
   return worktreePath;
+}
+
+/**
+ * Split a `<remote>/<branch>` ref into its parts so the pre-checkout fetch
+ * targets the branch the caller actually asked for.
+ *
+ * Returns empty parts for refs that are not remote-tracking (a bare SHA, a
+ * tag, a local branch): there is nothing to fetch, and `git worktree add`
+ * resolves them from the local object store. Only the first slash is treated
+ * as the separator so nested branch names (`origin/feature/x`) survive.
+ */
+export function parseRemoteRef(
+  ref: string,
+): { remote?: string; branch?: string } {
+  const idx = ref.indexOf("/");
+  if (idx <= 0 || idx === ref.length - 1) return {};
+  return { remote: ref.slice(0, idx), branch: ref.slice(idx + 1) };
 }
 
 /**

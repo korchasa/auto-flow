@@ -381,6 +381,11 @@
     `node_directory_declared`) establish the model before node transitions.
   - Every record carries `schema_version`, `run_id`, monotonic `seq`,
     deduplicatable `event_id`, `kind`, and `ts`.
+  - Env NAMES only (`run_started.env_keys`); values never persisted — the env
+    map carries `.env`/`--env` API tokens that would otherwise become durable
+    state and reach a model via MCP `get_state`. Resume re-derives values from
+    the live environment; a missing key fails fast at `{{env.X}}`. Legacy
+    `env` field: read-only back-compat.
   - Durable node records mirror live `NodeLifecycleEvent` semantics for
     `running`, `completed`, `failed`, `waiting`, and `skipped`.
   - Replay reconstructs run status, node status, attempt metadata, loop
@@ -409,6 +414,9 @@
     `lifecycle-replay_test.ts::terminal workflow record wins over stale running snapshot`.
   - [x] Dashboard reads replayed journal state. Evidence:
     `scripts/generate-dashboard_test.ts::readRunState — replays valid journal.jsonl`.
+  - [x] `run_started` carries env key names only; no record carries a value.
+    Evidence:
+    `lifecycle-replay_test.ts::FR-E69 lifecycle replay — Engine.run journals env names, never env values`.
 
 
 

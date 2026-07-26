@@ -60,7 +60,7 @@ async function setupFixtureWorkflow(): Promise<Fixture> {
     started_at: "2026-05-24T00:00:00.000Z",
     ts: "2026-05-24T00:00:00.000Z",
     args: {},
-    env: {},
+    env_keys: [],
   });
   await writer.append({
     kind: "workflow_loaded",
@@ -287,7 +287,7 @@ Deno.test("FR-E75 provide_human_input writes the local inbox for a waiting node"
       started_at: "2026-05-30T00:00:00.000Z",
       ts: "2026-05-30T00:00:00.000Z",
       args: {},
-      env: {},
+      env_keys: [],
     });
     await writer.append({
       kind: "node_declared",
@@ -610,3 +610,91 @@ Deno.test(
     }
   },
 );
+
+// --- Path-traversal rejection on externally supplied identifiers ---
+
+Deno.test("FR-E73 mcp-server rejects run_id / node_id / filename that escape runs/", async () => {
+  const fixture = await setupFixtureWorkflow();
+  try {
+    const { client, shutdown } = await startServerWithClient(
+      fixture.workflowDir,
+    );
+
+    // `join` normalises `..`, so an unchecked filename walked straight out of
+    // the node directory and turned tail_artifacts into an arbitrary file read.
+    const escapes: Array<[string, Record<string, unknown>, string]> = [
+      ["get_state", { run_id: "../../../../etc" }, "run_id"],
+      ["resume_node", { run_id: "../..", wait: false }, "run_id"],
+      ["cancel_run", { run_id: "../.." }, "run_id"],
+      [
+        "tail_artifacts",
+        {
+          run_id: fixture.completedRunId,
+          node_id: "build",
+          filename: "../../../../../../etc/passwd",
+        },
+        "filename",
+      ],
+      [
+        "tail_artifacts",
+        {
+          run_id: fixture.completedRunId,
+          node_id: "..",
+          filename: "out.log",
+        },
+        "node_id",
+      ],
+      [
+        "provide_human_input",
+        { run_id: "..", node_id: "build", text: "hi" },
+        "run_id",
+      ],
+    ];
+
+    for (const [name, args, field] of escapes) {
+      const result = await client.callTool({ name, arguments: args }) as {
+        isError?: boolean;
+        content: Array<{ text: string }>;
+      };
+      assert(result.isError, `${name} should reject ${field}`);
+      assertStringIncludes(result.content[0].text, field);
+    }
+
+    await shutdown();
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+Deno.test("FR-E73 mcp-server still reads a legitimate nested artifact path", async () => {
+  const fixture = await setupFixtureWorkflow();
+  try {
+    const nodeDir = getNodeDir(
+      fixture.completedRunId,
+      "build",
+      fixture.workflowDir,
+    );
+    await Deno.mkdir(join(nodeDir, "logs"), { recursive: true });
+    await Deno.writeTextFile(join(nodeDir, "logs", "agent.json"), "{}\n");
+
+    const { client, shutdown } = await startServerWithClient(
+      fixture.workflowDir,
+    );
+    const result = await client.callTool({
+      name: "tail_artifacts",
+      arguments: {
+        run_id: fixture.completedRunId,
+        node_id: "build",
+        filename: "logs/agent.json",
+      },
+    }) as { isError?: boolean; content: Array<{ text: string }> };
+    assertEquals(result.isError, undefined);
+    assertEquals(
+      (parseToolJson(result) as { lines: string[] }).lines,
+      ["{}"],
+    );
+    await shutdown();
+  } finally {
+    await fixture.cleanup();
+  }
+});

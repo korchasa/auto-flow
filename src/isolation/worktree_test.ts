@@ -3,6 +3,7 @@ import {
   copyToOriginalRepo,
   createWorktree,
   getWorktreePath,
+  parseRemoteRef,
   pinDetachedHead,
   removeWorktree,
   worktreeExists,
@@ -421,3 +422,26 @@ async function setupOriginAndClone(): Promise<
   await runGitCmd(["push", "-u", "origin", "main"], tmpClone);
   return { tmpOrigin, tmpClone };
 }
+
+// --- Base-ref parsing (review fix) ---
+
+Deno.test("parseRemoteRef — splits remote-tracking refs on the first slash", () => {
+  // The pre-checkout fetch used to be hardcoded to `origin main` regardless of
+  // the requested ref, so any other branch was checked out from a stale local
+  // copy.
+  assertEquals(parseRemoteRef("origin/main"), {
+    remote: "origin",
+    branch: "main",
+  });
+  assertEquals(parseRemoteRef("upstream/release/2.x"), {
+    remote: "upstream",
+    branch: "release/2.x",
+  });
+});
+
+Deno.test("parseRemoteRef — non-remote refs yield nothing to fetch", () => {
+  // A bare SHA, tag or local branch resolves from the local object store.
+  for (const ref of ["main", "v1.2.3", "abc1234", "/leading", "trailing/"]) {
+    assertEquals(parseRemoteRef(ref), {});
+  }
+});

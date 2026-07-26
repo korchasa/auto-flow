@@ -339,9 +339,29 @@ export function parseArgs(args: string[]): EngineOptions {
         break;
       default:
         if (arg.startsWith("--")) {
-          // Generic --key value passthrough.
-          const key = arg.substring(2);
-          cliArgs[key] = args[++i] ?? "";
+          // Generic workflow-argument passthrough, attached form ONLY:
+          // `--key=value` sets `args.key`.
+          //
+          // The detached form (`--key value`) used to be accepted too, which
+          // made every mistyped engine flag silent: `--dryrun` was read as a
+          // workflow argument and swallowed the next token, and `--validate`
+          // (a flag that never existed) started a real run. Requiring `=`
+          // makes author intent explicit and lets anything else fail fast.
+          const eqIdx = arg.indexOf("=");
+          if (eqIdx === -1) {
+            throw new Error(
+              `Unknown flag: ${arg}. Run \`flowai-workflow run --help\` for the ` +
+                `supported options, or pass a workflow argument as ` +
+                `\`${arg}=<value>\` to expose it as {{args.${
+                  arg.substring(2)
+                }}}.`,
+            );
+          }
+          const key = arg.substring(2, eqIdx);
+          if (!key) {
+            throw new Error(`Invalid argument: ${arg}. Expected --key=value.`);
+          }
+          cliArgs[key] = arg.substring(eqIdx + 1);
         } else if (configPath === "") {
           // First positional → workflow folder path.
           configPath = `${normalizeWorkflowDir(arg)}/workflow.yaml`;
@@ -391,7 +411,7 @@ Subcommands:
                         local inbox file (transport-independent). Prints
                         {inboxPath, live}; when live is false, resume the run to
                         consume the queued answer.
-  mcp                   Start embedded MCP server exposing 8 engine-control tools over stdio.
+  mcp                   Start embedded MCP server exposing 9 engine-control tools over stdio.
 
 Workflow resolution (run / answer / mcp; FR-E78):
   Every subcommand that accepts a workflow shares one rule when the

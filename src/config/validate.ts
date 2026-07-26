@@ -79,7 +79,11 @@ async function runSingleValidation(
     };
   }
 
-  const displayPath = interpolate(rule.path, ctx);
+  // Pass the working directory through: `rule.path` may embed
+  // `{{file("…")}}` / `{{bash("…")}}`, and without it those resolve against
+  // the engine's own cwd instead of the run's worktree — the same convention
+  // `runAgent` already follows for prompts and hooks.
+  const displayPath = interpolate(rule.path, ctx, gitCwd);
   const fsPath = workPath(ctx.workDir, displayPath);
 
   switch (rule.type) {

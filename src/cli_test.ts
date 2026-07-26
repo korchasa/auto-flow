@@ -124,9 +124,29 @@ Deno.test("parseArgs — --env without = rejects", () => {
   );
 });
 
-Deno.test("parseArgs — generic --key value passthrough", () => {
-  const opts = parseArgs(["--foo", "bar"]);
+Deno.test("parseArgs — generic --key=value passthrough", () => {
+  const opts = parseArgs(["--foo=bar"]);
   assertEquals(opts.args.foo, "bar");
+});
+
+Deno.test("parseArgs — --key=value keeps '=' inside the value", () => {
+  const opts = parseArgs(["--filter=a=b"]);
+  assertEquals(opts.args.filter, "a=b");
+});
+
+Deno.test("parseArgs — unknown detached flag is rejected", () => {
+  // The detached form used to be a silent catch-all: a mistyped engine flag
+  // became a workflow argument and swallowed the following token.
+  assertThrows(
+    () => parseArgs(["--dryrun", "x"]),
+    Error,
+    "Unknown flag: --dryrun",
+  );
+  assertThrows(
+    () => parseArgs([".flowai-workflow/wf", "--validate"]),
+    Error,
+    "Unknown flag: --validate",
+  );
 });
 
 Deno.test("parseArgs — -s sets semi-verbose", () => {

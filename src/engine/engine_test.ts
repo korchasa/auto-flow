@@ -1035,7 +1035,7 @@ Deno.test("RunState — total_cost_usd in journal replay roundtrip", async () =>
       config_path: "cfg.yaml",
       started_at: state.started_at,
       args: {},
-      env: {},
+      env_keys: [],
     });
     await writer.append({
       kind: "node_declared",

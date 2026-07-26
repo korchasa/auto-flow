@@ -62,6 +62,65 @@ export class PhaseRegistry {
   }
 }
 
+// --- Path-safety guards for externally supplied identifiers ---
+
+/**
+ * Reject a run-id / node-id that is not a single, inert path segment.
+ *
+ * `getRunDir` / `getNodeDir` build paths by string concatenation, so an id
+ * carrying `/`, `\` or `..` escapes the `runs/` subtree entirely. Every
+ * boundary that accepts these ids from outside the engine (MCP tool
+ * arguments, CLI positionals) MUST call this first — the path helpers stay
+ * dumb concatenators by design.
+ *
+ * @param value — the untrusted identifier.
+ * @param label — field name used in the error message (e.g. `run_id`).
+ */
+export function assertSafeSegment(value: string, label: string): void {
+  if (value === "") {
+    throw new Error(`${label} must not be empty`);
+  }
+  if (value === "." || value === "..") {
+    throw new Error(`${label} must not be '.' or '..' (got '${value}')`);
+  }
+  if (value.includes("/") || value.includes("\\")) {
+    throw new Error(
+      `${label} must be a single path segment without '/' or '\\' (got '${value}')`,
+    );
+  }
+  if (value.includes("\0")) {
+    throw new Error(`${label} must not contain NUL bytes`);
+  }
+}
+
+/**
+ * Reject a relative artifact path that escapes its node directory.
+ *
+ * Unlike {@link assertSafeSegment} this permits nested directories (agents do
+ * write `logs/foo.json`), but forbids absolute paths and any `..` segment, so
+ * the resolved path can never leave the node directory it is joined onto.
+ *
+ * @param value — the untrusted relative path.
+ * @param label — field name used in the error message (e.g. `filename`).
+ */
+export function assertSafeRelativePath(value: string, label: string): void {
+  if (value === "") {
+    throw new Error(`${label} must not be empty`);
+  }
+  if (value.includes("\0")) {
+    throw new Error(`${label} must not contain NUL bytes`);
+  }
+  if (value.startsWith("/") || /^[A-Za-z]:[/\\]/.test(value)) {
+    throw new Error(`${label} must be a relative path (got '${value}')`);
+  }
+  const segments = value.split(/[/\\]/);
+  if (segments.includes("..")) {
+    throw new Error(
+      `${label} must not contain '..' path segments (got '${value}')`,
+    );
+  }
+}
+
 /** Generate a run ID from the current timestamp with optional label.
  * Format: YYYYMMDDTHHMMSS or YYYYMMDDTHHMMSS-<label> when label provided.
  * Label is sanitized: lowercased, non-alphanumeric chars replaced with '-',

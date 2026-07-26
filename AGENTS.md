@@ -96,8 +96,12 @@ example of engine usage.
   (iterative body with exit condition), `human` (terminal prompt)
 - **Inter-agent communication:** Structured artifacts in
   `<runs-dir>/<run-id>/<node-id>/`, linked via `{{input.<node-id>}}` templates
-- **Execution:** DAG topological sort into levels; nodes execute sequentially
-  (parallel execution deferred)
+- **Execution:** DAG topological sort into levels; levels run in order and one
+  node at a time (`defaults.max_parallel: 1`). Intra-level concurrency is
+  implemented but opt-in: all nodes of a run share ONE worktree and the FR-E50
+  guardrail brackets each agent node with a main-tree snapshot, so concurrent
+  nodes mis-attribute each other's writes as leaks. `max_parallel > 1` (or `0`
+  = unlimited) emits an engine WARN naming that risk.
 - **Continuation:** Re-invoking agents within same session on validation failure
   (max N per node)
 - **Resume:** Failed/interrupted runs resumable via `--resume <run-id>`;
@@ -240,10 +244,11 @@ example of engine usage.
   **`deno task run` is hardcoded to `github-inbox`.** To run a different
   variant: `deno run -A --no-check src/cli.ts run .flowai-workflow/<variant>` —
   or add a per-variant task to `deno.json`.
-  **Config validation:** use `--dry-run` (not `--validate` — it doesn't
-  exist; unknown flags are accepted silently and trigger worktree creation
-  as a side effect that has to be cleaned up with `git worktree remove
-  --force`).
+  **Config validation:** use `--dry-run` (`--validate` does not exist).
+  Unknown flags are now rejected with a clear error and no side effect —
+  they used to be swallowed as workflow arguments, which started a real run
+  and left a worktree behind. Workflow arguments must use the attached
+  form: `--key=value` → `{{args.key}}`.
   **`memory/agent-*.md` files are gitignored** at the repo root (they
   accumulate per run); only `memory/reflection-protocol.md` is tracked.
   **Memory invalidation:** When the engine path contract or artifact

@@ -85,7 +85,7 @@ Design ideas captured for discussion; not committed work. Promote to FR-E only a
 ### P2: Per-Node Worktree Isolation for Safe Parallel Execution
 
 - **Description:** Optional per-node `isolation: node_worktree` field that creates a nested git worktree per node, extending existing FR-E24 (run-level worktree) with finer I/O isolation. Enables safe parallel execution of sibling nodes that write to overlapping file paths.
-- **Motivation:** Sibling independent nodes on the same DAG level already run in parallel via `Promise.allSettled` with `max_parallel` semaphore (`engine/engine.ts:363-366`). However, they share the run-level worktree — any two agents writing to the same file race each other. Current SDLC workflow avoids this because parallel sibling nodes are rare (mostly linear PM → Architect → Tech Lead → loop(Dev → QA) → Review). P2 unlocks safe parallelism for workflows that would benefit (e.g., parallel explore-backend + explore-frontend, or adversarial design-review alongside design).
+- **Motivation:** Sibling independent nodes on the same DAG level can run in parallel via `Promise.allSettled` with the `max_parallel` semaphore, but `max_parallel` now defaults to `1` (sequential) precisely because that parallelism is unsafe today. However, they share the run-level worktree — any two agents writing to the same file race each other. Current SDLC workflow avoids this because parallel sibling nodes are rare (mostly linear PM → Architect → Tech Lead → loop(Dev → QA) → Review). P2 unlocks safe parallelism for workflows that would benefit (e.g., parallel explore-backend + explore-frontend, or adversarial design-review alongside design).
 - **Sketch:**
   ```yaml
   nodes:
