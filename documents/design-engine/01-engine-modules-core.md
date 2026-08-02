@@ -5,7 +5,7 @@
 
 ## 3. Components
 
-### 3.1 Workflow Engine (`engine/`)
+### 3.1 Workflow Engine (`src/`)
 
 - **Purpose:** Configurable DAG-based workflow executor. Replaces hardcoded
   shell script orchestration with YAML-driven node graph.
@@ -171,12 +171,12 @@
     published separately on JSR. Runtime adapters, low-level
     Claude/OpenCode/Cursor runners, stream parsers, HITL MCP helper, and
     process registry live in that package. Engine pins the dependency
-    via `jsr:@korchasa/ai-ide-cli@^0.2.0` in `engine/deno.json` and
+    via `jsr:@korchasa/ai-ide-cli@^0.8.12` in `deno.json` and
     imports via sub-path specifiers (e.g. `@korchasa/ai-ide-cli/runtime`,
     `@korchasa/ai-ide-cli/claude/process`). Library has zero imports
-    from engine (one-way dependency invariant). Local development
-    resolves the JSR specifier to a sibling checkout through the
-    `links` field in the root `deno.json`. See the sibling repo's
+    from engine (one-way dependency invariant). The specifier always
+    resolves through JSR — there is no `links` field and no
+    sibling-checkout override. See the sibling repo's
     `documents/design.md` for full module descriptions.
   - `agent.ts` — runtime-agnostic agent invocation, continuation loop, retry.
     **Adapter-error fail-fast (FR-E82):** after the initial

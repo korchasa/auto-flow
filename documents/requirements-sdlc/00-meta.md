@@ -61,7 +61,7 @@
   - `--output-format stream-json` — streams JSON events line-by-line; `result` event contains `result`, `session_id`, `total_cost_usd`, `duration_ms`, `num_turns`, `is_error`.
   - `--resume <session-id>` — re-invokes agent in the same session for continuations (engine SRS FR-E1).
   - `-p "<prompt>"` — non-interactive mode, task description is passed as the prompt argument.
-- **Workflow engine:** Deno/TypeScript engine (`engine/`) reads DAG config from `.flowai-workflow/workflow.yaml`, resolves node dependencies, executes nodes in topological order, manages state in `.flowai-workflow/runs/<run-id>/state.json`.
+- **Workflow engine:** Deno/TypeScript engine (`src/`) reads DAG config from `.flowai-workflow/workflow.yaml`, resolves node dependencies, executes nodes in topological order, manages state in `.flowai-workflow/runs/<run-id>/state.json`.
 - **Legacy stage scripts:** `.flowai-workflow/scripts/stage-<N>-<role>.sh` — handle invocation, validation, continuation, artifact commit. Superseded by engine but preserved.
 - **Inter-stage communication:** Engine: artifacts in `.flowai-workflow/runs/<run-id>/[<phase>/]<node-id>/`, linked via templates. Legacy: `.flowai-workflow/workflow/<issue-number>/`. Filesystem is source of truth.
 - **Branching & commits:** Feature branch `sdlc/issue-<N>` created by Tech Lead (fallback `sdlc/{{run_id}}` for `--prompt` mode). Developer owns commits (`git add`, `git commit`, `git push` per task). Commit format: `sdlc(impl): <summary>`. Failed stages produce no commits.
@@ -157,7 +157,7 @@ Design ideas captured for discussion; not committed work. Promote to FR-S only a
   workflow.yaml                         # DAG-based workflow configuration
 src/                                   # Deno/TypeScript workflow engine
     cli.ts                             # Entry point: deno task run
-    engine/engine.ts                   # DAG executor
+    src/engine/engine.ts                   # DAG executor
     # ACP runtime = external @korchasa/ai-ide-cli dependency (JSR)
     ...
 ```

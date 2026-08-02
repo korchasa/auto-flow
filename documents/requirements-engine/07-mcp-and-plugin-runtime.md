@@ -97,7 +97,7 @@ per-file token budget.
 - **Description:** Historical contract — the plugin shipped engine
   TypeScript sources plus a Deno-runtime launcher
   (`plugin-src/shared/bin/launch.ts`) that lazily compiled
-  `engine/cli.ts` into a host-data-dir cache and spawned the binary
+  `src/cli.ts` into a host-data-dir cache and spawned the binary
   with forwarded stdio + signals. Superseded by FR-E78: the plugin's
   `.mcp.json` now invokes `flowai-workflow mcp` directly and the
   operator installs the engine binary once on PATH (no launcher, no

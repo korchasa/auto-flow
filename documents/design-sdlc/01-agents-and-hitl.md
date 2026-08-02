@@ -13,7 +13,7 @@
 
 - **Status:** Deleted. Legacy stage orchestration scripts (`stage-*.sh`) and
   associated tests removed per FR-S26. Superseded by Deno/TypeScript workflow
-  engine (`engine/`). Use `deno task run`.
+  engine (`src/`). Use `deno task run`.
 - **Legacy `test:*` deno.json tasks:** Removed alongside scripts. No backward
   compatibility retention needed — engine execution via `deno task run` is the
   sole workflow entry point.

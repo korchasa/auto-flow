@@ -238,8 +238,8 @@ All FR evidence for issue #15 is complete:
   `renderTimeline`, `.timeline-bottleneck` CSS). Tests in
   `scripts/generate-dashboard_test.ts`. Evidence committed in `e493cbb`.
 - **FR-E20 (Repeated File Read Warning):** Implemented. SRS section 3.38
-  evidence recorded — `engine/agent.ts` (`FileReadTracker` class). Tests in
-  `engine/agent_test.ts`. Evidence committed in `e493cbb`.
+  evidence recorded — `src/engine/agent.ts` (`FileReadTracker` class). Tests in
+  `src/engine/agent_test.ts`. Evidence committed in `e493cbb`.
 - **FR-S20 (Dashboard Stream Log Links):** Implemented. SRS section 3.39
   evidence recorded — `scripts/generate-dashboard.ts` (`streamLogHref`,
   `.log-link` CSS). Tests in `scripts/generate-dashboard_test.ts`.
@@ -258,7 +258,7 @@ All FR evidence for issue #15 is complete:
 FR-S1 evidence (issue #100):
 
 - **FR-S1 (Pipeline Trigger):** All 4 acceptance criteria marked `[x]` with
-  evidence. `engine/cli.ts:36-76` (CLI entry point, flags),
+  evidence. `src/cli.ts:36-76` (CLI entry point, flags),
   `.flowai-workflow/agents/agent-pm/SKILL.md` (issue frontmatter mandate).
 
 Engine FR evidence (issue #99):
@@ -273,15 +273,15 @@ FR-S24 evidence (issue #96):
 
 - **FR-S24 (Pipeline Config Validation):** Existing implementation satisfies
   all acceptance criteria. `scripts/check.ts:84-96` (`workflowIntegrity()`
-  calls `loadConfig()`), `engine/config.ts:43-103` (schema validation),
-  `engine/config.ts:105-249` (node validation — types, inputs, run_on).
+  calls `loadConfig()`), `src/config/config.ts:43-103` (schema validation),
+  `src/config/config.ts:105-249` (node validation — types, inputs, run_on).
   No new code required — Variant A (evidence-only) selected.
 - **FR-S11 (Inter-Stage Data Flow):** SRS text updated by PM to reflect
   phase-aware artifact path `.flowai-workflow/runs/<run-id>/[<phase>/]<node-id>/`.
   SDS §2.2 already documents phase-aware layout. Engine FR-E9 implementation
   deferred (separate issue).
 - **FR-S25 (Phase-Organized SDLC Artifact Directories):** FR-E9 phase registry
-  implemented (`engine/state.ts:20-36`, `engine/engine.ts:129-130`). Artifact
+  implemented (`src/state/state.ts:20-36`, `src/engine/engine.ts:129-130`). Artifact
   paths resolve to `.flowai-workflow/runs/<run-id>/<phase>/<node-id>/` for nodes with
   `phase:` field. SDLC workflow nodes have `phase:` fields in `workflow.yaml`
   (`plan`, `impl`, `report`). ACs #1-3 marked with evidence. ACs #4-5 pending
@@ -311,7 +311,7 @@ FR-S42 workflow validate migration (issue #174):
 Engine refactoring (issue #92):
 
 - **engine.ts module size reduction:** Pure engine-scope refactoring — no SDLC
-  workflow impact. Variant A selected: extract `engine/hitl-handler.ts` (HITL
-  orchestration) and `engine/post-workflow.ts` (post-workflow executor) from
-  `engine/engine.ts`. Target: ≤500 LOC (from 849). Engine public interfaces
+  workflow impact. Variant A selected: extract `src/hitl/hitl-handler.ts` (HITL
+  orchestration) and `src/engine/post-workflow.ts` (post-workflow executor) from
+  `src/engine/engine.ts`. Target: ≤500 LOC (from 849). Engine public interfaces
   unchanged; SDLC workflow transparent to internal restructuring.

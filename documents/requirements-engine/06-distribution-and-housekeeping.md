@@ -16,8 +16,8 @@
 
 ### 3.27 FR-E27: Test Suite Integrity
 
-- **Description:** Every test function in `engine/` test files must contain ≥1 explicit assertion. Tests with no assertions pass trivially, provide zero coverage value, and mask implementation errors.
-- **Motivation:** `engine/lock_test.ts:143` — test "releaseLock - no error if lock file already removed" contained no assertions, silently passing while verifying nothing.
+- **Description:** Every test function in `src/` test files must contain ≥1 explicit assertion. Tests with no assertions pass trivially, provide zero coverage value, and mask implementation errors.
+- **Motivation:** `src/state/lock_test.ts:143` — test "releaseLock - no error if lock file already removed" contained no assertions, silently passing while verifying nothing.
 - **Acceptance criteria:**
   - **Tests:** `lock_test.ts` (regression-locked; one-time hygiene
     fix: `releaseLock - no error if lock file already removed` now
@@ -65,7 +65,7 @@
     (regression-locked; 4-target list, naming convention,
     `stripVersionPrefix`, `getVersionString`).
   - [x] AC1: Standalone binary produced by `deno compile --allow-all
-    engine/cli.ts` with all deps bundled. Evidence: `scripts/compile.ts`.
+    src/cli.ts` with all deps bundled. Evidence: `scripts/compile.ts`.
   - [x] AC3: Version-tag-triggered CI release workflow.
     Evidence: `.github/workflows/release.yml:4-6` (on push tags `v*`).
   - [x] AC5: README installation docs with binary download instructions.
@@ -103,10 +103,10 @@
   in the sibling repository
   [`korchasa/ai-ide-cli`](https://github.com/korchasa/ai-ide-cli).
   Engine depends on the library one-way via JSR
-  (`jsr:@korchasa/ai-ide-cli@^0.2.0`) pinned in `engine/deno.json`. For
-  local development the root workspace `deno.json` uses the `links` field
-  to resolve the JSR specifier from a sibling checkout of the library
-  repo. Library has zero imports from engine.
+  (`jsr:@korchasa/ai-ide-cli@^0.8.12`) pinned in `deno.json`. The
+  specifier always resolves through JSR — there is no `links` field and
+  no sibling-checkout override, so runtime changes reach the engine only
+  after a publish + pin bump. Library has zero imports from engine.
 
   **Scope:** Library package exports unchanged from the workspace-member
   era. Repository split preserves per-file git history via
@@ -123,27 +123,27 @@
     `process-registry`, `runtime`, `runtime/types`, `claude/process`,
     `claude/stream`, `cursor/process`, `opencode/process`,
     `opencode/hitl-mcp`, `skill`. Evidence: sibling repo `deno.json`.
-  - [x] Library has zero imports from `engine/` or
+  - [x] Library has zero imports from `src/` or
     `@korchasa/flowai-workflow`. Evidence: Grep over sibling repo.
   - [x] Engine has no imports from deleted paths
     (`./claude-process`, `./opencode-process`, `./stream`,
     `./opencode-hitl-mcp`, `./runtime/`).
-  - [x] OpenCode runner's HITL MCP self-spawn is a consumer-provided
-    callback (`RuntimeInvokeOptions.hitlMcpCommandBuilder`). Engine's
-    `hitl-mcp-command.ts` supplies a builder pointing at engine's own
-    `cli.ts`. Runner throws a clear error if a consumer sets
-    `hitlConfig` without a builder. Evidence:
-    `engine/hitl-mcp-command.ts`, `engine/agent.ts:179-196,290-307`,
-    `engine/hitl.ts:243-256`.
+  - [x] OpenCode runner's HITL MCP self-spawn was a consumer-provided
+    callback (`RuntimeInvokeOptions.hitlMcpCommandBuilder`) fed by the
+    engine's own `hitl-mcp-command.ts`. Superseded by FR-E8
+    (hitl-via-engine-mcp): the engine now registers one stdio MCP server
+    per invocation and intercepts the tool call through
+    `onToolUseObserved`, so both the builder and that module are gone.
+    Evidence: `src/hitl/hitl-injection.ts`, `src/hitl/hitl-mcp-server.ts`.
   - [x] `ClaudeCliOutput` renamed to `CliRunOutput` in code (docs
     updated to match); no compatibility alias is exported.
-  - [x] `@korchasa/flowai-workflow` publishes from `engine/deno.json`
-    with a JSR dep on `@korchasa/ai-ide-cli@^0.2.0`;
+  - [x] `@korchasa/flowai-workflow` publishes from the root `deno.json`
+    with a JSR dep on `@korchasa/ai-ide-cli@^0.8.12`;
     `@korchasa/ai-ide-cli` publishes from the sibling repo's root
     `deno.json`. Each repo `deno publish --dry-run` passes. Evidence:
-    `engine/deno.json#imports`, workspace root `deno.json#links`.
-  - [x] `deno compile engine/cli.ts` produces a working binary that
-    inlines the library (`links` makes the local source self-contained).
+    `deno.json:10`, `deno.json#publish`.
+  - [x] `deno compile src/cli.ts` produces a working binary that
+    inlines the library from the JSR cache. Evidence: `scripts/compile.ts`.
 
 
 

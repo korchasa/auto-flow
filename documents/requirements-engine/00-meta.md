@@ -111,9 +111,9 @@ Design ideas captured for discussion; not committed work. Promote to FR-E only a
 
 ### P3: Permission Prompt Interception via `--permission-prompt-tool`
 
-- **Description:** Engine starts a dedicated HITL MCP server exposing a `handle_permission_request` tool; passes `--permission-prompt-tool <tool>` to Claude CLI spawns. When Claude needs to request a permission (e.g. running an untrusted Bash command), the request flows through the MCP server → engine HITL pipeline → operator reply → result back to Claude. Extends or reuses existing OpenCode HITL MCP infrastructure (`engine/opencode-hitl-mcp.ts`).
+- **Description:** Engine starts a dedicated HITL MCP server exposing a `handle_permission_request` tool; passes `--permission-prompt-tool <tool>` to Claude CLI spawns. When Claude needs to request a permission (e.g. running an untrusted Bash command), the request flows through the MCP server → engine HITL pipeline → operator reply → result back to Claude. Extends or reuses existing OpenCode HITL MCP infrastructure (`src/hitl/hitl-mcp-server.ts`).
 - **Motivation:** Current SDLC workflow sets `permission_mode: bypassPermissions`, so all permission prompts are auto-approved. This is fine for dogfooding but blocks future workflows that want **strict interactive permission** with human approval (e.g., security-sensitive pipelines, CI gate flows). In those workflows, without `--permission-prompt-tool`, a Claude headless process hitting a permission prompt either hangs or fails silently.
-- **Current state:** `AskUserQuestion` tool is already intercepted via stream-json tool_use detection (`engine/hitl.ts`). Permission prompts are a separate channel — not tool_use events — and require the dedicated CLI flag.
+- **Current state:** `AskUserQuestion` tool is already intercepted via stream-json tool_use detection (`src/hitl/hitl.ts`). Permission prompts are a separate channel — not tool_use events — and require the dedicated CLI flag.
 - **Sketch:**
   ```yaml
   defaults:

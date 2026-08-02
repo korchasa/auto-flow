@@ -81,7 +81,7 @@
   - Update `workflow.yaml` — new DAG with fewer nodes.
 
   **Invariants (no changes):**
-  - `engine/` — engine remains domain-agnostic, no code changes.
+  - `src/` — engine remains domain-agnostic, no code changes.
   - `.flowai-workflow/agents/agent-pm/` — no changes.
   - `.flowai-workflow/agents/agent-meta-agent/` — no changes.
 - **Motivation:** Current workflow diverges from standard practices: roles are

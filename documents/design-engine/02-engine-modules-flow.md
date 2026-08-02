@@ -286,9 +286,9 @@
 - **Legacy Test Task Removal (FR-E29):** Verified complete. No `test:*` tasks
   referencing `.flowai-workflow/scripts/stage-*_test.ts` remain in `deno.json`. No "Stage
   Scripts" section in SDS (§3.2 is Phase Registry). No `.flowai-workflow/scripts/stage-*`
-  references in this document. Current valid test tasks: `test`, `test:lib`,
-  `test:engine`.
-- **Test Suite Integrity (FR-E27):** Every `engine/` test function must
+  references in this document. The only test task is `test`
+  (`deno.json#tasks`); the former `test:lib` / `test:engine` split is gone.
+- **Test Suite Integrity (FR-E27):** Every `src/` test function must
   contain ≥1 explicit assertion. `lock_test.ts` "releaseLock — no error if
   lock file already removed" test: `assertEquals(result, undefined)` +
   `Deno.stat` file-absence verification (asserting `NotFound` error).

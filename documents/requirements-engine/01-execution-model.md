@@ -39,7 +39,7 @@
 - **Description:** Project directory layout must reflect application structure, not be buried under a single `.flowai-workflow/` prefix. Engine code, agent prompts, workflow config, and run artifacts should be organized at the top level as distinct concerns.
 - **Motivation:** Current `.flowai-workflow/` prefix conflates engine source code, configuration, runtime data, and legacy scripts. This hinders navigation, IDE support, and standard tooling (test runners, linters).
 - **Acceptance criteria:**
-  - [x] Engine source code lives under a standard `src/` or dedicated top-level directory (not `.flowai-workflow/engine/`). Evidence: `engine/` (top-level directory, 30 files moved via `git mv .flowai-workflow/engine/ engine/`)
+  - [x] Engine source code lives under a standard `src/` or dedicated top-level directory (not `.flowai-workflow/engine/`). Evidence: `src/` (top-level directory, grouped by domain — `src/engine/`, `src/config/`, `src/state/`, `src/isolation/`, `src/hitl/`, `src/mcp/`)
   - ~~`[ ] Agent prompts in a top-level agents/ directory`~~ — superseded by FR-S17/FR-S13: canonical location is `.flowai-workflow/agents/agent-<name>/`.
   - [x] Workflow config path resolved from positional `<workflow>`
     argument (FR-E53; `<workflow>/workflow.yaml`). With FR-S47 the
@@ -88,10 +88,10 @@
 
 ### 3.14 FR-E14: Engine-Workflow Separation Invariant
 
-- **Description:** The workflow engine (`engine/`) is a domain-agnostic DAG executor. It MUST be physically separated from workflow-specific concerns (config, agents, run artifacts) by directory structure, not only by convention. This constraint is structural and must be enforced by the project layout.
+- **Description:** The workflow engine (`src/`) is a domain-agnostic DAG executor. It MUST be physically separated from workflow-specific concerns (config, agents, run artifacts) by directory structure, not only by convention. This constraint is structural and must be enforced by the project layout.
 
   **Rules:**
-  - Engine source lives in a dedicated top-level directory (e.g., `engine/` or a standardized path); no workflow, agent, git, or GitHub-specific logic inside.
+  - Engine source lives in a dedicated top-level directory (e.g., `src/` or a standardized path); no workflow, agent, git, or GitHub-specific logic inside.
   - Workflow config (`workflow.yaml`), agent prompts (`.claude/skills/`), and run artifacts (`runs/`) are domain-specific — must not be nested under the engine directory.
   - `deno.json` tasks and imports reference the new layout consistently.
 - **Motivation:** Issue #12 — collocating engine source with workflow data under `.flowai-workflow/` obscures boundaries, hinders tooling, and blocks future engine reuse.

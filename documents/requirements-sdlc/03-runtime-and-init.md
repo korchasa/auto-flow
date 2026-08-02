@@ -78,7 +78,7 @@
     CLI, Git.
   - [x] Available `deno task` commands documented (run, check, test).
   - [x] Configuration section references `workflow.yaml` (not env vars).
-  - [x] Project directory structure matches actual layout (`engine/`,
+  - [x] Project directory structure matches actual layout (`src/`,
     `.flowai-workflow/`).
   - [x] Agents-as-skills mentioned with `/agent-<name>` slash command
     examples.

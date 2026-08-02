@@ -44,7 +44,7 @@ graph TD
 ```
 
 - **Subsystems:**
-  - **Workflow Engine** (`engine/`): Deno/TypeScript DAG-based executor
+  - **Workflow Engine** (`src/`): Deno/TypeScript DAG-based executor
     with YAML config, template interpolation, sequential levels, loop nodes,
     human nodes, resume support, and runtime abstraction (`claude` default,
     `opencode` supported)
