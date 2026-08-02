@@ -158,7 +158,7 @@
   final code review, checks CI gates, merges PR if all pass. Handles
   missing-PR case gracefully (no-op with clear message when workflow failed
   before tech-lead created PR). **After-hook observability (FR-S36):**
-  `after:` field invokes `.flowai-workflow/scripts/run-dashboard.sh {{run_dir}}`
+  `after:` field invokes `.flowai-workflow/<workflow>/scripts/run-dashboard.sh {{run_dir}}`
   (replaces `deno task dashboard ... || true`). Wrapper runs dashboard
   command, emits `[WARN] dashboard generation failed (exit $code)` to stderr
   on non-zero exit, always exits 0. Warning captured in `stream.log`, visible
@@ -184,10 +184,10 @@
   Workflow config:
   ```yaml
   defaults:
-    on_failure_script: .flowai-workflow/scripts/rollback-uncommitted.sh
+    on_failure_script: .flowai-workflow/<workflow>/scripts/rollback-uncommitted.sh
     hitl:
-      ask_script: .flowai-workflow/scripts/hitl-ask.sh
-      check_script: .flowai-workflow/scripts/hitl-check.sh
+      ask_script: .flowai-workflow/<workflow>/scripts/hitl-ask.sh
+      check_script: .flowai-workflow/<workflow>/scripts/hitl-check.sh
       artifact_source: "{{input.specification}}/01-spec.md"
       poll_interval: 60
       timeout: 7200
@@ -203,8 +203,8 @@
 - **Sec:** Secret detection via `gitleaks detect --no-git` in `deno task check`
   (`scripts/check.ts`). Engine-level scope checks removed. Agents run with
   local user's permissions.
-- **Logs:** Full transcripts per stage in `.flowai-workflow/runs/<run-id>/logs/`. Note:
-  logs path remains engine-controlled (`.flowai-workflow/runs/`); configurable `runs_dir`
+- **Logs:** Full transcripts per stage in `.flowai-workflow/<workflow>/runs/<run-id>/logs/`. Note:
+  logs path remains engine-controlled (`.flowai-workflow/<workflow>/runs/`); configurable `runs_dir`
   deferred to separate engine FR.
 
 ## 7. Constraints
@@ -259,7 +259,7 @@ FR-S1 evidence (issue #100):
 
 - **FR-S1 (Pipeline Trigger):** All 4 acceptance criteria marked `[x]` with
   evidence. `src/cli.ts:36-76` (CLI entry point, flags),
-  `.flowai-workflow/agents/agent-pm/SKILL.md` (issue frontmatter mandate).
+  `.flowai-workflow/<workflow>/agents/agent-pm.md` (issue frontmatter mandate).
 
 Engine FR evidence (issue #99):
 
@@ -277,12 +277,12 @@ FR-S24 evidence (issue #96):
   `src/config/config.ts:105-249` (node validation — types, inputs, run_on).
   No new code required — Variant A (evidence-only) selected.
 - **FR-S11 (Inter-Stage Data Flow):** SRS text updated by PM to reflect
-  phase-aware artifact path `.flowai-workflow/runs/<run-id>/[<phase>/]<node-id>/`.
+  phase-aware artifact path `.flowai-workflow/<workflow>/runs/<run-id>/[<phase>/]<node-id>/`.
   SDS §2.2 already documents phase-aware layout. Engine FR-E9 implementation
   deferred (separate issue).
 - **FR-S25 (Phase-Organized SDLC Artifact Directories):** FR-E9 phase registry
   implemented (`src/state/state.ts:20-36`, `src/engine/engine.ts:129-130`). Artifact
-  paths resolve to `.flowai-workflow/runs/<run-id>/<phase>/<node-id>/` for nodes with
+  paths resolve to `.flowai-workflow/<workflow>/runs/<run-id>/<phase>/<node-id>/` for nodes with
   `phase:` field. SDLC workflow nodes have `phase:` fields in `workflow.yaml`
   (`plan`, `impl`, `report`). ACs #1-3 marked with evidence. ACs #4-5 pending
   verification (end-to-end run + `deno task check`). Selected Variant A

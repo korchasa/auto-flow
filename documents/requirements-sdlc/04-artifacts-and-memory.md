@@ -28,7 +28,7 @@
 
 ### 3.25 FR-S25: Phase-Organized SDLC Artifact Directories
 
-- **Description:** SDLC workflow nodes with a `phase` config field must store output artifacts in phase-organized subdirectories (`.flowai-workflow/runs/<run-id>/<phase>/<node-id>/`). Nodes without `phase` use flat layout (`.flowai-workflow/runs/<run-id>/<node-id>/`). Depends on engine FR-E9 implementation.
+- **Description:** SDLC workflow nodes with a `phase` config field must store output artifacts in phase-organized subdirectories (`.flowai-workflow/<workflow>/runs/<run-id>/<phase>/<node-id>/`). Nodes without `phase` use flat layout (`.flowai-workflow/<workflow>/runs/<run-id>/<node-id>/`). Depends on engine FR-E9 implementation.
 - **Motivation:** SDLC workflow nodes are grouped into `plan`, `impl`, `report` phases in `workflow.yaml`. Phase-organized storage improves navigability and aligns artifact structure with declared execution flow. Without engine FR-E9 (phase registry + phase-aware `getNodeDir()`), the `phase` field in `workflow.yaml` has no effect on artifact paths.
 - **Acceptance criteria:**
   - [x] All SDLC workflow nodes in `.flowai-workflow/workflow.yaml` have `phase:` field set to `plan`, `impl`, or `report` as appropriate. Evidence: `.flowai-workflow/workflow.yaml` (specification, design, decision → `plan`; implementation → `impl`; tech-lead-review, optimize → `report`).
@@ -91,14 +91,14 @@
 
 ### 3.28 FR-S28: Per-Agent Reflection Memory
 
-- **Description:** Each agent owns its own reflection memory stored at `.flowai-workflow/memory/<agent-name>.md`. At session start, agent reads its memory file. At session end, agent rewrites the file in full (not append) with compressed current-state knowledge: anti-patterns, effective strategies, environment quirks, baseline metrics. Agent decides what to retain, evicting stale or resolved items.
+- **Description:** Each agent owns its own reflection memory stored at `.flowai-workflow/<workflow>/memory/<agent-name>.md`. At session start, agent reads its memory file. At session end, agent rewrites the file in full (not append) with compressed current-state knowledge: anti-patterns, effective strategies, environment quirks, baseline metrics. Agent decides what to retain, evicting stale or resolved items.
 
-  **Storage:** `.flowai-workflow/memory/<agent-name>.md` — one file per agent. Git tracking TBD (tracked enables review; gitignored avoids noise — open decision per issue #117).
+  **Storage:** `.flowai-workflow/<workflow>/memory/<agent-name>.md` — one file per agent. Git tracking TBD (tracked enables review; gitignored avoids noise — open decision per issue #117).
 
   **Lifecycle per agent run:**
-  1. Read `.flowai-workflow/memory/<self>.md` at session start before main work.
+  1. Read `.flowai-workflow/<workflow>/memory/<self>.md` at session start before main work.
   2. Execute main task.
-  3. Rewrite `.flowai-workflow/memory/<self>.md` at end — full rewrite, compress stale data out.
+  3. Rewrite `.flowai-workflow/<workflow>/memory/<self>.md` at end — full rewrite, compress stale data out.
   4. **Commit** memory + history files in the worktree before exiting the
      session (prevents reflection-loss; in-loop nodes may opt out via
      `memory_commit_deferred: true` in `workflow.yaml`).
@@ -112,18 +112,18 @@
   **Scope:** All 6 workflow agents: pm, architect, tech-lead, tech-lead-review, developer, qa.
 - **Motivation:** Centralized `documents/meta.md` caused: (1) git history pollution from per-run updates to `documents/`; (2) merge conflicts on concurrent runs; (3) ~60% dead-weight content (resolved patterns duplicate git history); (4) no measurable quality improvement; (5) scope violation (workflow-level data in project docs). Per-agent decentralized memory eliminates all five issues.
 - **Acceptance criteria:**
-  - [x] `.flowai-workflow/memory/` directory exists in repo.
+  - [x] `.flowai-workflow/<workflow>/memory/` directory exists in repo.
   - [x] Each of 6 agent `SKILL.md` files includes: (a) read-memory step at
     session start, (b) rewrite-memory step at session end.
   - [x] `workflow.yaml` `task_templates` or `defaults` exposes
-    `.flowai-workflow/memory/<agent-name>.md` path to each agent.
+    `.flowai-workflow/<workflow>/memory/<agent-name>.md` path to each agent.
   - [ ] `documents/meta.md` removed or repurposed (no longer used as shared
     cross-run memory).
   - [x] At least one end-to-end workflow run completes with agents
     reading/writing their own memory files.
   - [x] **Commit step in lifecycle:** Each agent's reflection-protocol
     appendix instructs it to commit memory + history files at session end.
-    `.flowai-workflow/memory/reflection-protocol.md` §Lifecycle includes
+    `.flowai-workflow/<workflow>/memory/reflection-protocol.md` §Lifecycle includes
     step 3c. Evidence: `.flowai-workflow/memory/reflection-protocol.md:49-50`
     (step "c. Commit MEMORY + HISTORY files").
   - [x] **Engine enforcement:** When `defaults.memory_paths` is configured

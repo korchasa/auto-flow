@@ -150,7 +150,7 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
 ### 3.54 FR-E54: Per-Workflow Run Lock
 
 - **Description:** The workflow lock file is rooted at `<workflowDir>/runs/.lock`,
-  not at the repo-global `.flowai-workflow/runs/.lock`. `<workflowDir>` is the
+  not at the repo-global `.flowai-workflow/<workflow>/runs/.lock`. `<workflowDir>` is the
   folder that contains `workflow.yaml` (FR-S47, FR-E53). The engine derives it
   once via `deriveWorkflowDir(options.config_path)` and threads it into
   `defaultLockPath(workflowDir)`. Two runs against the **same** workflow folder

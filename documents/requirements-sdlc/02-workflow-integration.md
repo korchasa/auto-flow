@@ -51,7 +51,7 @@
 
   **Role changes:**
   - `tech-lead` node (current) → renamed to **`architect`** (designs solution
-    with variants). Prompt: `.flowai-workflow/agents/agent-architect/SKILL.md`.
+    with variants). Prompt: `.flowai-workflow/<workflow>/agents/agent-architect.md`.
   - `reviewer` node → **removed**. Design review absorbed into new tech-lead.
   - `architect` node (current) → renamed to **`tech-lead`** (reviews design,
     selects variant, task breakdown, updates SDS, creates branch

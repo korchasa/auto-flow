@@ -33,7 +33,7 @@
 
 ## 2. General description
 
-- **System context:** Operates as a local Deno engine process triggered by CLI command (`deno task run [--prompt "..."]`). The engine reads workflow DAG config (`.flowai-workflow/workflow.yaml`), executes nodes sequentially via `claude` CLI, validates outputs, and commits artifacts. PM agent autonomously triages open GitHub issues; `--prompt` passes optional additional context. Agents communicate through files in the repository.
+- **System context:** Operates as a local Deno engine process triggered by CLI command (`deno task run [--prompt "..."]`). The engine reads workflow DAG config (`.flowai-workflow/<workflow>/workflow.yaml`), executes nodes sequentially via `claude` CLI, validates outputs, and commits artifacts. PM agent autonomously triages open GitHub issues; `--prompt` passes optional additional context. Agents communicate through files in the repository.
 - **Assumptions and constraints:**
   - A devcontainer provides the runtime environment with all required tools (see FR-S10).
   - Each agent is stateless between runs — all context comes from input artifacts and its system prompt.
@@ -47,8 +47,8 @@
 ## 4. Non-functional requirements
 
 - **Isolation:** Each agent runs in its own Claude Code process with no shared state except file artifacts. Single local execution assumed (one workflow at a time). Concurrent execution is not supported.
-- **Reproducibility:** Agent prompts are versioned in the repository under `.flowai-workflow/agents/`.
-- **Observability:** Full logs stored per stage in `.flowai-workflow/runs/<run-id>/logs/`. Total workflow duration reported in the final PR description.
+- **Reproducibility:** Agent prompts are versioned in the repository under `.flowai-workflow/<workflow>/agents/`.
+- **Observability:** Full logs stored per stage in `.flowai-workflow/<workflow>/runs/<run-id>/logs/`. Total workflow duration reported in the final PR description.
 - **Fault tolerance:** If a stage fails (agent error, timeout, continuation limit exhausted), the workflow stops. Manual restart via `--resume <run-id>`.
 - **Timeouts:** Each stage has a configurable timeout via `SDLC_STAGE_TIMEOUT_MINUTES` env var (default: 30 min). Engine enforces timeout per node. When a timeout fires, the stage is treated as failed.
 - **Security:** Enforced at the engine/stage script level via diff-based checks (see engine SRS FR-E1). Agents run with the local user's permissions.
@@ -61,7 +61,7 @@
   - `--output-format stream-json` — streams JSON events line-by-line; `result` event contains `result`, `session_id`, `total_cost_usd`, `duration_ms`, `num_turns`, `is_error`.
   - `--resume <session-id>` — re-invokes agent in the same session for continuations (engine SRS FR-E1).
   - `-p "<prompt>"` — non-interactive mode, task description is passed as the prompt argument.
-- **Workflow engine:** Deno/TypeScript engine (`src/`) reads DAG config from `.flowai-workflow/workflow.yaml`, resolves node dependencies, executes nodes in topological order, manages state in `.flowai-workflow/runs/<run-id>/state.json`.
+- **Workflow engine:** Deno/TypeScript engine (`src/`) reads DAG config from `.flowai-workflow/<workflow>/workflow.yaml`, resolves node dependencies, executes nodes in topological order, manages state in `.flowai-workflow/<workflow>/runs/<run-id>/state.json`.
 - **Legacy stage scripts:** `.flowai-workflow/scripts/stage-<N>-<role>.sh` — handle invocation, validation, continuation, artifact commit. Superseded by engine but preserved.
 - **Inter-stage communication:** Engine: artifacts in `.flowai-workflow/runs/<run-id>/[<phase>/]<node-id>/`, linked via templates. Legacy: `.flowai-workflow/workflow/<issue-number>/`. Filesystem is source of truth.
 - **Branching & commits:** Feature branch `sdlc/issue-<N>` created by Tech Lead (fallback `sdlc/{{run_id}}` for `--prompt` mode). Developer owns commits (`git add`, `git commit`, `git push` per task). Commit format: `sdlc(impl): <summary>`. Failed stages produce no commits.

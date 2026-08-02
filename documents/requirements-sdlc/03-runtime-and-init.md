@@ -18,7 +18,7 @@
   - Located in `.flowai-workflow/scripts/stage-<N>-<role>.sh`.
   - Each script is responsible for:
     1. Preparing input: collecting handoff artifacts, setting environment variables.
-    2. Invoking `claude` CLI with the agent prompt from `.flowai-workflow/agents/agent-<role>/SKILL.md`.
+    2. Invoking `claude` CLI with the agent prompt from `.flowai-workflow/<workflow>/agents/agent-<role>.md`.
     3. Running stage-specific validation (artifact checks, `deno task check` for Developer).
     4. Implementing the Continuation mechanism (engine SRS FR-E1): re-invoking via `--resume` on validation failure.
     5. Committing output artifacts and logs to the feature branch.
@@ -49,7 +49,7 @@
 
 ### 3.13 FR-S13: Agents as Skills
 
-- **Description:** Each workflow agent is a Claude Code project skill stored canonically in `.flowai-workflow/agents/agent-<name>/SKILL.md` per the agentskills.io specification. Each skill directory may include a `scripts/` subdirectory with co-located stage scripts. No symlinks. Each agent can be invoked standalone via `/agent-<name>` or used by the workflow engine.
+- **Description:** Each workflow agent is a Claude Code project skill stored canonically in `.flowai-workflow/<workflow>/agents/agent-<name>.md` per the agentskills.io specification. Each skill directory may include a `scripts/` subdirectory with co-located stage scripts. No symlinks. Each agent can be invoked standalone via `/agent-<name>` or used by the workflow engine.
 
   **Agents (6):** pm, architect, tech-lead, tech-lead-review, developer, qa. (FR-S15: reduced from 10-agent set; removed committer, tech-lead-reviewer, tech-lead-sds; presenter has no agent directory. FR-S9: meta-agent removed. FR-S18: executor renamed to developer.)
 - **Supersedes:** Original layout `agents/<name>/SKILL.md` with `.claude/skills/` symlinks (superseded by FR-S17).

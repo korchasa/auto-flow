@@ -132,7 +132,7 @@
   a 30+ minute run.
 - **Motivation:** Current `summary()` output (`output.ts:98-111`) renders
   only aggregate metadata. Per-node result text is available in
-  `.flowai-workflow/runs/<run-id>/logs/<node-id>.json` but not in run state, forcing
+  `.flowai-workflow/<workflow>/runs/<run-id>/logs/<node-id>.json` but not in run state, forcing
   operators to read N log files after the run. Issue #109: "After a 30+ minute
   run, the operator has to scroll back through interleaved logs to find what
   each agent produced."

@@ -43,11 +43,11 @@ graph LR
 
 - **Subsystems:**
   - **Agent Runtime**: Claude Code CLI invocations with role-specific prompts
-    from `.flowai-workflow/agents/agent-<name>/SKILL.md` (canonical location per
+    from `.flowai-workflow/<workflow>/agents/agent-<name>.md` (canonical location per
     FR-S26; legacy `.claude/skills/` symlinks removed per FR-S33)
-  - **Artifact Store**: Git-tracked files in `.flowai-workflow/runs/<run-id>/[<phase>/]<node-id>/`
+  - **Artifact Store**: Git-tracked files in `.flowai-workflow/<workflow>/runs/<run-id>/[<phase>/]<node-id>/`
     (phase subdir present when node has `phase` field in config). Note: runs
-    directory remains at `.flowai-workflow/runs/` — engine-controlled hardcoded path;
+    directory remains at `.flowai-workflow/<workflow>/runs/` — engine-controlled hardcoded path;
     configurable `runs_dir` deferred to separate engine FR.
     - **Artifact File Numbering (FR-S32):** Gapless sequential prefixes
       `01`–`06` reflecting workflow execution order. Convention:

@@ -183,7 +183,7 @@
   behavior retained). `on_error: continue` and `run_on: always` remain
   unchanged.
 - **Acceptance criteria:**
-  - [x] `run-dashboard.sh` created at `.flowai-workflow/scripts/run-dashboard.sh`.
+  - [x] `run-dashboard.sh` created at `.flowai-workflow/<workflow>/scripts/run-dashboard.sh`.
     Evidence: `.flowai-workflow/scripts/run-dashboard.sh`.
   - [x] Wrapper receives `$1` as run_dir, executes
     `deno task dashboard --run-dir "$1"`, captures exit code. Evidence:

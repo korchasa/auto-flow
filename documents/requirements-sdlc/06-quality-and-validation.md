@@ -5,7 +5,7 @@
 
 ### 3.24 FR-S24: Workflow Config Validation
 
-- **Description:** SDLC workflow config (`.flowai-workflow/workflow.yaml`) must be validated for schema correctness as part of `deno task check`. Detects drift between workflow config and engine schema requirements before runtime failures occur.
+- **Description:** SDLC workflow config (`.flowai-workflow/<workflow>/workflow.yaml`) must be validated for schema correctness as part of `deno task check`. Detects drift between workflow config and engine schema requirements before runtime failures occur.
 - **Motivation:** Unvalidated config changes cause hard-to-diagnose runtime failures. Static validation catches invalid node types, missing required fields, and bad `inputs` references at development time. Maps to SDLC-scope aspect of engine FR-E7 (config drift detection).
 - **Acceptance criteria:**
   - **Tests:** `scripts/check_test.ts` (regression-locked;
@@ -41,7 +41,7 @@
 
 ### 3.37 FR-S37: Verify Node Verdict Frontmatter Validation
 
-- **Description:** The `verify` node in `.flowai-workflow/workflow.yaml` MUST declare a
+- **Description:** The `verify` node in `.flowai-workflow/<workflow>/workflow.yaml` MUST declare a
   `frontmatter_field` rule for `verdict` in its `validate` block, with
   `allowed: [PASS, FAIL]`. This ensures the engine validates the QA agent's verdict
   field at parse time (via FR-E36) and at runtime (presence check), preventing the QA
@@ -85,7 +85,7 @@
 
 ### 3.42 FR-S42: Migrate Workflow Validate Rules to Composite Artifact Type
 
-- **Description:** The SDLC workflow config (`.flowai-workflow/workflow.yaml`)
+- **Description:** The SDLC workflow config (`.flowai-workflow/<workflow>/workflow.yaml`)
   validates each agent artifact using 2–3 separate rules (`file_exists`,
   `file_not_empty`, `contains_section`) per node, creating ~20 lines of
   redundant config across 6 agent nodes. FR-S42 migrates all 6 nodes to the

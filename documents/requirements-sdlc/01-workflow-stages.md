@@ -205,19 +205,19 @@
 
   **Trigger mechanism:** Engine executes meta-agent node as a post-workflow node. In `workflow.yaml`, the meta-agent node is configured with `run_on: always` (engine SRS FR-E11) to run regardless of upstream success/failure. Failed node ID identified via `state.json` (nodes with `status: "failed"`). Engine does NOT write a separate `failed-node.txt` — that violates engine SRS FR-E14.
 - **Input:**
-  - `.flowai-workflow/memory/agent-meta-agent.md` — own reflection memory (read first; FR-S28).
+  - `.flowai-workflow/<workflow>/memory/agent-meta-agent.md` — own reflection memory (read first; FR-S28).
   - Run logs from `<run-dir>/logs/` and `state.json` (failed node context from `nodes[*].status` field; no `failed-node.txt`).
-  - Current agent prompts from `.flowai-workflow/agents/agent-*/`.
+  - Current agent prompts from `.flowai-workflow/<workflow>/agents/agent-*.md`.
 - **Output:**
-  - Primary: edited `.flowai-workflow/agents/agent-*/SKILL.md` (prompt fixes).
+  - Primary: edited `.flowai-workflow/<workflow>/agents/agent-*.md` (prompt fixes).
   - Secondary: `<run-dir>/meta-agent/07-changelog.md` (minimal fix log).
-  - Persistent: updated `.flowai-workflow/memory/agent-meta-agent.md` (own reflection memory; FR-S28).
+  - Persistent: updated `.flowai-workflow/<workflow>/memory/agent-meta-agent.md` (own reflection memory; FR-S28).
 - **Acceptance criteria:**
   - Agent analyzes logs, diagnoses problems, and edits agent prompts directly.
   - `07-changelog.md` lists each fix with evidence (turns/cost/error data).
-  - `.flowai-workflow/memory/agent-meta-agent.md` rewritten with new patterns, fix outcomes, baselines (FR-S28).
+  - `.flowai-workflow/<workflow>/memory/agent-meta-agent.md` rewritten with new patterns, fix outcomes, baselines (FR-S28).
   - Does NOT produce verbose reports — focus is on prompt optimization.
-  - [ ] `.flowai-workflow/agents/agent-meta-agent/SKILL.md` Input section references `state.json` for failed-node context; no `failed-node.txt` reference (engine SRS FR-E14 compliance).
+  - [ ] `.flowai-workflow/<workflow>/agents/agent-meta-agent.md` Input section references `state.json` for failed-node context; no `failed-node.txt` reference (engine SRS FR-E14 compliance).
 
   Quality metrics (observability targets, not per-FR acceptance):
   - Every fix references specific log data as evidence.

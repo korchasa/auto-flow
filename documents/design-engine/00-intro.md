@@ -20,7 +20,7 @@
 ```mermaid
 graph TD
     CLI["CLI<br/>deno task run"] --> Engine
-    Engine --> Config["Config Loader<br/>.flowai-workflow/workflow.yaml"]
+    Engine --> Config["Config Loader<br/>.flowai-workflow/<workflow>/workflow.yaml"]
     Engine --> DAG["DAG Builder<br/>toposort → levels"]
     Engine --> State["State Manager<br/>state.json"]
 
@@ -48,7 +48,7 @@ graph TD
     with YAML config, template interpolation, sequential levels, loop nodes,
     human nodes, resume support, and runtime abstraction (`claude` default,
     `opencode` supported)
-  - **Artifact Store**: Git-tracked files in `.flowai-workflow/runs/<run-id>/[<phase>/]<node-id>/`
+  - **Artifact Store**: Git-tracked files in `.flowai-workflow/<workflow>/runs/<run-id>/[<phase>/]<node-id>/`
     (phase subdir present when node has `phase` field in config)
   - **Validation Engine**: Rule-based checks (file_exists, file_not_empty,
     contains_section, custom_script, frontmatter_field)

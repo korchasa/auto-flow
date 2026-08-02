@@ -35,7 +35,7 @@
 ### 3.30 FR-S30: Stale Path Reference Cleanup in SDLC Artifacts
 
 - **Description:** SDLC documentation, task files, utility scripts, config, and agent prompts must contain zero deprecated `.flowai-workflow/` or `.flowai-workflow/agents/agent-*` path references. Additionally, FR-S23 ACs left `[ ]` by #97 (implementation done, bookkeeping skipped) must be marked `[x]` with evidence from `documents/design-sdlc.md`.
-- **Motivation:** ~60 stale `.flowai-workflow/` refs across SDLC artifacts cause navigation failures after #111 migration. FR-S23 ACs unstamped despite implementation complete per #97. `.flowai-workflow/agents/agent-*` refs in agent prompts couple them to Claude Code's internal path layout.
+- **Motivation:** ~60 stale `.flowai-workflow/` refs across SDLC artifacts cause navigation failures after #111 migration. FR-S23 ACs unstamped despite implementation complete per #97. `.flowai-workflow/<workflow>/agents/agent-*.md` refs in agent prompts couple them to Claude Code's internal path layout.
 - **Acceptance criteria:**
   - [x] Cleanup complete — zero deprecated path references in
     `documents/requirements-sdlc.md`, `agent-tech-lead.md`, or other

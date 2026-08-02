@@ -90,7 +90,7 @@
     Pre-existing uncommitted changes excluded by before/after diff (AC #5).
     Sub-second latency for ≤1000 tracked files (AC #6) — git index-based.
   - ~~`git.ts`~~ — **deleted** (FR-E14: domain-specific git code removed from
-    engine). Functions relocated to `.flowai-workflow/scripts/rollback-uncommitted.sh`.
+    engine). Functions relocated to `.flowai-workflow/<workflow>/scripts/rollback-uncommitted.sh`.
     Failure handling replaced by configurable `on_failure_script` hook
   - `output.ts` — terminal output manager (quiet/normal/semi-verbose/verbose),
     verbose methods for detailed agent-node diagnostics.

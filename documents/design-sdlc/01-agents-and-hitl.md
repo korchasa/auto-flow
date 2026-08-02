@@ -30,10 +30,10 @@
     failures.
 - **Deps:** `claude` CLI, `git`, `gh`.
 
-### 3.4 Agent Skills (`.flowai-workflow/agents/agent-*`) (FR-S17, FR-S26)
+### 3.4 Agent Skills (`.flowai-workflow/<workflow>/agents/agent-*.md`) (FR-S17, FR-S26)
 
 - **Purpose:** Versioned system prompts defining each agent's role and behavior.
-  Each agent lives in `.flowai-workflow/agents/agent-<name>/SKILL.md` (canonical
+  Each agent lives in `.flowai-workflow/<workflow>/agents/agent-<name>.md` (canonical
   location per FR-S26). Pipeline-driven: agent prompt files loaded via
   `{{file(...)}}` in the workflow's `system_prompt` field (FR-S38); per-task
   user message delivered via `prompt` field. Shared agent rules are inlined
@@ -46,7 +46,7 @@
   Legacy `.claude/skills/` symlinks removed per FR-S33 — interactive
   `/agent-<name>` slash commands no longer supported (workflow-only agents
   should not be exposed as interactive skills).
-- **Directory structure:** `.flowai-workflow/agents/agent-<name>/SKILL.md` — 6 agents:
+- **Directory structure:** `.flowai-workflow/<workflow>/agents/agent-<name>.md` — 6 agents:
   - `agent-pm` — triages open GitHub issues, selects highest-priority, produces
     spec. **Issue Author Filter (FR-S31):** PM filters candidates by author at
     two points: (1) `gh issue list --author korchasa` in STEP 2a (triage path),
@@ -94,7 +94,7 @@
   optimization removed due to unreviewed SKILL.md edit risk and marginal value.
   Superseded by two-layer per-agent reflection (FR-S32).
 - **Shared Reflection Protocol (FR-S32):**
-  `.flowai-workflow/agents/reflection-protocol.md` — single source of truth for
+  `.flowai-workflow/<workflow>/memory/reflection-protocol.md` — single source of truth for
   two-layer reflection protocol (MEMORY + HISTORY). Referenced by each agent's
   `## Reflection Memory` section in SKILL.md and reinforced via `task_template`
   in `workflow.yaml`. See §3.4.1 for details.
@@ -163,7 +163,7 @@
      (consolidated into workflow directory; `.claude/skills/agent-<name>`
      symlinks created for Claude Code discovery).
   3. FR-S33: `.claude/skills/agent-<name>` symlinks removed. Canonical path
-     `.flowai-workflow/agents/agent-<name>/SKILL.md` is sole discovery mechanism.
+     `.flowai-workflow/<workflow>/agents/agent-<name>.md` is sole discovery mechanism.
      `scripts/check.ts` symlink validation block removed (engine `loadConfig()`
      covers prompt file existence).
 - **Voice directive (FR-S20):** Each SKILL.md contains `## Voice` section
@@ -191,7 +191,7 @@
 - **Purpose:** Cross-run learning via per-agent memory and history files.
   Replaces single-layer reflection (FR-S28) with two-layer design (FR-S32).
   Eliminates meta-agent dependency — each agent manages its own learning.
-- **Shared Protocol:** `.flowai-workflow/agents/reflection-protocol.md` — single
+- **Shared Protocol:** `.flowai-workflow/<workflow>/memory/reflection-protocol.md` — single
   source of truth for the two-layer reflection protocol. Referenced by each
   agent's `## Reflection Memory` section in SKILL.md (~3-5 line reference
   block) and reinforced via `task_template` in `workflow.yaml`. Contains:
@@ -200,7 +200,7 @@
   - Lifecycle instructions
   - Size constraints
 - **Layer 1 — MEMORY** (edit-in-place operative knowledge):
-  - **Directory:** `.flowai-workflow/memory/` — 6 files, one per agent:
+  - **Directory:** `.flowai-workflow/<workflow>/memory/` — 6 files, one per agent:
     `agent-pm.md`, `agent-architect.md`, `agent-tech-lead.md`,
     `agent-developer.md`, `agent-qa.md`, `agent-tech-lead-review.md`.
   - **Lifecycle:** Read at session start → execute task → full rewrite at
@@ -208,7 +208,7 @@
   - **Content categories:** Anti-patterns encountered, effective strategies,
     environment quirks, baseline metrics.
 - **Layer 2 — HISTORY** (append-only run log):
-  - **Directory:** `.flowai-workflow/memory/` — 6 files:
+  - **Directory:** `.flowai-workflow/<workflow>/memory/` — 6 files:
     `agent-pm-history.md`, `agent-architect-history.md`, etc.
   - **Lifecycle:** Read at session start → append one entry at session end.
     FIFO trim to <=20 most recent entries.
@@ -218,9 +218,9 @@
     pattern identification across runs.
 - **SKILL.md integration:** Each agent's `## Reflection Memory` section
   replaced with ~3-5 line reference block:
-  - "Follow `.flowai-workflow/agents/reflection-protocol.md`."
-  - Memory path: `.flowai-workflow/memory/<agent>.md`
-  - History path: `.flowai-workflow/memory/<agent>-history.md`
+  - "Follow `.flowai-workflow/<workflow>/memory/reflection-protocol.md`."
+  - Memory path: `.flowai-workflow/<workflow>/memory/<agent>.md`
+  - History path: `.flowai-workflow/<workflow>/memory/<agent>-history.md`
   - Agent-specific HISTORY format hint.
 - **Pipeline integration:** Each agent's `task_template` in `workflow.yaml`
   includes both memory and history file paths as reinforcement.

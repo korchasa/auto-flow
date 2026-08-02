@@ -10,7 +10,7 @@
 - **Acceptance criteria:**
   - [x] `src/mod.ts` purpose documented via module-level JSDoc: barrel re-export for `deno doc --lint`. Evidence: `src/mod.ts:1`.
   - [x] `documents/rnd/human-in-the-loop.md` deleted — superseded by `src/hitl/hitl.ts` + SDS §5 HITL documentation. Evidence: file removed from repo.
-  - [x] Empty `.flowai-workflow/runs/*/implementation` directories are not git-tracked; `.gitignore` covers `runs/` directory.
+  - [x] Empty `.flowai-workflow/<workflow>/runs/*/implementation` directories are not git-tracked; `.gitignore` covers `runs/` directory.
 
 
 
@@ -43,7 +43,7 @@
 - **Description:** `deno.json` contains legacy test tasks (`test:pm`, `test:tech-lead`, etc.) referencing obsolete `.flowai-workflow/scripts/stage-*_test.ts` files superseded by the engine test suite. These tasks must be removed to keep the task list accurate.
 - **Motivation:** Stale tasks reference non-existent or inactive test files, pollute `deno task` output, and create false confidence that stage-level tests are running.
 - **Acceptance criteria:**
-  - [x] All `test:*` tasks in `deno.json` referencing `.flowai-workflow/scripts/stage-*_test.ts` paths are identified. Evidence: `deno.json` — no such tasks exist; active test tasks are `test`, `test:lib`, `test:engine` only.
+  - [x] All `test:*` tasks in `deno.json` referencing `.flowai-workflow/scripts/stage-*_test.ts` paths are identified. Evidence: `deno.json` — no such tasks exist; `test` is the only test task.
   - [x] All identified obsolete tasks are removed from `deno.json`. Evidence: `deno.json:6-18` — no `.flowai-workflow/scripts/stage-*_test.ts` references present.
 
 

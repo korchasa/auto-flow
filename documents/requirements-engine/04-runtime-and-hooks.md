@@ -189,7 +189,7 @@
 - **Acceptance criteria:**
   - **Tests:** `engine_test.ts` (FR-E19; regression-locked; no-op,
     success path, script failure warning, nonexistent script).
-  - [x] `.flowai-workflow/workflow.yaml` sets `on_failure_script:
+  - [x] `.flowai-workflow/<workflow>/workflow.yaml` sets `on_failure_script:
     .flowai-workflow/scripts/rollback-uncommitted.sh`. Evidence:
     `.flowai-workflow/workflow.yaml:18`.
   - [x] Engine does NOT import or call any git functions on failure.

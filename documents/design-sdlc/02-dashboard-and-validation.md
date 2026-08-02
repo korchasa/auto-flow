@@ -116,7 +116,7 @@
 
 ### 3.8 Pipeline Config Validation (FR-S24)
 
-- **Purpose:** Validate `.flowai-workflow/workflow.yaml` against engine schema as part
+- **Purpose:** Validate `.flowai-workflow/<workflow>/workflow.yaml` against engine schema as part
   of `deno task check`. Prevents config drift causing runtime failures.
 - **Implementation:** `workflowIntegrity()` in `scripts/check.ts` delegates to
   engine's `loadConfig()` (`config.ts`). The engine validation covers:

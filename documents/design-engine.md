@@ -22,8 +22,9 @@ across section files in [design-engine/](design-engine/) to fit within the
   Binary Compile Script, §3.6 Release CI Workflow.
 - [04-data-and-logic.md](design-engine/04-data-and-logic.md) — §4 Data
   (entities, inter-node data flow, validation rules), §5 Logic (all
-  algorithms, template resolution, error-handling precedence), §6
-  Non-Functional, §7 Constraints.
+  algorithms, template resolution, error-handling precedence).
 - [05-mcp-server.md](design-engine/05-mcp-server.md) — §5 Logic for the
   embedded MCP server (FR-E73): bootstrap, nine tool handlers (incl.
   FR-E84 `start_run`), transport selection, error mapping.
+- [06-non-functional-and-constraints.md](design-engine/06-non-functional-and-constraints.md) — §6
+  Non-Functional, §7 Constraints.

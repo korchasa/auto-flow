@@ -2,7 +2,7 @@
 
 # SDS Engine — Embedded MCP Server (FR-E73)
 
-Module: [`mcp-server.ts`](../../mcp-server.ts). Public entry:
+Module: [`mcp-server.ts`](../../src/mcp/mcp-server.ts). Public entry:
 `runMcpServer(workflowDir: string, options?: RunMcpServerOptions)`.
 Re-exported from `mod.ts`. Dispatched by `cli.ts` via the `mcp`
 subcommand (`flowai-workflow mcp <workflow>`).

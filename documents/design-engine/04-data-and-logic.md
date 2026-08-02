@@ -8,7 +8,7 @@
 - **Entities:**
   - Run Journal: JSONL (`<workflow>/runs/<run-id>/journal.jsonl`). Append-only
     recovery contract; replay derives `RunState` from empty memory (FR-E69).
-  - Pipeline Config: YAML (`.flowai-workflow/workflow.yaml`). Top-level keys: `name`,
+  - Pipeline Config: YAML (`.flowai-workflow/<workflow>/workflow.yaml`). Top-level keys: `name`,
     `version`, `defaults`, `phases`, `nodes`. `phases` key declares
     named phase groups with member stage IDs. Engine treats `phases` as opaque
     config data. `defaults.prepare_command` (FR-E30): optional string, shell
@@ -72,7 +72,7 @@
 
 - **Mechanism:** Filesystem-based. Each node reads input via `{{input.<node-id>}}`
   template variable pointing to predecessor's output directory. No manifest.
-- **Directory structure:** `.flowai-workflow/runs/<run-id>/[<phase>/]<node-id>/` per node
+- **Directory structure:** `.flowai-workflow/<workflow>/runs/<run-id>/[<phase>/]<node-id>/` per node
   output. Phase subdir present when node's `phase` field is set in config.
 - **Validation:** Engine validates output via configurable rules (file_exists,
   file_not_empty, contains_section, custom_script, frontmatter_field) after
@@ -294,10 +294,10 @@
     Workflow config example:
     ```yaml
     defaults:
-      on_failure_script: .flowai-workflow/scripts/rollback-uncommitted.sh
+      on_failure_script: .flowai-workflow/<workflow>/scripts/rollback-uncommitted.sh
       hitl:
-        ask_script: .flowai-workflow/scripts/hitl-ask.sh
-        check_script: .flowai-workflow/scripts/hitl-check.sh
+        ask_script: .flowai-workflow/<workflow>/scripts/hitl-ask.sh
+        check_script: .flowai-workflow/<workflow>/scripts/hitl-check.sh
         artifact_source: plan/pm/01-spec.md
         poll_interval: 60
         timeout: 7200
@@ -437,26 +437,3 @@
 - **Rules:**
   - Artifacts overwritten on re-run (git history preserves previous).
   - QA iteration numbering restarts on re-run.
-
-## 6. Non-Functional
-
-- **Scale:** Single workflow per run. Sequential stages (no parallel agents).
-- **Fault:** Node failure stops workflow (unless `on_error: continue`). Failure
-  reported via `journal.jsonl` replay. `on_error: continue` emits info log per
-  suppressed node (FR-E34). Configurable `on_failure_script` hook runs before
-  post-workflow nodes only when `workflowSuccess === false` (not when all
-  failures suppressed).
-- **Logs:** Full transcripts per node in `.flowai-workflow/runs/<run-id>/logs/`.
-
-## 7. Constraints
-
-- **Simplified:** Pipeline runs sequentially (no parallel stages in v1).
-- **Deferred:** Multi-repo support. Parallel workflows for multiple issues.
-  Issue size/complexity limits. Budget alerts/notifications (FR-E47 covers
-  enforcement only). Binary smoke tests in CI matrix. Package manager
-  distribution. Windows binaries. Auto-update. SHA256 release checksums.
-- **Deferred CLI flags per node:** Candidate flags need separate FRs after
-  validation (`--max-budget-usd`, `--json-schema`, `--fallback-model`,
-  `--name`, `--no-session-persistence`, `--settings`, `--mcp-config`,
-  `--worktree`). Shipped: `--effort` (FR-E42),
-  `--allowedTools`/`--disallowedTools` (FR-E48), `--permission-mode` (FR-E29).

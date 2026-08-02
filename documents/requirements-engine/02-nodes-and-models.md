@@ -24,12 +24,12 @@
     nodes:
       developer:
         type: agent
-        prompt: ".flowai-workflow/agents/agent-developer/SKILL.md"
+        prompt: ".flowai-workflow/<workflow>/agents/agent-developer.md"
         inputs: [architect, sds-update]
         ...
       qa:
         type: agent
-        prompt: ".flowai-workflow/agents/agent-qa/SKILL.md"
+        prompt: ".flowai-workflow/<workflow>/agents/agent-qa.md"
         inputs: [pm, architect, developer]
         ...
   ```
