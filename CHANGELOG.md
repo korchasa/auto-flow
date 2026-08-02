@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.8.6](https://github.com/korchasa/flowai-workflow/compare/v0.8.5...v0.8.6) (2026-08-02)
+
+
+### Features
+
+* **engine:** add runtime adapter injection seam for agent-less tests (FR-E86) ([3fb57c0](https://github.com/korchasa/flowai-workflow/commit/3fb57c065b670886832e2f3dc11e3db6471c4579))
+
+
+### Chores
+
+* **deps:** bump @korchasa/ai-ide-cli to ^0.8.11 ([ed3dba0](https://github.com/korchasa/flowai-workflow/commit/ed3dba0cd0a925714b507ff64ea1e4cf92e83ce5))
+
+
+### Documentation
+
+* **agents:** own the ai-ide-cli runtime layer end to end ([dd08b72](https://github.com/korchasa/flowai-workflow/commit/dd08b72bf982f6cf75865516984de24fa6a4a6cc))
+* **agents:** record the JSR index lag that blocks a fresh pin bump ([250e274](https://github.com/korchasa/flowai-workflow/commit/250e274b1dfa28a9b2f611e3c8cd92de1d35a54d))
+* **srs:** record that ACP session resume actually resumes since 0.8.11 ([89b3eed](https://github.com/korchasa/flowai-workflow/commit/89b3eed1a39273d6ba177297c7c8aea24a84f34a))
+* **tasks:** mark the observer-app task by what its DoD actually shows ([74842d4](https://github.com/korchasa/flowai-workflow/commit/74842d493774716a34b57cc2c2965a9a12e0e5f4))
+* **tasks:** record the native run observer app plan and its outcome ([9840093](https://github.com/korchasa/flowai-workflow/commit/9840093cb54504c87109d3a1d0cc97f0c54a0f9b))
+* **tasks:** record what the live checks found after the first handover ([cb3cde0](https://github.com/korchasa/flowai-workflow/commit/cb3cde0e95ef25f06da8b16c9a02ecedc95bd8d3))
+
+
+### Build System
+
+* **deps:** bump @korchasa/ai-ide-cli to ^0.8.12 ([42a2d35](https://github.com/korchasa/flowai-workflow/commit/42a2d35ede9f0f9f6ec5c9839c967ef613d56a14))
+
 ### [0.8.5](https://github.com/korchasa/flowai-workflow/compare/v0.8.4...v0.8.5) (2026-07-26)
 
 
