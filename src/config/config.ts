@@ -473,7 +473,7 @@ function validateNode(
     }
   }
 
-  const validTypes = ["agent", "command", "merge", "loop", "human"];
+  const validTypes = ["agent", "command", "merge", "loop", "human", "hitl"];
   if (!validTypes.includes(node.type as string)) {
     throw new Error(
       `Node '${id}' has invalid type '${node.type}'. Must be one of: ${
@@ -724,6 +724,29 @@ function validateNode(
     if (typeof node.question !== "string" || !node.question) {
       throw new Error(
         `Human node '${id}' requires a non-empty 'question' field`,
+      );
+    }
+  }
+
+  // FR-E93: a hitl node asks its question through the workflow's HITL
+  // transport instead of the terminal, but the question itself is just as
+  // mandatory.
+  if (type === "hitl") {
+    if (typeof node.question !== "string" || !node.question) {
+      throw new Error(
+        `Hitl node '${id}' requires a non-empty 'question' field`,
+      );
+    }
+    const questionErrors = validateTemplateVars(
+      node.question,
+      allNodeIds,
+      allowEach,
+    );
+    if (questionErrors.length > 0) {
+      throw new Error(
+        `Hitl node '${id}' question has invalid template variables: ${
+          questionErrors.join("; ")
+        }`,
       );
     }
   }

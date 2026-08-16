@@ -198,7 +198,7 @@ export interface ForEachConfig {
 export interface NodeConfig {
   /** Determines execution behavior: agent (runtime CLI), command (shell),
    * merge, loop, or human prompt. */
-  type: "agent" | "command" | "merge" | "loop" | "human";
+  type: "agent" | "command" | "merge" | "loop" | "human" | "hitl";
   /** Human-readable description shown in logs and status output. */
   label: string;
   /** Node IDs whose outputs this node depends on; defines DAG edges. */

@@ -240,3 +240,60 @@ isolation. Reference shapes are named per FR.
     one execution per item, per-item artifact directories under both `key_by`
     modes, `fail_fast` versus `collect`, empty and unreadable sources, config
     defaults, node-type restriction, `each.*` scope).
+
+### 3.93 FR-E93: Human Node Over the HITL Transport (`type: hitl`)
+
+- **Description:** A node MAY declare `type: hitl`. It asks its `question`
+  through the workflow's configured HITL transport (`defaults.hitl`
+  `ask_script`/`check_script`), waits for the answer, and writes it to
+  `<node-dir>/response.txt`.
+
+  **Config schema:**
+  ```yaml
+  approve-plan:
+    type: hitl
+    label: "Approve the plan"
+    inputs: [architect]
+    question: "Approve the plan for {{args.issue}}?"
+    options: ["approve", "reject"]
+    abort_on: ["reject"]
+  ```
+
+  **Relation to the two pre-existing human paths.** `type: human` prompts on
+  the terminal, so it only works while an operator sits at the run.
+  `defaults.hitl` handles a question an *agent* raised mid-invocation and
+  resumes that agent's session with the reply. `type: hitl` is neither: the
+  workflow author decides where the human belongs in the graph, and the answer
+  is an artifact rather than a resumed agent turn.
+
+  **Engine behaviour:**
+  - `question` is interpolated before delivery, and `options` travel with it in
+    the `--question-json` payload the `ask_script` receives.
+  - Two answer channels are polled until `defaults.hitl.timeout` elapses: the
+    local inbox (written by MCP `provide_human_input` / CLI `answer`) and
+    `check_script`. The inbox is read once before the first sleep, so an answer
+    that arrived ahead of the question is not delayed by a whole poll interval.
+  - A numeric reply resolves to the matching entry of `options`, matching
+    `type: human`.
+  - The reply is written to `<node-dir>/response.txt` — the same artifact
+    `type: human` produces, so a workflow can move from terminal prompting to
+    an external channel without touching its downstream nodes — and appended
+    to `<node-dir>/hitl.jsonl` for the audit trail.
+  - A reply listed in `abort_on` aborts the run, as with `type: human`.
+  - No answer within the timeout fails the node with `hitl_timeout`; a failing
+    `ask_script` fails it with the script's stderr; HITL scripts not configured
+    fail it naming `defaults.hitl`.
+- **Motivation:** An approval gate could be expressed only two ways, both
+  wrong for an unattended run: a terminal prompt that requires someone watching
+  the console, or an agent instructed to ask a question — which makes the model
+  responsible for a decision that was supposed to be the human's, and buries
+  the question inside an agent turn. The transport for asking a human already
+  existed; it was reachable only by agents.
+- **Dep:** FR-E89.
+- **Acceptance criteria:**
+  - **Tests:** `hitl-node_test.ts` (FR-E93; regression-locked; question
+    delivery and interpolation, reply capture, option-number resolution,
+    polling until an answer arrives, inbox precedence, `abort_on`, timeout,
+    ask-script failure, unconfigured transport, audit record).
+  - [x] Dispatch wired for the new node type. Evidence:
+    `src/engine/engine.ts:646`, `src/engine/node-dispatch.ts:570`.

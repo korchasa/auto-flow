@@ -332,7 +332,7 @@ export async function runHitlLoop(
  * file. `NotFound` is swallowed (no reply); a remove that races to
  * `NotFound` is also benign. Any other read error propagates — fail-fast.
  */
-async function readAndConsumeInbox(
+export async function readAndConsumeInbox(
   path: string,
 ): Promise<string | undefined> {
   let content: string;
@@ -360,7 +360,7 @@ async function readAndConsumeInbox(
  * Caller wraps `ctx.node_dir` with {@link workPath} before passing —
  * keeps FS I/O cwd-correct under worktree isolation (FR-E52).
  */
-async function appendHitlAuditRecord(
+export async function appendHitlAuditRecord(
   nodeDirAbs: string,
   question: HitlQuestion,
   reply: string,
@@ -389,7 +389,7 @@ async function appendHitlAuditRecord(
 }
 
 /** Build args array for ask/check scripts. */
-function buildScriptArgs(
+export function buildScriptArgs(
   type: "ask" | "check",
   runDir: string,
   runId: string,
@@ -421,7 +421,7 @@ function buildScriptArgs(
 }
 
 /** Default script runner — executes shell script via sh. */
-async function defaultScriptRunner(
+export async function defaultScriptRunner(
   path: string,
   args: string[],
   cwd?: string,
@@ -444,7 +444,7 @@ async function defaultScriptRunner(
  * trimmed stderr (capped at 500 chars to keep engine logs/state.json
  * compact). Without this, callers see only the exit code and cannot
  * diagnose the cause. */
-function formatScriptFailure(
+export function formatScriptFailure(
   scriptName: string,
   result: { exitCode: number; stderr?: string },
 ): string {
@@ -454,6 +454,6 @@ function formatScriptFailure(
   return `${scriptName} failed with exit code ${result.exitCode}: ${truncated}`;
 }
 
-function sleep(ms: number): Promise<void> {
+export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

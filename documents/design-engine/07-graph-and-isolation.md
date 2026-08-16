@@ -245,3 +245,53 @@ inside the block, and restricts the block to `agent` and `command` nodes.
 `merge`, `loop` and `human` are excluded deliberately: fanning out a merge has
 no meaning, and a fanned-out loop or human prompt would multiply a control
 structure rather than a unit of work.
+
+## 5. HITL Node (FR-E93)
+
+**Modules:** `src/hitl/hitl-node.ts` (new),
+`src/engine/node-dispatch.ts#executeHitlNode`, `src/engine/engine.ts`
+(`case "hitl"`).
+
+**Public surface:**
+
+```ts
+export interface HitlNodeResult {
+  success: boolean; response: string; aborted: boolean;
+  error?: string; error_category?: ErrorCategory;
+}
+export interface HitlNodeOptions {
+  nodeId: string; runDir: string;
+  scriptRunner?: ScriptRunner; cwd?: string; output?: OutputManager;
+}
+export function runHitlNode(
+  node: NodeConfig, ctx: TemplateContext,
+  config: HitlConfig | undefined, opts: HitlNodeOptions,
+): Promise<HitlNodeResult>;
+```
+
+**Reuse, not a second transport.** `hitl.ts`'s helpers — `buildScriptArgs`,
+`defaultScriptRunner`, `readAndConsumeInbox`, `appendHitlAuditRecord`,
+`formatScriptFailure`, `sleep` — became exported and are called from here, so
+a node-initiated question reaches the operator through exactly the same
+scripts, argument shape and inbox file as an agent-initiated one. What the new
+module does NOT reuse is `runHitlLoop`'s second half: there is no session to
+resume and no runtime to invoke, so the ACP capability check, MCP re-injection
+and resume call have no counterpart on this path.
+
+**`runDir` is an option, not `ctx.run_dir`.** The scripts run with cwd inside
+the worktree, where the workDir-relative run directory does not exist;
+`executeHitlNode` passes `resolve(getRunDir(...))`, mirroring
+`handleAgentHitl`. This also keeps `hitl-node.ts` clear of the FR-E52 audit's
+bare-`ctx.run_dir` rule.
+
+**Artifact compatibility with `type: human`.** The reply lands in
+`response.txt` under the node's directory and option numbers resolve to option
+text, so swapping `type: human` for `type: hitl` changes who is asked and how,
+not what downstream nodes read.
+
+**Abort handling.** `executeHitlNode` calls `markRunAborted` before failing the
+node, matching `executeHumanNode`. A human's "reject" is meant to stop the
+workflow; failing only that node would leave the rest of the level running.
+
+**Validation.** `validTypes` gains `"hitl"`, and the type-specific branch
+requires a non-empty `question` and validates its template variables.

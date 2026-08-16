@@ -73,6 +73,7 @@ import type { EngineContext } from "./node-dispatch.ts";
 import {
   executeAgentNode,
   executeCommandNode,
+  executeHitlNode,
   executeHumanNode,
   executeLoopNode,
   executeMergeNode,
@@ -689,6 +690,9 @@ export class Engine {
           break;
         case "human":
           success = await executeHumanNode(eng, nodeId, node);
+          break;
+        case "hitl":
+          success = await executeHitlNode(eng, nodeId, node);
           break;
         default:
           throw new Error(`Unknown node type: ${(node as NodeConfig).type}`);

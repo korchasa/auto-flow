@@ -95,7 +95,9 @@ example of engine usage.
 - **Node types:** `agent` (Claude CLI), `command` (shell command as a DAG
   node, FR-E88), `merge` (combine outputs), `loop` (iterative body with an
   exit condition — artifact-field triple or `until` shell predicate, FR-E87),
-  `human` (terminal prompt)
+  `human` (terminal prompt), `hitl` (asks a human through the workflow's HITL
+  transport, FR-E93). Any node may carry a `when:` gate (FR-E89); `agent` and
+  `command` nodes may fan out with `for_each:` (FR-E90)
 - **Inter-agent communication:** Structured artifacts in
   `<runs-dir>/<run-id>/<node-id>/`, linked via `{{input.<node-id>}}` templates
 - **Execution:** DAG topological sort into levels; levels run in order and one

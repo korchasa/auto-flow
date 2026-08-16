@@ -10,6 +10,8 @@ import { resolveBudget, resolveToolFilter } from "../config/config.ts";
 import { runWithGuardrail } from "../isolation/guardrail.ts";
 import { handleAgentHitl } from "../hitl/hitl-handler.ts";
 import { isHitlConfigured } from "../hitl/hitl.ts";
+import { runHitlNode } from "../hitl/hitl-node.ts";
+import { resolve } from "@std/path";
 import { runHuman } from "./human.ts";
 import { runCommandNode } from "./command.ts";
 import {
@@ -566,6 +568,50 @@ export async function executeCommandNode(
       );
       return false;
     }
+  }
+
+  return true;
+}
+
+/**
+ * Run a `type: hitl` node (FR-E93): ask a human through the workflow's HITL
+ * transport and wait for the answer.
+ *
+ * An abort answer aborts the whole run, matching `type: human` — the node
+ * exists to let a human stop the workflow, and a stop that only failed one
+ * node would leave the rest of the level running.
+ */
+export async function executeHitlNode(
+  eng: EngineContext,
+  nodeId: string,
+  node: NodeConfig,
+): Promise<boolean> {
+  const ctx = eng.buildContext(nodeId);
+  const result = await runHitlNode(
+    node,
+    ctx,
+    eng.config.defaults?.hitl,
+    {
+      nodeId,
+      // Absolute, for the same reason handleAgentHitl resolves it: the
+      // ask/check scripts run with cwd inside the worktree, where the
+      // workDir-relative run directory does not exist.
+      runDir: resolve(getRunDir(eng.state.run_id, eng.workflowDir)),
+      cwd: eng.workDir !== "." ? eng.workDir : undefined,
+      output: eng.output,
+    },
+  );
+
+  if (result.aborted) {
+    markRunAborted(eng.state);
+  }
+  if (!result.success) {
+    await eng.nodeFailed(
+      nodeId,
+      result.error ?? "HITL node failed",
+      result.error_category,
+    );
+    return false;
   }
 
   return true;
