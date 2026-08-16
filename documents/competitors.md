@@ -148,27 +148,97 @@ syntax pre-run.
 | **Portability unit** | workflow folder — `git mv` and it runs elsewhere | `.claude/workflows/*.js` | agent md + graph JSON | flow file | `.pi/workflows/` | recipe file + subrecipes |
 | **Loop primitive** | `loop` node, frontmatter exit condition, max iterations (FR-E10, FR-E35, FR-E36) | JS `while` | iteration budget | `loop` phase | edges back | none |
 
-**Bernstein on these axes** (kept out of the table for width). Node
-kinds: agent / command / loop. Transitions: declarative YAML DAG,
-validated up-front. Runtime lock: none — 49–51 wired adapters (Claude
-Code, Codex, Gemini CLI, Copilot CLI, Cursor, Aider, Goose, OpenCode,
-OpenHands, Amp, Ollama, …) plus a generic wrapper for any tool taking
-`--prompt`. Isolation: one git worktree per task, default-on, so
-parallelism is the default rather than an unsafe opt-in. Resume /
-determinism: no model in the coordination loop, so runs replay
-byte-identically; `replay list`, `replay latest --verify`, `lineage
-verify <run_id>`; non-determinism surfaces as a hash mismatch at the
-exact step. Audit: opt-in HMAC chain + Ed25519-signed run receipt
-binding journal head and lineage head, verifiable offline by a
-reviewer with just the file and a public key; `bench run --reliability
-k` seals a `pass^k` floor. Verification gates: a "Janitor" checks
-tests, lint, types, PII before merge. Deployment: cluster mode,
-air-gap, file-based state. Status: beta, solo-maintained.
-
 **Baton on these axes**: no graph — fixed poll → worktree → agent → PR
 pipeline; concurrency via a dispatcher; a reconciler detects stale
 runs; multi-turn retries. It is our `github-inbox` use case shipped as
 a product with the DAG removed.
+
+### Bernstein — Closest Peer, Detail
+
+Kept out of the table for width. Beta, solo-maintained, Apache-2.0.
+
+**Two surfaces, not one.** `bernstein.yaml` + `.sdd/backlog/` drive the
+planning path (LLM decomposition once, then pure Python). Separately
+`bernstein workflow` runs a manifest DAG — the direct analogue of our
+`workflow.yaml`:
+
+```yaml
+name: idea-to-pr
+version: "1.0.0"
+nodes:
+  - id: research
+    agent: manager
+    prompt: "Research the goal: {goal}"
+  - id: implement
+    depends_on: [research]
+    agent: backend
+    prompt: "Carry out the plan for: {goal}"
+    fresh_context: true
+    timeout_seconds: 3600
+  - id: tests
+    depends_on: [implement]
+    command: "pytest -x -q"
+```
+
+Node fields: `id`, `depends_on`, mutually exclusive `command` / `agent`,
+`prompt` (`{goal}` substituted), `loop: {until: "<bash predicate>",
+max_iterations: N}`, `fresh_context`, `timeout_seconds`; `interactive`
+is rejected at load. Runner topologically sorts and runs each satisfied
+layer concurrently on a thread pool.
+
+**Three cheap borrows.**
+
+1. Loop exit is an arbitrary shell predicate — re-fires until `until`
+   exits `0` or iterations run out. Replaces our three-field
+   `condition_node`/`condition_field`/`exit_value` and its
+   equality-only semantics, without introducing an expression
+   language.
+2. `command` is a first-class node with deps and its own timeout.
+   Ours lives outside the graph in `before`/`after`/
+   `prepare_command`/`custom_script`, which is where several of our
+   imperative escapes hide.
+3. `fresh_context` declares session carryover per loop node; ours is
+   implicit.
+
+**Where it is genuinely ahead — checkability, in layers.**
+
+- Deterministic tick loop: fetch open tasks → batch by role → route
+  models → spawn in per-task worktrees → watch heartbeats → hand to
+  verification. No model decides scheduling.
+- Lifecycle Governance Kernel: `open → claimed → completed → done`
+  plus `failed` / `decomposed`, every transition emitting a typed
+  `LifecycleEvent` that feeds audit and replay.
+- Two verification layers: a "Janitor" asserts concrete signals (file
+  exists, glob, test run, string present) rather than agent claims;
+  then quality gates (lint, types, PII, mutation testing, benchmark
+  regression) from `.bernstein/quality_gates.yaml`, blocking or
+  non-blocking, run in parallel. Stated split: janitor checks signals,
+  reviewer checks quality.
+- Always-on lineage spine; one Ed25519-signed receipt binds journal
+  head, spine head and the opt-in HMAC chain range. A reviewer
+  verifies offline with the file plus a public key; tampering exits 2
+  naming the first divergent step. `bench run --reliability k` seals a
+  `pass^k` floor.
+
+**Correction to the headline claim.** "Byte-identical replay" covers
+the *task graph*, not agent output — the docs promise replaying
+yesterday's plan yields yesterday's task graph. Its agents are as
+non-deterministic as ours. Our toposort is equally reproducible; the
+real gap is that Bernstein turned reproducibility into a *checkable*
+property (hashed journal, `replay latest --verify` recomputes the
+head, divergence named at a step) while our `journal.jsonl` (FR-E69)
+serves state reconstruction only. Closing this is an additive layer
+over the existing journal — per-event prev-hash, a recompute command,
+optionally a signature — not a redesign.
+
+**What stays ours against it.** Continuation inside a live agent
+session (a failed gate there means task retry or reroute to another
+model — work restarts); agent-initiated HITL; an external control
+plane that permits graph mutation; and portability — our workflow is a
+folder you `git mv`, its state lives in `.sdd/` beside the
+orchestrator. It has no HITL primitive, no conditional transitions and
+no dynamic fan-out either, so on graph expressiveness it is our equal
+or poorer — the peer to study there is Conductor.
 
 ## Where flowai-workflow Is Ahead
 
