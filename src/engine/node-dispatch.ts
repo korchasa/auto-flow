@@ -11,6 +11,12 @@ import { runWithGuardrail } from "../isolation/guardrail.ts";
 import { handleAgentHitl } from "../hitl/hitl-handler.ts";
 import { isHitlConfigured } from "../hitl/hitl.ts";
 import { runHuman } from "./human.ts";
+import { runCommandNode } from "./command.ts";
+import {
+  allPassed,
+  formatFailures,
+  runValidations,
+} from "../config/validate.ts";
 import {
   findDirtyMemoryFiles,
   formatMemoryViolation,
@@ -518,6 +524,53 @@ export async function executeLoopNode(
 }
 
 /** Prompt the user for input and abort the run if response matches abort_on. */
+/**
+ * Run a `type: command` node (FR-E88): execute the shell command, then apply
+ * the node's `validate` rules once.
+ *
+ * Unlike an agent node there is no continuation loop — a failed validation on
+ * a deterministic command means the command itself is wrong, and re-running it
+ * unchanged would produce the same artifacts.
+ */
+export async function executeCommandNode(
+  eng: EngineContext,
+  nodeId: string,
+  node: NodeConfig,
+): Promise<boolean> {
+  const ctx = eng.buildContext(nodeId);
+  const settings = node.settings as ResolvedNodeSettings;
+  const cwd = eng.workDir !== "." ? eng.workDir : undefined;
+
+  await eng.journal?.append({ kind: "attempt_started", node_id: nodeId });
+
+  const result = await runCommandNode(node, ctx, settings, cwd);
+  eng.output.status(nodeId, `$ ${result.resolved} → exit ${result.code}`);
+
+  if (!result.success) {
+    await eng.nodeFailed(
+      nodeId,
+      result.error ?? `Command failed with exit ${result.code}`,
+      result.error_category,
+    );
+    return false;
+  }
+
+  const rules = node.validate ?? [];
+  if (rules.length > 0) {
+    const results = await runValidations(rules, ctx, cwd);
+    if (!allPassed(results)) {
+      await eng.nodeFailed(
+        nodeId,
+        `Command succeeded but validation failed:\n${formatFailures(results)}`,
+        "validation_failed",
+      );
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export async function executeHumanNode(
   eng: EngineContext,
   nodeId: string,

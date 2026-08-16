@@ -120,7 +120,7 @@
   of `deno task check`. Prevents config drift causing runtime failures.
 - **Implementation:** `workflowIntegrity()` in `scripts/check.ts` delegates to
   engine's `loadConfig()` (`config.ts`). The engine validation covers:
-  - Node type validation (agent, merge, loop, human)
+  - Node type validation (agent, command, merge, loop, human)
   - Required field validation per node type
   - `inputs` reference validation (referenced nodes must exist)
   - `run_on` enum validation

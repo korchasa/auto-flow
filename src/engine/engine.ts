@@ -65,6 +65,7 @@ import { interpolate } from "../config/template.ts";
 import type { EngineContext } from "./node-dispatch.ts";
 import {
   executeAgentNode,
+  executeCommandNode,
   executeHumanNode,
   executeLoopNode,
   executeMergeNode,
@@ -550,6 +551,9 @@ export class Engine {
           success = lastAgentResult?.success === true;
           break;
         }
+        case "command":
+          success = await executeCommandNode(eng, nodeId, node);
+          break;
         case "merge":
           success = await executeMergeNode(eng, nodeId, node);
           break;

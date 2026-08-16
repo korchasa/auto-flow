@@ -65,3 +65,66 @@ isolation. Reference shapes are named per FR.
     scoping, fail-fast on unresolved variables, stderr capture, mutual
     exclusivity both ways, non-string and empty rejection, template
     validation at load, triple-path unchanged).
+
+### 3.88 FR-E88: Command Node (`type: command`)
+
+- **Description:** A node MAY declare `type: command` and carry a `command:`
+  string instead of a `prompt:`. The engine interpolates the command against
+  the node's template context, runs it through `bash -c` in the run's working
+  directory, and treats exit `0` as success. It is a full DAG citizen: it
+  takes `inputs:`, participates in levels, may sit inside a loop body, and
+  may carry `validate:` rules.
+
+  **Config schema:**
+  ```yaml
+  tests:
+    type: command
+    label: "Run the suite"
+    inputs: [developer]
+    command: "deno task check > {{node_dir}}/report.txt"
+    validate:
+      - type: file_not_empty
+        path: "{{node_dir}}/report.txt"
+  ```
+
+  **Field rules.** `command` is required, non-empty, and valid only on
+  `type: command` nodes — declaring it elsewhere is a load error rather than
+  a silently ignored key. A command node MUST NOT carry `prompt`. Template
+  variables in `command` are validated at config load, alongside the checks
+  already applied to agent prompts.
+
+  **Engine behaviour:**
+  - Artifacts: `stdout.txt`, `stderr.txt` and `exit_code.txt` are written into
+    the node's artifact directory on every run, success or failure, so
+    downstream `{{input.<node-id>}}` references and post-mortems see the same
+    bytes.
+  - `settings.timeout_seconds` applies. A command killed by the timeout fails
+    with `error_category: timeout`; a non-zero exit fails with
+    `command_failed`.
+  - `validate:` rules run once after a successful command. Failure yields
+    `error_category: validation_failed` — there is no continuation loop,
+    because re-running an unchanged deterministic command reproduces the same
+    artifacts.
+  - Cost, session id and result text stay undefined: a shell command has no
+    model output, and a synthetic zero-cost record would put fictional numbers
+    into the run summary.
+  - Inside a loop body the result is projected onto the same `AgentResult`
+    shape the loop's budget, journal and condition bookkeeping already use.
+- **Motivation:** Deterministic steps — run the suite, build, lint, publish —
+  were only expressible as `before`/`after` hooks bolted onto an agent node,
+  or as an agent instructed to run one command. The first hides the step from
+  the DAG (no id, no artifacts, no resume granularity, no place to hang
+  `validate`); the second spends a model call and a context window on work
+  with no judgement in it, and lets the agent misreport the outcome. Every
+  peer surveyed in [competitors.md](../competitors.md) ships a command step —
+  Bernstein `command`, Conductor's non-agent step types, goose recipe shell
+  steps.
+- **Dep:** FR-E87.
+- **Acceptance criteria:**
+  - **Tests:** `command_test.ts`, `config_command_node_test.ts` (FR-E88;
+    regression-locked; exit-code mapping, artifact persistence, interpolation,
+    cwd scoping, timeout, fail-fast on unresolved variables, wrong-type
+    rejection, field-rule validation at load, loop-body execution and
+    failure).
+  - [x] Dispatch wired for top-level nodes. Evidence:
+    `src/engine/engine.ts:553`, `src/engine/node-dispatch.ts:527`.

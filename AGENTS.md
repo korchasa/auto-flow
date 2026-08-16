@@ -92,8 +92,10 @@ example of engine usage.
 - **Core:** Domain-agnostic DAG executor engine (Deno/TypeScript modules
   under `src/`, grouped by domain — see Repo Layout). Reads YAML workflow
   configs. Entry: `deno task run [--prompt "..."]`
-- **Node types:** `agent` (Claude CLI), `merge` (combine outputs), `loop`
-  (iterative body with exit condition), `human` (terminal prompt)
+- **Node types:** `agent` (Claude CLI), `command` (shell command as a DAG
+  node, FR-E88), `merge` (combine outputs), `loop` (iterative body with an
+  exit condition — artifact-field triple or `until` shell predicate, FR-E87),
+  `human` (terminal prompt)
 - **Inter-agent communication:** Structured artifacts in
   `<runs-dir>/<run-id>/<node-id>/`, linked via `{{input.<node-id>}}` templates
 - **Execution:** DAG topological sort into levels; levels run in order and one

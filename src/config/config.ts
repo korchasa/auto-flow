@@ -367,6 +367,7 @@ const NODE_CONFIG_KEYS: readonly string[] = [
   "condition_field",
   "exit_value",
   "until",
+  "command",
   "max_iterations",
   "merge_strategy",
   "question",
@@ -398,7 +399,7 @@ function validateNode(
     }
   }
 
-  const validTypes = ["agent", "merge", "loop", "human"];
+  const validTypes = ["agent", "command", "merge", "loop", "human"];
   if (!validTypes.includes(node.type as string)) {
     throw new Error(
       `Node '${id}' has invalid type '${node.type}'. Must be one of: ${
@@ -438,6 +439,36 @@ function validateNode(
     if (!node.prompt) {
       throw new Error(
         `Agent node '${id}' requires a 'prompt' field`,
+      );
+    }
+  }
+
+  // FR-E88: `command` belongs to command nodes only. Silently ignoring it on
+  // an agent node would let a config author believe a shell step runs when
+  // nothing does.
+  if (type !== "command" && node.command !== undefined) {
+    throw new Error(
+      `Node '${id}' declares 'command', which is only valid on 'command' nodes`,
+    );
+  }
+
+  if (type === "command") {
+    if (typeof node.command !== "string" || !node.command) {
+      throw new Error(
+        `Command node '${id}' requires a non-empty 'command' field`,
+      );
+    }
+    if (node.prompt !== undefined) {
+      throw new Error(
+        `Command node '${id}' does not accept 'prompt' — it runs a shell command, not an agent`,
+      );
+    }
+    const commandErrors = validateTemplateVars(node.command, allNodeIds);
+    if (commandErrors.length > 0) {
+      throw new Error(
+        `Command node '${id}' has invalid template variables: ${
+          commandErrors.join("; ")
+        }`,
       );
     }
   }

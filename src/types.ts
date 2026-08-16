@@ -179,8 +179,9 @@ export interface WorkflowDefaults extends NodeSettings {
 
 /** Configuration for a single workflow node. */
 export interface NodeConfig {
-  /** Determines execution behavior: agent (Claude CLI), merge, loop, or human prompt. */
-  type: "agent" | "merge" | "loop" | "human";
+  /** Determines execution behavior: agent (runtime CLI), command (shell),
+   * merge, loop, or human prompt. */
+  type: "agent" | "command" | "merge" | "loop" | "human";
   /** Human-readable description shown in logs and status output. */
   label: string;
   /** Node IDs whose outputs this node depends on; defines DAG edges. */
@@ -209,6 +210,24 @@ export interface NodeConfig {
   runtime_args?: ExtraArgsMap;
   /** Permission mode override for this node (maps to --permission-mode CLI flag). */
   permission_mode?: PermissionMode;
+
+  // command-specific
+  /**
+   * Shell command executed as the node's whole work (FR-E88). Required for
+   * `type: command` and rejected on every other type.
+   *
+   * Runs through `bash -c` in the run's working directory, bounded by
+   * `settings.timeout_seconds`, with the full template surface available.
+   * stdout, stderr and the exit code are persisted as `stdout.txt`,
+   * `stderr.txt` and `exit_code.txt` in the node's artifact directory, so a
+   * downstream node can consume them through `{{input.<id>}}` exactly like an
+   * agent's output. Exit 0 is success; anything else fails the node with
+   * `error_category: "command_failed"`.
+   *
+   * Distinct from `before`/`after`, which are hooks bracketing another node's
+   * work and carry no dependencies, artifacts or validation of their own.
+   */
+  command?: string;
 
   // common
   /** Per-node execution settings (timeouts, retries, error handling). */
@@ -367,6 +386,11 @@ export interface ValidationRule {
 export type ErrorCategory =
   | "continuations_exhausted"
   | "timeout"
+  | "command_failed"
+  /** FR-E88: validation rules failed on a node that has no continuation path —
+   * a command node cannot be re-prompted, so `continuations_exhausted` would
+   * name a mechanism that never ran. */
+  | "validation_failed"
   | "cli_crash"
   | "stream_stall"
   | "hook_failure"

@@ -22,6 +22,12 @@ import { buildLoopBodyOrder } from "./dag.ts";
 import { interpolate } from "../config/template.ts";
 import { runAgent } from "./agent.ts";
 import type { AgentResult } from "./agent.ts";
+import { runCommandNode } from "./command.ts";
+import {
+  allPassed,
+  formatFailures,
+  runValidations,
+} from "../config/validate.ts";
 import {
   markNodeCompleted,
   markNodeFailed,
@@ -81,6 +87,51 @@ export async function evaluateUntilPredicate(
     code: output.code,
     stderr: new TextDecoder().decode(output.stderr),
   };
+}
+
+/**
+ * Run a `type: command` body node (FR-E88) and project its outcome onto
+ * `AgentResult`.
+ *
+ * The loop's bookkeeping — budget accounting, journal entries, condition
+ * extraction — is written against `AgentResult`; giving command nodes their own
+ * result shape would fork that logic in a dozen places for no gain. `output`
+ * stays undefined: a shell command has no session, no token cost and no model
+ * result text, and inventing a zero-cost `CliRunOutput` would put fictional
+ * numbers into the run summary.
+ */
+async function runCommandBodyNode(
+  bodyNode: NodeConfig,
+  ctx: TemplateContext,
+  settings: ResolvedNodeSettings,
+  cwd?: string,
+): Promise<AgentResult> {
+  const cmd = await runCommandNode(bodyNode, ctx, settings, cwd);
+  if (!cmd.success) {
+    return {
+      success: false,
+      continuations: 0,
+      error: cmd.error,
+      error_category: cmd.error_category,
+    };
+  }
+
+  const rules = bodyNode.validate ?? [];
+  if (rules.length > 0) {
+    const results = await runValidations(rules, ctx, cwd);
+    if (!allPassed(results)) {
+      return {
+        success: false,
+        continuations: 0,
+        error: `Command succeeded but validation failed:\n${
+          formatFailures(results)
+        }`,
+        error_category: "validation_failed",
+      };
+    }
+  }
+
+  return { success: true, continuations: 0 };
 }
 
 /** Result of a loop execution. */
@@ -351,27 +402,32 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         loopNode,
       );
 
-      let result = await runAgent({
-        node: bodyNode,
-        ctx,
-        settings,
-        runtime: runtimeConfig.runtime,
-        runtimeArgs: runtimeConfig.args,
-        permissionMode: runtimeConfig.permissionMode,
-        model: runtimeConfig.model,
-        reasoningEffort: runtimeConfig.reasoningEffort,
-        allowedTools: toolFilter.allowedTools,
-        disallowedTools: toolFilter.disallowedTools,
-        hitlConfig: config.defaults?.hitl,
-        runtimeAdapter: opts.runtimeAdapter,
-        output: opts.output,
-        nodeId: bodyNodeId,
-        streamLogPath,
-        verbosity: opts.verbosity,
-        cwd: opts.cwd,
-        maxTurns: resolvedBudget?.max_turns,
-        processRegistry: opts.processRegistry,
-      });
+      // FR-E88: a command body node runs a shell command instead of an agent.
+      // Its outcome is projected onto AgentResult so the surrounding
+      // bookkeeping (budget, journal, condition extraction) stays uniform.
+      let result: AgentResult = bodyNode.type === "command"
+        ? await runCommandBodyNode(bodyNode, ctx, settings, opts.cwd)
+        : await runAgent({
+          node: bodyNode,
+          ctx,
+          settings,
+          runtime: runtimeConfig.runtime,
+          runtimeArgs: runtimeConfig.args,
+          permissionMode: runtimeConfig.permissionMode,
+          model: runtimeConfig.model,
+          reasoningEffort: runtimeConfig.reasoningEffort,
+          allowedTools: toolFilter.allowedTools,
+          disallowedTools: toolFilter.disallowedTools,
+          hitlConfig: config.defaults?.hitl,
+          runtimeAdapter: opts.runtimeAdapter,
+          output: opts.output,
+          nodeId: bodyNodeId,
+          streamLogPath,
+          verbosity: opts.verbosity,
+          cwd: opts.cwd,
+          maxTurns: resolvedBudget?.max_turns,
+          processRegistry: opts.processRegistry,
+        });
 
       // The agent asked a human something. Its artifact does not exist yet,
       // so treating this as success would corrupt the iteration.
