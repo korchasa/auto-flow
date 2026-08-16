@@ -128,3 +128,51 @@ isolation. Reference shapes are named per FR.
     failure).
   - [x] Dispatch wired for top-level nodes. Evidence:
     `src/engine/engine.ts:553`, `src/engine/node-dispatch.ts:527`.
+
+### 3.89 FR-E89: Conditional Node Execution (`when`)
+
+- **Description:** Any node MAY carry `when: "<shell predicate>"`. The engine
+  evaluates it immediately before the node would run: exit `0` runs the node,
+  any other code skips it. The skip propagates — every node that lists a
+  gated-out node in its `inputs` is skipped too, transitively.
+
+  **Config schema:**
+  ```yaml
+  hotfix-review:
+    type: agent
+    label: "Extra review for hotfixes"
+    inputs: [developer]
+    when: "test '{{args.kind}}' = hotfix"
+    prompt: "Review the hotfix."
+  ```
+
+  **Engine behaviour:**
+  - The predicate runs through `bash -c` in the run's working directory (the
+    worktree when isolation is on) with the node's full template context:
+    `{{args.*}}`, `{{env.*}}`, `{{input.*}}`, `{{node_dir}}`, `{{run_dir}}`,
+    and `{{loop.iteration}}` for body nodes.
+  - A gated-out node reaches status `skipped`, not `failed`; the run's own
+    status is unaffected and downstream levels continue.
+  - Skip propagation is scoped to `when` gates. `--skip` and `--only` also
+    produce `skipped` nodes, but those mean "the operator handled this
+    already", so their dependents keep running — the existing behaviour is
+    unchanged.
+  - Inside a loop body the gate is re-evaluated on every iteration, and the
+    within-iteration propagation resets each time: a node skipped on iteration
+    1 runs on iteration 2 if its predicate then passes.
+  - An unresolvable template variable throws rather than degrading into a gate
+    that always closes.
+- **Motivation:** Every branch was an unconditional node, so a workflow that
+  should take one of two paths had to run both and instruct the unwanted one
+  to do nothing — spending a model call and a context window on a no-op, and
+  trusting the agent to actually no-op. Conductor expresses this as
+  `routes: [{to, when}]` and pi-workflows as `decisionEdge`; the node-level
+  form fits this engine's `inputs:`-based edges, where an edge has no config
+  object of its own to hang a predicate on.
+- **Dep:** FR-E87.
+- **Acceptance criteria:**
+  - **Tests:** `when_test.ts`, `config_when_test.ts` (FR-E89;
+    regression-locked; gate open and closed, transitive skip, argument
+    interpolation, gated branch is not a run failure, per-iteration
+    re-evaluation in a loop body, non-empty-string and template validation at
+    load).

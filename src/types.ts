@@ -279,6 +279,12 @@ export interface NodeConfig {
    * `phases:` config. When absent, flat `<runDir>/<nodeId>/` is used. */
   phase?: string;
 
+  /** FR-E89: shell predicate gating this node. Evaluated immediately before
+   * the node would run; exit 0 runs it, any other code skips it — and the skip
+   * propagates to every node downstream of it. Unlike `run_on` (which selects
+   * post-workflow nodes by run outcome) this is an ordinary in-graph branch. */
+  when?: string;
+
   // post-workflow execution
   /** When set, node executes after all DAG levels complete.
    * "always" = regardless of outcome, "success" = only on success, "failure" = only on failure. */

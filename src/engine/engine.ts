@@ -23,6 +23,7 @@ import {
 } from "../config/config.ts";
 import { resolveRuntimeConfig } from "@korchasa/ai-ide-cli/runtime";
 import { buildLevels } from "./dag.ts";
+import { evaluateShellPredicate } from "./predicate.ts";
 import { terminalInput } from "./human.ts";
 import type { UserInput } from "./human.ts";
 import { acquireLock, defaultLockPath, releaseLock } from "../state/lock.ts";
@@ -101,6 +102,11 @@ export class Engine {
    * phase` mappings isolated. Defaults to an empty registry until the run
    * starts (so dry-run path computations behave as before). */
   private phaseRegistry: PhaseRegistry = PhaseRegistry.empty();
+  /** Nodes skipped by an FR-E89 `when` gate during this run. Kept apart from
+   * the `skipped` node status, which also covers `--skip`/`--only`: those are
+   * an operator saying "I already handled this", and their dependents must
+   * still run. A `when` skip means the branch was not taken. */
+  private whenSkipped = new Set<string>();
 
   /** Create an engine instance with the given options and optional user-input provider. */
   constructor(options: EngineOptions, userInput: UserInput = terminalInput) {
@@ -459,6 +465,40 @@ export class Engine {
         this.output.nodeSkipped(id, "not in --only");
         continue;
       }
+
+      // FR-E89: a node downstream of an untaken branch is itself untaken. Its
+      // `{{input.<id>}}` references have no artifacts to resolve, so running it
+      // could only fail — and only after spending an agent call to get there.
+      const gatedInput = (this.config.nodes[id].inputs ?? []).find((inputId) =>
+        this.whenSkipped.has(inputId)
+      );
+      if (gatedInput !== undefined) {
+        this.whenSkipped.add(id);
+        await this.nodeSkipped(id);
+        this.output.nodeSkipped(id, `input '${gatedInput}' was skipped`);
+        continue;
+      }
+
+      const when = this.config.nodes[id].when;
+      if (when !== undefined) {
+        const predicate = await evaluateShellPredicate(
+          when,
+          this.buildContext(id),
+          this.workDir !== "." ? this.workDir : undefined,
+        );
+        if (!predicate.satisfied) {
+          this.whenSkipped.add(id);
+          await this.nodeSkipped(id);
+          this.output.nodeSkipped(
+            id,
+            `when predicate exited ${predicate.code}${
+              predicate.stderr.trim() ? `: ${predicate.stderr.trim()}` : ""
+            }`,
+          );
+          continue;
+        }
+      }
+
       filtered.push(id);
     }
 

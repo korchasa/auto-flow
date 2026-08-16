@@ -368,6 +368,7 @@ const NODE_CONFIG_KEYS: readonly string[] = [
   "exit_value",
   "until",
   "command",
+  "when",
   "max_iterations",
   "merge_strategy",
   "question",
@@ -439,6 +440,24 @@ function validateNode(
     if (!node.prompt) {
       throw new Error(
         `Agent node '${id}' requires a 'prompt' field`,
+      );
+    }
+  }
+
+  // FR-E89: `when` gates any node type, so it is checked before the
+  // type-specific branches.
+  if (node.when !== undefined) {
+    if (typeof node.when !== "string" || !node.when) {
+      throw new Error(
+        `Node '${id}' 'when' must be a non-empty string (a shell predicate)`,
+      );
+    }
+    const whenErrors = validateTemplateVars(node.when, allNodeIds);
+    if (whenErrors.length > 0) {
+      throw new Error(
+        `Node '${id}' 'when' has invalid template variables: ${
+          whenErrors.join("; ")
+        }`,
       );
     }
   }

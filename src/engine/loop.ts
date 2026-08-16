@@ -19,10 +19,13 @@ import type {
 } from "../types.ts";
 import type { RuntimeAdapter } from "@korchasa/ai-ide-cli/runtime/types";
 import { buildLoopBodyOrder } from "./dag.ts";
-import { interpolate } from "../config/template.ts";
 import { runAgent } from "./agent.ts";
 import type { AgentResult } from "./agent.ts";
 import { runCommandNode } from "./command.ts";
+import {
+  evaluateShellPredicate,
+  type ShellPredicateResult,
+} from "./predicate.ts";
 import {
   allPassed,
   formatFailures,
@@ -31,6 +34,7 @@ import {
 import {
   markNodeCompleted,
   markNodeFailed,
+  markNodeSkipped,
   markNodeStarted,
   workPath,
 } from "../state/state.ts";
@@ -47,14 +51,7 @@ export type LoopExitReason =
   | "budget_preempt";
 
 /** Outcome of one FR-E87 `until` predicate evaluation. */
-export interface UntilPredicateResult {
-  /** True when the predicate exited 0 — the loop may stop. */
-  satisfied: boolean;
-  /** Raw exit code, surfaced in loop diagnostics. */
-  code: number;
-  /** Captured stderr, so a broken predicate names itself in the failure. */
-  stderr: string;
-}
+export type UntilPredicateResult = ShellPredicateResult;
 
 /**
  * Evaluate a loop's FR-E87 `until` predicate.
@@ -63,30 +60,19 @@ export interface UntilPredicateResult {
  * `{{node_dir}}` and friends resolve), then run through `bash -c`. Exit 0
  * means "stop looping"; any other code means "run another iteration".
  *
- * Unresolved template variables propagate as a thrown error rather than
- * degrading into a predicate that silently never matches.
+ * Thin alias over {@link evaluateShellPredicate}: the mechanism is shared with
+ * FR-E89's `when` gate, but the loop's vocabulary ("until") is worth keeping at
+ * its call sites.
  *
  * @param cwd working directory for the predicate — the run's worktree when
  *   isolation is on, otherwise the engine CWD.
  */
-export async function evaluateUntilPredicate(
+export function evaluateUntilPredicate(
   command: string,
   ctx: TemplateContext,
   cwd?: string,
 ): Promise<UntilPredicateResult> {
-  const resolved = interpolate(command, ctx, cwd ?? ctx.workDir);
-  const output = await new Deno.Command("bash", {
-    args: ["-c", resolved],
-    cwd: cwd ?? Deno.cwd(),
-    stdout: "piped",
-    stderr: "piped",
-  }).output();
-
-  return {
-    satisfied: output.code === 0,
-    code: output.code,
-    stderr: new TextDecoder().decode(output.stderr),
-  };
+  return evaluateShellPredicate(command, ctx, cwd);
 }
 
 /**
@@ -368,12 +354,44 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
     opts.onIteration?.(iteration, maxIterations);
     await opts.onIterationStarted?.(iteration, maxIterations);
     let iterCost = 0;
+    // FR-E89 gates are re-evaluated every iteration: a body node skipped on
+    // iteration 1 may well run on iteration 2, which is the whole point of
+    // gating inside a loop.
+    const skippedThisIteration = new Set<string>();
 
     // Run each body node in order (from inline nodes sub-object)
     for (const bodyNodeId of bodyOrder) {
       const bodyNode = loopNode.nodes![bodyNodeId];
       const settings = bodyNode.settings as ResolvedNodeSettings;
       const ctx = opts.buildCtx(bodyNodeId, iteration);
+
+      // FR-E89: gate the body node, and carry the skip to its dependents
+      // within this iteration.
+      const gatedInput = (bodyNode.inputs ?? []).find((inputId) =>
+        skippedThisIteration.has(inputId)
+      );
+      if (gatedInput !== undefined) {
+        skippedThisIteration.add(bodyNodeId);
+        markNodeSkipped(state, bodyNodeId);
+        continue;
+      }
+      if (bodyNode.when !== undefined) {
+        const predicate = await evaluateShellPredicate(
+          bodyNode.when,
+          ctx,
+          opts.cwd,
+        );
+        if (!predicate.satisfied) {
+          skippedThisIteration.add(bodyNodeId);
+          markNodeSkipped(state, bodyNodeId);
+          opts.output?.status(
+            bodyNodeId,
+            `skipped: when predicate exited ${predicate.code}`,
+          );
+          continue;
+        }
+      }
+
       const runtimeConfig = resolveRuntimeConfig({
         defaults: config.defaults,
         node: bodyNode,

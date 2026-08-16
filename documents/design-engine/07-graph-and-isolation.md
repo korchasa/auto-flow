@@ -141,3 +141,42 @@ summary as a real measurement.
 `command` present on a non-command node → reject; command node without a
 non-empty string `command` → reject; command node carrying `prompt` →
 reject; `validateTemplateVars(node.command)` must pass.
+
+## 3. Conditional Node Execution (FR-E89)
+
+**Modules:** `src/engine/predicate.ts` (new, shared with FR-E87),
+`src/engine/engine.ts#executeLevel`, `src/engine/loop.ts` (body-node gate).
+
+**Shared predicate.** FR-E87's `evaluateUntilPredicate` and FR-E89's `when`
+are the same mechanism — interpolate, `bash -c`, exit 0 means yes. The
+implementation moved to `evaluateShellPredicate` in `predicate.ts`;
+`evaluateUntilPredicate` is now a thin wrapper that keeps the loop's
+vocabulary at its call sites and its FR-E87 tests intact.
+
+**Where the gate sits.** In `executeLevel`'s filter loop, after the
+`--skip`/`--only` filters and before `executeNode`. Levels run in dependency
+order, so by the time a node's level runs, every one of its inputs has already
+been decided — no extra pass is needed to know whether an input was gated out.
+
+**Two skip vocabularies.** `NodeStatus.skipped` already covers `--skip` and
+`--only`. Those mean "the operator handled this", and their dependents must
+still run; changing that would break existing resume workflows. So FR-E89
+keeps its own `Engine#whenSkipped: Set<string>` and propagates only from it. A
+node whose `inputs` intersect that set is added to the set and skipped with
+the offending input named.
+
+The set is in-memory and per-run. On resume, non-completed nodes are
+re-evaluated from scratch — including their gates — which is the correct
+reading: a predicate over the working tree may legitimately answer differently
+after the fix that prompted the resume.
+
+**Loop bodies.** `runLoop` keeps a `skippedThisIteration` set, allocated fresh
+at the top of each iteration, and applies the same two checks (input-gated,
+then own predicate) before the agent/command branch. Resetting per iteration is
+the point: a gate that closed on iteration 1 is expected to open later, which
+is precisely why one would gate inside a loop.
+
+**Validation (`src/config/config.ts`, `validateNode`).** `when` is checked
+before the type-specific branches, since it applies to every node type:
+non-empty string, and `validateTemplateVars` must accept it. `NODE_CONFIG_KEYS`
+gains `"when"`.
