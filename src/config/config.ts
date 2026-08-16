@@ -366,6 +366,7 @@ const NODE_CONFIG_KEYS: readonly string[] = [
   "condition_node",
   "condition_field",
   "exit_value",
+  "until",
   "max_iterations",
   "merge_strategy",
   "question",
@@ -450,21 +451,62 @@ function validateNode(
         `Loop node '${id}' requires a non-empty 'nodes' sub-object`,
       );
     }
-    if (typeof node.condition_node !== "string") {
-      throw new Error(`Loop node '${id}' requires 'condition_node'`);
+    // FR-E87: a loop declares its exit EITHER as a shell predicate (`until`)
+    // OR as the artifact-field triple. Accepting both would leave the engine
+    // guessing which one wins; accepting neither would silently run to
+    // max_iterations every time.
+    const TRIPLE_KEYS = [
+      "condition_node",
+      "condition_field",
+      "exit_value",
+    ] as const;
+    const hasUntil = node.until !== undefined;
+    const declaredTriple = TRIPLE_KEYS.filter((k) => node[k] !== undefined);
+
+    if (hasUntil && declaredTriple.length > 0) {
+      throw new Error(
+        `Loop node '${id}': 'until' and the condition triple (${
+          declaredTriple.join(", ")
+        }) are mutually exclusive — declare the exit either as a shell predicate or as an artifact-field match`,
+      );
     }
-    if (typeof node.condition_field !== "string") {
-      throw new Error(`Loop node '${id}' requires 'condition_field'`);
+    if (!hasUntil && declaredTriple.length === 0) {
+      throw new Error(
+        `Loop node '${id}' requires either 'until' (a shell predicate) or the 'condition_node'/'condition_field'/'exit_value' triple`,
+      );
     }
-    if (typeof node.exit_value !== "string") {
-      throw new Error(`Loop node '${id}' requires 'exit_value'`);
+
+    if (hasUntil) {
+      if (typeof node.until !== "string" || !node.until) {
+        throw new Error(
+          `Loop node '${id}' 'until' must be a non-empty string (a shell predicate)`,
+        );
+      }
+      const untilErrors = validateTemplateVars(node.until, allNodeIds);
+      if (untilErrors.length > 0) {
+        throw new Error(
+          `Loop node '${id}' 'until' has invalid template variables: ${
+            untilErrors.join("; ")
+          }`,
+        );
+      }
+    } else {
+      if (typeof node.condition_node !== "string") {
+        throw new Error(`Loop node '${id}' requires 'condition_node'`);
+      }
+      if (typeof node.condition_field !== "string") {
+        throw new Error(`Loop node '${id}' requires 'condition_field'`);
+      }
+      if (typeof node.exit_value !== "string") {
+        throw new Error(`Loop node '${id}' requires 'exit_value'`);
+      }
     }
 
     const bodyNodes = node.nodes as Record<string, unknown>;
     const bodyNodeIds = Object.keys(bodyNodes);
 
     // condition_node must reference a key in nodes
-    if (!bodyNodeIds.includes(node.condition_node as string)) {
+    if (!hasUntil && !bodyNodeIds.includes(node.condition_node as string)) {
       throw new Error(
         `Loop node '${id}' condition_node '${node.condition_node}' must be a key in 'nodes'`,
       );
@@ -525,13 +567,14 @@ function validateNode(
     // Validate condition_field vs frontmatter_field in condition node (FR-E36):
     // If condition node declares a validate block, it must include a frontmatter_field
     // rule whose 'field' matches condition_field — fail fast on misconfigured workflows.
-    // Skip if condition node has no validate block (no contract to enforce).
-    const condNodeRaw = bodyNodes[node.condition_node as string] as Record<
-      string,
-      unknown
-    >;
+    // Skip if condition node has no validate block (no contract to enforce),
+    // and skip entirely for FR-E87 `until` loops, which have no condition node.
+    const condNodeRaw = hasUntil
+      ? undefined
+      : bodyNodes[node.condition_node as string] as Record<string, unknown>;
     if (
-      Array.isArray(condNodeRaw.validate) && condNodeRaw.validate.length > 0
+      condNodeRaw && Array.isArray(condNodeRaw.validate) &&
+      condNodeRaw.validate.length > 0
     ) {
       const rules = condNodeRaw.validate as Array<Record<string, unknown>>;
       const hasMatchingRule = rules.some(

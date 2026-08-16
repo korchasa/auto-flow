@@ -229,6 +229,17 @@ export interface NodeConfig {
   condition_field?: string;
   /** Value that triggers loop termination when matched by condition_field. */
   exit_value?: string;
+  /**
+   * Shell predicate evaluated after every iteration (FR-E87). Exit code 0
+   * ends the loop; any other code starts the next iteration. Runs through
+   * `bash -c` with cwd = the run's working directory, and supports the full
+   * template surface (`{{loop.iteration}}`, `{{node_dir}}`, `{{env.*}}`, …).
+   *
+   * Mutually exclusive with the `condition_node`/`condition_field`/
+   * `exit_value` triple: a loop declares its exit either as "this artifact
+   * field equals this value" or as "this command succeeds", never both.
+   */
+  until?: string;
   /** Safety cap on loop iterations to prevent infinite execution. */
   max_iterations?: number;
 

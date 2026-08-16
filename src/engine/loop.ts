@@ -19,6 +19,7 @@ import type {
 } from "../types.ts";
 import type { RuntimeAdapter } from "@korchasa/ai-ide-cli/runtime/types";
 import { buildLoopBodyOrder } from "./dag.ts";
+import { interpolate } from "../config/template.ts";
 import { runAgent } from "./agent.ts";
 import type { AgentResult } from "./agent.ts";
 import {
@@ -35,8 +36,52 @@ import { resolveBudget, resolveToolFilter } from "../config/config.ts";
 /** Reason a loop exited. Undefined on failure. */
 export type LoopExitReason =
   | "exit_value"
+  | "until_satisfied"
   | "max_iterations"
   | "budget_preempt";
+
+/** Outcome of one FR-E87 `until` predicate evaluation. */
+export interface UntilPredicateResult {
+  /** True when the predicate exited 0 — the loop may stop. */
+  satisfied: boolean;
+  /** Raw exit code, surfaced in loop diagnostics. */
+  code: number;
+  /** Captured stderr, so a broken predicate names itself in the failure. */
+  stderr: string;
+}
+
+/**
+ * Evaluate a loop's FR-E87 `until` predicate.
+ *
+ * The command is template-interpolated first (so `{{loop.iteration}}`,
+ * `{{node_dir}}` and friends resolve), then run through `bash -c`. Exit 0
+ * means "stop looping"; any other code means "run another iteration".
+ *
+ * Unresolved template variables propagate as a thrown error rather than
+ * degrading into a predicate that silently never matches.
+ *
+ * @param cwd working directory for the predicate — the run's worktree when
+ *   isolation is on, otherwise the engine CWD.
+ */
+export async function evaluateUntilPredicate(
+  command: string,
+  ctx: TemplateContext,
+  cwd?: string,
+): Promise<UntilPredicateResult> {
+  const resolved = interpolate(command, ctx, cwd ?? ctx.workDir);
+  const output = await new Deno.Command("bash", {
+    args: ["-c", resolved],
+    cwd: cwd ?? Deno.cwd(),
+    stdout: "piped",
+    stderr: "piped",
+  }).output();
+
+  return {
+    satisfied: output.code === 0,
+    code: output.code,
+    stderr: new TextDecoder().decode(output.stderr),
+  };
+}
 
 /** Result of a loop execution. */
 export interface LoopResult {
@@ -225,6 +270,11 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
   }
 
   const maxIterations = loopNode.max_iterations ?? 3;
+  // FR-E87: the exit contract is either a shell predicate or the artifact
+  // triple — never both. The config validator guarantees exactly one is set.
+  const untilPredicate = loopNode.until;
+  const usesUntil = typeof untilPredicate === "string" &&
+    untilPredicate.length > 0;
   const conditionNode = loopNode.condition_node!;
   const conditionField = loopNode.condition_field!;
   const exitValue = loopNode.exit_value!;
@@ -454,6 +504,53 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
     totalLoopCost += iterCost;
     completedIterations = iteration;
 
+    // FR-E87 exit path: run the shell predicate instead of reading an
+    // artifact field. A predicate that cannot even be interpolated fails the
+    // loop rather than looping forever on an unevaluable condition.
+    if (usesUntil) {
+      let predicate: UntilPredicateResult;
+      try {
+        predicate = await evaluateUntilPredicate(
+          untilPredicate!,
+          opts.buildCtx(loopNodeId, iteration),
+          opts.cwd,
+        );
+      } catch (e) {
+        const msg =
+          `Loop '${loopNodeId}': until predicate could not be evaluated: ${
+            e instanceof Error ? e.message : String(e)
+          }`;
+        await opts.onIterationFailed?.(iteration, msg);
+        return {
+          success: false,
+          iterations: iteration,
+          error: msg,
+          lastConditionValue,
+          bodyResults,
+        };
+      }
+
+      lastConditionValue = `exit ${predicate.code}`;
+      if (predicate.satisfied) {
+        await opts.onIterationCompleted?.(iteration);
+        return {
+          success: true,
+          iterations: iteration,
+          lastConditionValue,
+          bodyResults,
+          exit_reason: "until_satisfied",
+        };
+      }
+      opts.output?.status(
+        loopNodeId,
+        `until predicate not satisfied (exit ${predicate.code})${
+          predicate.stderr.trim() ? `: ${predicate.stderr.trim()}` : ""
+        }`,
+      );
+      await opts.onIterationCompleted?.(iteration);
+      continue;
+    }
+
     // Check exit condition (condition node is in inline nodes sub-object).
     // extractConditionValue throws (FR-E36) if field is missing — treat as loop failure.
     let conditionValue: string;
@@ -493,16 +590,21 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
     await opts.onIterationCompleted?.(iteration);
   }
 
+  const exhaustion =
+    `Loop '${loopNodeId}' reached max iterations (${maxIterations}) without exit condition. ${
+      usesUntil
+        ? `Last until predicate '${untilPredicate}' ended with ${lastConditionValue}, expected exit 0`
+        : `Last ${conditionField}=${lastConditionValue}, expected ${exitValue}`
+    }`;
   await opts.onIterationFailed?.(
     maxIterations,
-    `Loop '${loopNodeId}' reached max iterations (${maxIterations}) without exit condition. Last ${conditionField}=${lastConditionValue}, expected ${exitValue}`,
+    exhaustion,
     "continuations_exhausted",
   );
   return {
     success: false,
     iterations: maxIterations,
-    error:
-      `Loop '${loopNodeId}' reached max iterations (${maxIterations}) without exit condition. Last ${conditionField}=${lastConditionValue}, expected ${exitValue}`,
+    error: exhaustion,
     error_category: "continuations_exhausted",
     lastConditionValue,
     bodyResults,

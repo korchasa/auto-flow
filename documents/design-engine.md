@@ -28,3 +28,7 @@ across section files in [design-engine/](design-engine/) to fit within the
   FR-E84 `start_run`), transport selection, error mapping.
 - [06-non-functional-and-constraints.md](design-engine/06-non-functional-and-constraints.md) — §6
   Non-Functional, §7 Constraints.
+- [07-graph-and-isolation.md](design-engine/07-graph-and-isolation.md) —
+  Design for the peer-comparison additions FR-E87..FR-E93: shell-predicate
+  loop exit, command node, conditional edges, data-driven fan-out, per-node
+  worktree, journal hash chain, HITL node type.

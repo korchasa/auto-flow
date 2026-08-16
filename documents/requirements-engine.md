@@ -33,6 +33,11 @@ FR-IDs are stable — never renumber them on move.
 - [06-distribution-and-housekeeping.md](requirements-engine/06-distribution-and-housekeeping.md)
   — Housekeeping, test suite integrity, shared backoff, legacy test task
   removal, standalone binary, auto-update, IDE CLI wrapper split.
+- [08-graph-and-isolation.md](requirements-engine/08-graph-and-isolation.md)
+  — Graph expressiveness and isolation additions from the peer comparison:
+  shell-predicate loop exit (FR-E87), command node type (FR-E88),
+  conditional edges (FR-E89), data-driven fan-out (FR-E90), per-node
+  worktree (FR-E91), journal hash chain (FR-E92), HITL node type (FR-E93).
 - [07-mcp-and-plugin-runtime.md](requirements-engine/07-mcp-and-plugin-runtime.md)
   — Embedded MCP server (FR-E73), the plugin's self-contained runtime
   with lazy binary compile + auto-MCP registration (FR-E74, superseded
@@ -124,3 +129,10 @@ FR-IDs are stable — never renumber them on move.
 - FR-E84 (MCP start_run Tool)                          → 07-mcp-and-plugin-runtime
 - FR-E85 (Non-Blocking resume_node)                    → 07-mcp-and-plugin-runtime
 - FR-E86 (Runtime Adapter Injection Seam)              → 01-execution-model
+- FR-E87 (Shell-Predicate Loop Exit `until`)           → 08-graph-and-isolation
+- FR-E88 (Command Node Type)                           → 08-graph-and-isolation
+- FR-E89 (Conditional Edge Predicate `when`)           → 08-graph-and-isolation
+- FR-E90 (Data-Driven Fan-Out `for_each`)              → 08-graph-and-isolation
+- FR-E91 (Per-Node Worktree Isolation)                 → 08-graph-and-isolation
+- FR-E92 (Journal Hash Chain + Verify)                 → 08-graph-and-isolation
+- FR-E93 (HITL Node Type)                              → 08-graph-and-isolation
