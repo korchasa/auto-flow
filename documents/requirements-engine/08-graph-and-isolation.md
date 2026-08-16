@@ -241,6 +241,49 @@ isolation. Reference shapes are named per FR.
     modes, `fail_fast` versus `collect`, empty and unreadable sources, config
     defaults, node-type restriction, `each.*` scope).
 
+### 3.91 FR-E91: Node-Scoped Isolation
+
+- **Description:** Two related guarantees for nodes that run at the same time.
+
+  **Part 1 — leak attribution follows the execution scope.** The FR-E50
+  guardrail brackets an agent node with two `git status` snapshots of the main
+  repository tree. When a level runs one node at a time, the difference between
+  the snapshots belongs to that node. When a level runs several nodes at once
+  (`defaults.max_parallel != 1` and the level holds more than one runnable
+  node), it does not: the snapshots are global, so a file written by node B
+  appears inside node A's bracket and is rolled back under A's name. The engine
+  therefore switches the per-node guardrail off for a concurrent level and
+  brackets the whole level once instead. The level bracket unions the
+  `allowed_paths` of every node it covers, and its leak message is attributed to
+  the level, not to a node:
+
+  ```
+  [guardrail] level=<level-index> (<node-ids>) leaked <n> file(s): <paths> (rolled back)
+  ```
+
+  A leak still fails the run and is still rolled back; only the attribution
+  widens, because a wrong name is worse than an honest "one of these".
+
+  **Part 2 — `isolation: worktree`.** An `agent` or `command` node MAY carry
+  `isolation: worktree`, which gives that node its own git worktree instead of
+  the run's shared one. The node's edits are then invisible to every other node,
+  including its own `for_each` items, which each get a worktree of their own.
+  This is opt-in and off by default, because the shared worktree is the very
+  mechanism by which one node's source edits reach the next: making it the
+  default would break every sequential workflow the engine runs today.
+
+- **Motivation:** Intra-level concurrency has been implemented but unusable
+  since FR-E50 landed: `defaults.max_parallel > 1` emits a warning that the
+  guardrail will mis-attribute writes, so no workflow turns it on. The two
+  failure modes hiding behind that warning are different problems — a snapshot
+  scoped too narrowly (fixable without touching the worktree model) and two
+  nodes editing the same file (fixable only by separating their trees) — and
+  they are fixed separately.
+- **Dep:** FR-E50, FR-E57, FR-E90.
+- **Acceptance criteria:**
+  - **Tests:** `guardrail_level_test.ts` (FR-E91; regression-locked; the
+    per-node guardrail switch and the level attribution in the leak message).
+
 ### 3.92 FR-E92: Journal Hash Chain and Verification
 
 - **Description:** Every `journal.jsonl` record carries `prev_hash` (the

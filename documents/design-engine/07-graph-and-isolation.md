@@ -246,7 +246,48 @@ inside the block, and restricts the block to `agent` and `command` nodes.
 no meaning, and a fanned-out loop or human prompt would multiply a control
 structure rather than a unit of work.
 
-## 5. Journal Hash Chain (FR-E92)
+## 5. Node-Scoped Isolation (FR-E91)
+
+**Modules:** `src/isolation/guardrail.ts`, `src/engine/engine.ts`,
+`src/engine/node-dispatch.ts`.
+
+### 5.1 Level-scoped guardrail bracket
+
+`GuardrailOptions` gains two fields:
+
+```ts
+enabled?: boolean;              // false → no snapshot, no rollback, no log
+scopeKind?: "node" | "level";   // attribution word in the leak message
+```
+
+`runWithGuardrail` treats `enabled: false` exactly like the existing
+`workDir === "."` fast path: it awaits `fn` and returns without touching git.
+`formatLeakMessage(scope, leaks, kind = "node")` renders `[guardrail]
+<kind>=<scope> …`, so the default keeps every existing message byte-identical.
+
+`Engine` decides the scope per level. `executeLevel` computes `concurrent =
+maxParallel !== 1 && filtered.length > 1` after the `when`/`--skip` filter has
+run — a level of one runnable node is sequential no matter what `max_parallel`
+says, and paying for a second bracket there would only widen attribution for
+free. A concurrent level goes through `executeLevelWithLevelGuardrail`, which
+unions the `allowed_paths` of every node in the level, sets
+`levelGuardrailActive` inside a `try/finally`, and wraps `runLevelNodes` in one
+`runWithGuardrail` call with `scopeKind: "level"` and the node ids joined into
+the scope string.
+
+The per-node switch travels through `EngineContext.nodeGuardrail`
+(`!this.levelGuardrailActive`), which `node-dispatch.ts` passes as `enabled`.
+Threading it through the context rather than reading engine state inside the
+dispatcher keeps the dispatcher a pure function of its context, which is what
+makes its node handlers unit-testable without an `Engine`.
+
+**Why the union of `allowed_paths` and not the intersection.** Under one
+bracket the engine cannot tell which node wrote a path, so the narrower rule
+would fail nodes for writing what they were allowed to write. The union
+loosens the check exactly as much as concurrency has already loosened the
+evidence.
+
+## 6. Journal Hash Chain (FR-E92)
 
 **Module:** `src/state/run-journal.ts`; CLI surface in `src/cli.ts`
 (`verify` subcommand).
@@ -297,7 +338,7 @@ the shared `resolveActiveWorkflow` rule (FR-E78), prints the verification JSON
 on stdout and a sentence on stderr, and exits 1 on a broken chain so CI and
 supervising agents can branch on it.
 
-## 6. HITL Node (FR-E93)
+## 7. HITL Node (FR-E93)
 
 **Modules:** `src/hitl/hitl-node.ts` (new),
 `src/engine/node-dispatch.ts#executeHitlNode`, `src/engine/engine.ts`

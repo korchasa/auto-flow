@@ -71,6 +71,10 @@ export interface EngineContext {
   phaseRegistry: PhaseRegistry;
   /** Durable lifecycle journal for this run. */
   journal?: RunJournalWriter;
+  /** FR-E91: whether the FR-E50 guardrail brackets THIS node. False while a
+   * level runs its nodes concurrently, where one bracket around the level
+   * replaces the per-node ones. */
+  nodeGuardrail: boolean;
   /** Mark a node as running and publish optional lifecycle callback. */
   nodeStarted: (nodeId: string) => Promise<void>;
   /** Mark a node as completed and publish optional lifecycle callback. */
@@ -169,6 +173,9 @@ export async function executeAgentNode(
       allowedPaths: node.allowed_paths ?? [],
       nodeId,
       log: (m) => eng.output.warn(m),
+      // FR-E91: off while the level runs concurrently — the level bracket
+      // owns the check there.
+      enabled: eng.nodeGuardrail,
     },
     () =>
       runAgent({

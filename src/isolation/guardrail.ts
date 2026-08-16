@@ -52,13 +52,18 @@ export function detectLeaks(
 
 /**
  * Format a single-line leak report for the engine log.
- * Format: `"[guardrail] node=<id> leaked <N> file(s): <comma-list> (rolled back)"`.
+ * Format: `"[guardrail] <kind>=<scope> leaked <N> file(s): <comma-list> (rolled back)"`.
+ *
+ * @param kind attribution scope. `node` when one node was bracketed; `level`
+ *   when the level ran concurrently and the leak cannot be pinned on a single
+ *   node (FR-E91).
  */
 export function formatLeakMessage(
-  nodeId: string,
+  scope: string,
   leaks: readonly string[],
+  kind: "node" | "level" = "node",
 ): string {
-  return `[guardrail] node=${nodeId} leaked ${leaks.length} file(s): ${
+  return `[guardrail] ${kind}=${scope} leaked ${leaks.length} file(s): ${
     leaks.join(", ")
   } (rolled back)`;
 }
@@ -163,6 +168,13 @@ export interface GuardrailOptions {
   nodeId: string;
   /** Optional sink for the leak message (called only when a leak fires). */
   log?: (message: string) => void;
+  /** FR-E91: set `false` to skip the check. The engine switches the per-node
+   * guardrail off when a level runs concurrently, because the snapshots are
+   * global to the repository and would blame one node for another's writes;
+   * one level-scoped bracket takes over. */
+  enabled?: boolean;
+  /** Attribution scope for the leak message. Defaults to `node`. */
+  scopeKind?: "node" | "level";
 }
 
 /** Outcome of {@linkcode runWithGuardrail}. */
@@ -189,7 +201,7 @@ export async function runWithGuardrail<T>(
   opts: GuardrailOptions,
   fn: () => Promise<T>,
 ): Promise<GuardrailOutcome<T>> {
-  if (opts.workDir === ".") {
+  if (opts.enabled === false || opts.workDir === ".") {
     return { result: await fn(), leak: undefined };
   }
   const before = await snapshotMainTree(opts.repoRoot);
@@ -205,7 +217,11 @@ export async function runWithGuardrail<T>(
     return { result, leak: undefined };
   }
   await rollbackLeaks(opts.repoRoot, leakedPaths);
-  const message = formatLeakMessage(opts.nodeId, leakedPaths);
+  const message = formatLeakMessage(
+    opts.nodeId,
+    leakedPaths,
+    opts.scopeKind ?? "node",
+  );
   opts.log?.(message);
   return { result, leak: { paths: leakedPaths, message } };
 }

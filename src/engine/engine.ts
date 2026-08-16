@@ -24,6 +24,7 @@ import {
 import { resolveRuntimeConfig } from "@korchasa/ai-ide-cli/runtime";
 import { buildLevels } from "./dag.ts";
 import { evaluateShellPredicate } from "./predicate.ts";
+import { runWithGuardrail } from "../isolation/guardrail.ts";
 import {
   ensureItemDir,
   type ForEachItem,
@@ -114,6 +115,10 @@ export class Engine {
    * an operator saying "I already handled this", and their dependents must
    * still run. A `when` skip means the branch was not taken. */
   private whenSkipped = new Set<string>();
+  /** FR-E91: true while a concurrent level runs inside one guardrail bracket.
+   * Nodes then skip their own bracket — see
+   * `executeLevelWithLevelGuardrail`. */
+  private levelGuardrailActive = false;
 
   /** Create an engine instance with the given options and optional user-input provider. */
   constructor(options: EngineOptions, userInput: UserInput = terminalInput) {
@@ -513,6 +518,17 @@ export class Engine {
 
     // Respect max_parallel (default 1 = sequential; 0 = unlimited)
     const maxParallel = this.config.defaults?.max_parallel ?? 1;
+
+    // FR-E91: two or more nodes actually running at once make the per-node
+    // FR-E50 guardrail unsound — its snapshots cover the whole repository, so
+    // node A's `after` picks up node B's writes and A is failed for them. One
+    // bracket around the level keeps the protection and drops the false
+    // attribution; the price is a leak reported against the level.
+    const concurrent = maxParallel !== 1 && filtered.length > 1;
+    if (concurrent) {
+      return await this.executeLevelWithLevelGuardrail(filtered, maxParallel);
+    }
+
     if (maxParallel > 0 && filtered.length > maxParallel) {
       // Execute in chunks
       for (let i = 0; i < filtered.length; i += maxParallel) {
@@ -545,6 +561,67 @@ export class Engine {
     }
     // FR-E47: workflow-wide budget check after each level completes
     this.checkWorkflowBudget("runtime");
+    return true;
+  }
+
+  /**
+   * FR-E91: run a concurrent level under ONE guardrail bracket.
+   *
+   * The per-node guardrail is switched off for the duration (see
+   * `nodeGuardrail`), and the allowed-path sets of every node in the level are
+   * unioned — with the nodes interleaved there is no way to tell whose write a
+   * given path was, so the check can only be as strict as its most permissive
+   * member. That is the cost of concurrency, and it is why `max_parallel: 1`
+   * remains the default.
+   */
+  private async executeLevelWithLevelGuardrail(
+    filtered: string[],
+    maxParallel: number,
+  ): Promise<boolean> {
+    const allowedPaths = [
+      ...new Set(
+        filtered.flatMap((id) => this.config.nodes[id].allowed_paths ?? []),
+      ),
+    ];
+    this.levelGuardrailActive = true;
+    try {
+      const { result, leak } = await runWithGuardrail(
+        {
+          repoRoot: Deno.cwd(),
+          workDir: this.workDir,
+          allowedPaths,
+          nodeId: `${filtered.join(", ")}`,
+          scopeKind: "level",
+          log: (m) => this.output.warn(m),
+        },
+        () => this.runLevelNodes(filtered, maxParallel),
+      );
+      if (leak !== undefined) return false;
+      return result;
+    } finally {
+      this.levelGuardrailActive = false;
+    }
+  }
+
+  /** Execute a level's nodes in `max_parallel`-sized chunks. */
+  private async runLevelNodes(
+    filtered: string[],
+    maxParallel: number,
+  ): Promise<boolean> {
+    const chunkSize = maxParallel > 0 ? maxParallel : filtered.length;
+    for (let i = 0; i < filtered.length; i += chunkSize) {
+      const chunk = filtered.slice(i, i + chunkSize);
+      const results = await Promise.allSettled(
+        chunk.map((id) => this.executeNode(id)),
+      );
+      for (const r of results) {
+        if (r.status === "rejected" || (r.status === "fulfilled" && !r.value)) {
+          return false;
+        }
+      }
+      // FR-E47: check after each chunk to short-circuit mid-level
+      this.checkWorkflowBudget("runtime");
+    }
     return true;
   }
 
@@ -656,6 +733,7 @@ export class Engine {
         workflowDir: this.workflowDir,
         phaseRegistry: this.phaseRegistry,
         journal: this.journal,
+        nodeGuardrail: !this.levelGuardrailActive,
         nodeFailed: (id, error, errorCategory) =>
           this.nodeFailed(id, error, errorCategory),
         nodeWaiting: (id, sessionId, questionJson) =>
