@@ -521,7 +521,7 @@ deno task fmt              # Format code
 deno task dashboard        # Render an HTML run dashboard
 deno task compile          # Build standalone binaries
 deno task loop             # Iterative SDLC self-runner (advanced)
-deno task release          # Cut a standard-version bump (CI-driven)
+deno task release          # Cut a commit-and-tag-version bump (CI-driven)
 deno task sync-plugins     # Build + dry-run/publish the plugin payload (FR-E70/E72)
 deno task sync-plugins-local # Rebuild + install local Claude/Codex payloads
 ```

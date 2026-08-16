@@ -177,10 +177,10 @@ jobs:
           # Detect releasable commits and pick a bump level.
           #
           # Conventional-commit prefixes (feat/fix/...) are handled by
-          # standard-version directly. Project-style engine: and
+          # commit-and-tag-version directly. Project-style engine: and
           # engine+sdlc: prefixes are detected here and forced to a
-          # patch bump because standard-version does not understand
-          # them. sdlc: commits do NOT trigger a release — SDLC workflow
+          # patch bump because commit-and-tag-version does not
+          # understand them. sdlc: commits do NOT trigger a release — SDLC workflow
           # changes are dev tooling, not engine code.
           RELEASABLE=false
           BUMP_ARGS=""
@@ -205,7 +205,7 @@ jobs:
             COMMITS_SINCE=$(git log --format='%s' ${LATEST_TAG}..HEAD)
             if echo "$COMMITS_SINCE" | grep -qE '^feat'; then
               RELEASABLE=true
-              # standard-version decides minor/major automatically.
+              # commit-and-tag-version decides minor/major automatically.
             elif echo "$COMMITS_SINCE" | grep -qE '^(fix|perf|refactor|build|engine)'; then
               RELEASABLE=true
               BUMP_ARGS="--release-as patch"

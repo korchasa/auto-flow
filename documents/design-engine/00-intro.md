@@ -61,7 +61,7 @@ graph TD
   - **Auto-Update & Release Pipeline** (FR-E41): CLI self-update via GitHub
     Releases API. Two-workflow CI: `ci.yml` (check + auto-bump + tag on main)
     → `release.yml` (compile + publish on tag). Version bumping via
-    `standard-version` + conventional commits. `deno.json` version field as
+    `commit-and-tag-version` + conventional commits. `deno.json` version as
     source of truth
 
 ## 3. Components

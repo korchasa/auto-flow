@@ -9,13 +9,11 @@
   "imports": {
     "@korchasa/ai-ide-cli": "jsr:@korchasa/ai-ide-cli@^0.8.12",
     "@std/assert": "jsr:@std/assert@^1.0.19",
-    "@std/path": "jsr:@std/path@^1.1.4",
-    "@std/yaml": "jsr:@std/yaml@^1.0.12",
-    "@std/semver": "jsr:@std/semver@^1.0.0",
-    "@std/cli": "jsr:@std/cli@^1.0.0",
-    "@std/fs": "jsr:@std/fs@^1.0.0",
-    "@modelcontextprotocol/sdk": "npm:@modelcontextprotocol/sdk@^1.29.0",
-    "zod": "npm:zod@^4.0.0"
+    "@std/path": "jsr:@std/path@^1.1.6",
+    "@std/yaml": "jsr:@std/yaml@^1.2.0",
+    "@std/semver": "jsr:@std/semver@^1.0.8",
+    "@modelcontextprotocol/sdk": "npm:@modelcontextprotocol/sdk@^1.30.0",
+    "zod": "npm:zod@^4.4.3"
   },
   "tasks": {
     "check": "deno run -A scripts/check.ts",
@@ -24,7 +22,7 @@
     "loop": "deno run -A --no-check scripts/self-runner.ts",
     "dashboard": "deno run --allow-read --allow-write scripts/generate-dashboard.ts",
     "compile": "deno run -A scripts/compile.ts",
-    "release": "deno run -A npm:standard-version --skip.tag",
+    "release": "deno run -A npm:commit-and-tag-version@13.1.2 --skip.tag",
     "fmt": "deno fmt",
     "sync-plugins": "deno run -A scripts/sync-plugins-repo.ts",
     "sync-plugins-local": "deno run -A scripts/sync-plugins-local.ts"

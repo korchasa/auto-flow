@@ -175,7 +175,7 @@ Deno.test("FR-E70 patchEngineDenoJson strips publish, version, dev tasks", () =>
       test: "deno test -A",
       "test:lib": "deno test -A lib",
       compile: "deno run -A scripts/compile.ts",
-      release: "deno run -A npm:standard-version",
+      release: "deno run -A npm:commit-and-tag-version@13.1.2",
       check: "deno run -A scripts/check.ts",
     },
   });
