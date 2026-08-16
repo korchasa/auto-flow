@@ -17,6 +17,11 @@ folder also hosts:
   `documents/ides-difference/*.md`): R&D reference on AI IDE/CLI capabilities,
   context primitives, config formats, migration paths. Per-IDE files +
   cross-IDE comparison + Cursor→Claude Code conversion guide.
+- **Competitive Landscape** (`documents/competitors.md`): R&D reference on
+  peer orchestrators of CLI coding agents (Claude Code Workflow tool,
+  `pi-agents`, `pi-taskflow`, `pi-workflows`, goose recipes). Peer
+  definition, feature matrix, gaps in both directions, candidate
+  follow-ups. Not an SRS — no FR ids are minted here.
 
 ### File size budget
 
