@@ -33,16 +33,59 @@ export function getJournalPath(runDir: string): string {
   return `${runDir}/journal.jsonl`;
 }
 
+/**
+ * Serialise a value with object keys sorted at every depth (FR-E92).
+ *
+ * The hash must not depend on the order in which fields happened to be
+ * assigned: an event round-tripped through `JSON.parse` keeps insertion order
+ * from the file, which need not match the order the writer produced.
+ */
+export function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, v]) => v !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return `{${
+    entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(
+      ",",
+    )
+  }}`;
+}
+
+/**
+ * Compute a record's FR-E92 hash: SHA-256 over its canonical JSON with `hash`
+ * removed. Because `prev_hash` is part of that JSON, the digest transitively
+ * covers every earlier record.
+ */
+export async function hashJournalEvent(
+  event: RunJournalEvent,
+): Promise<string> {
+  const { hash: _drop, ...rest } = event as RunJournalEvent & {
+    hash?: string;
+  };
+  const bytes = new TextEncoder().encode(canonicalJson(rest));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 /** Append-only writer for a single run's `journal.jsonl`. */
 export class RunJournalWriter {
   #nextSeq: number;
+  #prevHash: string;
 
   private constructor(
     readonly runDir: string,
     readonly runId: string,
     nextSeq: number,
+    prevHash: string,
   ) {
     this.#nextSeq = nextSeq;
+    this.#prevHash = prevHash;
   }
 
   /** Open a writer, continuing after any valid records already on disk. */
@@ -54,7 +97,13 @@ export class RunJournalWriter {
     }
     const events = parsed.events;
     const maxSeq = events.reduce((max, event) => Math.max(max, event.seq), 0);
-    return new RunJournalWriter(runDir, runId, maxSeq + 1);
+    // Resuming onto an unhashed journal starts a chain from "" rather than
+    // rewriting history: the earlier records are what they are, and
+    // verification reports them as unchained instead of as tampered.
+    const prevHash = events.length > 0
+      ? events[events.length - 1].hash ?? ""
+      : "";
+    return new RunJournalWriter(runDir, runId, maxSeq + 1, prevHash);
   }
 
   /** Append one fully-enveloped event and return the persisted record. */
@@ -69,7 +118,10 @@ export class RunJournalWriter {
       seq,
       event_id: buildEventId(this.runId, seq, kind, event),
       ts,
+      prev_hash: this.#prevHash,
     } as RunJournalEvent;
+    persisted.hash = await hashJournalEvent(persisted);
+    this.#prevHash = persisted.hash;
     await Deno.writeTextFile(
       getJournalPath(this.runDir),
       `${JSON.stringify(persisted)}\n`,
@@ -91,6 +143,94 @@ export class RunJournalWriter {
       ...event.metadata,
     });
   }
+}
+
+/** Why a journal's hash chain failed to verify (FR-E92). */
+export type JournalChainBreakReason = "hash_mismatch" | "prev_hash_mismatch";
+
+/** Outcome of an FR-E92 hash-chain verification. */
+export interface JournalChainVerification {
+  /** True when no divergence was found. */
+  ok: boolean;
+  /** Records whose own hash and link both checked out. */
+  verified: number;
+  /** Records carrying no hash — written before FR-E92 existed. */
+  unchained: number;
+  /** The first divergent record; absent when `ok`. */
+  broken?: {
+    /** Sequence number of the divergent record. */
+    seq: number;
+    /** Its event id, so an operator can find it in the file. */
+    event_id: string;
+    /** Its kind. */
+    kind: RunJournalEventKind;
+    /** `hash_mismatch` = the record itself was edited; `prev_hash_mismatch` =
+     * a record before it was edited, removed or inserted. */
+    reason: JournalChainBreakReason;
+  };
+}
+
+/**
+ * Verify a run journal's FR-E92 hash chain and name the FIRST divergence.
+ *
+ * Reporting the first one is the point: after one edited record every later
+ * link mismatches, so a report of the last divergence would name a record that
+ * is fine and hide the one that is not.
+ *
+ * Unhashed records (journals from before FR-E92) are counted, not failed —
+ * absence of evidence is not evidence of tampering, and failing them would
+ * make every pre-upgrade run look compromised.
+ */
+export async function verifyJournalChain(
+  runDir: string,
+): Promise<JournalChainVerification> {
+  const parsed = await parseJournal(runDir, { allowMissing: false });
+  let verified = 0;
+  let unchained = 0;
+  let expectedPrev: string | undefined;
+
+  for (const event of parsed.events) {
+    if (event.hash === undefined) {
+      unchained++;
+      expectedPrev = undefined;
+      continue;
+    }
+
+    // `expectedPrev === undefined` means the chain starts here (first record,
+    // or the first hashed record after an unhashed prefix), so the link is
+    // unconstrained; the record's own hash is still checked.
+    if (expectedPrev !== undefined && event.prev_hash !== expectedPrev) {
+      return {
+        ok: false,
+        verified,
+        unchained,
+        broken: {
+          seq: event.seq,
+          event_id: event.event_id,
+          kind: event.kind,
+          reason: "prev_hash_mismatch",
+        },
+      };
+    }
+    if (await hashJournalEvent(event) !== event.hash) {
+      return {
+        ok: false,
+        verified,
+        unchained,
+        broken: {
+          seq: event.seq,
+          event_id: event.event_id,
+          kind: event.kind,
+          reason: "hash_mismatch",
+        },
+      };
+    }
+
+    verified++;
+    expectedPrev = event.hash;
+  }
+
+  return { ok: true, verified, unchained };
 }
 
 /** Replay `journal.jsonl` under `runDir` into a current run snapshot. */

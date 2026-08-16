@@ -241,6 +241,48 @@ isolation. Reference shapes are named per FR.
     modes, `fail_fast` versus `collect`, empty and unreadable sources, config
     defaults, node-type restriction, `each.*` scope).
 
+### 3.92 FR-E92: Journal Hash Chain and Verification
+
+- **Description:** Every `journal.jsonl` record carries `prev_hash` (the
+  preceding record's hash, `""` for the first) and `hash` (SHA-256 of the
+  record's canonical JSON with `hash` removed). Because `prev_hash` is inside
+  the hashed payload, each digest transitively covers the whole prefix.
+  `flowai-workflow verify [--workflow <path>] <run-id>` checks the chain and
+  reports the FIRST divergent record.
+
+  **Command output.** JSON on stdout (`{ok, verified, unchained, broken?}`) and
+  a human-readable line on stderr. Exit 0 when the chain holds, 1 when it does
+  not — so a CI job or a supervising agent can act on it, not just a reader.
+
+  **Break reasons.** `hash_mismatch` — the named record's own bytes changed.
+  `prev_hash_mismatch` — a record before it was edited, removed or inserted.
+
+  **Engine behaviour:**
+  - Canonicalisation sorts object keys at every depth and drops `undefined`
+    values, so a record round-tripped through `JSON.parse` (which preserves
+    file order, not writer order) hashes identically.
+  - Verification stops at the first divergence. After one edited record every
+    later link mismatches; reporting the last one would name a record that is
+    fine and hide the one that is not.
+  - Records without a `hash` — journals written before this FR — are counted as
+    `unchained` rather than failed, and a writer reopened on such a journal
+    starts a fresh chain instead of rewriting history.
+  - A writer reopened on a hashed journal continues the chain from the last
+    record's hash, so resume does not break verification.
+- **Motivation:** `journal.jsonl` was already the recovery contract and the
+  replay source, but nothing distinguished the file the engine wrote from a
+  file someone edited afterwards — including an agent with filesystem access
+  and a reason to make a run look successful. Bernstein makes its lineage
+  checkable and signs the receipt; this is the additive first half of that,
+  over the journal the engine already keeps.
+- **Acceptance criteria:**
+  - **Tests:** `journal-chain_test.ts` (FR-E92; regression-locked; canonical
+    encoding independence from key order, per-record hash and link, intact
+    chain, edited record, removed record, first-divergence reporting,
+    pre-hash journals, reopened writer).
+  - [x] `verify` subcommand wired with exit codes and usage text. Evidence:
+    `src/cli.ts:628`, `src/cli.ts:786`.
+
 ### 3.93 FR-E93: Human Node Over the HITL Transport (`type: hitl`)
 
 - **Description:** A node MAY declare `type: hitl`. It asks its `question`

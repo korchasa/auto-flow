@@ -541,6 +541,13 @@ export interface RunJournalEventBase {
   kind: RunJournalEventKind;
   /** ISO 8601 timestamp for when the fact was recorded. */
   ts: string;
+  /** FR-E92: hash of the preceding record (`""` for the first). Absent in
+   * journals written before hashing existed. */
+  prev_hash?: string;
+  /** FR-E92: SHA-256 of this record's canonical JSON with `hash` removed —
+   * so it covers `prev_hash` and thus every earlier record. Absent in
+   * journals written before hashing existed. */
+  hash?: string;
 }
 
 /** Run bootstrap fact. */

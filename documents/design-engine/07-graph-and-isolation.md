@@ -246,7 +246,58 @@ inside the block, and restricts the block to `agent` and `command` nodes.
 no meaning, and a fanned-out loop or human prompt would multiply a control
 structure rather than a unit of work.
 
-## 5. HITL Node (FR-E93)
+## 5. Journal Hash Chain (FR-E92)
+
+**Module:** `src/state/run-journal.ts`; CLI surface in `src/cli.ts`
+(`verify` subcommand).
+
+**Public surface:**
+
+```ts
+export function canonicalJson(value: unknown): string;
+export function hashJournalEvent(event: RunJournalEvent): Promise<string>;
+export type JournalChainBreakReason = "hash_mismatch" | "prev_hash_mismatch";
+export interface JournalChainVerification {
+  ok: boolean; verified: number; unchained: number;
+  broken?: { seq: number; event_id: string; kind: RunJournalEventKind;
+             reason: JournalChainBreakReason };
+}
+export function verifyJournalChain(runDir: string): Promise<JournalChainVerification>;
+```
+
+**Why canonical JSON.** `JSON.stringify` emits keys in insertion order, and a
+record read back from disk carries the file's order, not the writer's. Hashing
+the raw stringification would therefore make a verifier disagree with the
+writer on untouched bytes. `canonicalJson` sorts keys at every depth and drops
+`undefined` values.
+
+**What the digest covers.** `hash` is SHA-256 over the record's canonical JSON
+with `hash` itself removed — `prev_hash` stays in. That single link is what
+makes the digest transitive: verifying record N verifies every record before
+it, so an edit anywhere in the prefix surfaces.
+
+**Writer state.** `RunJournalWriter` keeps `#prevHash` beside `#nextSeq` and
+recovers it in `open()` from the last record's `hash`. `append` is already
+async, so `crypto.subtle.digest` costs no API change.
+
+**Backward compatibility.** `prev_hash`/`hash` are optional on
+`RunJournalEventBase`. A journal from before this FR replays unchanged, counts
+as `unchained` in verification, and a writer reopened on it starts a fresh
+chain from `""` rather than rewriting history it cannot vouch for. In
+`verifyJournalChain` an unhashed record resets `expectedPrev` to `undefined`,
+which makes the next hashed record's link unconstrained while still checking
+its own digest.
+
+**First divergence, not last.** Verification returns on the first mismatch. One
+edited record breaks every subsequent link, so a report of the last mismatch
+would point at an untouched record and bury the real one.
+
+**CLI.** `verify [--workflow <path>] <run-id>` resolves the workflow through
+the shared `resolveActiveWorkflow` rule (FR-E78), prints the verification JSON
+on stdout and a sentence on stderr, and exits 1 on a broken chain so CI and
+supervising agents can branch on it.
+
+## 6. HITL Node (FR-E93)
 
 **Modules:** `src/hitl/hitl-node.ts` (new),
 `src/engine/node-dispatch.ts#executeHitlNode`, `src/engine/engine.ts`

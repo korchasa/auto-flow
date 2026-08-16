@@ -44,6 +44,8 @@ import { dirname, join } from "@std/path";
 import type { EngineOptions, Verbosity } from "./types.ts";
 import { Engine } from "./engine/engine.ts";
 import { deliverHumanAnswer, resumeRun } from "./mcp/commands.ts";
+import { getRunDir } from "./state/state.ts";
+import { verifyJournalChain } from "./state/run-journal.ts";
 import {
   INTERNAL_HITL_MCP_ARG,
   runFlowaiHitlMcpServer,
@@ -402,6 +404,8 @@ Usage:
   flowai-workflow init [options]             Scaffold .flowai-workflow/ directory
   flowai-workflow answer [--workflow <path>] <run-id> --node <id> "<text>"
                                              Deliver a local HITL reply (FR-E75)
+  flowai-workflow verify [--workflow <path>] <run-id>
+                                             Check the run journal's hash chain (FR-E92)
   flowai-workflow mcp [<workflow>]           Start embedded MCP server (FR-E73)
 
 Subcommands:
@@ -411,16 +415,18 @@ Subcommands:
                         local inbox file (transport-independent). Prints
                         {inboxPath, live}; when live is false, resume the run to
                         consume the queued answer.
+  verify                Verify the run journal's hash chain and report the FIRST
+                        divergent record. Exit 0 = intact, 1 = broken or unreadable.
   mcp                   Start embedded MCP server exposing 9 engine-control tools over stdio.
 
-Workflow resolution (run / answer / mcp; FR-E78):
+Workflow resolution (run / answer / verify / mcp; FR-E78):
   Every subcommand that accepts a workflow shares one rule when the
   positional / --workflow is omitted:
     1. $FLOWAI_WORKFLOW env override.
     2. Single subdir of <cwd>/.flowai-workflow/ containing workflow.yaml.
     3. <cwd>/.flowai-workflow/github-inbox/ if present (ambiguity fallback).
   The mcp subcommand additionally falls through to no-workflow mode so
-  the MCP handshake completes; run / answer error out instead.
+  the MCP handshake completes; run / answer / verify error out instead.
 
 Run positional:
   [<workflow>]          Path to workflow folder containing workflow.yaml
@@ -626,6 +632,81 @@ async function runAnswer(args: string[]): Promise<never> {
 }
 
 /**
+ * Subcommand `verify <run-id>` (FR-E92): check a run journal's hash chain.
+ *
+ * Exit 0 when the chain holds, 1 when it does not — so the check is usable
+ * from CI and from a supervising agent, not just by eye.
+ */
+async function runVerify(args: string[]): Promise<never> {
+  try {
+    const { workflowDir, runId } = await parseVerifyArgs(args);
+    const runDir = getRunDir(runId, workflowDir);
+    const result = await verifyJournalChain(runDir);
+
+    console.log(JSON.stringify(result, null, 2));
+    if (result.ok) {
+      console.error(
+        `\nJournal chain intact: ${result.verified} records verified` +
+          (result.unchained > 0
+            ? `, ${result.unchained} written before hashing existed`
+            : "") +
+          ".",
+      );
+      Deno.exit(0);
+    }
+    console.error(
+      `\nJournal chain broken at seq ${result.broken?.seq} ` +
+        `(${result.broken?.kind}, ${result.broken?.event_id}): ` +
+        `${result.broken?.reason}. ` +
+        `The first ${result.verified} records verified; everything from this ` +
+        `record on is unverifiable.`,
+    );
+    Deno.exit(1);
+  } catch (err) {
+    console.error(`Error: ${(err as Error).message}`);
+    Deno.exit(1);
+  }
+}
+
+/** Parse `verify [--workflow <path>] <run-id>`, resolving the workflow. */
+async function parseVerifyArgs(
+  args: string[],
+): Promise<{ workflowDir: string; runId: string }> {
+  let workflow: string | undefined;
+  const positionals: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--workflow") {
+      workflow = args[++i];
+      continue;
+    }
+    if (a.startsWith("--workflow=")) {
+      workflow = a.slice("--workflow=".length);
+      continue;
+    }
+    positionals.push(a);
+  }
+  const runId = positionals[0];
+  if (!runId) {
+    throw new Error(
+      "verify: missing <run-id>. " +
+        "Usage: flowai-workflow verify [--workflow <path>] <run-id>",
+    );
+  }
+  if (workflow) return { workflowDir: normalizeWorkflowDir(workflow), runId };
+
+  const resolved = await resolveActiveWorkflow({ env: Deno.env.toObject() });
+  if (resolved === null) {
+    throw new Error(
+      "Could not resolve active workflow. Pass it via `--workflow <path>`, " +
+        "set FLOWAI_WORKFLOW, or place a workflow under " +
+        "`<cwd>/.flowai-workflow/`.",
+    );
+  }
+  return { workflowDir: normalizeWorkflowDir(resolved), runId };
+}
+
+/**
  * Print a one-line deprecation banner for users who installed the engine
  * via JSR or a prebuilt binary (FR-E70 plugin-first distribution). The
  * banner is suppressed when:
@@ -688,6 +769,11 @@ if (import.meta.main) {
   // → deliver a local HITL reply through the shared command core.
   if (subcommand === "answer") {
     await runAnswer(Deno.args.slice(1));
+  }
+
+  // Subcommand: `verify <run-id>` (FR-E92) → journal hash-chain check.
+  if (subcommand === "verify") {
+    await runVerify(Deno.args.slice(1));
   }
 
   // Subcommand: `init` → verbatim copy of a bundled workflow folder.
