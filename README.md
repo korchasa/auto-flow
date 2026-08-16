@@ -130,9 +130,11 @@ graph TD
 
     Executor --> Dispatch{Node Type?}
     Dispatch -->|agent| Agent["Agent Runner<br/>Claude / OpenCode"]
+    Dispatch -->|command| Command["Command Runner<br/>shell step"]
     Dispatch -->|loop| Loop["Loop Runner<br/>iterative body"]
     Dispatch -->|merge| Merge["Merge<br/>copy dirs"]
-    Dispatch -->|human| Human["Human Input<br/>terminal / HITL"]
+    Dispatch -->|human| Human["Human Input<br/>terminal prompt"]
+    Dispatch -->|hitl| Hitl["HITL Node<br/>ask via transport"]
 
     Agent --> Validate["Validation<br/>file_exists, frontmatter,<br/>custom_script, ..."]
     Loop --> Validate
@@ -149,14 +151,18 @@ graph TD
 
 The engine (Deno/TypeScript modules at repo root) reads a YAML workflow config and builds a directed acyclic graph (DAG) of nodes. Nodes are topologically sorted into levels; levels run in order and, by default, one node at a time.
 
-Concurrency within a level is available but opt-in via `defaults.max_parallel`. It is not the default because every node of a run shares one git worktree, and the FR-E50 guardrail brackets each agent node with a snapshot of the main working tree — two nodes running at once see each other's writes as their own leaks. The engine warns when the configuration allows concurrent nodes inside a worktree.
+Concurrency within a level is available but opt-in via `defaults.max_parallel`. It is not the default because every node of a run shares one git worktree, so two nodes editing the same file clobber each other. A node that needs a tree of its own asks for it with `isolation: worktree`. Leak detection follows the execution scope: a concurrent level runs inside one guardrail bracket rather than a per-node one, since the snapshots are repository-wide and would otherwise blame the wrong node.
 
-Four node types:
+Six node types:
 
 - **agent** — invokes the configured runtime (`claude` by default, `opencode` also supported)
+- **command** — runs a shell command as a graph node, with the same artifacts, validation and template variables as an agent
 - **merge** — combines outputs from multiple predecessor nodes
-- **loop** — iterative body with frontmatter-based exit condition
-- **human** — terminal prompt for manual input; agent-initiated HITL is supported on both Claude and OpenCode runtimes
+- **loop** — iterative body with an exit condition: an artifact field, or an `until` shell predicate
+- **human** — terminal prompt for manual input
+- **hitl** — asks a human through the workflow's HITL transport and waits; agent-initiated HITL is supported on both Claude and OpenCode runtimes
+
+Any node may carry a `when:` shell predicate that gates it (and, transitively, everything downstream of it). `agent` and `command` nodes may fan out with `for_each:`, running once per item of a list an earlier node produced.
 
 Inter-agent communication uses structured Markdown artifacts in `<runs-dir>/<run-id>/[<phase>/]<node-id>/`, linked via `{{input.<node-id>}}` template variables. On validation failure, the engine resumes the agent in the same session with error context (continuation mechanism).
 
@@ -167,6 +173,11 @@ Inter-agent communication uses structured Markdown artifacts in `<runs-dir>/<run
 - **Workflow-independent** — engine does not reference concrete node names or artifact filenames; one engine, many workflows
 - **Multi-runtime agents** — runtime selectable per workflow or per node: `claude` (default) or `opencode`
 - **Loop nodes** — iterative cycles with configurable exit conditions and max iterations
+- **Shell steps** — `type: command` nodes put a build, test or fetch step in the graph without spending an agent call
+- **Conditional branches** — `when:` gates a node on a shell predicate; nodes downstream of an untaken branch are skipped too
+- **Fan-out** — `for_each:` runs one node once per item of a list an earlier node produced, each with its own artifact directory
+- **Per-node isolation** — `isolation: worktree` gives a node (or each fan-out item) its own git worktree while artifacts stay shared
+- **Tamper-evident journal** — every `journal.jsonl` record is hash-chained; `flowai-workflow verify <run-id>` reports the first divergence
 - **HITL support** — human interaction nodes for manual decisions or approvals; agent-initiated HITL works on Claude and OpenCode
 - **Validation** — rule-based checks per node (file_exists, file_not_empty, contains_section, custom_script, frontmatter_field)
 - **Resume** — failed/interrupted runs resumable via `--resume <run-id>`; completed nodes skipped
