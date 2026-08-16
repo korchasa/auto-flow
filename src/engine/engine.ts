@@ -24,6 +24,12 @@ import {
 import { resolveRuntimeConfig } from "@korchasa/ai-ide-cli/runtime";
 import { buildLevels } from "./dag.ts";
 import { evaluateShellPredicate } from "./predicate.ts";
+import {
+  ensureItemDir,
+  type ForEachItem,
+  itemContext,
+  resolveForEachItems,
+} from "./for-each.ts";
 import { terminalInput } from "./human.ts";
 import type { UserInput } from "./human.ts";
 import { acquireLock, defaultLockPath, releaseLock } from "../state/lock.ts";
@@ -541,6 +547,84 @@ export class Engine {
     return true;
   }
 
+  /**
+   * FR-E90: run one node once per item of its `for_each` source.
+   *
+   * Item executions do NOT touch run state. The parent node owns exactly one
+   * `completed`/`failed` transition, so a fan-out over 40 files leaves one
+   * verdict in `state.json` instead of 40 overwrites of the same record.
+   * Failures are collected here and reported as one aggregated message.
+   */
+  private async executeForEach(
+    eng: EngineContext,
+    nodeId: string,
+    node: NodeConfig,
+  ): Promise<boolean> {
+    const cfg = node.for_each!;
+    const cwd = this.workDir !== "." ? this.workDir : undefined;
+
+    let items;
+    try {
+      items = await resolveForEachItems(node, this.buildContext(nodeId), cwd);
+    } catch (err) {
+      await this.nodeFailed(nodeId, (err as Error).message, "unknown");
+      return false;
+    }
+
+    if (items.length === 0) {
+      this.output.status(nodeId, "for_each: source is empty, nothing to run");
+      return true;
+    }
+    this.output.status(nodeId, `for_each: ${items.length} items`);
+    if (cfg.max_concurrent > 1) {
+      this.output.warn(
+        `Node '${nodeId}': for_each.max_concurrent=${cfg.max_concurrent} — all items share one worktree, so the FR-E50 guardrail can mis-attribute concurrent writes between them`,
+      );
+    }
+
+    const failures: string[] = [];
+    const runItem = async (item: ForEachItem): Promise<void> => {
+      // Item executions report into `failures` instead of run state: the
+      // parent node owns the single verdict.
+      const itemEng: EngineContext = {
+        ...eng,
+        buildContext: (nId, loopIteration?) =>
+          itemContext(this.buildContext(nId, loopIteration), item),
+        nodeStarted: () => Promise.resolve(),
+        nodeCompleted: () => Promise.resolve(),
+        nodeFailed: (_id, error) => {
+          failures.push(`item ${item.index} (${item.key}): ${error}`);
+          return Promise.resolve();
+        },
+      };
+
+      await ensureItemDir(itemEng.buildContext(nodeId), cwd);
+      const ok = node.type === "agent"
+        ? (await executeAgentNode(itemEng, nodeId, node))?.success === true
+        : await executeCommandNode(itemEng, nodeId, node);
+      if (!ok && failures.length === 0) {
+        failures.push(`item ${item.index} (${item.key}): failed`);
+      }
+    };
+
+    for (let i = 0; i < items.length; i += cfg.max_concurrent) {
+      const chunk = items.slice(i, i + cfg.max_concurrent);
+      const before = failures.length;
+      await Promise.all(chunk.map(runItem));
+      if (failures.length > before && cfg.failure_mode === "fail_fast") break;
+    }
+
+    if (failures.length === 0) return true;
+
+    const summary = cfg.failure_mode === "collect"
+      ? `for_each: ${failures.length} of ${items.length} items failed:\n${
+        failures.join("\n")
+      }`
+      : `for_each: ${failures[0]}`;
+    await this.nodeFailed(nodeId, summary, "unknown");
+    return false;
+  }
+
   /** Execute a single node based on its type. Returns true on success. */
   private async executeNode(nodeId: string): Promise<boolean> {
     const node = this.config.nodes[nodeId];
@@ -580,7 +664,10 @@ export class Engine {
           this.nodeCompleted(id, costUsd, result),
       };
 
-      switch (node.type) {
+      switch (node.for_each ? "for_each" : node.type) {
+        case "for_each":
+          success = await this.executeForEach(eng, nodeId, node);
+          break;
         case "agent": {
           lastAgentResult = await executeAgentNode(
             eng,

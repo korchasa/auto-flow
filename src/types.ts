@@ -177,6 +177,23 @@ export interface WorkflowDefaults extends NodeSettings {
   memory_paths?: string[];
 }
 
+/** FR-E90: data-driven fan-out of one node over a list of items. */
+export interface ForEachConfig {
+  /** Path to the list, interpolated then resolved against the working
+   * directory. Content is a JSON array of strings/numbers, or one item per
+   * non-empty line. */
+  source: string;
+  /** Artifact-directory naming: `index` (0, 1, 2 …) or `value` (slugified
+   * item text). Defaults to `index`, which is always collision-free. */
+  key_by: "index" | "value";
+  /** Items running at once. Defaults to 1. Values above 1 carry the same
+   * write-attribution risk as `defaults.max_parallel` (FR-E50) and warn. */
+  max_concurrent: number;
+  /** `fail_fast` (default) stops at the first failing item; `collect` runs
+   * every item and then fails the node with a tally. */
+  failure_mode: "fail_fast" | "collect";
+}
+
 /** Configuration for a single workflow node. */
 export interface NodeConfig {
   /** Determines execution behavior: agent (runtime CLI), command (shell),
@@ -278,6 +295,10 @@ export interface NodeConfig {
    * artifact directory: `<runDir>/<phase>/<nodeId>/`. Falls back to top-level
    * `phases:` config. When absent, flat `<runDir>/<nodeId>/` is used. */
   phase?: string;
+
+  /** FR-E90: expand this node into one execution per item of a list.
+   * Valid on `agent` and `command` nodes only. */
+  for_each?: ForEachConfig;
 
   /** FR-E89: shell predicate gating this node. Evaluated immediately before
    * the node would run; exit 0 runs it, any other code skips it — and the skip
@@ -763,6 +784,16 @@ export interface TemplateContext {
   loop?: {
     /** Zero-based iteration counter of the enclosing loop. */
     iteration: number;
+  };
+  /** FR-E90 fan-out context; only present for one expansion of a `for_each`
+   * node. */
+  each?: {
+    /** Zero-based position of this item in the source list. */
+    index: number;
+    /** The item's own text. */
+    value: string;
+    /** This item's artifact-directory name. */
+    key: string;
   };
 }
 

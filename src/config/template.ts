@@ -2,7 +2,7 @@
  * @module
  * Template interpolation engine: resolves `{{var}}` placeholders in prompt
  * and hook strings using the provided {@link TemplateContext}.
- * Supports dotted paths (input.*, args.*, env.*, loop.iteration),
+ * Supports dotted paths (input.*, args.*, env.*, loop.iteration, each.*),
  * direct keys (node_dir, run_dir, run_id), file inclusion via
  * `{{file("path")}}` / `{{flow_file("path")}}`, and shell substitution via
  * `{{bash("cmd")}}`.
@@ -23,6 +23,8 @@ export const FILE_INCLUSION_SIZE_WARN_BYTES = 102400;
  * - `{{args.<key>}}` — CLI arguments
  * - `{{env.<key>}}` — environment variables
  * - `{{loop.iteration}}` — current loop iteration
+ * - `{{each.value}}`, `{{each.index}}`, `{{each.key}}` — current item of a
+ *   `for_each` fan-out (FR-E90); only present on a fanned-out node
  * - `{{file("path")}}` — inline file content (single-pass, no re-interpolation),
  *   path resolved against `workDir`
  * - `{{flow_file("path")}}` — same as `file()` but path resolved against the
@@ -198,6 +200,19 @@ function resolve(
       }
       return String(ctx.loop.iteration);
 
+    case "each":
+      if (suffix !== "value" && suffix !== "index" && suffix !== "key") {
+        throw new Error(
+          `Unknown each property in template variable: {{${key}}}. Supported: each.value, each.index, each.key.`,
+        );
+      }
+      if (!ctx.each) {
+        throw new Error(
+          `Template variable {{${key}}} used outside a for_each node.`,
+        );
+      }
+      return suffix === "index" ? String(ctx.each.index) : ctx.each[suffix];
+
     default:
       throw new Error(`Unknown template variable prefix: {{${key}}}`);
   }
@@ -208,12 +223,14 @@ function resolve(
  *
  * Pure function — no I/O. Returns an array of error descriptions; empty = valid.
  * Known prefixes: `input` (suffix must be in knownInputs), `env`, `args`,
- * `loop` (only `loop.iteration`). Known direct keys: `run_dir`, `run_id`,
+ * `loop` (only `loop.iteration`), `each` (only under a `for_each` node —
+ * pass `allowEach`). Known direct keys: `run_dir`, `run_id`,
  * `node_dir`. `file("...")` and `flow_file("...")` patterns are always accepted.
  */
 export function validateTemplateVars(
   template: string,
   knownInputs: string[],
+  allowEach = false,
 ): string[] {
   const errors: string[] = [];
 
@@ -263,6 +280,18 @@ export function validateTemplateVars(
         if (suffix !== "iteration") {
           errors.push(
             `Unknown loop property in template variable: {{${key}}}. Only 'loop.iteration' is supported.`,
+          );
+        }
+        break;
+
+      case "each":
+        if (suffix !== "value" && suffix !== "index" && suffix !== "key") {
+          errors.push(
+            `Unknown each property in template variable: {{${key}}}. Supported: each.value, each.index, each.key.`,
+          );
+        } else if (!allowEach) {
+          errors.push(
+            `Template variable {{${key}}} used outside a for_each node.`,
           );
         }
         break;

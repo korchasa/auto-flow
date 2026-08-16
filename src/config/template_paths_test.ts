@@ -168,6 +168,11 @@ Deno.test(
   async () => {
     const allowedRaw = new Set([
       "template.ts", // intentional raw emission for prompt interpolation
+      // FR-E90 `itemContext` composes a workDir-relative path from another
+      // workDir-relative path to give each fan-out item its own artifact
+      // directory. No filesystem access is involved, so the wrap-before-I/O
+      // invariant this test guards does not apply.
+      "for-each.ts",
     ]);
     const offenders: string[] = [];
 

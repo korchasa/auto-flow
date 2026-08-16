@@ -180,3 +180,68 @@ is precisely why one would gate inside a loop.
 before the type-specific branches, since it applies to every node type:
 non-empty string, and `validateTemplateVars` must accept it. `NODE_CONFIG_KEYS`
 gains `"when"`.
+
+## 4. Data-Driven Fan-Out (FR-E90)
+
+**Modules:** `src/engine/for-each.ts` (new),
+`src/engine/engine.ts#executeForEach`, `src/config/template.ts` (`each.*`),
+`src/config/config.ts#validateForEach`.
+
+**Public surface:**
+
+```ts
+export interface ForEachItem { index: number; value: string; key: string }
+
+export function parseForEachSource(text: string): string[];
+export function slugifyKey(value: string): string;
+export function assignKeys(values: string[], cfg: ForEachConfig): ForEachItem[];
+export function resolveForEachItems(
+  node: NodeConfig, ctx: TemplateContext, cwd?: string,
+): Promise<ForEachItem[]>;
+export function itemContext(ctx: TemplateContext, item: ForEachItem): TemplateContext;
+export function ensureItemDir(ctx: TemplateContext, cwd?: string): Promise<void>;
+```
+
+**Source parsing is a pure function** so the format's edge cases — a JSON array
+that does not parse, an array of objects, a bare object, trailing blank lines —
+are unit-testable without a filesystem. The `[`-prefix branch throws rather than
+falling back to line parsing: a truncated array would otherwise fan out once
+over the literal text, which reads as a successful run.
+
+**No new state records.** Item executions run through the ordinary
+`executeAgentNode` / `executeCommandNode`, but with an `EngineContext` whose
+`nodeStarted`/`nodeCompleted`/`nodeFailed` are replaced by no-ops and a failure
+collector. The parent node keeps exactly one `completed`/`failed` transition.
+The alternative — synthetic `nodeId#key` state entries — would put ids into
+`state.json` that no config declares and that `--skip`, `--only` and the DAG
+have no way to address.
+
+**Context derivation.** `itemContext` appends the item's key to `node_dir` and
+attaches `each`. It composes a workDir-relative path from another
+workDir-relative one, which is why `for-each.ts` is on the allowlist of the
+FR-E52 audit test in `template_paths_test.ts` — no filesystem access happens
+there. `ensureItemDir` does the wrapping (`workPath`) and creates the directory
+before the execution writes into it; without it an agent's first `>` redirect
+into `{{node_dir}}` fails on a missing parent.
+
+**Key collisions.** `key_by: value` slugifies, and two distinct items can
+slugify to one name (`a/b` and `a-b`). `assignKeys` suffixes the later one, so
+each item keeps its own directory instead of silently overwriting.
+
+**Concurrency.** Items run in chunks of `max_concurrent` via `Promise.all`,
+mirroring `executeLevel`'s chunking. `fail_fast` breaks after the chunk that
+produced the first failure — mid-chunk cancellation would leave half-written
+artifacts with no record of which item was interrupted.
+
+**Template layer.** `each` joins `loop` as a context-scoped namespace: unknown
+suffixes are rejected outright, and a known suffix outside a fan-out throws.
+`validateTemplateVars` gains an `allowEach` parameter (default `false`) that
+`validateNode` sets from the node's own `for_each` — so `{{each.value}}` on a
+node that never fans out is a load-time error.
+
+**Validation.** `validateForEach` normalises defaults in place (`key_by:
+index`, `max_concurrent: 1`, `failure_mode: fail_fast`), rejects unknown keys
+inside the block, and restricts the block to `agent` and `command` nodes.
+`merge`, `loop` and `human` are excluded deliberately: fanning out a merge has
+no meaning, and a fanned-out loop or human prompt would multiply a control
+structure rather than a unit of work.

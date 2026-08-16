@@ -369,6 +369,7 @@ const NODE_CONFIG_KEYS: readonly string[] = [
   "until",
   "command",
   "when",
+  "for_each",
   "max_iterations",
   "merge_strategy",
   "question",
@@ -384,6 +385,78 @@ const NODE_CONFIG_KEYS: readonly string[] = [
   "disallowed_tools",
   "memory_commit_deferred",
 ];
+
+/**
+ * Validate and normalise an FR-E90 `for_each` block in place.
+ *
+ * Returns whether `{{each.*}}` is legal on this node — the caller threads that
+ * into every `validateTemplateVars` call, so a fan-out variable on a node that
+ * never fans out is caught at load rather than throwing mid-run.
+ */
+function validateForEach(
+  id: string,
+  node: Record<string, unknown>,
+  type: string,
+): boolean {
+  if (node.for_each === undefined) return false;
+
+  if (
+    typeof node.for_each !== "object" || node.for_each === null ||
+    Array.isArray(node.for_each)
+  ) {
+    throw new Error(`Node '${id}' 'for_each' must be an object`);
+  }
+  if (type !== "agent" && type !== "command") {
+    throw new Error(
+      `Node '${id}' declares 'for_each', which is only valid on 'agent' and 'command' nodes`,
+    );
+  }
+
+  const cfg = node.for_each as Record<string, unknown>;
+  const known = ["source", "key_by", "max_concurrent", "failure_mode"];
+  for (const key of Object.keys(cfg)) {
+    if (!known.includes(key)) {
+      throw new Error(
+        `Node '${id}' 'for_each' has unknown key '${key}'. Valid keys: ${
+          known.join(", ")
+        }`,
+      );
+    }
+  }
+
+  if (typeof cfg.source !== "string" || !cfg.source) {
+    throw new Error(`Node '${id}' 'for_each' requires a non-empty 'source'`);
+  }
+  if (cfg.key_by === undefined) {
+    cfg.key_by = "index";
+  } else if (cfg.key_by !== "index" && cfg.key_by !== "value") {
+    throw new Error(
+      `Node '${id}' 'for_each' key_by must be 'index' or 'value', got '${cfg.key_by}'`,
+    );
+  }
+  if (cfg.failure_mode === undefined) {
+    cfg.failure_mode = "fail_fast";
+  } else if (
+    cfg.failure_mode !== "fail_fast" && cfg.failure_mode !== "collect"
+  ) {
+    throw new Error(
+      `Node '${id}' 'for_each' failure_mode must be 'fail_fast' or 'collect', got '${cfg.failure_mode}'`,
+    );
+  }
+  if (cfg.max_concurrent === undefined) {
+    cfg.max_concurrent = 1;
+  } else if (
+    typeof cfg.max_concurrent !== "number" ||
+    !Number.isInteger(cfg.max_concurrent) ||
+    cfg.max_concurrent < 1
+  ) {
+    throw new Error(
+      `Node '${id}' 'for_each' max_concurrent must be a positive integer, got '${cfg.max_concurrent}'`,
+    );
+  }
+
+  return true;
+}
 
 function validateNode(
   id: string,
@@ -444,6 +517,10 @@ function validateNode(
     }
   }
 
+  // FR-E90: `for_each` decides whether `{{each.*}}` is legal anywhere on this
+  // node, so it is normalised before any template validation runs.
+  const allowEach = validateForEach(id, node, type);
+
   // FR-E89: `when` gates any node type, so it is checked before the
   // type-specific branches.
   if (node.when !== undefined) {
@@ -452,7 +529,7 @@ function validateNode(
         `Node '${id}' 'when' must be a non-empty string (a shell predicate)`,
       );
     }
-    const whenErrors = validateTemplateVars(node.when, allNodeIds);
+    const whenErrors = validateTemplateVars(node.when, allNodeIds, allowEach);
     if (whenErrors.length > 0) {
       throw new Error(
         `Node '${id}' 'when' has invalid template variables: ${
@@ -482,7 +559,11 @@ function validateNode(
         `Command node '${id}' does not accept 'prompt' — it runs a shell command, not an agent`,
       );
     }
-    const commandErrors = validateTemplateVars(node.command, allNodeIds);
+    const commandErrors = validateTemplateVars(
+      node.command,
+      allNodeIds,
+      allowEach,
+    );
     if (commandErrors.length > 0) {
       throw new Error(
         `Command node '${id}' has invalid template variables: ${
@@ -649,7 +730,7 @@ function validateNode(
 
   // Validate hook template variables (FR-E7)
   if (typeof node.before === "string" && node.before) {
-    const errors = validateTemplateVars(node.before, allNodeIds);
+    const errors = validateTemplateVars(node.before, allNodeIds, allowEach);
     if (errors.length > 0) {
       throw new Error(
         `Node '${id}' before hook has invalid template variables: ${
@@ -659,7 +740,7 @@ function validateNode(
     }
   }
   if (typeof node.after === "string" && node.after) {
-    const errors = validateTemplateVars(node.after, allNodeIds);
+    const errors = validateTemplateVars(node.after, allNodeIds, allowEach);
     if (errors.length > 0) {
       throw new Error(
         `Node '${id}' after hook has invalid template variables: ${
