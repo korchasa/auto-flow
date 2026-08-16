@@ -59,8 +59,13 @@ export interface EngineContext {
   userInput: UserInput;
   /** Build template context for a given node (with optional loop iteration). */
   buildContext: (nodeId: string, loopIteration?: number) => TemplateContext;
-  /** Working directory (worktree path or "."). All subprocesses and I/O use this. */
+  /** The run's working directory (worktree path or "."). Artifact I/O and the
+   * FR-E50 guardrail are scoped to it. */
   workDir: string;
+  /** The working tree THIS node's subprocesses run in. Equals `workDir` unless
+   * the node declares `isolation: worktree` (FR-E91), in which case it is the
+   * node's own worktree and the context's artifact paths are absolute. */
+  nodeWorkDir: string;
   /** Workflow folder (containing `workflow.yaml`). FR-S47/FR-E9: threaded into
    * state-path calls so runs land under `<workflowDir>/runs/<run-id>` regardless
    * of project layout. */
@@ -114,7 +119,7 @@ export async function executeAgentNode(
     node,
   });
   const toolFilter = resolveToolFilter(node, eng.config.defaults);
-  const cwd = eng.workDir !== "." ? eng.workDir : undefined;
+  const cwd = eng.nodeWorkDir !== "." ? eng.nodeWorkDir : undefined;
 
   // Resume path: node was waiting for human reply
   if (wasWaiting) {
@@ -230,11 +235,15 @@ export async function executeAgentNode(
   // `memory_commit_deferred: true` on the node.
   const memoryPaths = eng.config.defaults?.memory_paths ?? [];
   if (
-    eng.workDir !== "." &&
+    eng.nodeWorkDir !== "." &&
     memoryPaths.length > 0 &&
     node.memory_commit_deferred !== true
   ) {
-    const dirtyMemory = await findDirtyMemoryFiles(eng.workDir, memoryPaths);
+    // The node's own tree, not the run's: an isolated node edits memory there.
+    const dirtyMemory = await findDirtyMemoryFiles(
+      eng.nodeWorkDir,
+      memoryPaths,
+    );
     if (dirtyMemory.length > 0) {
       const msg = formatMemoryViolation(nodeId, dirtyMemory);
       eng.output.warn(msg);
@@ -300,10 +309,7 @@ export async function executeAgentNode(
 
   // Save agent log (JSON output + JSONL transcript)
   if (result.output) {
-    const runDir = workPath(
-      eng.workDir,
-      getRunDir(eng.state.run_id, eng.workflowDir),
-    );
+    const runDir = workPath(ctx.workDir, ctx.run_dir);
     await saveAgentLog(runDir, nodeId, result.output);
   }
 
@@ -368,7 +374,7 @@ export async function executeLoopNode(
   const hitlConfig = isHitlConfigured(eng.config.defaults?.hitl)
     ? eng.config.defaults.hitl
     : undefined;
-  const cwd = eng.workDir !== "." ? eng.workDir : undefined;
+  const cwd = eng.nodeWorkDir !== "." ? eng.nodeWorkDir : undefined;
 
   const result = await runLoop({
     loopNodeId: nodeId,
@@ -548,7 +554,7 @@ export async function executeCommandNode(
 ): Promise<boolean> {
   const ctx = eng.buildContext(nodeId);
   const settings = node.settings as ResolvedNodeSettings;
-  const cwd = eng.workDir !== "." ? eng.workDir : undefined;
+  const cwd = eng.nodeWorkDir !== "." ? eng.nodeWorkDir : undefined;
 
   await eng.journal?.append({ kind: "attempt_started", node_id: nodeId });
 

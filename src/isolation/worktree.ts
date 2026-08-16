@@ -66,6 +66,76 @@ export async function createWorktree(
 }
 
 /**
+ * FR-E91: path of a node's own worktree, `<workflowDir>/runs/<runId>/
+ * worktrees/<key>`.
+ *
+ * Sibling of the run's `worktree/` rather than a child of it: a worktree
+ * nested inside another worktree would be copied by FR-E58's ignored-file
+ * mirroring and would show up in the parent tree's `git status`.
+ */
+export function getNodeWorktreePath(
+  runId: string,
+  workflowDir: string,
+  key: string,
+): string {
+  return `${workflowDir}/runs/${runId}/worktrees/${key}`;
+}
+
+/**
+ * FR-E91: compose the directory name for a node's (or a fan-out item's) own
+ * worktree.
+ *
+ * Everything outside `[A-Za-z0-9._-]` collapses to a dash, so a node id or an
+ * item key carrying path separators cannot walk out of the `worktrees/`
+ * directory. An input that slugifies to nothing is an error rather than a
+ * silent fallback name — two such nodes would otherwise share one tree and
+ * quietly stop being isolated.
+ */
+export function worktreeKey(nodeId: string, itemKey?: string): string {
+  const raw = itemKey === undefined ? nodeId : `${nodeId}-${itemKey}`;
+  const slug = raw.replace(/[^A-Za-z0-9._-]/g, "-");
+  if (slug.replace(/[.\-_]/g, "") === "") {
+    throw new Error(
+      `Worktree key for node '${nodeId}' cannot be empty after slugification`,
+    );
+  }
+  return slug;
+}
+
+/** Resolve the commit a working tree is checked out at (FR-E91 base ref). */
+export async function resolveTreeHead(treeDir: string): Promise<string> {
+  return await runGit(
+    ["-C", treeDir, "rev-parse", "HEAD"],
+    `git rev-parse HEAD failed in ${treeDir}`,
+  );
+}
+
+/**
+ * FR-E91: create a node's own worktree at `ref`, detached.
+ *
+ * Unlike {@linkcode createWorktree} there is no fetch: `ref` is a commit that
+ * already exists locally (the run's tree HEAD), so the node starts from
+ * everything the run has committed so far and from none of its uncommitted
+ * working-tree edits.
+ *
+ * Returns the repo-relative worktree path.
+ */
+export async function createNodeWorktree(
+  runId: string,
+  workflowDir: string,
+  key: string,
+  ref: string,
+): Promise<string> {
+  const path = getNodeWorktreePath(runId, workflowDir, key);
+  await Deno.mkdir(dirname(path), { recursive: true });
+  await runGit(
+    ["worktree", "add", "--detach", path, ref],
+    `git worktree add failed for ${path}`,
+  );
+  return path;
+}
+
+/**
  * Split a `<remote>/<branch>` ref into its parts so the pre-checkout fetch
  * targets the branch the caller actually asked for.
  *

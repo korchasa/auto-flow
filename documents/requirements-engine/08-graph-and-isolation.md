@@ -267,10 +267,36 @@ isolation. Reference shapes are named per FR.
   **Part 2 — `isolation: worktree`.** An `agent` or `command` node MAY carry
   `isolation: worktree`, which gives that node its own git worktree instead of
   the run's shared one. The node's edits are then invisible to every other node,
-  including its own `for_each` items, which each get a worktree of their own.
-  This is opt-in and off by default, because the shared worktree is the very
-  mechanism by which one node's source edits reach the next: making it the
-  default would break every sequential workflow the engine runs today.
+  and with `for_each` every item gets a worktree of its own. This is opt-in and
+  off by default, because the shared worktree is the very mechanism by which one
+  node's source edits reach the next: making it the default would break every
+  sequential workflow the engine runs today.
+
+  ```yaml
+  build:
+    type: command
+    label: "Build"
+    isolation: worktree     # only value; only on agent and command nodes
+    command: "deno task build"
+  ```
+
+  **Engine behaviour:**
+  - The node's tree is created at `<workflowDir>/runs/<run-id>/worktrees/<key>`,
+    detached at the run tree's HEAD. Committed work from earlier nodes is
+    therefore visible; uncommitted working-tree edits are not.
+  - `<key>` is the node id, or `<node-id>-<item-key>` under `for_each`, with
+    everything outside `[A-Za-z0-9._-]` collapsed to a dash so a key cannot
+    walk out of `worktrees/`.
+  - Gitignored files are mirrored into the new tree (FR-E58), so the node can
+    build. The copy is why isolation is per-node rather than global.
+  - Artifacts still land in the run's shared directory. The node's context
+    carries absolute artifact paths anchored there, so `{{node_dir}}`,
+    `{{run_dir}}` and `{{input.<id>}}` resolve to the same directories a
+    non-isolated node writes, and downstream nodes read them unchanged.
+  - A succeeding node's tree is removed after its commits are pinned to a
+    rescue branch (FR-E51). A failing node's tree is kept and its path logged.
+  - `for_each.max_concurrent > 1` stops warning about mis-attribution when the
+    node is isolated — each item's writes land in a tree of its own.
 
 - **Motivation:** Intra-level concurrency has been implemented but unusable
   since FR-E50 landed: `defaults.max_parallel > 1` emits a warning that the
@@ -281,8 +307,15 @@ isolation. Reference shapes are named per FR.
   they are fixed separately.
 - **Dep:** FR-E50, FR-E57, FR-E90.
 - **Acceptance criteria:**
-  - **Tests:** `guardrail_level_test.ts` (FR-E91; regression-locked; the
-    per-node guardrail switch and the level attribution in the leak message).
+  - **Tests:** `guardrail_level_test.ts`, `node-worktree_test.ts`,
+    `node-isolation_test.ts`, `config_isolation_test.ts`,
+    `isolation_e2e_test.ts` (FR-E91; regression-locked; the per-node guardrail
+    switch and the level attribution in the leak message; node-tree paths, key
+    slugification and checkout at a ref; absolute artifact paths under
+    isolation; config restriction to agent and command nodes; end to end — a
+    node's source edits stay out of the shared tree, downstream nodes still
+    read its artifacts, the tree is removed on success and kept on failure,
+    and each fan-out item gets its own tree).
 
 ### 3.92 FR-E92: Journal Hash Chain and Verification
 

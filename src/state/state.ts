@@ -6,6 +6,7 @@
  * `nodeId → phase` mapping used for computing node output directory paths.
  */
 
+import { isAbsolute } from "@std/path";
 import type {
   ErrorCategory,
   NodeState,
@@ -223,9 +224,18 @@ export function getLogsDir(
   return `${getRunDir(runId, workflowDir)}/logs`;
 }
 
-/** Prefix a relative path with workDir. No-op when workDir is ".". */
+/**
+ * Prefix a relative path with workDir. No-op when workDir is ".".
+ *
+ * An already-absolute path is returned untouched: it is not workDir-relative,
+ * so joining it to a working directory would produce a path that exists
+ * nowhere. FR-E91 relies on this — a node running in a worktree of its own
+ * carries absolute artifact paths anchored at the run's shared tree, and every
+ * existing `workPath` call site must leave them alone.
+ */
 export function workPath(workDir: string, relativePath: string): string {
-  return workDir === "." ? relativePath : `${workDir}/${relativePath}`;
+  if (workDir === "." || isAbsolute(relativePath)) return relativePath;
+  return `${workDir}/${relativePath}`;
 }
 
 /**

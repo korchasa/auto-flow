@@ -287,6 +287,57 @@ would fail nodes for writing what they were allowed to write. The union
 loosens the check exactly as much as concurrency has already loosened the
 evidence.
 
+### 5.2 Per-node worktree
+
+**Modules:** `src/isolation/worktree.ts` (lifecycle),
+`src/isolation/node-isolation.ts` (context derivation), `Engine.maybeIsolated`.
+
+```ts
+export function getNodeWorktreePath(runId, workflowDir, key): string;
+export function worktreeKey(nodeId: string, itemKey?: string): string;
+export function resolveTreeHead(treeDir: string): Promise<string>;
+export function createNodeWorktree(runId, workflowDir, key, ref): Promise<string>;
+export function isolatedContext(ctx, sharedWorkDir, nodeWorkDir): TemplateContext;
+```
+
+`Engine.maybeIsolated(eng, node, key, fn, succeeded)` wraps one node
+execution. Without `isolation: worktree` it calls `fn(eng)` and returns.
+With it: resolve the run tree's HEAD, create the node tree at that commit,
+mirror gitignored files in, run `fn` against a derived `EngineContext`, then
+remove the tree on success (after `pinDetachedHead`) or keep it on failure.
+The same helper serves plain nodes and `for_each` items — the item path passes
+`worktreeKey(nodeId, item.key)` and an `EngineContext` whose `buildContext` is
+already item-scoped, so isolation composes on top of fan-out rather than
+duplicating it.
+
+**Two working directories, not one.** `EngineContext` splits `workDir` (the
+run's tree — artifact I/O and the FR-E50 guardrail) from `nodeWorkDir` (the
+tree this node's subprocesses run in). Only `cwd` and the FR-S28 memory check
+follow `nodeWorkDir`; the guardrail deliberately stays on the run tree, because
+its job is to catch writes into the main repository and the node tree lives
+under the gitignored `runs/` umbrella either way.
+
+**Why absolute artifact paths.** FR-E52 makes context paths relative to the
+directory the node's processes run in. An isolated node has two directories:
+its own tree for source, the shared tree for artifacts. `isolatedContext`
+resolves `node_dir`, `run_dir` and every `input.<id>` against the shared tree,
+which makes them mean the same directory from any cwd. `workPath` gained one
+line for this — an already-absolute path is returned untouched — so every
+existing call site keeps working without knowing isolation exists.
+`workflow_dir` stays relative on purpose: it names a directory present in every
+checkout, and a `flow_file()` lookup should read the node's own tree.
+
+**Base ref is the run tree's HEAD, not `origin/main`.** Checking out the base
+branch again would drop everything earlier nodes committed during the run; the
+run tree's HEAD carries it. Uncommitted edits in the run tree do not travel —
+that is the isolation being asked for, and it is the reason the workflow's
+agents are expected to commit.
+
+**Cost.** Every isolated node pays a `git worktree add` plus an FR-E58 copy of
+the gitignored files (`node_modules` and friends). That is the whole argument
+for opt-in: a workflow that turns it on for one build node pays once, and a
+workflow that never turns it on pays nothing.
+
 ## 6. Journal Hash Chain (FR-E92)
 
 **Module:** `src/state/run-journal.ts`; CLI surface in `src/cli.ts`

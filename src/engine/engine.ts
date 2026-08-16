@@ -81,11 +81,15 @@ import {
 } from "./node-dispatch.ts";
 import {
   copyIgnoredIntoWorktree,
+  createNodeWorktree,
   createWorktree,
   pinDetachedHead,
   removeWorktree,
   resolveExistingWorktreePath,
+  resolveTreeHead,
+  worktreeKey,
 } from "../isolation/worktree.ts";
+import { isolatedContext } from "../isolation/node-isolation.ts";
 
 /** Main workflow engine. Orchestrates node execution across DAG levels. */
 export class Engine {
@@ -654,9 +658,9 @@ export class Engine {
       return true;
     }
     this.output.status(nodeId, `for_each: ${items.length} items`);
-    if (cfg.max_concurrent > 1) {
+    if (cfg.max_concurrent > 1 && node.isolation !== "worktree") {
       this.output.warn(
-        `Node '${nodeId}': for_each.max_concurrent=${cfg.max_concurrent} — all items share one worktree, so the FR-E50 guardrail can mis-attribute concurrent writes between them`,
+        `Node '${nodeId}': for_each.max_concurrent=${cfg.max_concurrent} — all items share one worktree, so the FR-E50 guardrail can mis-attribute concurrent writes between them (FR-E91: set 'isolation: worktree' to give each item its own tree)`,
       );
     }
 
@@ -677,9 +681,18 @@ export class Engine {
       };
 
       await ensureItemDir(itemEng.buildContext(nodeId), cwd);
-      const ok = node.type === "agent"
-        ? (await executeAgentNode(itemEng, nodeId, node))?.success === true
-        : await executeCommandNode(itemEng, nodeId, node);
+      // FR-E91: each item gets a worktree of its own, so two items writing the
+      // same source file no longer race.
+      const ok = await this.maybeIsolated(
+        itemEng,
+        node,
+        worktreeKey(nodeId, item.key),
+        async (nodeEng) =>
+          node.type === "agent"
+            ? (await executeAgentNode(nodeEng, nodeId, node))?.success === true
+            : await executeCommandNode(nodeEng, nodeId, node),
+        (r) => r,
+      );
       if (!ok && failures.length === 0) {
         failures.push(`item ${item.index} (${item.key}): failed`);
       }
@@ -701,6 +714,69 @@ export class Engine {
       : `for_each: ${failures[0]}`;
     await this.nodeFailed(nodeId, summary, "unknown");
     return false;
+  }
+
+  /**
+   * FR-E91: run `fn` in a worktree of the node's own when it declares
+   * `isolation: worktree`, otherwise run it unchanged.
+   *
+   * The node's tree is checked out at the run tree's HEAD, so everything the
+   * run has committed so far is visible and nothing it has left uncommitted
+   * is. Gitignored files are mirrored in (FR-E58) because a tree without them
+   * usually cannot build — that copy is the price of the flag, and it is why
+   * isolation is opt-in per node rather than a default.
+   *
+   * The tree is removed when the node succeeds and kept when it fails: a
+   * failed node's tree holds the half-finished work that explains the failure.
+   * Commits made inside it are pinned to a rescue branch first (FR-E51),
+   * because removing a detached worktree makes them unreachable.
+   */
+  private async maybeIsolated<T>(
+    eng: EngineContext,
+    node: NodeConfig,
+    key: string,
+    fn: (nodeEng: EngineContext) => Promise<T>,
+    succeeded: (result: T) => boolean,
+  ): Promise<T> {
+    if (node.isolation !== "worktree") return await fn(eng);
+
+    const head = await resolveTreeHead(this.workDir);
+    const treeDir = await createNodeWorktree(
+      this.state.run_id,
+      this.workflowDir,
+      key,
+      head,
+    );
+    this.output.status(key, `isolated worktree: ${treeDir}`);
+    await copyIgnoredIntoWorktree(
+      treeDir,
+      this.output,
+      this.workDir,
+      workPath(this.workDir, this.workflowDir),
+    );
+
+    const shared = this.workDir;
+    const nodeEng: EngineContext = {
+      ...eng,
+      nodeWorkDir: treeDir,
+      buildContext: (id, loopIteration?) =>
+        isolatedContext(eng.buildContext(id, loopIteration), shared, treeDir),
+    };
+
+    let result: T;
+    try {
+      result = await fn(nodeEng);
+    } catch (err) {
+      this.output.warn(`Isolated worktree preserved for diagnosis: ${treeDir}`);
+      throw err;
+    }
+    if (!succeeded(result)) {
+      this.output.warn(`Isolated worktree preserved for diagnosis: ${treeDir}`);
+      return result;
+    }
+    await pinDetachedHead(treeDir, `${this.state.run_id}-${key}`);
+    await removeWorktree(treeDir);
+    return result;
   }
 
   /** Execute a single node based on its type. Returns true on success. */
@@ -730,6 +806,7 @@ export class Engine {
         buildContext: (nId, loopIteration?) =>
           this.buildContext(nId, loopIteration),
         workDir: this.workDir,
+        nodeWorkDir: this.workDir,
         workflowDir: this.workflowDir,
         phaseRegistry: this.phaseRegistry,
         journal: this.journal,
@@ -748,17 +825,24 @@ export class Engine {
           success = await this.executeForEach(eng, nodeId, node);
           break;
         case "agent": {
-          lastAgentResult = await executeAgentNode(
+          lastAgentResult = await this.maybeIsolated(
             eng,
-            nodeId,
             node,
-            wasWaiting,
+            worktreeKey(nodeId),
+            (nodeEng) => executeAgentNode(nodeEng, nodeId, node, wasWaiting),
+            (r) => r?.success === true,
           );
           success = lastAgentResult?.success === true;
           break;
         }
         case "command":
-          success = await executeCommandNode(eng, nodeId, node);
+          success = await this.maybeIsolated(
+            eng,
+            node,
+            worktreeKey(nodeId),
+            (nodeEng) => executeCommandNode(nodeEng, nodeId, node),
+            (ok) => ok,
+          );
           break;
         case "merge":
           success = await executeMergeNode(eng, nodeId, node);

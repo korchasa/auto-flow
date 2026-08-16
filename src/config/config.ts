@@ -370,6 +370,7 @@ const NODE_CONFIG_KEYS: readonly string[] = [
   "command",
   "when",
   "for_each",
+  "isolation",
   "max_iterations",
   "merge_strategy",
   "question",
@@ -393,6 +394,30 @@ const NODE_CONFIG_KEYS: readonly string[] = [
  * into every `validateTemplateVars` call, so a fan-out variable on a node that
  * never fans out is caught at load rather than throwing mid-run.
  */
+/**
+ * FR-E91: validate `isolation`. Restricted to the two node types that run a
+ * subprocess in a working tree — a merge, loop, human or hitl node has no tree
+ * of its own to isolate, and accepting the key there would promise an
+ * isolation the engine never delivers.
+ */
+function validateIsolation(
+  id: string,
+  node: Record<string, unknown>,
+  type: string,
+): void {
+  if (node.isolation === undefined) return;
+  if (node.isolation !== "worktree") {
+    throw new Error(
+      `Node '${id}' 'isolation' must be 'worktree', got '${node.isolation}'`,
+    );
+  }
+  if (type !== "agent" && type !== "command") {
+    throw new Error(
+      `Node '${id}' declares 'isolation', which is only valid on 'agent' and 'command' nodes`,
+    );
+  }
+}
+
 function validateForEach(
   id: string,
   node: Record<string, unknown>,
@@ -520,6 +545,7 @@ function validateNode(
   // FR-E90: `for_each` decides whether `{{each.*}}` is legal anywhere on this
   // node, so it is normalised before any template validation runs.
   const allowEach = validateForEach(id, node, type);
+  validateIsolation(id, node, type);
 
   // FR-E89: `when` gates any node type, so it is checked before the
   // type-specific branches.

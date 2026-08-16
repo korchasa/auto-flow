@@ -97,15 +97,18 @@ example of engine usage.
   exit condition — artifact-field triple or `until` shell predicate, FR-E87),
   `human` (terminal prompt), `hitl` (asks a human through the workflow's HITL
   transport, FR-E93). Any node may carry a `when:` gate (FR-E89); `agent` and
-  `command` nodes may fan out with `for_each:` (FR-E90)
+  `command` nodes may fan out with `for_each:` (FR-E90) and may ask for a
+  worktree of their own with `isolation: worktree` (FR-E91)
 - **Inter-agent communication:** Structured artifacts in
   `<runs-dir>/<run-id>/<node-id>/`, linked via `{{input.<node-id>}}` templates
 - **Execution:** DAG topological sort into levels; levels run in order and one
   node at a time (`defaults.max_parallel: 1`). Intra-level concurrency is
-  implemented but opt-in: all nodes of a run share ONE worktree and the FR-E50
-  guardrail brackets each agent node with a main-tree snapshot, so concurrent
-  nodes mis-attribute each other's writes as leaks. `max_parallel > 1` (or `0`
-  = unlimited) emits an engine WARN naming that risk.
+  implemented but opt-in: all nodes of a run share ONE worktree, so two nodes
+  editing the same file clobber each other unless they carry
+  `isolation: worktree` (FR-E91). Leak attribution is handled — a concurrent
+  level runs inside ONE FR-E50 guardrail bracket instead of a per-node one
+  (FR-E91), because the snapshots are repository-wide and would otherwise blame
+  whichever node happened to be inside the bracket.
 - **Continuation:** Re-invoking agents within same session on validation failure
   (max N per node)
 - **Resume:** Failed/interrupted runs resumable via `--resume <run-id>`;

@@ -326,6 +326,16 @@ export interface NodeConfig {
    * are detected. Pre-existing uncommitted changes are excluded (FR-E37). */
   allowed_paths?: string[];
 
+  /** Give this node a git worktree of its own instead of the run's shared one
+   * (FR-E91). Valid on `agent` and `command` nodes. Off by default: the shared
+   * worktree is how one node's source edits reach the next, so isolation is
+   * something a workflow author asks for, not something the engine assumes.
+   * With `for_each`, every item gets its own worktree.
+   *
+   * The node's artifacts still land in the run's shared directory, so
+   * `{{input.<id>}}` keeps working downstream; only the source tree splits. */
+  isolation?: "worktree";
+
   /** Per-node budget limits (FR-E47). Cascades: node → enclosing loop → defaults. */
   budget?: NodeBudget;
 
