@@ -531,7 +531,7 @@ during migration.
 ## Key Decisions
 
 Architectural decisions are recorded as permanent task files under
-[documents/tasks/](documents/tasks/) (`adr-NNNN-<slug>.md` naming).
+[documents/tasks/](documents/tasks/), named `<YYYY>/<MM>/<slug>.md`.
 The list below is a one-line index — open the linked decision-task
 for full context, alternatives, and consequences.
 

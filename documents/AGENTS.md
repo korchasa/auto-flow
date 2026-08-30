@@ -56,7 +56,7 @@ regression tests. The pattern:
   per-FR line at the top of the acceptance block. Format:
 
   ```markdown
-  - **Tests:** `<test_file>` (FR-E<N>; regression-locked). See adr-NNNN-<slug>.
+  - **Tests:** `<test_file>` (FR-E<N>; regression-locked). See <slug>.
   ```
 
   Rules:
@@ -67,7 +67,7 @@ regression tests. The pattern:
     When the FR id is NOT embedded in any test name, replace with
     `(regression-locked; <3-5-word topic>)` — e.g.
     `(regression-locked; verbose toggle)`.
-  - `See adr-NNNN-<slug>.` ONLY when a decision-task records the
+  - `See <slug>.` ONLY when a decision-task records the
     rationale; omit otherwise (the FR's Description already carries
     the why).
   - Per-criterion `[x]` bullets exercised by the listed tests are
@@ -148,7 +148,7 @@ list mirrors that constant — if they ever drift, the constant wins
 4. `Motivation` — problem/incident/force. `Rationale` is the same
    role and is no longer accepted — migrate to `Motivation`.
 5. `Decision` — cross-links to relevant decision-task records (paths to
-   `documents/tasks/<YYYY>/<MM>/adr-NNNN-<slug>.md`).
+   `documents/tasks/<YYYY>/<MM>/<slug>.md`).
 6. `Dep` — comma-separated dependency FR ids.
 7. `Supersedes` — comma-separated predecessor FR ids.
 8. `Input` / `Output` — workflow-stage FRs only (`FR-S2..S9` and
@@ -205,7 +205,10 @@ Separate files per scope. Same structure in each:
 - Examples: `2026-03-24-add-dark-mode.md`, `2026-03-24-fix-auth-bug.md`.
 - Do not reuse another session's task file — create a new file. Old task files provide context but may contain outdated decisions.
 - Use GODS format (see below) for issues and plans.
-- Directory is gitignored. Files accumulate — this is expected.
+- Task files are **tracked**, not gitignored — commit yours together with
+  the change it describes. The historical ignore rule was removed when tasks
+  migrated to the permanent layout; `.gitignore` keeps a comment where it
+  used to be.
 
 ### GODS Format
 
