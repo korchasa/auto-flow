@@ -19,7 +19,7 @@ import type {
   TemplateContext,
 } from "../types.ts";
 import { interpolate } from "../config/template.ts";
-import { applyBudgetFlags } from "../engine/agent.ts";
+import { acpUnsupportedIntent, applyBudgetFlags } from "../engine/agent.ts";
 import type { AgentResult } from "../engine/agent.ts";
 import { getRuntimeAdapter } from "@korchasa/ai-ide-cli/runtime";
 import type {
@@ -150,6 +150,22 @@ export async function runHitlLoop(
       continuations: 0,
       error: "defaults.hitl requires non-empty ask_script and check_script",
       error_category: "unknown",
+    };
+  }
+
+  // FR-E98: the resume invoke goes over the same ACP wire as the initial one,
+  // so it inherits the same refusal — reject here rather than let the library
+  // reject mid-loop, after the human has already answered.
+  const acpRejects = acpUnsupportedIntent(
+    undefined,
+    applyBudgetFlags(runtimeArgs, runtime, maxTurns),
+  );
+  if (acpRejects) {
+    return {
+      success: false,
+      continuations: 0,
+      error: acpRejects,
+      error_category: "config_error",
     };
   }
 

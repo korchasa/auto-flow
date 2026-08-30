@@ -16,7 +16,7 @@ across section files in [design-engine/](design-engine/) to fit within the
   §3.1 second half: `@korchasa/ai-ide-cli/opencode/process`, `loop.ts`,
   `hitl.ts`, `commands.ts`, `human.ts`, `scope-check.ts`, `output.ts`,
   `node-dispatch.ts`, `engine.ts`, `cli.ts`, `mod.ts`, interfaces, node
-  flags, verbose output pattern.
+  flags, verbose output pattern, ACP invoke-option filter (FR-E98).
 - [03-subsystems.md](design-engine/03-subsystems.md) — §3.2 Phase Registry,
   §3.3 Process Registry, §3.4 Binary Distribution, §3.5 Shared Backoff,
   Binary Compile Script, §3.6 Release CI Workflow, FR-E94 static workflow

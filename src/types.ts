@@ -452,6 +452,10 @@ export type ErrorCategory =
   | "aborted"
   | "scope_violation"
   | "retry_budget_exceeded"
+  /** FR-E98: the node asks for something the runtime transport cannot carry,
+   * detected before any subprocess starts. Distinct from `cli_crash` — nothing
+   * ran, and the fix is in the workflow file, not in the environment. */
+  | "config_error"
   | "unknown";
 
 /** Status of a single node during execution. */

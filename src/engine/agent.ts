@@ -46,7 +46,11 @@ import {
   snapshotModifiedFiles,
 } from "../isolation/scope-check.ts";
 import { workPath } from "../state/state.ts";
-import { createStreamLogWriter, type StreamLogWriter } from "./stream-log.ts";
+import {
+  createEventFormatter,
+  createStreamLogWriter,
+  type StreamLogWriter,
+} from "./stream-log.ts";
 
 /**
  * Resolve input artifact file paths and sizes from input directories.
@@ -135,7 +139,10 @@ export interface AgentRunOptions {
   nodeId?: string;
   /** Path to write real-time stream-json log file. */
   streamLogPath?: string;
-  /** Verbosity level for terminal output filtering. */
+  /** Verbosity level for terminal output filtering. Consumed by the
+   * {@link OutputManager} the caller builds — NEVER forwarded to the runtime:
+   * the ACP wire cannot carry `verbosity` and rejects the whole invoke when it
+   * is present (FR-E98). */
   verbosity?: Verbosity;
   /** Working directory for subprocesses (worktree path or "."). */
   cwd?: string;
@@ -169,6 +176,33 @@ export function applyBudgetFlags(
   if (maxTurns === undefined) return base;
   if (runtime !== "claude") return base;
   return { ...(base ?? {}), "--max-turns": String(maxTurns) };
+}
+
+/**
+ * FR-E98: name the workflow fields whose intent the ACP wire cannot carry, or
+ * `undefined` when the node asks for nothing of the sort.
+ *
+ * The library rejects `agent` and `extraArgs` outright
+ * (`ACP_UNSUPPORTED_INVOKE_OPTIONS`), and both come straight from the workflow
+ * file. Reporting them here — before the invoke — names the YAML key the author
+ * wrote rather than the library field it maps to.
+ *
+ * @param agent   Value of the node's `agent:` key.
+ * @param extraArgs Resolved runtime args, budget flags already folded in.
+ */
+export function acpUnsupportedIntent(
+  agent: string | undefined,
+  extraArgs: ExtraArgsMap | undefined,
+): string | undefined {
+  const offenders: string[] = [];
+  if (agent !== undefined) offenders.push("agent");
+  if (extraArgs && Object.keys(extraArgs).length > 0) {
+    offenders.push("runtime_args");
+  }
+  if (offenders.length === 0) return undefined;
+  return `The ACP transport cannot carry ${offenders.join(" or ")}; ` +
+    `remove ${offenders.length > 1 ? "them" : "it"} from the node ` +
+    `(a non-empty runtime_args also comes from budget.max_turns on claude).`;
 }
 
 /**
@@ -209,7 +243,6 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     output,
     nodeId,
     streamLogPath,
-    verbosity,
     cwd,
     maxTurns,
     allowedTools,
@@ -218,6 +251,22 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
   } = opts;
   const adapter = runtimeAdapter ?? getRuntimeAdapter(runtime);
   const extraArgs = applyBudgetFlags(runtimeArgs, runtime, maxTurns);
+
+  // FR-E98: ACP is the engine's only transport, and the ACP wire carries
+  // neither a named sub-agent nor raw CLI flags. Both encode explicit
+  // workflow intent, so refuse the node instead of dropping them — a
+  // silently ignored `--max-turns` would look like a budget cap that never
+  // fires. `verbosity` and `onOutput` are NOT in this list: the engine owns
+  // both locally, so it simply stops sending them.
+  const acpRejects = acpUnsupportedIntent(node.agent, extraArgs);
+  if (acpRejects) {
+    return {
+      success: false,
+      continuations: 0,
+      error: acpRejects,
+      error_category: "config_error",
+    };
+  }
 
   // FR-E80: cumulative wall-clock retry cap. When configured, a single
   // AbortController is shared across the initial invoke and every
@@ -266,11 +315,6 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     effectiveCaps.mcpInjection;
   const mcpServers = hitlEnabled ? buildHitlMcpServers() : undefined;
   const hitlObserver = hitlEnabled ? createHitlObserver(runtime) : undefined;
-
-  // Derive onOutput callback from OutputManager
-  const onOutput = output && nodeId
-    ? (line: string) => output.nodeOutput(nodeId, line)
-    : undefined;
 
   // FR-E79: surface library `onCallbackError` (FR-L32 consumer-callback
   // throws + FR-L39 ACP `degradedOptions` diagnostics) as node-tagged
@@ -336,8 +380,23 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       };
     }
   }
-  const onEvent = streamLog
-    ? (params: Record<string, unknown>) => streamLog!.handleEvent(params)
+  // FR-E98: one formatter per node run, feeding both sinks. The ACP wire
+  // cannot carry `onOutput`, so the live per-node terminal lines come from
+  // the same events as `stream.log` — formatted once so the two never
+  // disagree and the FR-E20 re-read counter is not double-counted.
+  const nodeSink = output && nodeId
+    ? (line: string) => output.nodeOutput(nodeId, line)
+    : undefined;
+  const eventFormatter = streamLog || nodeSink
+    ? createEventFormatter({ onParseError: onCallbackError })
+    : undefined;
+  const onEvent = eventFormatter
+    ? (params: Record<string, unknown>) => {
+      const lines = eventFormatter.format(params);
+      if (lines.length === 0) return;
+      streamLog?.writeLines(lines);
+      if (nodeSink) { for (const line of lines) nodeSink(line); }
+    }
     : undefined;
 
   const initialInvokeOptions: Parameters<RuntimeAdapter["invoke"]>[0] = {
@@ -360,13 +419,11 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     timeoutSeconds: settings.timeout_seconds,
     maxRetries: settings.max_retries,
     retryDelaySeconds: settings.retry_delay_seconds,
-    onOutput,
     onCallbackError,
     // FR-E18/E20: subscribe to the raw ACP event stream — the engine persists
     // it to `stream.log`. `streamLogPath` is intentionally NOT forwarded (the
     // library drops it under ACP and would report a spurious FR-E79 WARN).
     onEvent,
-    verbosity,
     cwd,
     processRegistry: processRegistry ?? defaultRegistry,
     // FR-E80: shared budget signal — undefined when no cap is configured.
@@ -557,12 +614,10 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
         timeoutSeconds: settings.timeout_seconds,
         maxRetries: settings.max_retries,
         retryDelaySeconds: settings.retry_delay_seconds,
-        onOutput,
         onCallbackError,
         // FR-E18/E20: same engine-owned writer as the initial invoke —
         // events append to one handle across all continuations.
         onEvent,
-        verbosity,
         cwd,
         processRegistry: processRegistry ?? defaultRegistry,
         // FR-E80: same controller as the initial invocation — cumulative

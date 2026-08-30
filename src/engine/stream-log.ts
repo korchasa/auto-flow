@@ -63,6 +63,10 @@ export class FileReadTracker {
 export interface StreamLogWriter {
   /** Format one raw ACP `session/update` params object and enqueue a write. */
   handleEvent(params: Record<string, unknown>): void;
+  /** Enqueue lines already produced by a shared {@link EventFormatter}.
+   * `runAgent` formats once and fans the result out to this writer and the
+   * terminal, so the two never disagree (FR-E98). */
+  writeLines(lines: string[]): void;
   /**
    * Return the first async write rejection observed so far (and clear it).
    * `runAgent` polls this after each invoke and after `close()`; a non-null
@@ -72,6 +76,66 @@ export interface StreamLogWriter {
   /** Flush pending writes, append the `--- end ---` footer, close the fd.
    * Idempotent. */
   close(): Promise<void>;
+}
+
+/**
+ * Turns raw ACP `session/update` params into the engine's human-readable
+ * lines. Split out of the stream-log writer so one node run formats each
+ * event exactly once and feeds the same lines to `stream.log` and to the
+ * terminal (FR-E98) — the ACP wire cannot carry `onOutput`, so live
+ * per-node output is derived from the event stream instead.
+ *
+ * Statefulness matters: the FR-E20 repeat-read counter lives here, so both
+ * sinks must share ONE formatter or a re-read is counted twice.
+ */
+export interface EventFormatter {
+  /** Format one raw params object. Returns an empty array on a parse throw. */
+  format(params: Record<string, unknown>): string[];
+}
+
+/** Create an {@link EventFormatter} with its own FR-E20 read counter. */
+export function createEventFormatter(
+  opts: StreamLogWriterOptions = {},
+): EventFormatter {
+  const tracker = new FileReadTracker();
+  return {
+    format(params: Record<string, unknown>): string[] {
+      let items;
+      try {
+        // ACP extractor ignores the `runtime` field — see
+        // runtime/acp/content.ts (`_runtime` reserved/unused). The wrapper
+        // is byte-identical to the library's own `mapSessionUpdate`.
+        items = extractSessionContent({
+          runtime: "claude",
+          type: "session/update",
+          raw: params,
+        });
+      } catch (err) {
+        // Parse failure is best-effort: route to the WARN channel, skip line.
+        opts.onParseError?.(err, "onEvent");
+        return [];
+      }
+      const lines: string[] = [];
+      for (const item of items) {
+        if (item.kind === "text") {
+          lines.push(`[stream] text: ${item.text}`);
+        } else if (item.kind === "tool") {
+          const args = compactArgs(item.input);
+          lines.push(`[stream] tool: ${item.name}${args ? ` ${args}` : ""}`);
+          // FR-E20: surface repeated reads of the same path. Claude's `Read`
+          // tool surfaces as the ACP tool title; the path is in `file_path`.
+          const filePath = item.input?.file_path;
+          if (item.name === "Read" && typeof filePath === "string") {
+            const warn = tracker.track(filePath);
+            if (warn) lines.push(warn);
+          }
+        } else if (item.kind === "final") {
+          lines.push(`[stream] result: ${item.text}`);
+        }
+      }
+      return lines;
+    },
+  };
 }
 
 /** Options for {@link createStreamLogWriter}. */
@@ -121,7 +185,6 @@ export function createStreamLogWriter(
     );
   }
 
-  const tracker = new FileReadTracker();
   let tail: Promise<void> = Promise.resolve();
   let writeError: Error | null = null;
   let closed = false;
@@ -148,43 +211,14 @@ export function createStreamLogWriter(
     enqueue(`${stampLines(lines.join("\n"))}\n`);
   };
 
+  const formatter = createEventFormatter(opts);
+
   return {
     handleEvent(params: Record<string, unknown>) {
-      let items;
-      try {
-        // ACP extractor ignores the `runtime` field — see
-        // runtime/acp/content.ts (`_runtime` reserved/unused). The wrapper
-        // is byte-identical to the library's own `mapSessionUpdate`.
-        items = extractSessionContent({
-          runtime: "claude",
-          type: "session/update",
-          raw: params,
-        });
-      } catch (err) {
-        // Parse failure is best-effort: route to the WARN channel, skip line.
-        opts.onParseError?.(err, "onEvent");
-        return;
-      }
-      const lines: string[] = [];
-      for (const item of items) {
-        if (item.kind === "text") {
-          lines.push(`[stream] text: ${item.text}`);
-        } else if (item.kind === "tool") {
-          const args = compactArgs(item.input);
-          lines.push(`[stream] tool: ${item.name}${args ? ` ${args}` : ""}`);
-          // FR-E20: surface repeated reads of the same path. Claude's `Read`
-          // tool surfaces as the ACP tool title; the path is in `file_path`.
-          const filePath = item.input?.file_path;
-          if (item.name === "Read" && typeof filePath === "string") {
-            const warn = tracker.track(filePath);
-            if (warn) lines.push(warn);
-          }
-        } else if (item.kind === "final") {
-          lines.push(`[stream] result: ${item.text}`);
-        }
-      }
-      writeLines(lines);
+      writeLines(formatter.format(params));
     },
+
+    writeLines,
 
     takeWriteError(): Error | null {
       const e = writeError;

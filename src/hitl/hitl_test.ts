@@ -3,6 +3,8 @@
 // the runHitlLoop ask/poll/resume cycle and FR-E64 audit append.
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import type { HitlConfig } from "../types.ts";
+import { collectUnsupportedOptions } from "@korchasa/ai-ide-cli";
+import type { RuntimeInvokeOptions } from "@korchasa/ai-ide-cli/runtime/types";
 import { runHitlLoop } from "./hitl.ts";
 import type { HitlRunOptions } from "./hitl.ts";
 import { nodeWaiting } from "../engine/node-lifecycle.ts";
@@ -517,3 +519,76 @@ Deno.test(
     );
   },
 );
+
+Deno.test("FR-E98 the HITL resume invoke carries no option the transport rejects", async () => {
+  const seen: RuntimeInvokeOptions[] = [];
+
+  const opts = makeBaseOpts({
+    scriptRunner: (path: string, _args: string[]) =>
+      Promise.resolve(
+        path.includes("check")
+          ? { exitCode: 0, stdout: "Go" }
+          : { exitCode: 0, stdout: "" },
+      ),
+    claudeRunner: (invokeOpts) => {
+      seen.push(invokeOpts);
+      return Promise.resolve({
+        output: {
+          result: "ok",
+          session_id: "sess-456",
+          total_cost_usd: 0.01,
+          duration_ms: 10,
+          duration_api_ms: 10,
+          num_turns: 1,
+          is_error: false,
+        },
+      });
+    },
+  });
+
+  const result = await runHitlLoop(opts);
+
+  assertEquals(result.success, true);
+  assertEquals(seen.length, 1);
+  assertEquals(
+    collectUnsupportedOptions(
+      "invoke",
+      seen[0] as unknown as Record<string, unknown>,
+    ),
+    [],
+  );
+});
+
+Deno.test("FR-E98 runtime_args on the HITL resume fail with a named engine error", async () => {
+  const seen: RuntimeInvokeOptions[] = [];
+
+  const opts = makeBaseOpts({
+    runtimeArgs: { "--foo": "bar" },
+    scriptRunner: (path: string, _args: string[]) =>
+      Promise.resolve(
+        path.includes("check")
+          ? { exitCode: 0, stdout: "Go" }
+          : { exitCode: 0, stdout: "" },
+      ),
+    claudeRunner: (invokeOpts) => {
+      seen.push(invokeOpts);
+      return Promise.resolve({
+        output: {
+          result: "ok",
+          session_id: "sess-456",
+          total_cost_usd: 0.01,
+          duration_ms: 10,
+          duration_api_ms: 10,
+          num_turns: 1,
+          is_error: false,
+        },
+      });
+    },
+  });
+
+  const result = await runHitlLoop(opts);
+
+  assertEquals(result.success, false);
+  assertEquals(seen.length, 0, "the resume invoke must not be attempted");
+  assertStringIncludes(result.error ?? "", "runtime_args");
+});

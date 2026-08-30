@@ -21,4 +21,5 @@
 - [FR-E95](requirements-engine/10-fork-join.md#395-fr-e95-explicit-forkjoin) — Explicit `fork`/`join` branch groups with static and agent-decided branches — [ ]
 - [FR-E96](requirements-engine/10-fork-join.md#396-fr-e96-captured-node-answers-and-branch-manifest) — Captured node answers and per-group branch manifest for the join node — [ ]
 - [FR-E97](requirements-engine/10-fork-join.md#397-fr-e97-input-driven-node-scheduling) — Input-driven node scheduling replacing the DAG-level barrier — [ ]
+- [FR-E98](requirements-engine/11-acp-transport-contract.md#398-fr-e98-acp-unsupported-invoke-options-never-leave-the-engine) — The engine sends no invoke option the ACP wire rejects — [x]
 - [FR-E9](requirements-engine/01-execution-model.md#39-fr-e9-run-artifacts-folder-structure) — Run artifacts live under the selected workflow run directory — [x]

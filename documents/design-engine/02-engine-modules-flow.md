@@ -420,3 +420,27 @@
     AgentRunOptions.settings → AbortController → RuntimeInvokeOptions.signal
     → library cooperative abort → AgentResult.error_category =
     "retry_budget_exceeded" → nodeFailed / journal node_failed`.
+
+### ACP invoke-option filter (FR-E98)
+
+The ACP wire cannot carry every `RuntimeInvokeOptions` field, and
+`@korchasa/ai-ide-cli` rejects the whole invoke when one appears. The engine
+keeps them out at the source rather than reacting to the library's error.
+
+- `agent.ts:acpUnsupportedIntent(agent, extraArgs)` is the single decision
+  point for the fields that carry workflow intent. It returns a message
+  naming the YAML keys (`agent`, `runtime_args`) or `undefined`. Both
+  `runAgent` and `runHitlLoop` call it before their first `adapter.invoke()`
+  and short-circuit to `error_category: "config_error"` — nothing has been
+  spawned yet, so the failure is a config failure, not a `cli_crash`.
+- `verbosity` and `onOutput` are simply no longer built into the options
+  object. The engine already owns terminal output through `OutputManager`,
+  so nothing is lost by not asking the library to do it.
+- Live per-node lines now come from the event stream instead:
+  `stream-log.ts:createEventFormatter()` holds the ACP→lines mapping and the
+  FR-E20 re-read counter, `runAgent` creates exactly one per node run, and
+  its `onEvent` formats each event ONCE before fanning the lines out to
+  `StreamLogWriter.writeLines()` and to `output.nodeOutput()`. One formatter
+  is required, not incidental: two would count a repeated read twice.
+- `StreamLogWriter.handleEvent()` remains, backed by its own private
+  formatter, so an embedder wiring the writer directly is unaffected.
