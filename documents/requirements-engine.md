@@ -38,6 +38,8 @@ FR-IDs are stable — never renumber them on move.
   shell-predicate loop exit (FR-E87), command node type (FR-E88),
   conditional edges (FR-E89), data-driven fan-out (FR-E90), per-node
   worktree (FR-E91), journal hash chain (FR-E92), HITL node type (FR-E93).
+- [09-development-visualization.md](requirements-engine/09-development-visualization.md)
+  — Static workflow visualization for development (FR-E94).
 - [10-fork-join.md](requirements-engine/10-fork-join.md)
   — Explicit fork/join (FR-E95), captured node answers and the branch
   manifest (FR-E96), input-driven node scheduling (FR-E97).
@@ -139,6 +141,7 @@ FR-IDs are stable — never renumber them on move.
 - FR-E91 (Per-Node Worktree Isolation)                 → 08-graph-and-isolation
 - FR-E92 (Journal Hash Chain + Verify)                 → 08-graph-and-isolation
 - FR-E93 (HITL Node Type)                              → 08-graph-and-isolation
+- FR-E94 (Static Workflow Diagram)                     → 09-development-visualization
 - FR-E95 (Explicit Fork/Join)                          → 10-fork-join
 - FR-E96 (Node Answers + Branch Manifest)              → 10-fork-join
 - FR-E97 (Input-Driven Node Scheduling)                → 10-fork-join

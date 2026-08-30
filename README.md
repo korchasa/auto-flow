@@ -530,6 +530,8 @@ deno task check            # Full verification: fmt, lint, test, gitleaks (incl.
 deno task test             # Run all tests
 deno task fmt              # Format code
 deno task dashboard        # Render an HTML run dashboard
+deno task workflow-diagram -- .flowai-workflow/github-inbox --output workflow.html
+                            # Render one interactive visual-workflow canvas
 deno task compile          # Build standalone binaries
 deno task loop             # Iterative SDLC self-runner (advanced)
 deno task release          # Cut a commit-and-tag-version bump (CI-driven)

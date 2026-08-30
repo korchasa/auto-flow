@@ -21,6 +21,7 @@
     "run": "deno run -A --no-check src/cli.ts run .flowai-workflow/github-inbox",
     "loop": "deno run -A --no-check scripts/self-runner.ts",
     "dashboard": "deno run --allow-read --allow-write scripts/generate-dashboard.ts",
+    "workflow-diagram": "deno run --allow-read --allow-write scripts/workflow-diagram.ts",
     "compile": "deno run -A scripts/compile.ts",
     "release": "deno run -A npm:commit-and-tag-version@13.1.2 --skip.tag",
     "fmt": "deno fmt",

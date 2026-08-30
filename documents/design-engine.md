@@ -19,7 +19,8 @@ across section files in [design-engine/](design-engine/) to fit within the
   flags, verbose output pattern.
 - [03-subsystems.md](design-engine/03-subsystems.md) — §3.2 Phase Registry,
   §3.3 Process Registry, §3.4 Binary Distribution, §3.5 Shared Backoff,
-  Binary Compile Script, §3.6 Release CI Workflow.
+  Binary Compile Script, §3.6 Release CI Workflow, FR-E94 static workflow
+  diagram generator.
 - [04-data-and-logic.md](design-engine/04-data-and-logic.md) — §4 Data
   (entities, inter-node data flow, validation rules), §5 Logic (all
   algorithms, template resolution, error-handling precedence).

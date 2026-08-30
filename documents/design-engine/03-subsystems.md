@@ -333,3 +333,40 @@
   fake) and excluded from the JSR tarball via `deno.json#publish.exclude`.
   ACP-front behaviour (handshake, wire errors, real process kill) is
   deliberately NOT emulated — that band belongs to `@korchasa/ai-ide-cli`.
+
+### 3.94 Static Workflow Diagram (`scripts/workflow-diagram.ts`) — FR-E94
+
+- **Input boundary:** Accept a workflow directory or direct YAML path. Parse
+  only structural fields required for visualization; do not execute commands,
+  interpolate templates, or require the external project's engine version.
+  Read both forms of `fork` (FR-E95) — the `"<group>.<branch>"` string and the
+  object with `group`/`branches` — without normalising one into the other.
+- **Graph model:** Assign deterministic Mermaid-safe identifiers in YAML node
+  order. Reduce each node's `inputs` to immediate dependencies by removing an
+  input when another declared input already depends on it. Infer an omitted
+  phase only when all known adjacent phases agree; report the inference in
+  prose. Separate `run_on` nodes into a post-workflow group. Represent loop
+  bodies as contained nodes with their internal dependency edges.
+- **Primary view:** For an `.html` output path, flatten the config with
+  `flattenNodes` — every top-level node plus the body nodes of every loop,
+  under `"<loop>/<body>"` ids — compute a left-to-right DAG rank over that
+  flattened graph, and emit one self-contained interactive SVG canvas. A body
+  node no sibling precedes takes its loop as its input, which draws the
+  containment edge the Mermaid view spells out as `-. contains .->`; a body
+  node inherits the phase of the loop that owns it, since a `phases:` block
+  never names a body node.
+  Curved edges connect explicit prerequisites; node cards carry input/output
+  ports, type color, operation, stable ID, phase, and an execution summary.
+  Pointer drag pans, wheel/buttons zoom, and Fit restores the whole graph.
+  Selecting a node fills a right-hand inspector from the complete unabridged
+  node config, including commands, prompts, gates, hooks, validation, fork and
+  join membership, loops, and overrides. No Mermaid HTML-label behavior is involved.
+- **Completeness guard:** Compare keys recursively against the supported
+  workflow schema. Unknown workflow/default/node/settings/fork/validation
+  fields produce an explicit incomplete marker and path-specific warnings, so
+  schema growth cannot silently disappear from visualization. Prompt bodies are
+  summarized by line count and opening line; executable shell text remains
+  exact after YAML whitespace folding.
+- **Compatibility view:** Non-HTML paths retain the Markdown/Mermaid renderer.
+  Both renderers are static and have no browser, workflow-execution, or network
+  dependency.
