@@ -2,6 +2,45 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.9.0](https://github.com/korchasa/flowai-workflow/compare/v0.8.6...v0.9.0) (2026-08-30)
+
+### ⚠ BREAKING CHANGES
+
+* **engine:** `for_each` is rejected at config load with a message
+  naming `fork` as its replacement. `ForEachConfig` and `{{each.*}}` are
+  removed; use `ForkConfig` and `{{branch.*}}`.
+
+### Features
+
+* **engine:** conditional node execution via a `when` gate (FR-E89) ([2252075](https://github.com/korchasa/flowai-workflow/commit/2252075ed3132256e6aebec82a9dacb70cf524ff))
+* **engine:** data-driven fan-out with `for_each` (FR-E90) ([2856ee3](https://github.com/korchasa/flowai-workflow/commit/2856ee31890bd53ba2064327b1a5869015fb76d3))
+* **engine:** give a node its own worktree with isolation: worktree ([e43ab3d](https://github.com/korchasa/flowai-workflow/commit/e43ab3de69241d15a710a053aabe63ce3128aeed))
+* **engine:** hash-chain the run journal and add `verify` (FR-E92) ([d03e738](https://github.com/korchasa/flowai-workflow/commit/d03e738a58b743bc3ffbc21e98201b4b17bb0105))
+* **engine:** human-in-the-loop as a node type (FR-E93) ([44b7bf7](https://github.com/korchasa/flowai-workflow/commit/44b7bf7b87425ffbd9b1d642853dedcd4ad7d933))
+* **engine:** loop exit as a shell predicate (FR-E87) ([906ef0c](https://github.com/korchasa/flowai-workflow/commit/906ef0cd26ce40b3814012846571c4772f46373b))
+* **engine:** replace for_each with explicit fork/join (FR-E95..E97) ([462f082](https://github.com/korchasa/flowai-workflow/commit/462f08252ed8655bc437b025d79fc3a9776a1ec0))
+* **engine:** scope the FR-E50 guardrail to the level when nodes run concurrently ([333141a](https://github.com/korchasa/flowai-workflow/commit/333141acf9c195a7df21c841ad2a5ad5fa619616))
+* **engine:** shell command as a first-class node type (FR-E88) ([fb9e973](https://github.com/korchasa/flowai-workflow/commit/fb9e973f8dac1c516efaa685d12da98d7537bcf1))
+* **scripts:** render a workflow as an interactive canvas (FR-E94) ([fa2c839](https://github.com/korchasa/flowai-workflow/commit/fa2c839228357fb5471bb188aabda7ed6318733a))
+
+### Documentation
+
+* bring the README up to the current node set and isolation model ([cc77c0b](https://github.com/korchasa/flowai-workflow/commit/cc77c0b8425a5e47190a428ccd17422cc53408aa))
+* compare the engine against peer CLI-agent orchestrators ([c5fbc86](https://github.com/korchasa/flowai-workflow/commit/c5fbc86bc3b3a773f06fd6cc9f943a3dfcc2eba0))
+* detail Bernstein as the closest peer ([b0a367b](https://github.com/korchasa/flowai-workflow/commit/b0a367b10faeef52b6fc28a77a5887bf768bbc8e))
+* extend the competitive landscape with Bernstein, Baton and Conductor ([8f5c969](https://github.com/korchasa/flowai-workflow/commit/8f5c969b55e176c8a70d69b33eeca8d9f2270c25))
+* qualify workflow-folder paths with the <workflow> segment ([2e3c96e](https://github.com/korchasa/flowai-workflow/commit/2e3c96e98ae794e58bd79d62a5678bc6a5f7ae1b))
+* retire the engine/ layout and the stale ai-ide-cli pin claims ([f97b15b](https://github.com/korchasa/flowai-workflow/commit/f97b15b69c469154f88fd4539ae495796456ad0a))
+* **tasks:** record the borrowed-graph-features task for FR-E87..E93 ([3e4f338](https://github.com/korchasa/flowai-workflow/commit/3e4f33822c68ef50351131f61d50c393b37181c9))
+
+### Build System
+
+* **deps:** retire standard-version, refresh pins, drop unused std deps ([760ef97](https://github.com/korchasa/flowai-workflow/commit/760ef976262edb212232a7196ced3621def50f14))
+
+### Chores
+
+* **codex:** guard bare deno commands in Codex sessions too ([11a8607](https://github.com/korchasa/flowai-workflow/commit/11a8607cbacb5471f1cca9d785fa114bdf9085bb))
+* **security:** scan the working tree as well as history with gitleaks ([8140906](https://github.com/korchasa/flowai-workflow/commit/8140906dee400926b1da9dd9994856f0f0d06fb8))
 ### [0.8.6](https://github.com/korchasa/flowai-workflow/compare/v0.8.5...v0.8.6) (2026-08-02)
 
 
