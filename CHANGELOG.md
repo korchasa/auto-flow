@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.9.1](https://github.com/korchasa/flowai-workflow/compare/v0.9.0...v0.9.1) (2026-08-30)
+
+### Bug Fixes
+
+* **engine:** stop sending ACP-unsupported invoke options (FR-E98) ([f8a75ec](https://github.com/korchasa/flowai-workflow/commit/f8a75ecc56da6da6852e1e6448c627270ece5beb))
+
+### Documentation
+
+* correct two task-file rules that no longer match the repo ([94fe89c](https://github.com/korchasa/flowai-workflow/commit/94fe89c1bd6339792608d377489f133e38b794c1))
+
+### Chores
+
+* drop two run artifacts committed by mistake ([e0a994e](https://github.com/korchasa/flowai-workflow/commit/e0a994efa4f14b483e3edf72afdc4b54520d05a6))
 ## [0.9.0](https://github.com/korchasa/flowai-workflow/compare/v0.8.6...v0.9.0) (2026-08-30)
 
 ### ⚠ BREAKING CHANGES
