@@ -95,3 +95,16 @@ Deno.test("snapshotModifiedFiles — returns a Set of strings", async () => {
     assertEquals(entry.length > 0, true);
   }
 });
+
+Deno.test("FR-E37 an empty allowed_paths rejects every new modification", () => {
+  // A branch that declares no write scope gets `[]` rather than "no check",
+  // so anything it touches is a violation.
+  assertEquals(
+    findViolations(new Set(["pre.txt"]), new Set(["pre.txt", "new.txt"]), []),
+    ["new.txt"],
+  );
+  assertEquals(
+    findViolations(new Set(["pre.txt"]), new Set(["pre.txt"]), []),
+    [],
+  );
+});

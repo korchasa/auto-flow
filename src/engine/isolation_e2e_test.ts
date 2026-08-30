@@ -164,7 +164,7 @@ Deno.test("FR-E91 a failed isolated node keeps its worktree for diagnosis", asyn
   }
 });
 
-Deno.test("FR-E91 each fan-out item of an isolated node gets its own tree", async () => {
+Deno.test("FR-E91 each branch of an isolated fork node gets its own tree", async () => {
   const { dir, state } = await runWorkflow(
     [
       "  list:",
@@ -176,15 +176,21 @@ Deno.test("FR-E91 each fan-out item of an isolated node gets its own tree", asyn
       "    label: Work",
       "    inputs: [list]",
       "    isolation: worktree",
-      "    for_each:",
-      "      source: items.txt",
-      "    command: echo {{each.value}} > src.txt && cp src.txt {{node_dir}}/copy.txt",
+      "    fork:",
+      "      group: g",
+      "      branches: items.txt",
+      "    command: echo {{branch.value}} > src.txt && cp src.txt {{node_dir}}/copy.txt",
+      "  integrate:",
+      "    type: command",
+      "    label: Integrate",
+      "    join: g",
+      "    command: 'true'",
     ].join("\n"),
     "run-iso-fanout",
   );
   try {
     assertEquals(state.nodes.work.status, "completed");
-    // Both items wrote the same file name in their own tree; neither reached
+    // Both branches wrote the same file name in their own tree; neither reached
     // the shared one.
     assertEquals(await Deno.readTextFile(`${dir}/src.txt`), "base\n");
     assertEquals(
@@ -195,6 +201,127 @@ Deno.test("FR-E91 each fan-out item of an isolated node gets its own tree", asyn
       await Deno.readTextFile(`${dir}/wf/runs/run-iso-fanout/work/1/copy.txt`),
       "beta\n",
     );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E91 a branch's nodes share one tree, and the shared tree keeps none of it", async () => {
+  const { dir, state } = await runWorkflow(
+    [
+      "  edit:",
+      "    type: command",
+      "    label: Edit",
+      "    fork: g.a",
+      "    allowed_paths: ['src.txt']",
+      "    command: echo edited > src.txt",
+      "  check:",
+      "    type: command",
+      "    label: Check",
+      "    inputs: [edit]",
+      "    command: cp src.txt {{node_dir}}/seen.txt",
+      "  integrate:",
+      "    type: command",
+      "    label: Integrate",
+      "    join: g",
+      "    command: 'true'",
+    ].join("\n"),
+    "run-branch-tree",
+  );
+  try {
+    assertEquals(state.nodes.check.status, "completed");
+    assertEquals(state.nodes.integrate.status, "completed");
+    // The second node of the branch saw the first one's edit …
+    assertEquals(
+      await Deno.readTextFile(
+        `${dir}/wf/runs/run-branch-tree/check/seen.txt`,
+      ),
+      "edited\n",
+    );
+    // … and the run's shared tree never received it.
+    assertEquals(await Deno.readTextFile(`${dir}/src.txt`), "base\n");
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E96 two code-editing branches return patches an authored join applies", async () => {
+  const { dir, state } = await runWorkflow(
+    [
+      "  edit-existing:",
+      "    type: command",
+      "    label: Edit existing",
+      "    fork: g.existing",
+      "    allowed_paths: ['src.txt']",
+      "    command: echo edited > src.txt",
+      "    after: git add -A -N . && git diff",
+      "  add-new:",
+      "    type: command",
+      "    label: Add new",
+      "    fork: g.new",
+      "    allowed_paths: ['new.txt']",
+      "    command: echo brand-new > new.txt",
+      "    after: git add -A -N . && git diff",
+      "  integrate:",
+      "    type: command",
+      "    label: Integrate",
+      "    join: g",
+      "    command: >-",
+      '      for p in {{node_dir}}/branches/*/*.answer; do git apply "$p"; done',
+    ].join("\n"),
+    "run-branch-patch",
+  );
+  try {
+    assertEquals(state.nodes.integrate.status, "completed");
+    // Each branch edited in its own tree; the join replayed both patches into
+    // the run's tree — the modification and the newly created file alike.
+    assertEquals(await Deno.readTextFile(`${dir}/src.txt`), "edited\n");
+    assertEquals(await Deno.readTextFile(`${dir}/new.txt`), "brand-new\n");
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E91 a branch tree survives until its last node, not its first terminal", async () => {
+  const { dir, state } = await runWorkflow(
+    [
+      "  edit:",
+      "    type: command",
+      "    label: Edit",
+      "    fork: g.a",
+      "    allowed_paths: ['src.txt']",
+      "    command: echo edited > src.txt",
+      "  check-one:",
+      "    type: command",
+      "    label: Check one",
+      "    inputs: [edit]",
+      "    command: cp src.txt {{node_dir}}/seen.txt",
+      "  check-two:",
+      "    type: command",
+      "    label: Check two",
+      "    inputs: [edit]",
+      "    command: cp src.txt {{node_dir}}/seen.txt",
+      "  integrate:",
+      "    type: command",
+      "    label: Integrate",
+      "    join: g",
+      "    command: 'true'",
+    ].join("\n"),
+    "run-branch-two-tails",
+  );
+  try {
+    // Both ends of the branch are terminals of it; whichever finishes first
+    // must not take the tree away from the other.
+    for (const node of ["check-one", "check-two"]) {
+      assertEquals(state.nodes[node].status, "completed");
+      assertEquals(
+        await Deno.readTextFile(
+          `${dir}/wf/runs/run-branch-two-tails/${node}/seen.txt`,
+        ),
+        "edited\n",
+      );
+    }
+    assertEquals(state.nodes.integrate.status, "completed");
   } finally {
     await Deno.remove(dir, { recursive: true });
   }

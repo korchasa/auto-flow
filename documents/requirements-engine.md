@@ -38,6 +38,9 @@ FR-IDs are stable — never renumber them on move.
   shell-predicate loop exit (FR-E87), command node type (FR-E88),
   conditional edges (FR-E89), data-driven fan-out (FR-E90), per-node
   worktree (FR-E91), journal hash chain (FR-E92), HITL node type (FR-E93).
+- [10-fork-join.md](requirements-engine/10-fork-join.md)
+  — Explicit fork/join (FR-E95), captured node answers and the branch
+  manifest (FR-E96), input-driven node scheduling (FR-E97).
 - [07-mcp-and-plugin-runtime.md](requirements-engine/07-mcp-and-plugin-runtime.md)
   — Embedded MCP server (FR-E73), the plugin's self-contained runtime
   with lazy binary compile + auto-MCP registration (FR-E74, superseded
@@ -136,3 +139,6 @@ FR-IDs are stable — never renumber them on move.
 - FR-E91 (Per-Node Worktree Isolation)                 → 08-graph-and-isolation
 - FR-E92 (Journal Hash Chain + Verify)                 → 08-graph-and-isolation
 - FR-E93 (HITL Node Type)                              → 08-graph-and-isolation
+- FR-E95 (Explicit Fork/Join)                          → 10-fork-join
+- FR-E96 (Node Answers + Branch Manifest)              → 10-fork-join
+- FR-E97 (Input-Driven Node Scheduling)                → 10-fork-join

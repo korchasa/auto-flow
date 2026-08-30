@@ -177,21 +177,23 @@ export interface WorkflowDefaults extends NodeSettings {
   memory_paths?: string[];
 }
 
-/** FR-E90: data-driven fan-out of one node over a list of items. */
-export interface ForEachConfig {
-  /** Path to the list, interpolated then resolved against the working
-   * directory. Content is a JSON array of strings/numbers, or one item per
-   * non-empty line. */
-  source: string;
-  /** Artifact-directory naming: `index` (0, 1, 2 …) or `value` (slugified
-   * item text). Defaults to `index`, which is always collision-free. */
-  key_by: "index" | "value";
-  /** Items running at once. Defaults to 1. Values above 1 carry the same
-   * write-attribution risk as `defaults.max_parallel` (FR-E50) and warn. */
-  max_concurrent: number;
-  /** `fail_fast` (default) stops at the first failing item; `collect` runs
-   * every item and then fails the node with a tally. */
-  failure_mode: "fail_fast" | "collect";
+/** FR-E95: the object form of `fork` — one branch per element of a list. */
+export interface ForkConfig {
+  /** Branch group this node's expansions belong to. The group's `join` node
+   * names the same string. */
+  group: string;
+  /** Path to the branch list, interpolated then resolved against the working
+   * directory. Content is a JSON array of strings, numbers or objects, or one
+   * item per non-empty line. An object item is what lets the producing agent
+   * hand each branch its own prompt and scope. */
+  branches: string;
+  /** How a branch gets its name: omitted numbers them (0, 1, 2 …), `value`
+   * slugifies a scalar item, `value.<field>` reads a field of an object item.
+   * Branch names must be unique within a group. */
+  key?: string;
+  /** Branches running at once. Defaults to 1; the config loader fills it in,
+   * so only a hand-built config sees it absent. */
+  max_concurrent?: number;
 }
 
 /** Configuration for a single workflow node. */
@@ -296,9 +298,25 @@ export interface NodeConfig {
    * `phases:` config. When absent, flat `<runDir>/<nodeId>/` is used. */
   phase?: string;
 
-  /** FR-E90: expand this node into one execution per item of a list.
+  /** FR-E95: declare that this node opens a branch of a fork group. The string
+   * form `"<group>.<branch>"` opens one static branch; the object form expands
+   * the node into one branch per element of a runtime list. Membership
+   * propagates from here along `inputs` until the group's `join` node, so a
+   * branch that takes several nodes declares `fork` only on its first one.
    * Valid on `agent` and `command` nodes only. */
-  for_each?: ForEachConfig;
+  fork?: string | ForkConfig;
+
+  /** FR-E95: this node is the barrier of the named fork group. It runs once,
+   * after every branch of the group has finished, and reads their answers from
+   * the manifest the engine writes into its artifact directory. Exactly one
+   * node per group carries it, and no node carries both `fork` and `join`. */
+  join?: string;
+
+  /** FR-E95: what a failed branch does to the rest of its group. `fail_fast`
+   * (default) stops the group at the first failure, `collect` lets every
+   * branch finish and records the failures in the manifest, `all_or_nothing`
+   * fails the group without running the join. Valid on a `join` node only. */
+  failure_mode?: "fail_fast" | "collect" | "all_or_nothing";
 
   /** FR-E89: shell predicate gating this node. Evaluated immediately before
    * the node would run; exit 0 runs it, any other code skips it — and the skip
@@ -330,7 +348,6 @@ export interface NodeConfig {
    * (FR-E91). Valid on `agent` and `command` nodes. Off by default: the shared
    * worktree is how one node's source edits reach the next, so isolation is
    * something a workflow author asks for, not something the engine assumes.
-   * With `for_each`, every item gets its own worktree.
    *
    * The node's artifacts still land in the run's shared directory, so
    * `{{input.<id>}}` keeps working downstream; only the source tree splits. */
@@ -802,14 +819,15 @@ export interface TemplateContext {
     /** Zero-based iteration counter of the enclosing loop. */
     iteration: number;
   };
-  /** FR-E90 fan-out context; only present for one expansion of a `for_each`
-   * node. */
-  each?: {
-    /** Zero-based position of this item in the source list. */
+  /** FR-E95 branch context; only present for a node running inside one branch
+   * of a fork group. */
+  branch?: {
+    /** Zero-based position of this branch in the source list. */
     index: number;
-    /** The item's own text. */
-    value: string;
-    /** This item's artifact-directory name. */
+    /** The branch's own item — a string for a scalar list, an object for a
+     * record list. Addressed as `{{branch.value}}` or `{{branch.value.<field>}}`. */
+    value: unknown;
+    /** This branch's name, and its artifact-directory name. */
     key: string;
   };
 }

@@ -97,18 +97,21 @@ example of engine usage.
   exit condition — artifact-field triple or `until` shell predicate, FR-E87),
   `human` (terminal prompt), `hitl` (asks a human through the workflow's HITL
   transport, FR-E93). Any node may carry a `when:` gate (FR-E89); `agent` and
-  `command` nodes may fan out with `for_each:` (FR-E90) and may ask for a
-  worktree of their own with `isolation: worktree` (FR-E91)
+  `command` nodes may open a branch with `fork:` and close a group with
+  `join:` (FR-E95), and may ask for a worktree of their own with
+  `isolation: worktree` (FR-E91)
 - **Inter-agent communication:** Structured artifacts in
   `<runs-dir>/<run-id>/<node-id>/`, linked via `{{input.<node-id>}}` templates
-- **Execution:** DAG topological sort into levels; levels run in order and one
-  node at a time (`defaults.max_parallel: 1`). Intra-level concurrency is
-  implemented but opt-in: all nodes of a run share ONE worktree, so two nodes
-  editing the same file clobber each other unless they carry
-  `isolation: worktree` (FR-E91). Leak attribution is handled — a concurrent
-  level runs inside ONE FR-E50 guardrail bracket instead of a per-node one
-  (FR-E91), because the snapshots are repository-wide and would otherwise blame
-  whichever node happened to be inside the bracket.
+- **Execution:** a node starts when its own inputs have finished, not when its
+  DAG level has (FR-E97); levels survive only as the picture `--dry-run` and
+  drift detection read. `defaults.max_parallel` caps how many nodes run at once
+  and defaults to 1. Concurrency is opt-in because all nodes of a run share ONE
+  worktree, so two nodes editing the same file clobber each other unless they
+  carry `isolation: worktree` or belong to a fork branch that declares
+  `allowed_paths` (FR-E91). Leak attribution is handled — while more than one
+  node runs they share ONE rolling FR-E50 guardrail bracket instead of a
+  per-node one, because the snapshots are repository-wide and would otherwise
+  blame whichever node happened to be inside the bracket.
 - **Continuation:** Re-invoking agents within same session on validation failure
   (max N per node)
 - **Resume:** Failed/interrupted runs resumable via `--resume <run-id>`;

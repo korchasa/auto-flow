@@ -2,7 +2,7 @@
  * @module
  * Template interpolation engine: resolves `{{var}}` placeholders in prompt
  * and hook strings using the provided {@link TemplateContext}.
- * Supports dotted paths (input.*, args.*, env.*, loop.iteration, each.*),
+ * Supports dotted paths (input.*, args.*, env.*, loop.iteration, branch.*),
  * direct keys (node_dir, run_dir, run_id), file inclusion via
  * `{{file("path")}}` / `{{flow_file("path")}}`, and shell substitution via
  * `{{bash("cmd")}}`.
@@ -23,8 +23,9 @@ export const FILE_INCLUSION_SIZE_WARN_BYTES = 102400;
  * - `{{args.<key>}}` — CLI arguments
  * - `{{env.<key>}}` — environment variables
  * - `{{loop.iteration}}` — current loop iteration
- * - `{{each.value}}`, `{{each.index}}`, `{{each.key}}` — current item of a
- *   `for_each` fan-out (FR-E90); only present on a fanned-out node
+ * - `{{branch.value}}`, `{{branch.value.<field>}}`, `{{branch.index}}`,
+ *   `{{branch.key}}` — the branch this node runs in (FR-E95); only present
+ *   inside a fork group
  * - `{{file("path")}}` — inline file content (single-pass, no re-interpolation),
  *   path resolved against `workDir`
  * - `{{flow_file("path")}}` — same as `file()` but path resolved against the
@@ -200,22 +201,70 @@ function resolve(
       }
       return String(ctx.loop.iteration);
 
-    case "each":
-      if (suffix !== "value" && suffix !== "index" && suffix !== "key") {
+    case "branch": {
+      if (!isBranchProperty(suffix)) {
         throw new Error(
-          `Unknown each property in template variable: {{${key}}}. Supported: each.value, each.index, each.key.`,
+          `Unknown branch property in template variable: {{${key}}}. Supported: branch.index, branch.key, branch.value, branch.value.<field>.`,
         );
       }
-      if (!ctx.each) {
+      if (!ctx.branch) {
         throw new Error(
-          `Template variable {{${key}}} used outside a for_each node.`,
+          `Template variable {{${key}}} used outside a branch group.`,
         );
       }
-      return suffix === "index" ? String(ctx.each.index) : ctx.each[suffix];
+      if (suffix === "index") return String(ctx.branch.index);
+      if (suffix === "key") return ctx.branch.key;
+      return readBranchValue(key, ctx.branch.value, suffix.split(".").slice(1));
+    }
 
     default:
       throw new Error(`Unknown template variable prefix: {{${key}}}`);
   }
+}
+
+/** True for the branch properties the template surface exposes. */
+function isBranchProperty(suffix: string): boolean {
+  return suffix === "index" || suffix === "key" ||
+    /^value(\.[A-Za-z0-9_$-]+)*$/.test(suffix);
+}
+
+/**
+ * Read `{{branch.value}}` or `{{branch.value.<field>}}` off a branch item.
+ *
+ * An object item has no useful string form, so addressing it bare is an error
+ * naming the fields available rather than a rendered `[object Object]`.
+ */
+function readBranchValue(
+  key: string,
+  value: unknown,
+  fields: readonly string[],
+): string {
+  let current: unknown = value;
+  for (const field of fields) {
+    if (typeof current !== "object" || current === null) {
+      throw new Error(
+        `Template variable {{${key}}}: branch value has no field '${field}'.`,
+      );
+    }
+    const record = current as Record<string, unknown>;
+    if (!(field in record)) {
+      throw new Error(
+        `Template variable {{${key}}}: branch value has no field '${field}'. Available: ${
+          Object.keys(record).join(", ") || "(none)"
+        }`,
+      );
+    }
+    current = record[field];
+  }
+  if (typeof current === "string") return current;
+  if (typeof current === "number" || typeof current === "boolean") {
+    return String(current);
+  }
+  throw new Error(
+    `Template variable {{${key}}} resolves to ${
+      current === null ? "null" : typeof current
+    }, not a value that can be rendered — address a field of it instead.`,
+  );
 }
 
 /**
@@ -223,14 +272,14 @@ function resolve(
  *
  * Pure function — no I/O. Returns an array of error descriptions; empty = valid.
  * Known prefixes: `input` (suffix must be in knownInputs), `env`, `args`,
- * `loop` (only `loop.iteration`), `each` (only under a `for_each` node —
- * pass `allowEach`). Known direct keys: `run_dir`, `run_id`,
- * `node_dir`. `file("...")` and `flow_file("...")` patterns are always accepted.
+ * `loop` (only `loop.iteration`), `branch` (only inside a fork group — pass
+ * `allowBranch`). Known direct keys: `run_dir`, `run_id`, `node_dir`.
+ * `file("...")` and `flow_file("...")` patterns are always accepted.
  */
 export function validateTemplateVars(
   template: string,
   knownInputs: string[],
-  allowEach = false,
+  allowBranch = false,
 ): string[] {
   const errors: string[] = [];
 
@@ -284,14 +333,14 @@ export function validateTemplateVars(
         }
         break;
 
-      case "each":
-        if (suffix !== "value" && suffix !== "index" && suffix !== "key") {
+      case "branch":
+        if (!isBranchProperty(suffix)) {
           errors.push(
-            `Unknown each property in template variable: {{${key}}}. Supported: each.value, each.index, each.key.`,
+            `Unknown branch property in template variable: {{${key}}}. Supported: branch.index, branch.key, branch.value, branch.value.<field>.`,
           );
-        } else if (!allowEach) {
+        } else if (!allowBranch) {
           errors.push(
-            `Template variable {{${key}}} used outside a for_each node.`,
+            `Template variable {{${key}}} used outside a branch group.`,
           );
         }
         break;

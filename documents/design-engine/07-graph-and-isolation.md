@@ -145,7 +145,7 @@ reject; `validateTemplateVars(node.command)` must pass.
 ## 3. Conditional Node Execution (FR-E89)
 
 **Modules:** `src/engine/predicate.ts` (new, shared with FR-E87),
-`src/engine/engine.ts#executeLevel`, `src/engine/loop.ts` (body-node gate).
+`src/engine/engine.ts#gateNode`, `src/engine/loop.ts` (body-node gate).
 
 **Shared predicate.** FR-E87's `evaluateUntilPredicate` and FR-E89's `when`
 are the same mechanism — interpolate, `bash -c`, exit 0 means yes. The
@@ -153,10 +153,11 @@ implementation moved to `evaluateShellPredicate` in `predicate.ts`;
 `evaluateUntilPredicate` is now a thin wrapper that keeps the loop's
 vocabulary at its call sites and its FR-E87 tests intact.
 
-**Where the gate sits.** In `executeLevel`'s filter loop, after the
-`--skip`/`--only` filters and before `executeNode`. Levels run in dependency
-order, so by the time a node's level runs, every one of its inputs has already
-been decided — no extra pass is needed to know whether an input was gated out.
+**Where the gate sits.** In `gateNode`, after the `--skip`/`--only` filters
+and before `executeNode`. The scheduler releases a node only once every node it
+depends on has been decided, so by the time the gate runs its inputs already
+carry their verdict — no extra pass is needed to know whether one was gated
+out.
 
 **Two skip vocabularies.** `NodeStatus.skipped` already covers `--skip` and
 `--only`. Those mean "the operator handled this", and their dependents must
@@ -181,83 +182,25 @@ before the type-specific branches, since it applies to every node type:
 non-empty string, and `validateTemplateVars` must accept it. `NODE_CONFIG_KEYS`
 gains `"when"`.
 
-## 4. Data-Driven Fan-Out (FR-E90)
+## 4. Data-Driven Fan-Out (FR-E90) — superseded
 
-**Modules:** `src/engine/for-each.ts` (new),
-`src/engine/engine.ts#executeForEach`, `src/config/template.ts` (`each.*`),
-`src/config/config.ts#validateForEach`.
-
-**Public surface:**
-
-```ts
-export interface ForEachItem { index: number; value: string; key: string }
-
-export function parseForEachSource(text: string): string[];
-export function slugifyKey(value: string): string;
-export function assignKeys(values: string[], cfg: ForEachConfig): ForEachItem[];
-export function resolveForEachItems(
-  node: NodeConfig, ctx: TemplateContext, cwd?: string,
-): Promise<ForEachItem[]>;
-export function itemContext(ctx: TemplateContext, item: ForEachItem): TemplateContext;
-export function ensureItemDir(ctx: TemplateContext, cwd?: string): Promise<void>;
-```
-
-**Source parsing is a pure function** so the format's edge cases — a JSON array
-that does not parse, an array of objects, a bare object, trailing blank lines —
-are unit-testable without a filesystem. The `[`-prefix branch throws rather than
-falling back to line parsing: a truncated array would otherwise fan out once
-over the literal text, which reads as a successful run.
-
-**No new state records.** Item executions run through the ordinary
-`executeAgentNode` / `executeCommandNode`, but with an `EngineContext` whose
-`nodeStarted`/`nodeCompleted`/`nodeFailed` are replaced by no-ops and a failure
-collector. The parent node keeps exactly one `completed`/`failed` transition.
-The alternative — synthetic `nodeId#key` state entries — would put ids into
-`state.json` that no config declares and that `--skip`, `--only` and the DAG
-have no way to address.
-
-**Context derivation.** `itemContext` appends the item's key to `node_dir` and
-attaches `each`. It composes a workDir-relative path from another
-workDir-relative one, which is why `for-each.ts` is on the allowlist of the
-FR-E52 audit test in `template_paths_test.ts` — no filesystem access happens
-there. `ensureItemDir` does the wrapping (`workPath`) and creates the directory
-before the execution writes into it; without it an agent's first `>` redirect
-into `{{node_dir}}` fails on a missing parent.
-
-**Key collisions.** `key_by: value` slugifies, and two distinct items can
-slugify to one name (`a/b` and `a-b`). `assignKeys` suffixes the later one, so
-each item keeps its own directory instead of silently overwriting.
-
-**Concurrency.** Items run in chunks of `max_concurrent` via `Promise.all`,
-mirroring `executeLevel`'s chunking. `fail_fast` breaks after the chunk that
-produced the first failure — mid-chunk cancellation would leave half-written
-artifacts with no record of which item was interrupted.
-
-**Template layer.** `each` joins `loop` as a context-scoped namespace: unknown
-suffixes are rejected outright, and a known suffix outside a fan-out throws.
-`validateTemplateVars` gains an `allowEach` parameter (default `false`) that
-`validateNode` sets from the node's own `for_each` — so `{{each.value}}` on a
-node that never fans out is a load-time error.
-
-**Validation.** `validateForEach` normalises defaults in place (`key_by:
-index`, `max_concurrent: 1`, `failure_mode: fail_fast`), rejects unknown keys
-inside the block, and restricts the block to `agent` and `command` nodes.
-`merge`, `loop` and `human` are excluded deliberately: fanning out a merge has
-no meaning, and a fanned-out loop or human prompt would multiply a control
-structure rather than a unit of work.
+`for_each` and the `src/engine/for-each.ts` module are gone. The expansion they
+provided lives on in the object form of `fork`, implemented by
+`src/engine/branch.ts`; see [08-fork-join.md](08-fork-join.md) §1. Config load
+rejects `for_each` with a message naming its replacement.
 
 ## 5. Node-Scoped Isolation (FR-E91)
 
 **Modules:** `src/isolation/guardrail.ts`, `src/engine/engine.ts`,
 `src/engine/node-dispatch.ts`.
 
-### 5.1 Level-scoped guardrail bracket
+### 5.1 Group-scoped guardrail bracket
 
 `GuardrailOptions` gains two fields:
 
 ```ts
 enabled?: boolean;              // false → no snapshot, no rollback, no log
-scopeKind?: "node" | "level";   // attribution word in the leak message
+scopeKind?: "node" | "group";   // attribution word in the leak message
 ```
 
 `runWithGuardrail` treats `enabled: false` exactly like the existing
@@ -265,15 +208,13 @@ scopeKind?: "node" | "level";   // attribution word in the leak message
 `formatLeakMessage(scope, leaks, kind = "node")` renders `[guardrail]
 <kind>=<scope> …`, so the default keeps every existing message byte-identical.
 
-`Engine` decides the scope per level. `executeLevel` computes `concurrent =
-maxParallel !== 1 && filtered.length > 1` after the `when`/`--skip` filter has
-run — a level of one runnable node is sequential no matter what `max_parallel`
-says, and paying for a second bracket there would only widen attribution for
-free. A concurrent level goes through `executeLevelWithLevelGuardrail`, which
-unions the `allowed_paths` of every node in the level, sets
-`levelGuardrailActive` inside a `try/finally`, and wraps `runLevelNodes` in one
-`runWithGuardrail` call with `scopeKind: "level"` and the node ids joined into
-the scope string.
+`Engine` decides the scope from what is actually running. Since FR-E97 there
+are no levels to bracket, so `GroupGuardrail` rolls: `enter(nodeId,
+allowedPaths)` opens one bracket on the first node and admits every node that
+starts while it is open, unioning their `allowed_paths` and joining their ids
+into the scope string; `leave()` closes it when the last one finishes. A run
+that never has two nodes in flight therefore keeps the per-node bracket and its
+byte-identical message.
 
 The per-node switch travels through `EngineContext.nodeGuardrail`
 (`!this.levelGuardrailActive`), which `node-dispatch.ts` passes as `enabled`.
@@ -305,10 +246,11 @@ execution. Without `isolation: worktree` it calls `fn(eng)` and returns.
 With it: resolve the run tree's HEAD, create the node tree at that commit,
 mirror gitignored files in, run `fn` against a derived `EngineContext`, then
 remove the tree on success (after `pinDetachedHead`) or keep it on failure.
-The same helper serves plain nodes and `for_each` items — the item path passes
-`worktreeKey(nodeId, item.key)` and an `EngineContext` whose `buildContext` is
-already item-scoped, so isolation composes on top of fan-out rather than
-duplicating it.
+`maybeIsolated` takes a boolean rather than reading `node.isolation`, so the
+same helper serves three callers: a node that asked for a tree, one runtime
+branch of a dynamic fork (keyed by the item), and a static branch whose tree is
+shared by all its nodes and keyed `<group>.<branch>` — see
+[08-fork-join.md](08-fork-join.md) §3.
 
 **Two working directories, not one.** `EngineContext` splits `workDir` (the
 run's tree — artifact I/O and the FR-E50 guardrail) from `nodeWorkDir` (the

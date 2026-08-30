@@ -176,57 +176,20 @@ isolation. Reference shapes are named per FR.
     interpolation, gated branch is not a run failure, per-iteration
     re-evaluation in a loop body, non-empty-string and template validation at
     load).
-
 ### 3.90 FR-E90: Data-Driven Fan-Out (`for_each`)
 
-- **Description:** An `agent` or `command` node MAY carry a `for_each` block.
-  The engine reads a list produced by an earlier node and runs that one node
-  once per item, giving each item its own artifact directory and its own
-  `{{each.*}}` variables.
-
-  **Config schema:**
-  ```yaml
-  review:
-    type: agent
-    label: "Review one file"
-    inputs: [plan]
-    for_each:
-      source: "{{input.plan}}/files.txt"   # required
-      key_by: index                        # index (default) | value
-      max_concurrent: 1                    # default 1
-      failure_mode: fail_fast              # fail_fast (default) | collect
-    prompt: "Review {{each.value}} and write the verdict to {{node_dir}}."
-  ```
-
-  **Source format.** The path is interpolated, then resolved against the run's
-  working directory. Its content is either a JSON array of strings/numbers or
-  one item per non-empty line. Content that starts with `[` but does not parse
-  as JSON is an error, not a single item — fanning out once over a broken
-  array would look like success. Objects inside the array are rejected: the
-  fan-out variable is a string.
-
-  **Template variables.** `{{each.value}}` (the item), `{{each.index}}`
-  (zero-based), `{{each.key}}` (the item's directory name). They are valid only
-  on a node that declares `for_each`; used elsewhere they fail at config load,
-  not mid-run.
-
-  **Engine behaviour:**
-  - Artifacts land in `<node-dir>/<key>/`. `key_by: index` names them `0`, `1`,
-    `2`; `key_by: value` slugifies the item (path separators and whitespace
-    become dashes, `..` segments cannot escape the node directory) and suffixes
-    collisions.
-  - The parent node owns exactly one state transition. Item executions are not
-    separate state records, so a fan-out over forty files leaves one verdict in
-    the run state rather than forty overwrites of one record.
-  - `fail_fast` (default) stops at the end of the chunk containing the first
-    failure; `collect` runs every item and then fails the node with a
-    `<n> of <total> items failed` tally listing each failure.
-  - An empty source completes the node without running anything — "no files to
-    review" is an answer, not an error — and downstream nodes proceed.
-  - An unreadable source fails the node with the resolved path named.
-  - `max_concurrent > 1` warns for the same reason `defaults.max_parallel > 1`
-    does: all items share one worktree, so the FR-E50 guardrail can
-    mis-attribute one item's writes to another (see FR-E91).
+- **Description:** An `agent` or `command` node carried a `for_each` block: the
+  engine read a list produced by an earlier node and ran that one node once per
+  item, giving each item its own artifact directory and its own `{{each.*}}`
+  variables. Every item ran the same single node, and an item could not carry
+  instructions of its own, so a fan-out could not express "each of these tasks
+  is different". FR-E95 replaces the block with `fork`/`join`, which keeps the
+  expansion, lets a branch span several nodes, and lets the list items be
+  objects that carry their own prompt and scope.
+- **Tasks:** [explicit-fork-join](../tasks/2026-08-30-explicit-fork-join.md)
+- **Status:** Superseded by FR-E95. The `for_each` key no longer exists in the
+  language; a config that still uses it fails at load with a message naming
+  `fork` as its replacement.
 - **Motivation:** The DAG was fixed at config-authoring time, so "review each
   file the planner listed" had to become one agent handling all N files in one
   context — the reviews compete for one context window, one artifact and one
@@ -234,12 +197,10 @@ isolation. Reference shapes are named per FR.
   over a step's output for exactly this; goose reaches it through subrecipes.
 - **Dep:** FR-E88.
 - **Acceptance criteria:**
-  - **Tests:** `for_each_test.ts`, `for_each_e2e_test.ts`,
-    `config_for_each_test.ts` (FR-E90; regression-locked; source parsing in
-    both formats and its rejections, key slugification and traversal safety,
-    one execution per item, per-item artifact directories under both `key_by`
-    modes, `fail_fast` versus `collect`, empty and unreadable sources, config
-    defaults, node-type restriction, `each.*` scope).
+  - [x] `for_each` is rejected at config load with a message naming `fork` as
+    its replacement, so a workflow written against the old key fails with a
+    migration instruction rather than "unknown key". Evidence:
+    `src/config/config.ts:547`, `src/config/config_fork_test.ts:344`.
 
 ### 3.91 FR-E91: Node-Scoped Isolation
 
@@ -252,13 +213,15 @@ isolation. Reference shapes are named per FR.
   (`defaults.max_parallel != 1` and the level holds more than one runnable
   node), it does not: the snapshots are global, so a file written by node B
   appears inside node A's bracket and is rolled back under A's name. The engine
-  therefore switches the per-node guardrail off for a concurrent level and
-  brackets the whole level once instead. The level bracket unions the
-  `allowed_paths` of every node it covers, and its leak message is attributed to
-  the level, not to a node:
+  therefore switches the per-node guardrail off whenever more than one node is
+  running and brackets the running set once instead. Since FR-E97 the set is
+  rolling rather than a level: a `GroupGuardrail` opens on the first node to
+  start, admits every node that joins while it is open, and closes when the
+  last one leaves. The bracket unions the `allowed_paths` of every node it
+  covered, and its leak message names the group, not a node:
 
   ```
-  [guardrail] level=<level-index> (<node-ids>) leaked <n> file(s): <paths> (rolled back)
+  [guardrail] group (<node-ids>) leaked <n> file(s): <paths> (rolled back)
   ```
 
   A leak still fails the run and is still rolled back; only the attribution
@@ -266,11 +229,18 @@ isolation. Reference shapes are named per FR.
 
   **Part 2 — `isolation: worktree`.** An `agent` or `command` node MAY carry
   `isolation: worktree`, which gives that node its own git worktree instead of
-  the run's shared one. The node's edits are then invisible to every other node,
-  and with `for_each` every item gets a worktree of its own. This is opt-in and
-  off by default, because the shared worktree is the very mechanism by which one
-  node's source edits reach the next: making it the default would break every
-  sequential workflow the engine runs today.
+  the run's shared one. The node's edits are then invisible to every other node.
+  This is opt-in and off by default, because the shared worktree is the very
+  mechanism by which one node's source edits reach the next: making it the
+  default would break every sequential workflow the engine runs today.
+
+  **Part 3 — branch-scoped trees.** A fork branch (FR-E95) that declares
+  `allowed_paths` on any of its nodes gets one worktree keyed
+  `<group>.<branch>`, shared by every node of that branch and by every node
+  alone. Isolation is derived from the write scope rather than asked for
+  separately: a branch that says what it owns is a branch whose writes must not
+  reach its siblings. A branch with no declared scope stays in the run's shared
+  tree and writes nothing (FR-E37).
 
   ```yaml
   build:
@@ -284,7 +254,7 @@ isolation. Reference shapes are named per FR.
   - The node's tree is created at `<workflowDir>/runs/<run-id>/worktrees/<key>`,
     detached at the run tree's HEAD. Committed work from earlier nodes is
     therefore visible; uncommitted working-tree edits are not.
-  - `<key>` is the node id, or `<node-id>-<item-key>` under `for_each`, with
+  - `<key>` is the node id, or `<group>.<branch>` for a branch tree, with
     everything outside `[A-Za-z0-9._-]` collapsed to a dash so a key cannot
     walk out of `worktrees/`.
   - Gitignored files are mirrored into the new tree (FR-E58), so the node can
@@ -295,9 +265,11 @@ isolation. Reference shapes are named per FR.
     non-isolated node writes, and downstream nodes read them unchanged.
   - A succeeding node's tree is removed after its commits are pinned to a
     rescue branch (FR-E51). A failing node's tree is kept and its path logged.
-  - `for_each.max_concurrent > 1` stops warning about mis-attribution when the
-    node is isolated — each item's writes land in a tree of its own.
+    A branch tree lives until the branch's last node finishes, so the pinning
+    and the FR-E58 gitignored-file mirror are paid once per branch, not once
+    per node.
 
+- **Tasks:** [explicit-fork-join](../tasks/2026-08-30-explicit-fork-join.md)
 - **Motivation:** Intra-level concurrency has been implemented but unusable
   since FR-E50 landed: `defaults.max_parallel > 1` emits a warning that the
   guardrail will mis-attribute writes, so no workflow turns it on. The two
@@ -305,17 +277,17 @@ isolation. Reference shapes are named per FR.
   scoped too narrowly (fixable without touching the worktree model) and two
   nodes editing the same file (fixable only by separating their trees) — and
   they are fixed separately.
-- **Dep:** FR-E50, FR-E57, FR-E90.
+- **Dep:** FR-E50, FR-E57, FR-E95.
 - **Acceptance criteria:**
   - **Tests:** `guardrail_level_test.ts`, `node-worktree_test.ts`,
     `node-isolation_test.ts`, `config_isolation_test.ts`,
     `isolation_e2e_test.ts` (FR-E91; regression-locked; the per-node guardrail
-    switch and the level attribution in the leak message; node-tree paths, key
+    switch and the group attribution in the leak message; node-tree paths, key
     slugification and checkout at a ref; absolute artifact paths under
     isolation; config restriction to agent and command nodes; end to end — a
     node's source edits stay out of the shared tree, downstream nodes still
     read its artifacts, the tree is removed on success and kept on failure,
-    and each fan-out item gets its own tree).
+    and every node of one branch shares that branch's tree).
 
 ### 3.92 FR-E92: Journal Hash Chain and Verification
 

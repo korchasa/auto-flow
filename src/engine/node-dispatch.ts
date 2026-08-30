@@ -5,7 +5,9 @@
  * pure orchestrator (config loading, state management, level iteration).
  */
 import type { AgentResult } from "./agent.ts";
-import { resolveInputArtifacts, runAgent } from "./agent.ts";
+import { resolveInputArtifacts, runAgent, runShellCommand } from "./agent.ts";
+import { persistAnswer } from "./answer.ts";
+import { interpolate } from "../config/template.ts";
 import { resolveBudget, resolveToolFilter } from "../config/config.ts";
 import { runWithGuardrail } from "../isolation/guardrail.ts";
 import { handleAgentHitl } from "../hitl/hitl-handler.ts";
@@ -313,6 +315,11 @@ export async function executeAgentNode(
     await saveAgentLog(runDir, nodeId, result.output);
   }
 
+  // FR-E96: the node's answer — the `after` hook's stdout when it declared
+  // one, the agent's final message otherwise. Written beside the artifacts so
+  // a `join` can read it as a file, patch or verdict alike.
+  if (result.success) await persistAnswer(ctx, result.answer ?? "");
+
   await appendAttemptCompleted(eng.journal, nodeId, result);
   return result;
 }
@@ -582,6 +589,28 @@ export async function executeCommandNode(
       return false;
     }
   }
+
+  // FR-E96: the `after` hook's stdout is the node's answer when it declares
+  // one — the same rule an agent node follows — and the command's own stdout
+  // otherwise.
+  let answer = result.stdout;
+  if (node.after) {
+    try {
+      answer = await runShellCommand(
+        interpolate(node.after, ctx, cwd ?? ctx.workDir),
+        "after hook",
+        cwd,
+      );
+    } catch (err) {
+      await eng.nodeFailed(
+        nodeId,
+        `After hook failed: ${(err as Error).message}`,
+        "hook_failure",
+      );
+      return false;
+    }
+  }
+  await persistAnswer(ctx, answer);
 
   return true;
 }

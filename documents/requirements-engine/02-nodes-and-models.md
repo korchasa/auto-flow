@@ -2,6 +2,10 @@
 
 # SRS Engine — Nodes and Models
 
+The `fork`, `join` and `failure_mode` node fields, and the `after` hook's
+redefined role as the node's answer, are specified in
+[10-fork-join.md](10-fork-join.md) (FR-E95, FR-E96).
+
 
 ### 3.10 FR-E10: Loop Body Node Nesting
 

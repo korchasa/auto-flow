@@ -4,22 +4,35 @@
  * Builds execution levels from node dependencies: each level is a set of
  * node IDs that can run in parallel. Loop body nodes are excluded from the
  * main DAG — managed by the loop executor internally.
- * Entry points: {@link buildLevels}, {@link buildLoopBodyOrder}.
+ * Entry points: {@link buildDependencies}, {@link buildLevels},
+ * {@link buildLoopBodyOrder}.
  */
 
 import type { WorkflowConfig } from "../types.ts";
+import { resolveBranchMembership } from "../config/config.ts";
 
 /** Nodes grouped into parallel execution levels. */
 export type ExecutionLevels = string[][];
 
-/** Build execution levels from workflow config via topological sort. */
-export function buildLevels(config: WorkflowConfig): ExecutionLevels {
+/**
+ * Build the dependency map the whole engine reads: node → nodes it waits for.
+ *
+ * Edges come from `inputs`, plus one source `inputs` cannot express: a `join`
+ * node waits for every terminal node of every branch of its group (FR-E95). A
+ * join carries no `inputs` of its own, so without this edge it would sort to
+ * level 0 and the `--dry-run` plan would disagree with what actually runs.
+ *
+ * Cycle detection lives here rather than in the scheduler: a cyclic graph must
+ * fail at load with the cycle named, not stall a ready set that can never fill.
+ */
+export function buildDependencies(
+  config: WorkflowConfig,
+): Map<string, Set<string>> {
   const loopBodyNodes = collectLoopBodyNodes(config);
   const nodeIds = Object.keys(config.nodes).filter(
     (id) => !loopBodyNodes.has(id),
   );
 
-  // Build adjacency: node → set of nodes it depends on (inputs)
   const deps = new Map<string, Set<string>>();
   for (const id of nodeIds) {
     const node = config.nodes[id];
@@ -27,8 +40,68 @@ export function buildLevels(config: WorkflowConfig): ExecutionLevels {
     deps.set(id, new Set(inputs));
   }
 
+  for (const [group, terminals] of branchTerminals(config, loopBodyNodes)) {
+    for (const id of nodeIds) {
+      if (config.nodes[id].join !== group) continue;
+      const own = deps.get(id) ?? new Set<string>();
+      for (const terminal of terminals) own.add(terminal);
+      deps.set(id, own);
+    }
+  }
+
   detectCycles(deps);
-  return topoSort(deps);
+  return deps;
+}
+
+/**
+ * For every fork group, the last node of each of its branches.
+ *
+ * A branch is several nodes chained by `inputs`; the join waits for the end of
+ * each chain, not for the node that opened it. A node of a branch that no
+ * sibling of the same branch takes as input is such an end.
+ */
+export function branchTerminals(
+  config: WorkflowConfig,
+  loopBodyNodes: Set<string>,
+): Map<string, string[]> {
+  const membership = resolveBranchMembership(config);
+  const consumed = new Set<string>();
+  for (const [id, node] of Object.entries(config.nodes)) {
+    if (loopBodyNodes.has(id)) continue;
+    const own = membership.get(id);
+    if (!own) continue;
+    for (const input of node.inputs ?? []) {
+      const upstream = membership.get(input);
+      if (
+        upstream && upstream.group === own.group &&
+        upstream.branch === own.branch
+      ) {
+        consumed.add(input);
+      }
+    }
+  }
+
+  const terminals = new Map<string, string[]>();
+  for (const [id, own] of membership) {
+    if (loopBodyNodes.has(id) || consumed.has(id)) continue;
+    const list = terminals.get(own.group) ?? [];
+    list.push(id);
+    terminals.set(own.group, list);
+  }
+  for (const list of terminals.values()) list.sort();
+  return terminals;
+}
+
+/**
+ * Group nodes into parallel execution levels.
+ *
+ * A projection of {@link buildDependencies}, not a traversal of its own — the
+ * plan a reader sees and the order the scheduler follows must come from one
+ * source. The executor schedules by readiness instead; this shape is what
+ * `--dry-run`, the bootstrap journal and drift detection read.
+ */
+export function buildLevels(config: WorkflowConfig): ExecutionLevels {
+  return topoSort(buildDependencies(config));
 }
 
 /** Collect all node IDs defined inline in any loop's `nodes` sub-object. */

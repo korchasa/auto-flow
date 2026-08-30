@@ -2,10 +2,10 @@ import { assertEquals } from "@std/assert";
 import { formatLeakMessage, runWithGuardrail } from "./guardrail.ts";
 
 /**
- * FR-E91: when a level runs its nodes concurrently, the per-node guardrail is
- * switched off and one snapshot brackets the whole level. These tests cover
- * the switch itself; the level-scoped bracket is exercised end-to-end in
- * `node_isolation_test.ts`.
+ * FR-E91: when several nodes run at once, the per-node guardrail is switched
+ * off and one snapshot brackets the whole running set. These tests cover the
+ * switch and the message; the group-scoped bracket is exercised end-to-end in
+ * `isolation_e2e_test.ts`.
  */
 
 Deno.test("FR-E91 runWithGuardrail — enabled: false skips the check entirely", async () => {
@@ -38,9 +38,9 @@ Deno.test("FR-E91 formatLeakMessage — scope kind defaults to node", () => {
   );
 });
 
-Deno.test("FR-E91 formatLeakMessage — a level-scoped leak names the level", () => {
+Deno.test("FR-E91 formatLeakMessage — a group-scoped leak names every member", () => {
   assertEquals(
-    formatLeakMessage("2 (build, test)", ["a.ts", "b.ts"], "level"),
-    "[guardrail] level=2 (build, test) leaked 2 file(s): a.ts, b.ts (rolled back)",
+    formatLeakMessage("build, test", ["a.ts", "b.ts"], "group"),
+    "[guardrail] group=build, test leaked 2 file(s): a.ts, b.ts (rolled back)",
   );
 });

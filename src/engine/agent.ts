@@ -95,6 +95,9 @@ export interface AgentResult {
   error_category?: ErrorCategory;
   /** Tool permission denials encountered during execution. */
   permission_denials?: PermissionDenial[];
+  /** FR-E96: what this node hands back. The `after` hook's stdout when the
+   * node declares one, the agent's final message otherwise. */
+  answer?: string;
   /** HITL question captured from the agent's MCP `request_human_input` tool
    * call (FR-L35). Populated when the engine intercepted the call via
    * `onToolUseObserved` and aborted the run. The caller is expected to
@@ -603,11 +606,13 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       };
     }
 
-    // Run after hook
+    // Run after hook. Its stdout, when there is a hook, is the node's answer
+    // (FR-E96) — the agent's final message otherwise.
+    let afterOutput: string | undefined;
     if (node.after) {
       const hookCmd = interpolate(node.after, ctx, cwd);
       try {
-        await runShellCommand(hookCmd, "after hook", cwd);
+        afterOutput = await runShellCommand(hookCmd, "after hook", cwd);
       } catch (err) {
         return {
           success: false,
@@ -642,6 +647,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       continuations,
       permission_denials: result.output?.permission_denials,
       hitl_question: hitlObserver?.getQuestion() ?? undefined,
+      answer: afterOutput ?? result.output?.result ?? "",
     };
   } finally {
     // FR-E80: clear the wall-clock budget timer on EVERY exit path —
@@ -701,11 +707,18 @@ function mapRuntimeErrorCategory(
 }
 
 /** Run a shell command (for before/after hooks). */
-async function runShellCommand(
+/**
+ * Run a hook through `sh -c` and return its stdout.
+ *
+ * The stdout is not incidental: when a node declares `after`, that output
+ * becomes the node's answer (FR-E96), which is what lets a code-editing branch
+ * hand its patch back without the engine knowing anything about patches.
+ */
+export async function runShellCommand(
   command: string,
   label: string,
   cwd?: string,
-): Promise<void> {
+): Promise<string> {
   const cmd = new Deno.Command("sh", {
     args: ["-c", command],
     stdout: "piped",
@@ -719,6 +732,7 @@ async function runShellCommand(
       `${label} failed: ${command}${stderr ? `\n${stderr}` : ""}`,
     );
   }
+  return new TextDecoder().decode(output.stdout);
 }
 
 /** Convert ValidationResult[] to verbose format for output. */

@@ -54,7 +54,7 @@
   (default), `opencode`, `cursor`. CLI invocation contracts per runtime
   documented in the sibling `korchasa/ai-ide-cli` repo
   (`documents/requirements/00-meta.md` §5).
-- **Config format:** YAML workflow config with `defaults` (global settings) and `nodes` (DAG definition). Node types: `agent`, `loop`, `merge`, `human`. Fields per type include `runtime`, `runtime_args`, `prompt`, `inputs`, `validate`, `model`, `run_on`, `after`/`before` hooks. `permission_mode` is Claude-only. Config validation rejects non-claude runtimes with unsupported permission modes.
+- **Config format:** YAML workflow config with `defaults` (global settings) and `nodes` (DAG definition). Node types: `agent`, `command`, `loop`, `merge`, `human`, `hitl`. Fields per type include `runtime`, `runtime_args`, `prompt`, `inputs`, `validate`, `model`, `run_on`, `when`, `fork`/`join`/`failure_mode`, `isolation`, `allowed_paths`, and `after`/`before` hooks. `permission_mode` is Claude-only. Config validation rejects non-claude runtimes with unsupported permission modes.
 - **State:** `<run-dir>/state.json` — node statuses (`pending`/`running`/`completed`/`failed`/`waiting`/`skipped`), session IDs, cost data, timing, HITL question JSON.
 - **Template variables:** `{{input.<node-id>}}` (node output dir), `{{node_dir}}` (current node output dir), `{{run_dir}}` (run root), `{{run_id}}`, `{{loop.iteration}}` (loop body only), `{{env.<KEY>}}`, `{{file("path")}}` (inline file content, path relative to `workDir`; FR-E32), `{{flow_file("path")}}` (inline file content, path relative to current workflow folder `workDir/dirname(config_path)`; FR-E55).
 
@@ -84,6 +84,13 @@ Design ideas captured for discussion; not committed work. Promote to FR-E only a
 
 ### P2: Per-Node Worktree Isolation for Safe Parallel Execution
 
+- **Status:** Partially resolved. FR-E91 ships the per-node worktree and
+  FR-E95/FR-E97 the branch-scoped tree and the readiness scheduler, so phase 1
+  is done and phase 2's attribution problem is closed by the rolling group
+  guardrail. Phase 3 stays open: a branch's edits reach the shared tree only
+  through an answer the workflow's own `join` applies (FR-E96), and the engine
+  still performs no merge of its own. Atomic `state.json` writes under real
+  concurrency also remain unaddressed.
 - **Description:** Optional per-node `isolation: node_worktree` field that creates a nested git worktree per node, extending existing FR-E24 (run-level worktree) with finer I/O isolation. Enables safe parallel execution of sibling nodes that write to overlapping file paths.
 - **Motivation:** Sibling independent nodes on the same DAG level can run in parallel via `Promise.allSettled` with the `max_parallel` semaphore, but `max_parallel` now defaults to `1` (sequential) precisely because that parallelism is unsafe today. However, they share the run-level worktree — any two agents writing to the same file race each other. Current SDLC workflow avoids this because parallel sibling nodes are rare (mostly linear PM → Architect → Tech Lead → loop(Dev → QA) → Review). P2 unlocks safe parallelism for workflows that would benefit (e.g., parallel explore-backend + explore-frontend, or adversarial design-review alongside design).
 - **Sketch:**

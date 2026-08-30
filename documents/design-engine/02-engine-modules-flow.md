@@ -131,23 +131,23 @@
     `resolvedBudget.max_usd && state.nodes[id].cost_usd > max_usd` — demotes
     the node via `markNodeFailed(..., "aborted")`, emits `nodeFailed`, honours
     `on_error` (so `continue` still suppresses the failure).
-    Workflow-wide check in `executeLevel()` (after each level and after each
-    chunk when `max_parallel > 0`) via `checkWorkflowBudget("runtime")` —
+    Workflow-wide check in `runNodes()`, after every node completion, via
+    `checkWorkflowBudget("runtime")` —
     throws `Error("Budget exceeded: $X.XX > $Y.YY")` when total strictly
     exceeds `options.budget_usd`. Throw propagates to the `runWithLock` outer
     try/catch which flips `workflowSuccess=false`.
     Resume entry check: `runWithLock` calls `checkWorkflowBudget("resume")`
-    before the level loop — aborts immediately when a loaded
+    before the scheduler starts — aborts immediately when a loaded
     `state.total_cost_usd` already exceeds the cap. The call is wrapped so
     the run is marked failed and a terminal journal fact is recorded before
     the error is rethrown; an unwrapped throw escaped past the status
     bookkeeping and left `run_started` as the journal's last word, i.e. a
     run that looks alive forever.
-    `warnUnsafeParallelism(levels)` runs alongside it: inside a worktree,
-    a `max_parallel` allowing two or more concurrent nodes emits a WARN
-    because the FR-E50 guardrail cannot attribute main-tree changes per
-    node and may roll back a sibling's work. `max_parallel` defaults to
-    `1`; `0` still means unlimited.
+    `max_parallel` defaults to `1`; `0` still means unlimited. The warning
+    that used to accompany it (`warnUnsafeParallelism`) is gone: since
+    FR-E97 the FR-E50 guardrail brackets the set of nodes actually running
+    together instead of one node, so concurrency no longer mis-attributes
+    a sibling's writes.
     `warnBudgetCaveats()` runs once at workflow start (after phase registry
     init): (1) for every node with resolved `budget.max_turns` whose runtime
     is not `claude` emits `budget.max_turns ignored: runtime=<id> (node
@@ -190,7 +190,7 @@
     `template.ts`, executes via `Deno.Command("sh", ["-c", interpolated])`.
     Non-zero exit throws → caught by `run()` → state saved → workflow aborts.
     Call site: `runWithLock()`, after `ensureRunDirs()` + `saveState()`,
-    before level loop. Guarded by `!this.options.resume && cmd` (skipped on
+    before the scheduler starts. Guarded by `!this.options.resume && cmd` (skipped on
     resume — environment already prepared by original run).
     `executeNode()`: passes `extractResultExcerpt(result.output.result)` to
     `markNodeCompleted()` as `result` param (FR-E22).

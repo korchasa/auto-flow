@@ -84,15 +84,32 @@
   invocation and compares it after. Any new modifications outside `allowed_paths` are
   treated as a validation failure, triggering continuation via the existing FR-E1
   mechanism.
+
+  **Inside a fork branch the scope is derived, not optional.** A node that
+  belongs to a branch of a group (FR-E95) and declares no `allowed_paths` gets
+  the empty scope `[]` — it may write nothing — instead of "no check". A branch
+  exists to keep its writes apart from its siblings', so silence there means
+  the author forgot to say what the branch owns, and an unchecked branch is the
+  one case where the check matters most. Outside a branch the field stays
+  optional and absent still means unchecked.
+
+  **Sibling scopes must not overlap.** When two branches of one group both
+  declare `allowed_paths`, config load rejects the pair unless the two glob
+  sets are provably disjoint. The comparison is conservative — a pattern it
+  cannot prove disjoint counts as overlapping — because a false rejection costs
+  the author one edit and a false acceptance costs a silent clobber.
+- **Tasks:** [explicit-fork-join](../tasks/2026-08-30-explicit-fork-join.md)
 - **Motivation:** Without scope enforcement, agents can silently modify out-of-scope files
   during continuation loops — undetected until QA stage, wasting continuation budget.
   `allowed_paths` provides a lightweight, optional per-node safeguard without violating
   the domain-agnostic invariant.
 - **Acceptance criteria:**
-  - **Tests:** `scope-check_test.ts`, `agent_test.ts`, `guardrail_test.ts`
+  - **Tests:** `scope-check_test.ts`, `agent_test.ts`, `guardrail_test.ts`,
+    `branch-scope_test.ts`
     (FR-E37; regression-locked; `findViolations` pure function,
     `snapshotModifiedFiles` baseline, agent integration, shared
-    continuation budget).
+    continuation budget, the empty scope derived inside a branch, and
+    overlap rejection between sibling branch scopes).
 
 
 

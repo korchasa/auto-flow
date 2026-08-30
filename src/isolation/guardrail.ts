@@ -54,14 +54,14 @@ export function detectLeaks(
  * Format a single-line leak report for the engine log.
  * Format: `"[guardrail] <kind>=<scope> leaked <N> file(s): <comma-list> (rolled back)"`.
  *
- * @param kind attribution scope. `node` when one node was bracketed; `level`
- *   when the level ran concurrently and the leak cannot be pinned on a single
- *   node (FR-E91).
+ * @param kind attribution scope. `node` when one node was bracketed; `group`
+ *   when several nodes ran together and the leak cannot be pinned on a single
+ *   one (FR-E91).
  */
 export function formatLeakMessage(
   scope: string,
   leaks: readonly string[],
-  kind: "node" | "level" = "node",
+  kind: "node" | "group" = "node",
 ): string {
   return `[guardrail] ${kind}=${scope} leaked ${leaks.length} file(s): ${
     leaks.join(", ")
@@ -174,7 +174,7 @@ export interface GuardrailOptions {
    * one level-scoped bracket takes over. */
   enabled?: boolean;
   /** Attribution scope for the leak message. Defaults to `node`. */
-  scopeKind?: "node" | "level";
+  scopeKind?: "node" | "group";
 }
 
 /** Outcome of {@linkcode runWithGuardrail}. */
@@ -224,4 +224,83 @@ export async function runWithGuardrail<T>(
   );
   opts.log?.(message);
   return { result, leak: { paths: leakedPaths, message } };
+}
+
+/** Inputs to a {@linkcode GroupGuardrail}. */
+export interface GroupGuardrailOptions {
+  /** Absolute path to the main repo (where `git status` runs). */
+  repoRoot: string;
+  /** Repo-relative path to the run's worktree. */
+  workDir: string;
+  /** Optional sink for the leak message (called only when a leak fires). */
+  log?: (message: string) => void;
+}
+
+/**
+ * FR-E91: an FR-E50 bracket around the set of nodes actually running together.
+ *
+ * The snapshots are repository-wide, so they can only ever describe whoever
+ * was inside the bracket. Bracketing one node while a sibling runs would blame
+ * that node for the sibling's writes; bracketing a DAG level would be wrong in
+ * the other direction once nodes start by readiness rather than by level. The
+ * bracket therefore opens when the first node starts with none running and
+ * closes when the last one finishes, and it is checked against the union of
+ * the scopes of everyone who was inside it — the check can only be as strict
+ * as its most permissive member, which is what concurrency costs.
+ *
+ * A node that happens to run alone gets a bracket of its own, named after it,
+ * so the common case still reports per-node attribution.
+ */
+export class GroupGuardrail {
+  private before: Set<string> | undefined;
+  private members: string[] = [];
+  private allowed = new Set<string>();
+  private depth = 0;
+
+  constructor(private readonly opts: GroupGuardrailOptions) {}
+
+  /** Open the bracket if nothing is running, and record this node's scope. */
+  async enter(nodeId: string, allowedPaths: readonly string[]): Promise<void> {
+    if (this.depth === 0) {
+      this.before = await snapshotMainTree(this.opts.repoRoot);
+      this.members = [];
+      this.allowed.clear();
+    }
+    this.depth++;
+    this.members.push(nodeId);
+    for (const pattern of allowedPaths) this.allowed.add(pattern);
+  }
+
+  /**
+   * Close the bracket when the last node inside it finishes.
+   *
+   * Returns the leak record for that bracket, or `undefined` while other nodes
+   * are still inside it or when nothing leaked.
+   */
+  async leave(): Promise<GuardrailLeak | undefined> {
+    this.depth--;
+    if (this.depth > 0) return undefined;
+
+    const after = await snapshotMainTree(this.opts.repoRoot);
+    const leaks = detectLeaks(
+      this.before ?? new Set(),
+      after,
+      this.opts.workDir,
+      [...this.allowed],
+    );
+    const members = this.members;
+    this.before = undefined;
+    this.members = [];
+    this.allowed.clear();
+    if (leaks.length === 0) return undefined;
+
+    await rollbackLeaks(this.opts.repoRoot, leaks);
+    const message = formatLeakMessage(
+      members.join(", "),
+      leaks,
+      members.length > 1 ? "group" : "node",
+    );
+    this.opts.log?.(message);
+    return { paths: leaks, message };
+  }
 }

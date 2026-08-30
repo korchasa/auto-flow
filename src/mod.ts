@@ -8,7 +8,7 @@ export type {
   CliRunOutput,
   EngineOptions,
   ErrorCategory,
-  ForEachConfig,
+  ForkConfig,
   HitlConfig,
   HumanInputOption,
   HumanInputRequest,

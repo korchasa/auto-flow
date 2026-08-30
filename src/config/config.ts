@@ -13,6 +13,7 @@ import {
   resolveRuntimeConfig,
 } from "@korchasa/ai-ide-cli/runtime";
 import { validateTemplateVars } from "./template.ts";
+import { globsOverlap } from "../isolation/glob.ts";
 import {
   REASONING_EFFORT_VALUES,
   VALID_PERMISSION_MODES,
@@ -194,6 +195,8 @@ function validateSchema(config: Record<string, unknown>): void {
     validateNode(id, node, nodeIds);
   }
 
+  validateForkGraph(config as unknown as WorkflowConfig);
+
   // Validate phases if present
   if (config.phases) {
     if (typeof config.phases !== "object" || Array.isArray(config.phases)) {
@@ -369,7 +372,9 @@ const NODE_CONFIG_KEYS: readonly string[] = [
   "until",
   "command",
   "when",
-  "for_each",
+  "fork",
+  "join",
+  "failure_mode",
   "isolation",
   "max_iterations",
   "merge_strategy",
@@ -388,11 +393,14 @@ const NODE_CONFIG_KEYS: readonly string[] = [
 ];
 
 /**
- * Validate and normalise an FR-E90 `for_each` block in place.
+ * FR-E95: validate and normalise a `fork` declaration in place.
  *
- * Returns whether `{{each.*}}` is legal on this node — the caller threads that
- * into every `validateTemplateVars` call, so a fan-out variable on a node that
- * never fans out is caught at load rather than throwing mid-run.
+ * Two shapes. The string form `"<group>.<branch>"` opens one static branch and
+ * needs nothing at runtime. The object form expands the node into one branch
+ * per element of a list an earlier node produced, so it carries the source
+ * path and the naming rule. Both are restricted to the node types that run
+ * work of their own — a merge, loop, human or hitl node has no execution to
+ * multiply.
  */
 /**
  * FR-E91: validate `isolation`. Restricted to the two node types that run a
@@ -418,55 +426,61 @@ function validateIsolation(
   }
 }
 
-function validateForEach(
+function validateFork(
   id: string,
   node: Record<string, unknown>,
   type: string,
-): boolean {
-  if (node.for_each === undefined) return false;
-
-  if (
-    typeof node.for_each !== "object" || node.for_each === null ||
-    Array.isArray(node.for_each)
-  ) {
-    throw new Error(`Node '${id}' 'for_each' must be an object`);
-  }
+): void {
+  if (node.fork === undefined) return;
   if (type !== "agent" && type !== "command") {
     throw new Error(
-      `Node '${id}' declares 'for_each', which is only valid on 'agent' and 'command' nodes`,
+      `Node '${id}' declares 'fork', which is only valid on 'agent' and 'command' nodes`,
     );
   }
 
-  const cfg = node.for_each as Record<string, unknown>;
-  const known = ["source", "key_by", "max_concurrent", "failure_mode"];
+  if (typeof node.fork === "string") {
+    parseForkName(id, node.fork);
+    return;
+  }
+  if (
+    typeof node.fork !== "object" || node.fork === null ||
+    Array.isArray(node.fork)
+  ) {
+    throw new Error(
+      `Node '${id}' 'fork' must be a '<group>.<branch>' string or an object`,
+    );
+  }
+
+  const cfg = node.fork as Record<string, unknown>;
+  const known = ["group", "branches", "key", "max_concurrent"];
   for (const key of Object.keys(cfg)) {
     if (!known.includes(key)) {
       throw new Error(
-        `Node '${id}' 'for_each' has unknown key '${key}'. Valid keys: ${
+        `Node '${id}' 'fork' has unknown key '${key}'. Valid keys: ${
           known.join(", ")
         }`,
       );
     }
   }
-
-  if (typeof cfg.source !== "string" || !cfg.source) {
-    throw new Error(`Node '${id}' 'for_each' requires a non-empty 'source'`);
-  }
-  if (cfg.key_by === undefined) {
-    cfg.key_by = "index";
-  } else if (cfg.key_by !== "index" && cfg.key_by !== "value") {
+  if (typeof cfg.group !== "string" || !cfg.group || cfg.group.includes(".")) {
     throw new Error(
-      `Node '${id}' 'for_each' key_by must be 'index' or 'value', got '${cfg.key_by}'`,
+      `Node '${id}' 'fork' requires a non-empty 'group' without a '.'`,
     );
   }
-  if (cfg.failure_mode === undefined) {
-    cfg.failure_mode = "fail_fast";
-  } else if (
-    cfg.failure_mode !== "fail_fast" && cfg.failure_mode !== "collect"
-  ) {
+  if (typeof cfg.branches !== "string" || !cfg.branches) {
     throw new Error(
-      `Node '${id}' 'for_each' failure_mode must be 'fail_fast' or 'collect', got '${cfg.failure_mode}'`,
+      `Node '${id}' 'fork' requires a non-empty 'branches' source path`,
     );
+  }
+  if (cfg.key !== undefined) {
+    if (
+      typeof cfg.key !== "string" ||
+      !/^value(\.[A-Za-z0-9_$-]+)*$/.test(cfg.key)
+    ) {
+      throw new Error(
+        `Node '${id}' 'fork' key must be 'value' or 'value.<field>', got '${cfg.key}'`,
+      );
+    }
   }
   if (cfg.max_concurrent === undefined) {
     cfg.max_concurrent = 1;
@@ -476,11 +490,52 @@ function validateForEach(
     cfg.max_concurrent < 1
   ) {
     throw new Error(
-      `Node '${id}' 'for_each' max_concurrent must be a positive integer, got '${cfg.max_concurrent}'`,
+      `Node '${id}' 'fork' max_concurrent must be a positive integer, got '${cfg.max_concurrent}'`,
     );
   }
+}
 
-  return true;
+/** Split a `"<group>.<branch>"` fork name, rejecting every other shape. */
+export function parseForkName(
+  id: string,
+  raw: string,
+): { group: string; branch: string } {
+  const parts = raw.split(".");
+  if (parts.length !== 2 || parts[0] === "" || parts[1] === "") {
+    throw new Error(
+      `Node '${id}' 'fork' must name '<group>.<branch>', got '${raw}'`,
+    );
+  }
+  return { group: parts[0], branch: parts[1] };
+}
+
+/** FR-E95: validate `join` and the `failure_mode` that only a join may carry. */
+function validateJoin(id: string, node: Record<string, unknown>): void {
+  if (node.join !== undefined) {
+    if (typeof node.join !== "string" || !node.join) {
+      throw new Error(`Node '${id}' 'join' must be a non-empty group name`);
+    }
+    if (node.fork !== undefined) {
+      throw new Error(
+        `Node '${id}' declares both 'fork' and 'join' — a node either opens a branch or closes a group`,
+      );
+    }
+  }
+
+  if (node.failure_mode === undefined) return;
+  if (node.join === undefined) {
+    throw new Error(
+      `Node '${id}' declares 'failure_mode', which is only valid on a 'join' node`,
+    );
+  }
+  const modes = ["fail_fast", "collect", "all_or_nothing"];
+  if (!modes.includes(node.failure_mode as string)) {
+    throw new Error(
+      `Node '${id}' failure_mode must be one of ${
+        modes.join(", ")
+      }, got '${node.failure_mode}'`,
+    );
+  }
 }
 
 function validateNode(
@@ -488,6 +543,12 @@ function validateNode(
   node: Record<string, unknown>,
   allNodeIds: string[],
 ): void {
+  if (node.for_each !== undefined) {
+    throw new Error(
+      `Node '${id}': 'for_each' was replaced by 'fork' (FR-E95) — declare 'fork: {group, branches, key}' on this node and add a matching 'join' node`,
+    );
+  }
+
   for (const key of Object.keys(node)) {
     if (!NODE_CONFIG_KEYS.includes(key)) {
       throw new Error(
@@ -542,9 +603,13 @@ function validateNode(
     }
   }
 
-  // FR-E90: `for_each` decides whether `{{each.*}}` is legal anywhere on this
-  // node, so it is normalised before any template validation runs.
-  const allowEach = validateForEach(id, node, type);
+  // FR-E95: `fork`/`join` are normalised before any template validation runs.
+  // Whether `{{branch.*}}` is legal here depends on branch membership, which
+  // only the whole graph knows, so that gate runs in `validateForkGraph`
+  // after every node has been checked on its own.
+  validateFork(id, node, type);
+  validateJoin(id, node);
+  const allowBranch = true;
   validateIsolation(id, node, type);
 
   // FR-E89: `when` gates any node type, so it is checked before the
@@ -555,7 +620,7 @@ function validateNode(
         `Node '${id}' 'when' must be a non-empty string (a shell predicate)`,
       );
     }
-    const whenErrors = validateTemplateVars(node.when, allNodeIds, allowEach);
+    const whenErrors = validateTemplateVars(node.when, allNodeIds, allowBranch);
     if (whenErrors.length > 0) {
       throw new Error(
         `Node '${id}' 'when' has invalid template variables: ${
@@ -588,7 +653,7 @@ function validateNode(
     const commandErrors = validateTemplateVars(
       node.command,
       allNodeIds,
-      allowEach,
+      allowBranch,
     );
     if (commandErrors.length > 0) {
       throw new Error(
@@ -700,6 +765,13 @@ function validateNode(
         );
       }
       const bodyNode = rawBody as Record<string, unknown>;
+      // FR-E97: a loop body runs through its own traversal, not the readiness
+      // scheduler, so a branch opened inside one would never reach a join.
+      if (bodyNode.fork !== undefined || bodyNode.join !== undefined) {
+        throw new Error(
+          `Loop node '${id}' body node '${bodyId}' declares 'fork' or 'join' — branch groups are not allowed inside a loop body`,
+        );
+      }
       validateNode(bodyId, bodyNode, validInputIds);
     }
 
@@ -766,7 +838,7 @@ function validateNode(
     const questionErrors = validateTemplateVars(
       node.question,
       allNodeIds,
-      allowEach,
+      allowBranch,
     );
     if (questionErrors.length > 0) {
       throw new Error(
@@ -779,7 +851,7 @@ function validateNode(
 
   // Validate hook template variables (FR-E7)
   if (typeof node.before === "string" && node.before) {
-    const errors = validateTemplateVars(node.before, allNodeIds, allowEach);
+    const errors = validateTemplateVars(node.before, allNodeIds, allowBranch);
     if (errors.length > 0) {
       throw new Error(
         `Node '${id}' before hook has invalid template variables: ${
@@ -789,7 +861,7 @@ function validateNode(
     }
   }
   if (typeof node.after === "string" && node.after) {
-    const errors = validateTemplateVars(node.after, allNodeIds, allowEach);
+    const errors = validateTemplateVars(node.after, allNodeIds, allowBranch);
     if (errors.length > 0) {
       throw new Error(
         `Node '${id}' after hook has invalid template variables: ${
@@ -1492,6 +1564,235 @@ export function validateFileReferences(
  * Find a NodeConfig by ID, searching both top-level nodes and loop body nodes.
  * Returns undefined if not found.
  */
+/** Branch identity of a node inside a fork group. */
+export interface BranchMembership {
+  /** The fork group. */
+  group: string;
+  /** The branch within it; `*` for a branch set only known at runtime. */
+  branch: string;
+}
+
+/** Branch name standing for "one per element of the runtime list". */
+export const DYNAMIC_BRANCH = "*";
+
+/** Read a node's own `fork` declaration, or undefined when it opens no branch. */
+function forkEntry(id: string, node: NodeConfig): BranchMembership | undefined {
+  if (node.fork === undefined) return undefined;
+  return typeof node.fork === "string"
+    ? parseForkName(id, node.fork)
+    : { group: node.fork.group, branch: DYNAMIC_BRANCH };
+}
+
+/**
+ * FR-E95: work out which branch each node runs in.
+ *
+ * A branch declares itself once, on the node that opens it, and membership
+ * then flows along `inputs` until the group's `join`. That is what lets a
+ * branch be several nodes — an agent that edits and a command that checks its
+ * work belong to the same branch, and therefore to the same worktree, without
+ * repeating the declaration on both.
+ *
+ * A node fed by two branches of the same group is an error unless it is the
+ * join: it would otherwise read two branches' artifacts while belonging to
+ * one, and its writes could not be attributed to either.
+ */
+export function resolveBranchMembership(
+  config: WorkflowConfig,
+): Map<string, BranchMembership> {
+  const membership = new Map<string, BranchMembership>();
+  for (const [id, node] of Object.entries(config.nodes)) {
+    const own = forkEntry(id, node);
+    if (own) membership.set(id, own);
+  }
+
+  // Fixpoint rather than a topological walk: `inputs` may describe a cycle,
+  // and rejecting that is the DAG builder's job, not this one's.
+  let changed = true;
+  let guard = Object.keys(config.nodes).length + 1;
+  while (changed && guard-- > 0) {
+    changed = false;
+    for (const [id, node] of Object.entries(config.nodes)) {
+      if (node.fork !== undefined || node.join !== undefined) continue;
+      const seen: BranchMembership[] = [];
+      for (const input of node.inputs ?? []) {
+        const m = membership.get(input);
+        if (!m) continue;
+        if (!seen.some((x) => x.group === m.group && x.branch === m.branch)) {
+          seen.push(m);
+        }
+      }
+      if (seen.length > 1) {
+        throw new Error(
+          `Node '${id}' takes inputs from two branches (${
+            seen.map((m) => `${m.group}.${m.branch}`).join(", ")
+          }) — only the group's 'join' node may read more than one branch`,
+        );
+      }
+      if (seen.length === 1 && !membership.has(id)) {
+        membership.set(id, seen[0]);
+        changed = true;
+      }
+    }
+  }
+
+  return membership;
+}
+
+/**
+ * FR-E95: check the fork groups of a whole graph.
+ *
+ * Per-node validation cannot see a group — it is spread over the node that
+ * opens each branch and the node that closes the group — so pairing,
+ * duplicate branch names and the scope of `{{branch.*}}` are all decided here.
+ */
+function validateForkGraph(config: WorkflowConfig): void {
+  const entries = new Map<string, string>();
+  const groups = new Set<string>();
+  for (const [id, node] of Object.entries(config.nodes)) {
+    const own = forkEntry(id, node);
+    if (!own) continue;
+    const key = `${own.group}.${own.branch}`;
+    const previous = entries.get(key);
+    if (previous !== undefined) {
+      throw new Error(
+        `Branch '${key}' is declared twice — nodes '${previous}' and '${id}' both fork into it`,
+      );
+    }
+    entries.set(key, id);
+    groups.add(own.group);
+  }
+
+  const joins = new Map<string, string>();
+  for (const [id, node] of Object.entries(config.nodes)) {
+    if (node.join === undefined) continue;
+    const previous = joins.get(node.join);
+    if (previous !== undefined) {
+      throw new Error(
+        `Branch group '${node.join}' has more than one 'join' node ('${previous}' and '${id}')`,
+      );
+    }
+    joins.set(node.join, id);
+  }
+
+  for (const group of groups) {
+    if (!joins.has(group)) {
+      throw new Error(
+        `Branch group '${group}' has no 'join' node — a group that never closes would leave its branches' answers unread`,
+      );
+    }
+  }
+  for (const [group, id] of joins) {
+    if (!groups.has(group)) {
+      throw new Error(
+        `Node '${id}' joins branch group '${group}' but no node forks into it`,
+      );
+    }
+  }
+
+  const membership = resolveBranchMembership(config);
+
+  // FR-E95: a branch produced at runtime is exactly one node long. Its
+  // expansions live inside that node, so a downstream node would run once for
+  // N branches and read whichever one finished last.
+  for (const [id, own] of membership) {
+    if (own.branch !== DYNAMIC_BRANCH) continue;
+    if (config.nodes[id].fork !== undefined) continue;
+    throw new Error(
+      `Node '${id}' inherits branch group '${own.group}' from a node whose branches are produced at runtime, and such a branch is one node long — give the branch its work in the forking node, or declare static branches`,
+    );
+  }
+
+  // FR-E97: a loop runs its body through its own traversal, not the readiness
+  // scheduler, so a branch that swallows a loop has no terminal node the join
+  // can wait on and no defined tree for the body's writes.
+  for (const [id, own] of membership) {
+    if (config.nodes[id].type !== "loop") continue;
+    throw new Error(
+      `Node '${id}': a loop node '${id}' belongs to branch '${own.group}.${own.branch}' — a loop may not sit inside a branch; move it before the fork or after the join`,
+    );
+  }
+
+  validateDisjointBranchScopes(config, membership);
+
+  const nodeIds = Object.keys(config.nodes);
+  for (const [id, node] of Object.entries(config.nodes)) {
+    if (membership.has(id)) continue;
+    for (const [field, text] of templatedStrings(node)) {
+      const errors = validateTemplateVars(text, nodeIds, false)
+        .filter((e) => e.includes("branch"));
+      if (errors.length > 0) {
+        throw new Error(
+          `Node '${id}' field '${field}': ${errors.join("; ")}`,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * FR-E37: two branches of one group may not claim overlapping write scopes.
+ *
+ * Branches run at the same time; a path both may write is a path where one
+ * branch's edit silently replaces the other's. The check is conservative —
+ * it fires unless the two scopes are provably disjoint — because a missed
+ * overlap loses work while a false one costs an edit to the config.
+ */
+function validateDisjointBranchScopes(
+  config: WorkflowConfig,
+  membership: Map<string, BranchMembership>,
+): void {
+  const scopes = new Map<string, Map<string, string[]>>();
+  for (const [id, own] of membership) {
+    const paths = config.nodes[id].allowed_paths;
+    if (paths === undefined) continue;
+    const group = scopes.get(own.group) ?? new Map<string, string[]>();
+    group.set(own.branch, [...(group.get(own.branch) ?? []), ...paths]);
+    scopes.set(own.group, group);
+  }
+
+  for (const [group, branches] of scopes) {
+    const names = [...branches.keys()].sort();
+    for (let i = 0; i < names.length; i++) {
+      for (let j = i + 1; j < names.length; j++) {
+        for (const left of branches.get(names[i])!) {
+          for (const right of branches.get(names[j])!) {
+            if (!globsOverlap(left, right)) continue;
+            throw new Error(
+              `Branches '${group}.${names[i]}' and '${group}.${
+                names[j]
+              }' declare overlapping write scopes ('${left}' and '${right}') — branches of one group run at the same time, so both edits cannot survive`,
+            );
+          }
+        }
+      }
+    }
+  }
+}
+
+/** Every string of a node that goes through template interpolation. */
+function* templatedStrings(
+  node: NodeConfig,
+): Generator<[string, string]> {
+  const direct: [string, string | undefined][] = [
+    ["prompt", node.prompt],
+    ["system_prompt", node.system_prompt],
+    ["command", node.command],
+    ["when", node.when],
+    ["before", node.before],
+    ["after", node.after],
+    ["question", node.question],
+  ];
+  for (const [field, value] of direct) {
+    if (typeof value === "string") yield [field, value];
+  }
+  for (const [i, pattern] of (node.allowed_paths ?? []).entries()) {
+    yield [`allowed_paths[${i}]`, pattern];
+  }
+  for (const [key, value] of Object.entries(node.env ?? {})) {
+    yield [`env.${key}`, value];
+  }
+}
+
 export function findNodeConfig(
   config: WorkflowConfig,
   nodeId: string,

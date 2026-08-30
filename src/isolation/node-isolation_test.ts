@@ -56,8 +56,8 @@ Deno.test("FR-E91 workPath leaves an already-absolute artifact path alone", () =
   assertEquals(workPath(ctx.workDir, ctx.node_dir), ctx.node_dir);
 });
 
-Deno.test("FR-E91 isolatedContext preserves each.* on a fan-out item", () => {
-  const item = { ...baseCtx(), each: { index: 2, value: "b.ts", key: "2" } };
+Deno.test("FR-E91 isolatedContext preserves branch.* on a branch node", () => {
+  const item = { ...baseCtx(), branch: { index: 2, value: "b.ts", key: "2" } };
   const ctx = isolatedContext(item, SHARED, NODE_TREE);
-  assertEquals(ctx.each, { index: 2, value: "b.ts", key: "2" });
+  assertEquals(ctx.branch, { index: 2, value: "b.ts", key: "2" });
 });

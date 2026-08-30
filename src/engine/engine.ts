@@ -8,6 +8,7 @@
 
 import type {
   EngineOptions,
+  ForkConfig,
   NodeConfig,
   RunState,
   TemplateContext,
@@ -16,21 +17,29 @@ import type {
 import type { AgentResult } from "./agent.ts";
 import {
   collectAllNodeIds,
+  DYNAMIC_BRANCH,
   extractWorktreeDisabled,
   findNodeConfig,
   loadConfig,
+  resolveBranchMembership,
   resolveBudget,
 } from "../config/config.ts";
 import { resolveRuntimeConfig } from "@korchasa/ai-ide-cli/runtime";
-import { buildLevels } from "./dag.ts";
+import { buildDependencies, buildLevels } from "./dag.ts";
+import { readAnswer } from "./answer.ts";
 import { evaluateShellPredicate } from "./predicate.ts";
-import { runWithGuardrail } from "../isolation/guardrail.ts";
+import { GroupGuardrail } from "../isolation/guardrail.ts";
 import {
+  branchTreeKey,
+  effectiveAllowedPaths,
+  isolatedBranches,
+} from "../isolation/branch-scope.ts";
+import {
+  branchContext,
+  type BranchItem,
   ensureItemDir,
-  type ForEachItem,
-  itemContext,
-  resolveForEachItems,
-} from "./for-each.ts";
+  resolveBranchItems,
+} from "./branch.ts";
 import { terminalInput } from "./human.ts";
 import type { UserInput } from "./human.ts";
 import { acquireLock, defaultLockPath, releaseLock } from "../state/lock.ts";
@@ -120,9 +129,17 @@ export class Engine {
    * still run. A `when` skip means the branch was not taken. */
   private whenSkipped = new Set<string>();
   /** FR-E91: true while a concurrent level runs inside one guardrail bracket.
-   * Nodes then skip their own bracket — see
-   * `executeLevelWithLevelGuardrail`. */
+   * Nodes then skip their own bracket — see `runNodes`. */
   private levelGuardrailActive = false;
+  /** FR-E95: node → its branch, resolved once per run from the config. */
+  private membership:
+    | Map<string, { group: string; branch: string }>
+    | undefined;
+  /** FR-E91: branches that own a worktree, and the tree each currently holds. */
+  private isolated: Set<string> | undefined;
+  private branchTrees = new Map<string, string>();
+  /** FR-E95: branch names a runtime fork expanded into, per group. */
+  private expandedBranches = new Map<string, string[]>();
 
   /** Create an engine instance with the given options and optional user-input provider. */
   constructor(options: EngineOptions, userInput: UserInput = terminalInput) {
@@ -330,7 +347,6 @@ export class Engine {
     }
     // FR-E47: one-time warnings before the level loop
     this.warnBudgetCaveats();
-    this.warnUnsafeParallelism(levels);
 
     // Run prepare_command before level loop (skip on resume)
     const prepareCmd = this.config.defaults?.prepare_command ?? "";
@@ -377,16 +393,11 @@ export class Engine {
       );
     }
 
-    // Execute regular levels
+    // Execute the graph by readiness (FR-E97): every node whose own inputs
+    // are done, not every node of the current level.
     let workflowSuccess = true;
     try {
-      for (const level of filteredLevels) {
-        const success = await this.executeLevel(level);
-        if (!success) {
-          workflowSuccess = false;
-          break;
-        }
-      }
+      workflowSuccess = await this.runNodes(filteredLevels.flat());
     } catch (err) {
       workflowSuccess = false;
       this.output.error((err as Error).message);
@@ -457,225 +468,261 @@ export class Engine {
     return this.state;
   }
 
-  /** Execute a single level (set of independent nodes). */
-  private async executeLevel(nodeIds: string[]): Promise<boolean> {
-    // Filter out completed nodes (for resume)
-    const toRun = nodeIds.filter(
-      (id) => !isNodeCompleted(this.state, id),
-    );
+  /**
+   * FR-E97: run the graph, starting each node when its own inputs are done.
+   *
+   * Levels are a picture of the graph, not a schedule. Under level execution a
+   * one-node branch waits for its three-node sibling because they share a
+   * level; here a node becomes runnable the moment the nodes it names in
+   * `inputs` — and, for a `join`, every branch of its group — have finished.
+   * `defaults.max_parallel` stays the global cap on how many run at once, and
+   * with its default of 1 the order is the same as before, one node at a time.
+   */
+  private async runNodes(nodeIds: string[]): Promise<boolean> {
+    const deps = buildDependencies(this.config);
+    const scheduled = new Set(nodeIds);
+    const pending = new Set<string>();
+    const satisfied = new Set<string>();
+    for (const id of nodeIds) {
+      // Resume: a node already completed in a previous attempt is a dependency
+      // that is met, not work to redo.
+      if (isNodeCompleted(this.state, id)) satisfied.add(id);
+      else pending.add(id);
+    }
 
-    // Filter skip/only nodes
-    const filtered: string[] = [];
-    for (const id of toRun) {
-      if (this.options.skip_nodes?.includes(id)) {
-        await this.nodeSkipped(id);
-        this.output.nodeSkipped(id, "skipped by --skip");
-        continue;
-      }
-      if (
-        this.options.only_nodes &&
-        this.options.only_nodes.length > 0 &&
-        !this.options.only_nodes.includes(id)
-      ) {
-        await this.nodeSkipped(id);
-        this.output.nodeSkipped(id, "not in --only");
-        continue;
-      }
+    const maxParallel = this.config.defaults?.max_parallel ?? 1;
+    const cap = maxParallel > 0 ? maxParallel : Math.max(nodeIds.length, 1);
+    // Only a run that can overlap nodes needs the shared bracket; at
+    // max_parallel 1 the per-node guardrail in the dispatcher is exact.
+    const guard = maxParallel !== 1 && this.workDir !== "."
+      ? new GroupGuardrail({
+        repoRoot: Deno.cwd(),
+        workDir: this.workDir,
+        log: (m) => this.output.warn(m),
+      })
+      : undefined;
+    this.levelGuardrailActive = guard !== undefined;
 
-      // FR-E89: a node downstream of an untaken branch is itself untaken. Its
-      // `{{input.<id>}}` references have no artifacts to resolve, so running it
-      // could only fail — and only after spending an agent call to get there.
-      const gatedInput = (this.config.nodes[id].inputs ?? []).find((inputId) =>
-        this.whenSkipped.has(inputId)
+    // FR-E37: a branch node with no write scope of its own runs in the tree
+    // the whole run shares, and its check compares repository-wide snapshots.
+    // Letting a sibling write while it runs would fail it for someone else's
+    // file, so such a node runs alone. A branch that wants concurrency
+    // declares `allowed_paths` and gets a tree of its own.
+    const exclusive = (id: string): boolean => {
+      const own = this.branchOf(id);
+      return own !== undefined &&
+        !this.branchIsolated(own.group, own.branch);
+    };
+    let exclusiveNode: string | undefined;
+
+    const ready = (id: string): boolean =>
+      [...(deps.get(id) ?? [])].every((dep) =>
+        !scheduled.has(dep) || satisfied.has(dep)
       );
-      if (gatedInput !== undefined) {
-        this.whenSkipped.add(id);
-        await this.nodeSkipped(id);
-        this.output.nodeSkipped(id, `input '${gatedInput}' was skipped`);
-        continue;
-      }
 
-      const when = this.config.nodes[id].when;
-      if (when !== undefined) {
-        const predicate = await evaluateShellPredicate(
-          when,
-          this.buildContext(id),
-          this.workDir !== "." ? this.workDir : undefined,
-        );
-        if (!predicate.satisfied) {
-          this.whenSkipped.add(id);
-          await this.nodeSkipped(id);
-          this.output.nodeSkipped(
+    const running = new Map<string, Promise<string>>();
+    let failed = false;
+    try {
+      while (!failed && (pending.size > 0 || running.size > 0)) {
+        let progressed = false;
+        for (const id of [...pending].sort()) {
+          if (running.size >= cap) break;
+          if (exclusiveNode !== undefined) break;
+          if (!ready(id)) continue;
+          if (exclusive(id) && running.size > 0) continue;
+          pending.delete(id);
+          progressed = true;
+          if (!await this.gateNode(id)) {
+            // A skipped node still satisfies its dependents, exactly as a
+            // completed one does — that is what `--skip` has always meant.
+            satisfied.add(id);
+            continue;
+          }
+          if (exclusive(id)) exclusiveNode = id;
+          running.set(
             id,
-            `when predicate exited ${predicate.code}${
-              predicate.stderr.trim() ? `: ${predicate.stderr.trim()}` : ""
-            }`,
+            this.runScheduledNode(id, guard).then((ok) => {
+              if (ok) satisfied.add(id);
+              else failed = true;
+              return id;
+            }),
           );
+        }
+
+        if (running.size === 0) {
+          if (pending.size === 0) break;
+          if (!progressed) {
+            throw new Error(
+              `Cannot resolve dependencies for nodes: ${
+                [...pending].sort().join(", ")
+              }`,
+            );
+          }
           continue;
         }
-      }
 
-      filtered.push(id);
-    }
-
-    if (filtered.length === 0) return true;
-
-    // Respect max_parallel (default 1 = sequential; 0 = unlimited)
-    const maxParallel = this.config.defaults?.max_parallel ?? 1;
-
-    // FR-E91: two or more nodes actually running at once make the per-node
-    // FR-E50 guardrail unsound — its snapshots cover the whole repository, so
-    // node A's `after` picks up node B's writes and A is failed for them. One
-    // bracket around the level keeps the protection and drops the false
-    // attribution; the price is a leak reported against the level.
-    const concurrent = maxParallel !== 1 && filtered.length > 1;
-    if (concurrent) {
-      return await this.executeLevelWithLevelGuardrail(filtered, maxParallel);
-    }
-
-    if (maxParallel > 0 && filtered.length > maxParallel) {
-      // Execute in chunks
-      for (let i = 0; i < filtered.length; i += maxParallel) {
-        const chunk = filtered.slice(i, i + maxParallel);
-        const results = await Promise.allSettled(
-          chunk.map((id) => this.executeNode(id)),
-        );
-        for (const r of results) {
-          if (
-            r.status === "rejected" || (r.status === "fulfilled" && !r.value)
-          ) {
-            return false;
-          }
-        }
-        // FR-E47: check after each chunk to short-circuit mid-level
+        const finished = await Promise.race(running.values());
+        running.delete(finished);
+        if (finished === exclusiveNode) exclusiveNode = undefined;
+        // FR-E47: check on every completion so an over-budget run stops
+        // without waiting for the rest of the graph.
         this.checkWorkflowBudget("runtime");
       }
-      return true;
+    } finally {
+      // A failure stops new starts but never abandons a running subprocess:
+      // its node would otherwise report into state after the run finalised.
+      await Promise.allSettled(running.values());
+      this.levelGuardrailActive = false;
     }
 
-    // Execute all in parallel
-    const results = await Promise.allSettled(
-      filtered.map((id) => this.executeNode(id)),
-    );
+    return !failed;
+  }
 
-    for (const r of results) {
-      if (r.status === "rejected" || (r.status === "fulfilled" && !r.value)) {
+  /**
+   * Decide whether a node that became ready actually runs.
+   *
+   * Returns false when the node is filtered out by `--skip` / `--only`, gated
+   * off by its own `when` predicate (FR-E89), or downstream of a node that was
+   * gated off. In every case the node is recorded as skipped before returning.
+   */
+  private async gateNode(id: string): Promise<boolean> {
+    if (this.options.skip_nodes?.includes(id)) {
+      await this.nodeSkipped(id);
+      this.output.nodeSkipped(id, "skipped by --skip");
+      return false;
+    }
+    if (
+      this.options.only_nodes &&
+      this.options.only_nodes.length > 0 &&
+      !this.options.only_nodes.includes(id)
+    ) {
+      await this.nodeSkipped(id);
+      this.output.nodeSkipped(id, "not in --only");
+      return false;
+    }
+
+    // FR-E89: a node downstream of an untaken branch is itself untaken. Its
+    // `{{input.<id>}}` references have no artifacts to resolve, so running it
+    // could only fail — and only after spending an agent call to get there.
+    const gatedInput = (this.config.nodes[id].inputs ?? []).find((inputId) =>
+      this.whenSkipped.has(inputId)
+    );
+    if (gatedInput !== undefined) {
+      this.whenSkipped.add(id);
+      await this.nodeSkipped(id);
+      this.output.nodeSkipped(id, `input '${gatedInput}' was skipped`);
+      return false;
+    }
+
+    const when = this.config.nodes[id].when;
+    if (when !== undefined) {
+      const predicate = await evaluateShellPredicate(
+        when,
+        this.buildContext(id),
+        this.workDir !== "." ? this.workDir : undefined,
+      );
+      if (!predicate.satisfied) {
+        this.whenSkipped.add(id);
+        await this.nodeSkipped(id);
+        this.output.nodeSkipped(
+          id,
+          `when predicate exited ${predicate.code}${
+            predicate.stderr.trim() ? `: ${predicate.stderr.trim()}` : ""
+          }`,
+        );
         return false;
       }
     }
-    // FR-E47: workflow-wide budget check after each level completes
-    this.checkWorkflowBudget("runtime");
+
     return true;
   }
 
   /**
-   * FR-E91: run a concurrent level under ONE guardrail bracket.
-   *
-   * The per-node guardrail is switched off for the duration (see
-   * `nodeGuardrail`), and the allowed-path sets of every node in the level are
-   * unioned — with the nodes interleaved there is no way to tell whose write a
-   * given path was, so the check can only be as strict as its most permissive
-   * member. That is the cost of concurrency, and it is why `max_parallel: 1`
-   * remains the default.
+   * Run one scheduled node, inside the shared guardrail bracket when there is
+   * one. Never throws: a node that dies takes its own verdict down, not the
+   * scheduler's loop.
    */
-  private async executeLevelWithLevelGuardrail(
-    filtered: string[],
-    maxParallel: number,
+  private async runScheduledNode(
+    id: string,
+    guard: GroupGuardrail | undefined,
   ): Promise<boolean> {
-    const allowedPaths = [
-      ...new Set(
-        filtered.flatMap((id) => this.config.nodes[id].allowed_paths ?? []),
-      ),
-    ];
-    this.levelGuardrailActive = true;
-    try {
-      const { result, leak } = await runWithGuardrail(
-        {
-          repoRoot: Deno.cwd(),
-          workDir: this.workDir,
-          allowedPaths,
-          nodeId: `${filtered.join(", ")}`,
-          scopeKind: "level",
-          log: (m) => this.output.warn(m),
-        },
-        () => this.runLevelNodes(filtered, maxParallel),
-      );
-      if (leak !== undefined) return false;
-      return result;
-    } finally {
-      this.levelGuardrailActive = false;
-    }
-  }
-
-  /** Execute a level's nodes in `max_parallel`-sized chunks. */
-  private async runLevelNodes(
-    filtered: string[],
-    maxParallel: number,
-  ): Promise<boolean> {
-    const chunkSize = maxParallel > 0 ? maxParallel : filtered.length;
-    for (let i = 0; i < filtered.length; i += chunkSize) {
-      const chunk = filtered.slice(i, i + chunkSize);
-      const results = await Promise.allSettled(
-        chunk.map((id) => this.executeNode(id)),
-      );
-      for (const r of results) {
-        if (r.status === "rejected" || (r.status === "fulfilled" && !r.value)) {
-          return false;
-        }
+    // FR-E96: a join reads its group's answers as files, so they must be in
+    // its artifact directory before it starts, not after.
+    const group = this.config.nodes[id].join;
+    if (group !== undefined) {
+      try {
+        await this.writeBranchManifest(id, group);
+      } catch (err) {
+        await this.nodeFailed(
+          id,
+          `Failed to collect branch answers: ${(err as Error).message}`,
+          "unknown",
+        );
+        return false;
       }
-      // FR-E47: check after each chunk to short-circuit mid-level
-      this.checkWorkflowBudget("runtime");
     }
-    return true;
+    if (guard) await guard.enter(id, this.config.nodes[id].allowed_paths ?? []);
+    let ok = false;
+    try {
+      ok = await this.executeNode(id);
+    } catch (err) {
+      this.output.error((err as Error).message);
+    }
+    if (!guard) return ok;
+    const leak = await guard.leave();
+    return ok && leak === undefined;
   }
 
   /**
-   * FR-E90: run one node once per item of its `for_each` source.
+   * FR-E95: run one node once per branch of its `fork` source.
    *
    * Item executions do NOT touch run state. The parent node owns exactly one
    * `completed`/`failed` transition, so a fan-out over 40 files leaves one
    * verdict in `state.json` instead of 40 overwrites of the same record.
    * Failures are collected here and reported as one aggregated message.
    */
-  private async executeForEach(
+  private async executeFork(
     eng: EngineContext,
     nodeId: string,
     node: NodeConfig,
   ): Promise<boolean> {
-    const cfg = node.for_each!;
+    const cfg = node.fork as ForkConfig;
+    const maxConcurrent = cfg.max_concurrent ?? 1;
+    const failureMode = this.joinFailureMode(cfg.group);
     const cwd = this.workDir !== "." ? this.workDir : undefined;
 
     let items;
     try {
-      items = await resolveForEachItems(node, this.buildContext(nodeId), cwd);
+      items = await resolveBranchItems(node, this.buildContext(nodeId), cwd);
     } catch (err) {
       await this.nodeFailed(nodeId, (err as Error).message, "unknown");
       return false;
     }
 
     if (items.length === 0) {
-      this.output.status(nodeId, "for_each: source is empty, nothing to run");
+      this.output.status(nodeId, "fork: branch list is empty, nothing to run");
       return true;
     }
-    this.output.status(nodeId, `for_each: ${items.length} items`);
-    if (cfg.max_concurrent > 1 && node.isolation !== "worktree") {
+    this.output.status(nodeId, `fork: ${items.length} branches`);
+    this.expandedBranches.set(cfg.group, items.map((item) => item.key));
+    if (maxConcurrent > 1 && node.isolation !== "worktree") {
       this.output.warn(
-        `Node '${nodeId}': for_each.max_concurrent=${cfg.max_concurrent} — all items share one worktree, so the FR-E50 guardrail can mis-attribute concurrent writes between them (FR-E91: set 'isolation: worktree' to give each item its own tree)`,
+        `Node '${nodeId}': fork.max_concurrent=${maxConcurrent} — all branches share one worktree, so the FR-E50 guardrail can mis-attribute concurrent writes between them (FR-E91: set 'isolation: worktree' to give each branch its own tree)`,
       );
     }
 
     const failures: string[] = [];
-    const runItem = async (item: ForEachItem): Promise<void> => {
+    const runItem = async (item: BranchItem): Promise<void> => {
       // Item executions report into `failures` instead of run state: the
       // parent node owns the single verdict.
       const itemEng: EngineContext = {
         ...eng,
         buildContext: (nId, loopIteration?) =>
-          itemContext(this.buildContext(nId, loopIteration), item),
+          branchContext(this.buildContext(nId, loopIteration), item),
         nodeStarted: () => Promise.resolve(),
         nodeCompleted: () => Promise.resolve(),
         nodeFailed: (_id, error) => {
-          failures.push(`item ${item.index} (${item.key}): ${error}`);
+          failures.push(`branch ${item.key}: ${error}`);
           return Promise.resolve();
         },
       };
@@ -685,7 +732,8 @@ export class Engine {
       // same source file no longer race.
       const ok = await this.maybeIsolated(
         itemEng,
-        node,
+        node.isolation === "worktree" ||
+          this.branchIsolated(cfg.group, item.key),
         worktreeKey(nodeId, item.key),
         async (nodeEng) =>
           node.type === "agent"
@@ -694,26 +742,289 @@ export class Engine {
         (r) => r,
       );
       if (!ok && failures.length === 0) {
-        failures.push(`item ${item.index} (${item.key}): failed`);
+        failures.push(`branch ${item.key}: failed`);
       }
     };
 
-    for (let i = 0; i < items.length; i += cfg.max_concurrent) {
-      const chunk = items.slice(i, i + cfg.max_concurrent);
+    for (let i = 0; i < items.length; i += maxConcurrent) {
+      const chunk = items.slice(i, i + maxConcurrent);
       const before = failures.length;
       await Promise.all(chunk.map(runItem));
-      if (failures.length > before && cfg.failure_mode === "fail_fast") break;
+      if (failures.length > before && failureMode === "fail_fast") break;
     }
 
     if (failures.length === 0) return true;
 
-    const summary = cfg.failure_mode === "collect"
-      ? `for_each: ${failures.length} of ${items.length} items failed:\n${
+    const summary = failureMode === "collect"
+      ? `fork: ${failures.length} of ${items.length} branches failed:\n${
         failures.join("\n")
       }`
-      : `for_each: ${failures[0]}`;
+      : `fork: ${failures[0]}`;
     await this.nodeFailed(nodeId, summary, "unknown");
     return false;
+  }
+
+  /**
+   * FR-E95: the failure mode a branch group runs under.
+   *
+   * It is declared on the group's `join` node rather than on each branch: the
+   * decision is about the group as a whole, and repeating it per branch would
+   * let two branches of one group disagree about what a sibling's failure
+   * means.
+   */
+  private joinFailureMode(
+    group: string,
+  ): "fail_fast" | "collect" | "all_or_nothing" {
+    for (const node of Object.values(this.config.nodes)) {
+      if (node.join === group) return node.failure_mode ?? "fail_fast";
+    }
+    return "fail_fast";
+  }
+
+  /**
+   * Pick the tree a node runs in: its branch's, its own, or the run's.
+   *
+   * A branch that declared where it may write owns a tree shared by its nodes;
+   * a single node outside any branch can still ask for one with
+   * `isolation: worktree` (FR-E91); everything else runs in the run's tree.
+   */
+  private runNodeTree<T>(
+    eng: EngineContext,
+    nodeId: string,
+    node: NodeConfig,
+    fn: (nodeEng: EngineContext) => Promise<T>,
+    succeeded: (result: T) => boolean,
+  ): Promise<T> {
+    const own = this.branchOf(nodeId);
+    if (own && this.branchIsolated(own.group, own.branch)) {
+      return this.inBranchTree(
+        eng,
+        branchTreeKey(own.group, own.branch),
+        nodeId,
+        fn,
+        succeeded,
+      );
+    }
+    return this.maybeIsolated(
+      eng,
+      node.isolation === "worktree",
+      worktreeKey(nodeId),
+      fn,
+      succeeded,
+    );
+  }
+
+  /**
+   * FR-E95: the `{{branch.*}}` variables a node of a STATIC branch sees.
+   *
+   * A static branch has no list item, so the branch's own name is its value
+   * and its position among the group's branches is its index. Unlike a runtime
+   * branch this does NOT move the node's artifact directory: the branch is
+   * spelled out in the config, so there is nothing to disambiguate.
+   */
+  private staticBranch(nodeId: string): TemplateContext["branch"] | undefined {
+    const own = this.branchOf(nodeId);
+    if (!own || own.branch === DYNAMIC_BRANCH) return undefined;
+    const names = [
+      ...new Set(
+        [...this.branchMembership().values()]
+          .filter((m) => m.group === own.group && m.branch !== DYNAMIC_BRANCH)
+          .map((m) => m.branch),
+      ),
+    ].sort();
+    return {
+      index: names.indexOf(own.branch),
+      value: own.branch,
+      key: own.branch,
+    };
+  }
+
+  /** Branch membership of every node, computed once per run. */
+  private branchOf(
+    nodeId: string,
+  ): { group: string; branch: string } | undefined {
+    return this.branchMembership().get(nodeId);
+  }
+
+  /** Node → branch for the whole graph, resolved once per run. */
+  private branchMembership(): Map<string, { group: string; branch: string }> {
+    this.membership ??= resolveBranchMembership(this.config);
+    return this.membership;
+  }
+
+  /**
+   * FR-E96: put a group's branch answers where its join node can read them.
+   *
+   * `<join>/branches.json` describes the group — every branch, its outcome and
+   * its nodes — and `<join>/branches/<branch>/<node>.answer` is a copy of each
+   * answer. The join reads ordinary files rather than a template variable,
+   * because an answer may be a whole patch and because a `command` join
+   * running `git apply` is the intended way to use one.
+   */
+  private async writeBranchManifest(
+    joinId: string,
+    group: string,
+  ): Promise<void> {
+    const joinDir = workPath(this.workDir, this.buildContext(joinId).node_dir);
+    const branches: {
+      branch: string;
+      status: string;
+      nodes: { id: string; status: string; answer: string | null }[];
+    }[] = [];
+
+    for (const [branch, members] of this.groupBranches(group)) {
+      const nodes: { id: string; status: string; answer: string | null }[] = [];
+      for (const member of members) {
+        const answer = await readAnswer(workPath(this.workDir, member.dir));
+        let relative: string | null = null;
+        if (answer !== undefined) {
+          relative = `branches/${branch}/${member.id}.answer`;
+          await Deno.mkdir(`${joinDir}/branches/${branch}`, {
+            recursive: true,
+          });
+          await Deno.writeTextFile(`${joinDir}/${relative}`, answer);
+        }
+        nodes.push({ id: member.id, status: member.status, answer: relative });
+      }
+      const status = nodes.some((n) => n.status === "failed")
+        ? "failed"
+        : nodes.every((n) => n.status === "completed")
+        ? "completed"
+        : "skipped";
+      branches.push({ branch, status, nodes });
+    }
+
+    await Deno.mkdir(joinDir, { recursive: true });
+    await Deno.writeTextFile(
+      `${joinDir}/branches.json`,
+      `${JSON.stringify({ group, branches }, null, 2)}\n`,
+    );
+  }
+
+  /**
+   * The branches of one group and the artifact directory of each of their
+   * nodes — static branches from config membership, runtime branches from
+   * what the forking node actually expanded into.
+   */
+  private groupBranches(
+    group: string,
+  ): Map<string, { id: string; dir: string; status: string }[]> {
+    const branches = new Map<
+      string,
+      { id: string; dir: string; status: string }[]
+    >();
+    for (const [id, own] of this.branchMembership()) {
+      if (own.group !== group) continue;
+      const status = this.state.nodes[id]?.status ?? "pending";
+      const nodeDir = this.buildContext(id).node_dir;
+      if (own.branch !== DYNAMIC_BRANCH) {
+        const list = branches.get(own.branch) ?? [];
+        list.push({ id, dir: nodeDir, status });
+        branches.set(own.branch, list);
+        continue;
+      }
+      for (const key of this.expandedBranches.get(group) ?? []) {
+        branches.set(key, [{ id, dir: `${nodeDir}/${key}`, status }]);
+      }
+    }
+    return new Map([...branches].sort(([a], [b]) => a.localeCompare(b)));
+  }
+
+  /** Whether a branch owns a worktree, derived from its declared write scope. */
+  private branchIsolated(group: string, branch: string): boolean {
+    this.isolated ??= isolatedBranches(this.config);
+    return this.isolated.has(branchTreeKey(group, branch));
+  }
+
+  /**
+   * Whether this node is the last of its branch still to run, so the branch's
+   * tree can be closed.
+   *
+   * Not "is this a terminal node of the branch": a branch may end in two nodes
+   * at once, and closing the tree when the first of them succeeds would take
+   * the branch's work away from the second, which would then rebuild an empty
+   * tree from the run's HEAD.
+   */
+  private branchDone(nodeId: string): boolean {
+    const own = this.branchOf(nodeId);
+    if (!own) return true;
+    for (const [id, other] of this.branchMembership()) {
+      if (id === nodeId) continue;
+      if (other.group !== own.group || other.branch !== own.branch) continue;
+      const status = this.state.nodes[id]?.status;
+      if (
+        status !== "completed" && status !== "failed" && status !== "skipped"
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * FR-E91/FR-E95: run `fn` in the worktree of the node's branch.
+   *
+   * The tree belongs to the branch, not to the node: a branch is normally an
+   * agent that edits and a command that checks the edit, and giving each of
+   * them a tree of its own would hide the first one's work from the second.
+   * The first node of the branch creates it, the rest reuse it, and it is
+   * closed when the branch's last node succeeds — kept, with its path logged,
+   * when any node of the branch fails.
+   */
+  private async inBranchTree<T>(
+    eng: EngineContext,
+    branchKey: string,
+    nodeId: string,
+    fn: (nodeEng: EngineContext) => Promise<T>,
+    succeeded: (result: T) => boolean,
+  ): Promise<T> {
+    let treeDir = this.branchTrees.get(branchKey);
+    if (treeDir === undefined) {
+      const head = await resolveTreeHead(this.workDir);
+      treeDir = await createNodeWorktree(
+        this.state.run_id,
+        this.workflowDir,
+        branchKey,
+        head,
+      );
+      this.output.status(branchKey, `branch worktree: ${treeDir}`);
+      await copyIgnoredIntoWorktree(
+        treeDir,
+        this.output,
+        this.workDir,
+        workPath(this.workDir, this.workflowDir),
+      );
+      this.branchTrees.set(branchKey, treeDir);
+    }
+
+    const shared = this.workDir;
+    const tree = treeDir;
+    const nodeEng: EngineContext = {
+      ...eng,
+      nodeWorkDir: tree,
+      buildContext: (id, loopIteration?) =>
+        isolatedContext(eng.buildContext(id, loopIteration), shared, tree),
+    };
+
+    let result: T;
+    try {
+      result = await fn(nodeEng);
+    } catch (err) {
+      this.branchTrees.delete(branchKey);
+      this.output.warn(`Branch worktree preserved for diagnosis: ${tree}`);
+      throw err;
+    }
+    if (!succeeded(result)) {
+      this.branchTrees.delete(branchKey);
+      this.output.warn(`Branch worktree preserved for diagnosis: ${tree}`);
+      return result;
+    }
+    if (this.branchDone(nodeId)) {
+      this.branchTrees.delete(branchKey);
+      await pinDetachedHead(tree, `${this.state.run_id}-${branchKey}`);
+      await removeWorktree(tree);
+    }
+    return result;
   }
 
   /**
@@ -733,12 +1044,12 @@ export class Engine {
    */
   private async maybeIsolated<T>(
     eng: EngineContext,
-    node: NodeConfig,
+    isolate: boolean,
     key: string,
     fn: (nodeEng: EngineContext) => Promise<T>,
     succeeded: (result: T) => boolean,
   ): Promise<T> {
-    if (node.isolation !== "worktree") return await fn(eng);
+    if (!isolate) return await fn(eng);
 
     const head = await resolveTreeHead(this.workDir);
     const treeDir = await createNodeWorktree(
@@ -781,7 +1092,16 @@ export class Engine {
 
   /** Execute a single node based on its type. Returns true on success. */
   private async executeNode(nodeId: string): Promise<boolean> {
-    const node = this.config.nodes[nodeId];
+    const declared = this.config.nodes[nodeId];
+    // FR-E37: inside a branch, an absent `allowed_paths` is a no-write
+    // contract rather than the absence of a check.
+    const node: NodeConfig = {
+      ...declared,
+      allowed_paths: effectiveAllowedPaths(
+        declared,
+        this.branchOf(nodeId) !== undefined,
+      ),
+    };
     // Capture waiting state before markNodeStarted overwrites status
     const wasWaiting = this.state.nodes[nodeId]?.status === "waiting";
     await this.nodeStarted(nodeId);
@@ -803,8 +1123,11 @@ export class Engine {
         output: this.output,
         options: this.options,
         userInput: this.userInput,
-        buildContext: (nId, loopIteration?) =>
-          this.buildContext(nId, loopIteration),
+        buildContext: (nId, loopIteration?) => {
+          const ctx = this.buildContext(nId, loopIteration);
+          const branch = this.staticBranch(nodeId);
+          return branch === undefined ? ctx : { ...ctx, branch };
+        },
         workDir: this.workDir,
         nodeWorkDir: this.workDir,
         workflowDir: this.workflowDir,
@@ -820,15 +1143,15 @@ export class Engine {
           this.nodeCompleted(id, costUsd, result),
       };
 
-      switch (node.for_each ? "for_each" : node.type) {
-        case "for_each":
-          success = await this.executeForEach(eng, nodeId, node);
+      switch (typeof node.fork === "object" ? "fork" : node.type) {
+        case "fork":
+          success = await this.executeFork(eng, nodeId, node);
           break;
         case "agent": {
-          lastAgentResult = await this.maybeIsolated(
+          lastAgentResult = await this.runNodeTree(
             eng,
+            nodeId,
             node,
-            worktreeKey(nodeId),
             (nodeEng) => executeAgentNode(nodeEng, nodeId, node, wasWaiting),
             (r) => r?.success === true,
           );
@@ -836,10 +1159,10 @@ export class Engine {
           break;
         }
         case "command":
-          success = await this.maybeIsolated(
+          success = await this.runNodeTree(
             eng,
+            nodeId,
             node,
-            worktreeKey(nodeId),
             (nodeEng) => executeCommandNode(nodeEng, nodeId, node),
             (ok) => ok,
           );
@@ -1228,35 +1551,6 @@ export class Engine {
         );
       }
     }
-  }
-
-  /**
-   * Warn when a level can run more than one node at a time inside a worktree.
-   *
-   * All nodes of a run share ONE worktree, and the FR-E50 guardrail brackets
-   * every agent node with a `git status` snapshot of the main tree. Run two
-   * nodes concurrently and each sees the other's writes in its "after"
-   * snapshot, reports them as its own leak, and rolls them back. The engine
-   * does not forbid the configuration — an author may have a workflow with no
-   * agent nodes, or worktrees disabled — but it must not stay silent about it.
-   */
-  private warnUnsafeParallelism(levels: string[][]): void {
-    if (this.workDir === ".") return;
-    const maxParallel = this.config.defaults?.max_parallel ?? 1;
-    if (maxParallel === 1) return;
-    const widest = levels.reduce(
-      (max, level) => Math.max(max, level.length),
-      0,
-    );
-    const concurrency = maxParallel === 0
-      ? widest
-      : Math.min(maxParallel, widest);
-    if (concurrency <= 1) return;
-    this.output.warn(
-      `max_parallel=${maxParallel} runs up to ${concurrency} nodes at once in one shared worktree — ` +
-        `the FR-E50 guardrail cannot attribute file changes per node and may roll back a sibling's work. ` +
-        `Set defaults.max_parallel: 1 unless the level's nodes are known not to touch the repo.`,
-    );
   }
 
   /** Create a dry-run state (no actual execution). */

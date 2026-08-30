@@ -32,3 +32,6 @@ across section files in [design-engine/](design-engine/) to fit within the
   Design for the peer-comparison additions FR-E87..FR-E93: shell-predicate
   loop exit, command node, conditional edges, data-driven fan-out, per-node
   worktree, journal hash chain, HITL node type.
+- [08-fork-join.md](design-engine/08-fork-join.md) — Design for FR-E95..FR-E97:
+  explicit fork/join and branch membership, captured node answers and the
+  branch manifest, readiness scheduling with the rolling group guardrail.

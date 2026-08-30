@@ -50,6 +50,13 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   exactly the leaked paths. Complements FR-E37 (which checks `allowed_paths`
   inside the worktree) by guarding the dual: writes outside the worktree.
 
+  **Bracket scope.** The snapshots are repository-wide, so they can name one
+  node only while one node runs. Since FR-E97 the engine brackets the set of
+  nodes actually running together (FR-E91): one bracket opens on the first node
+  to start, admits every node that joins while it is open, unions their
+  `allowed_paths`, and closes when the last leaves. A run that never has two
+  nodes in flight keeps the per-node bracket unchanged.
+
   **Constraints:**
   - No-op when `workDir === "."` (no worktree); behavior identical to
     pre-feature.
@@ -86,7 +93,9 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   removed. If a branch with that name already exists (resume of the same
   run-id, repeat invocation), the engine appends a counter suffix
   (`-2`, `-3`, …) until it finds a free name. No-op when HEAD is already
-  on a named branch.
+  on a named branch. The same pin runs before an FR-E91 tree is removed; a
+  branch tree is one tree for the whole branch, so the cost is paid once per
+  branch rather than once per node.
 
   **Constraints:**
   - No-op when `workDir === "."` (engine never invokes worktree teardown).
@@ -249,7 +258,9 @@ template path contract (FR-E52), and the per-workflow run lock (FR-E54).
   broken symlinks reproduced). Tracked files untouched (already present
   from `origin/main` checkout). Untracked-not-ignored NOT copied —
   committing/stashing them remains operator's job (FR-E50 safety check).
-  Special files (socket/FIFO/device) skipped with a warning.
+  Special files (socket/FIFO/device) skipped with a warning. The mirror runs
+  again for every FR-E91 tree, since a fresh worktree carries no gitignored
+  files; a branch tree pays it once for all its nodes.
 
   **Constraints:** No-op when `worktree_disabled: true`; no-op on resume
   reuse (re-copy would clobber the previous run's persisted state under

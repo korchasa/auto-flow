@@ -303,7 +303,7 @@
         timeout: 7200
     ```
   - **Pipeline Prepare Command (FR-E30):** In `runWithLock()`, after
-    `ensureRunDirs()` + journal bootstrap, before level loop: if
+    `ensureRunDirs()` + journal bootstrap, before the scheduler starts: if
     `!options.resume && defaults.prepare_command` is non-empty, calls
     `runPrepareCommand()`. Flow: build workflow-level `TemplateContext`
     (`node_dir: ""`, `input: {}`, real `run_dir`/`run_id`/`env`/`args`) →
@@ -349,9 +349,8 @@
     `AgentRunOptions` so terminal output is filtered at source.
   - **Run Budget Enforcement (FR-E47):** Inline checks at 4 sites, all using
     strict `>` (exact-equal to cap does NOT trigger):
-    1. **Workflow-wide (engine.ts):** In `executeLevel()` (after each level
-       and after each chunk when `max_parallel > 0`) via
-       `checkWorkflowBudget("runtime")`: `if (options.budget_usd &&
+    1. **Workflow-wide (engine.ts):** In `runNodes()`, after every node
+       completion, via `checkWorkflowBudget("runtime")`: `if (options.budget_usd &&
        state.total_cost_usd > options.budget_usd)` → throws
        `Error("Budget exceeded: $X.XX > $Y.YY")`. Throw propagates to the
        outer try/catch in `runWithLock`, flipping `workflowSuccess=false`.

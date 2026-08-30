@@ -126,7 +126,7 @@ pipeline. Only the literal string `true` enables the hook; `1` / `yes`
 graph TD
     CLI["CLI<br/>deno task run"] --> ConfigLoader["Config Loader<br/>YAML → WorkflowConfig"]
     ConfigLoader --> DAG["DAG Builder<br/>toposort → levels"]
-    DAG --> Executor["Level Executor<br/>sequential; opt-in max_parallel"]
+    DAG --> Executor["Node Scheduler<br/>ready when inputs finish; max_parallel cap"]
 
     Executor --> Dispatch{Node Type?}
     Dispatch -->|agent| Agent["Agent Runner<br/>Claude / OpenCode"]
@@ -149,9 +149,9 @@ graph TD
 
 ## Core Concepts
 
-The engine (Deno/TypeScript modules at repo root) reads a YAML workflow config and builds a directed acyclic graph (DAG) of nodes. Nodes are topologically sorted into levels; levels run in order and, by default, one node at a time.
+The engine (Deno/TypeScript modules at repo root) reads a YAML workflow config and builds a directed acyclic graph (DAG) of nodes. A node starts as soon as the nodes it depends on have finished; the topological levels remain the picture `--dry-run` prints, not the schedule.
 
-Concurrency within a level is available but opt-in via `defaults.max_parallel`. It is not the default because every node of a run shares one git worktree, so two nodes editing the same file clobber each other. A node that needs a tree of its own asks for it with `isolation: worktree`. Leak detection follows the execution scope: a concurrent level runs inside one guardrail bracket rather than a per-node one, since the snapshots are repository-wide and would otherwise blame the wrong node.
+Concurrency is available but opt-in via `defaults.max_parallel`, which caps how many nodes run at once and defaults to 1. It is not higher by default because every node of a run shares one git worktree, so two nodes editing the same file clobber each other. A node that needs a tree of its own asks for it with `isolation: worktree`, and a fork branch that declares `allowed_paths` gets one for the whole branch. Leak detection follows the execution scope: while more than one node is running, they share one guardrail bracket instead of a per-node one, since the snapshots are repository-wide and would otherwise blame the wrong node.
 
 Six node types:
 
@@ -162,7 +162,7 @@ Six node types:
 - **human** — terminal prompt for manual input
 - **hitl** — asks a human through the workflow's HITL transport and waits; agent-initiated HITL is supported on both Claude and OpenCode runtimes
 
-Any node may carry a `when:` shell predicate that gates it (and, transitively, everything downstream of it). `agent` and `command` nodes may fan out with `for_each:`, running once per item of a list an earlier node produced.
+Any node may carry a `when:` shell predicate that gates it (and, transitively, everything downstream of it). `agent` and `command` nodes may open a branch with `fork:` — either one named branch, or one branch per item of a list an earlier node produced — and exactly one node per group carries `join:`, which runs after every branch has finished.
 
 Inter-agent communication uses structured Markdown artifacts in `<runs-dir>/<run-id>/[<phase>/]<node-id>/`, linked via `{{input.<node-id>}}` template variables. On validation failure, the engine resumes the agent in the same session with error context (continuation mechanism).
 
@@ -175,8 +175,8 @@ Inter-agent communication uses structured Markdown artifacts in `<runs-dir>/<run
 - **Loop nodes** — iterative cycles with configurable exit conditions and max iterations
 - **Shell steps** — `type: command` nodes put a build, test or fetch step in the graph without spending an agent call
 - **Conditional branches** — `when:` gates a node on a shell predicate; nodes downstream of an untaken branch are skipped too
-- **Fan-out** — `for_each:` runs one node once per item of a list an earlier node produced, each with its own artifact directory
-- **Per-node isolation** — `isolation: worktree` gives a node (or each fan-out item) its own git worktree while artifacts stay shared
+- **Fork/join** — `fork:` splits the flow into named branches (or one branch per item of a list an earlier node produced) and `join:` merges them; every branch gets its own artifact directory, and the join reads each branch's answer from a manifest
+- **Per-node isolation** — `isolation: worktree` gives a node its own git worktree while artifacts stay shared; a branch that declares `allowed_paths` gets one tree for the whole branch
 - **Tamper-evident journal** — every `journal.jsonl` record is hash-chained; `flowai-workflow verify <run-id>` reports the first divergence
 - **HITL support** — human interaction nodes for manual decisions or approvals; agent-initiated HITL works on Claude and OpenCode
 - **Validation** — rule-based checks per node (file_exists, file_not_empty, contains_section, custom_script, frontmatter_field)
@@ -375,7 +375,7 @@ Workflow behavior is defined in a YAML config file. Key settings under `defaults
   load; see FR-E77)
 - `runtime_args` — extra CLI args forwarded to the selected runtime
 - `max_continuations` — max agent re-invocations on validation failure (default: 3)
-- `max_parallel` — concurrent node executions per level (default: 1 = sequential; 0 = unlimited). Values above 1 are unsafe while the FR-E50 worktree guardrail is active — see Core Concepts
+- `max_parallel` — cap on how many nodes run at once (default: 1 = sequential; 0 = unlimited). Above 1, nodes that write should be kept apart with `isolation: worktree` or a fork branch's `allowed_paths` — see Core Concepts
 - `timeout_seconds` — per-node timeout (default: 1800)
 - `permission_mode` — permission mode override (Claude: full support; opencode: only `bypassPermissions`)
 - `hitl` — Human-in-the-Loop config: `ask_script`, `check_script`, `poll_interval`, `timeout` (used by Claude directly and by OpenCode via injected local MCP)
