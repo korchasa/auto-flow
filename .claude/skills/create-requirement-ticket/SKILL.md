@@ -65,7 +65,7 @@ This is illustration, not specification of internals.>
 4. **No redundant DoD.** Do not add "tests pass", "linter clean", "docs
    updated" — these are project-level standards, not per-ticket criteria.
 5. **Respect project conventions.** Follow the repository's title prefix rules,
-   label conventions, and FR numbering if they exist (check CLAUDE.md).
+   label conventions, and FR numbering if they exist (check AGENTS.md).
 6. **Language: English.** Tickets and all content in English.
 7. **Use `gh issue create`** with `--title`, `--label`, and `--body` via
    HEREDOC for correct formatting.

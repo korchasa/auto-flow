@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "deno run --no-check .claude/hooks/guard-deno-direct.ts",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}
