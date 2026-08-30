@@ -901,7 +901,8 @@ Checks performed:
   - Linting (deno lint)
   - Type check (deno check — all .ts files incl. tests)
   - CLI smoke test (cli.ts --help)
-  - Secret scan (gitleaks)
+  - Secret scan, working tree (gitleaks dir)
+  - Secret scan, git history (gitleaks git — every commit reachable from HEAD)
   - Run artifact secret scan (gitleaks over gitignored runs/; warns, never fails)
   - Tests (deno test)
   - Doc lint: JSDoc, private-type-ref, circular deps (deno doc --lint)
@@ -984,7 +985,15 @@ if (import.meta.main) {
     "CLI Smoke Test",
   );
 
-  await run("gitleaks", ["detect", "--no-git"], "Secret Scan");
+  // Two blocking passes, because they cover disjoint surfaces:
+  // `dir` scans the working tree (catches a secret before it is staged),
+  // `git` scans every commit reachable from HEAD (catches a secret that
+  // was committed and later deleted — invisible to the tree scan).
+  // Both need gitleaks >= 8.19 for the subcommand form; CI pins the
+  // version in `.github/workflows/ci.yml`. `--redact` keeps a matched
+  // value out of the public CI log.
+  await run("gitleaks", ["dir", "--redact", "."], "Secret Scan (tree)");
+  await run("gitleaks", ["git", "--redact", "."], "Secret Scan (history)");
 
   // "." recursively finds every *_test.ts in the repo (root engine
   // modules, scripts/, .flowai-workflow/, init/, …). Passing

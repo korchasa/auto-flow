@@ -151,9 +151,16 @@
 - **~~Pre-Run Auto-Stash (FR-S41)~~:** Superseded by engine FR-E24 (worktree
   isolation). Engine creates a git worktree per run — original working tree
   untouched. `pre_run` field removed; `reset-to-main.sh` no longer invoked.
-- **Secret Detection**: `gitleaks detect --no-git` runs as part of
-  `deno task check` (`scripts/check.ts`). `allowFailure=true` — skips if
-  gitleaks binary not found. Engine-level `safetyCheckDiff()` removed.
+- **Secret Detection**: two blocking gitleaks passes in `deno task check`
+  (`scripts/check.ts`), covering disjoint surfaces — `gitleaks dir --redact .`
+  (working tree, catches a secret before it is staged) and `gitleaks git
+  --redact .` (every commit reachable from HEAD, catches a secret that was
+  committed then deleted). Both fail the check; a missing gitleaks binary
+  also fails it. Requires gitleaks >= 8.19 for the subcommand form; CI pins
+  the version in `.github/workflows/ci.yml` and checks out with
+  `fetch-depth: 0` so the history pass sees every commit. A third pass over
+  the gitignored `runs/` artefacts warns only (`runArtifactSecretScan()`).
+  Engine-level `safetyCheckDiff()` removed.
 - **Tech-Lead-Review Node**: Post-workflow agent (`run_on: always`). Performs
   final code review, checks CI gates, merges PR if all pass. Handles
   missing-PR case gracefully (no-op with clear message when workflow failed
@@ -200,9 +207,9 @@
 
 - **Scale:** Single workflow per issue. Sequential stages (no parallel agents).
 - **Fault:** Stage failure stops workflow, failure reported on issue.
-- **Sec:** Secret detection via `gitleaks detect --no-git` in `deno task check`
-  (`scripts/check.ts`). Engine-level scope checks removed. Agents run with
-  local user's permissions.
+- **Sec:** Secret detection via `gitleaks dir` (working tree) + `gitleaks git`
+  (full history) in `deno task check` (`scripts/check.ts`), both blocking.
+  Engine-level scope checks removed. Agents run with local user's permissions.
 - **Logs:** Full transcripts per stage in `.flowai-workflow/<workflow>/runs/<run-id>/logs/`. Note:
   logs path remains engine-controlled (`.flowai-workflow/<workflow>/runs/`); configurable `runs_dir`
   deferred to separate engine FR.

@@ -1,5 +1,10 @@
 title = "flowai-workflow gitleaks config"
 
+# `deno task check` invokes the `dir` and `git` subcommands, introduced in
+# 8.19. An older binary would fail with an opaque "unknown command" instead of
+# naming the real cause, so refuse it here.
+minVersion = "8.19.0"
+
 # Paths are unanchored regexes matched against the scanned file path, so every
 # entry must track the CURRENT repo layout. The previous list named
 # `documents/requirements.md`, `documents/design.md`,
@@ -10,7 +15,7 @@ title = "flowai-workflow gitleaks config"
 # surfaced as a CI false positive.
 #
 # Run artefacts are deliberately NOT allowlisted. They are gitignored, so the
-# repo-wide `gitleaks detect --no-git` never reaches them anyway; the dedicated
+# repo-wide `gitleaks dir` never reaches them anyway; the dedicated
 # run-artefact scan in `scripts/check.ts` targets them on purpose, and an entry
 # here would silence exactly the signal that scan exists to produce.
 [allowlist]

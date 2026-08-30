@@ -12,7 +12,7 @@
   - `deno` runtime — for running project checks, tests, and the workflow engine.
   - `git` — for branch management, commits, and diff-based safety checks.
   - `gh` CLI — for creating PRs and posting issue comments.
-  - `gitleaks` — for secret detection in diff-based safety checks (see engine SRS FR-E1).
+  - `gitleaks` (>= 8.19, `dir`/`git` subcommands) — secret detection over the working tree and the full git history in `deno task check`.
 
   **Stage scripts (legacy):**
   - Located in `.flowai-workflow/scripts/stage-<N>-<role>.sh`.
