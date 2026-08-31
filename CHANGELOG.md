@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.9.2](https://github.com/korchasa/flowai-workflow/compare/v0.9.1...v0.9.2) (2026-08-31)
+
+### Features
+
+* **engine:** one scheduler and the run outcome as a value (FR-E99) ([9e4a716](https://github.com/korchasa/flowai-workflow/commit/9e4a7166058cf6ca9db382537a1f2177b561aaf1))
+
+### Chores
+
+* **deps:** raise the ai-ide-cli pin to 0.8.13 ([2c69f62](https://github.com/korchasa/flowai-workflow/commit/2c69f6284f1b3b61670590c1dc388a08344a01be))
 ## [0.9.1](https://github.com/korchasa/flowai-workflow/compare/v0.9.0...v0.9.1) (2026-08-30)
 
 ### Bug Fixes
