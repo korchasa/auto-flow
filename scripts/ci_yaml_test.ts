@@ -9,6 +9,7 @@ import { parse as parseYaml } from "@std/yaml";
  */
 
 interface CiWorkflow {
+  on: Record<string, unknown>;
   jobs: Record<string, {
     steps?: Array<Record<string, unknown>>;
     "runs-on"?: string;
@@ -85,4 +86,46 @@ Deno.test("FR-E78 windows matrix entry exists in targets.json", async () => {
     t.target === "x86_64-pc-windows-msvc"
   );
   assertEquals(win?.artifact, "flowai-workflow-windows-x86_64.exe");
+});
+
+/**
+ * FR-E41 regression locks on the release step. The bump level must be
+ * computed by `scripts/release-level.ts` and forced with `--release-as`:
+ * left to itself, commit-and-tag-version applies pre-1.0 semantics and
+ * releases a `feat` as a patch, which is how FR-E99 shipped as 0.9.2.
+ */
+function releaseStep(ci: CiWorkflow): Record<string, unknown> {
+  const steps = ci.jobs.release?.steps;
+  if (!steps) throw new Error("release job missing or has no steps");
+  const step = steps.find((s) => s.id === "create-release");
+  if (!step) throw new Error("release job missing the create-release step");
+  return step;
+}
+
+Deno.test("FR-E41 the release step forces an explicit bump level", async () => {
+  const run = String(releaseStep(await loadCi()).run);
+  assertStringIncludes(run, "scripts/release-level.ts");
+  assertStringIncludes(run, "--release-as");
+});
+
+Deno.test("FR-E41 the release level is read from the whole commit range", async () => {
+  // A merge commit carries no conventional-commit type of its own, so the
+  // range handed to the script must cover every commit since the last tag.
+  const run = String(releaseStep(await loadCi()).run);
+  assertStringIncludes(run, "${LATEST_TAG}..HEAD");
+});
+
+Deno.test("FR-E41 a release level can be dispatched by hand", async () => {
+  const ci = await loadCi();
+  const dispatch = ci.on["workflow_dispatch"] as
+    | { inputs?: Record<string, { options?: string[] }> }
+    | undefined;
+  const input = dispatch?.inputs?.release_as;
+  if (!input) throw new Error("workflow_dispatch has no release_as input");
+  assertEquals(input.options, ["auto", "patch", "minor", "major"]);
+});
+
+Deno.test("FR-E41 a manual dispatch reaches the release step", async () => {
+  const condition = String(releaseStep(await loadCi()).if);
+  assertStringIncludes(condition, "workflow_dispatch");
 });

@@ -5,6 +5,15 @@ on:
     branches: ["**"]
   pull_request:
     branches: [main]
+  # Manual release. `auto` keeps the commit-driven decision; the explicit
+  # levels exist to correct a version number without inventing a commit.
+  workflow_dispatch:
+    inputs:
+      release_as:
+        description: "Release level (auto = decide from the commits)"
+        type: choice
+        default: auto
+        options: [auto, patch, minor, major]
 
 # Default permissions cover check (tag push) and publish-github
 # (release create). publish-jsr overrides with id-token: write for
@@ -165,55 +174,35 @@ jobs:
       - name: Create release and push tags
         id: create-release
         if: |
-          github.event_name == 'push' &&
+          (github.event_name == 'push' &&
           github.ref == 'refs/heads/main' &&
-          !contains(github.event.head_commit.message, 'chore(release):')
+          !contains(github.event.head_commit.message, 'chore(release):')) ||
+          github.event_name == 'workflow_dispatch'
+        env:
+          RELEASE_AS: ${{ inputs.release_as }}
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
-          # Detect releasable commits and pick a bump level.
-          #
-          # Conventional-commit prefixes (feat/fix/...) are handled by
-          # commit-and-tag-version directly. Project-style engine: and
-          # engine+sdlc: prefixes are detected here and forced to a
-          # patch bump because commit-and-tag-version does not
-          # understand them. sdlc: commits do NOT trigger a release — SDLC workflow
-          # changes are dev tooling, not engine code.
-          RELEASABLE=false
-          BUMP_ARGS=""
-
-          if [ -z "$LATEST_TAG" ]; then
-            # Fresh repo with no prior tags — DO NOT auto-release on
-            # first push. Require at least one conventional-commit type
-            # that would normally trigger a release. Otherwise the
-            # initial push silently tags + publishes and often produces
-            # a spurious release (e.g. tag collides with a JSR version
-            # pre-existing from a prior repo move). Operators bootstrap
-            # by manually pushing v<X.Y.Z> that matches
-            # `deno.json#version` once the package is production-ready.
-            COMMITS_ALL=$(git log --format='%s' HEAD)
-            if echo "$COMMITS_ALL" | grep -qE '^feat'; then
-              RELEASABLE=true
-            elif echo "$COMMITS_ALL" | grep -qE '^(fix|perf|refactor|build|engine)'; then
-              RELEASABLE=true
-              BUMP_ARGS="--release-as patch"
-            fi
+          # The bump level is decided by scripts/release-level.ts and forced
+          # with --release-as. commit-and-tag-version must NOT decide it: while
+          # the version is 0.x the tool treats a feat as a patch, which is how
+          # FR-E99 shipped as 0.9.2 instead of 0.10.0. The script reads every
+          # commit of the range (a merge commit carries no type of its own) and
+          # keeps the rules under test in scripts/release-level_test.ts.
+          if [ -n "$RELEASE_AS" ] && [ "$RELEASE_AS" != "auto" ]; then
+            LEVEL="$RELEASE_AS"
+          elif [ -z "$LATEST_TAG" ]; then
+            LEVEL=$(deno run -A scripts/release-level.ts)
           else
-            COMMITS_SINCE=$(git log --format='%s' ${LATEST_TAG}..HEAD)
-            if echo "$COMMITS_SINCE" | grep -qE '^feat'; then
-              RELEASABLE=true
-              # commit-and-tag-version decides minor/major automatically.
-            elif echo "$COMMITS_SINCE" | grep -qE '^(fix|perf|refactor|build|engine)'; then
-              RELEASABLE=true
-              BUMP_ARGS="--release-as patch"
-            fi
+            LEVEL=$(deno run -A scripts/release-level.ts "${LATEST_TAG}..HEAD")
           fi
+          echo "Release level: ${LEVEL} (tag: ${LATEST_TAG:-none})"
 
-          if [ "$RELEASABLE" = "true" ]; then
-            deno task release $BUMP_ARGS
+          if [ "$LEVEL" != "none" ]; then
+            deno task release --release-as "$LEVEL"
             NEW_VERSION=$(deno eval "console.log(JSON.parse(Deno.readTextFileSync('deno.json')).version)")
             NEW_TAG="v${NEW_VERSION}"
             git tag -a "$NEW_TAG" -m "Release ${NEW_TAG}"
