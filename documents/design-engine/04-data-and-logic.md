@@ -237,18 +237,22 @@
     `findViolations()` algorithm: `newMods = after − before` (set difference),
     for each path in `newMods`: match against `allowedPaths` globs; if no
     match → violation. Pure function — unit-testable without I/O.
-  - **Post-Workflow Node Collection & Ordering**: `collectPostWorkflowNodes()`
-    collects nodes where `run_on !== undefined` (replaces `run_always`-based
-    collection). `sortPostWorkflowNodes()` sorts them topologically using
-    `inputs` field (reuses `toposort()` from `dag.ts`).
-  - **Post-Workflow Node Filtering**: Before executing each post-workflow node,
-    engine applies per-node filter based on `run_on` value and
-    `workflowSuccess`:
-    - `run_on: "always"` → execute unconditionally.
-    - `run_on: "success"` → skip if `!workflowSuccess`, call
-      `markNodeSkipped()`.
-    - `run_on: "failure"` → skip if `workflowSuccess`, call
-      `markNodeSkipped()`.
+  - **Outcome Wave** (FR-E99): `collectPostWorkflowNodes()` is the single
+    selection rule — nodes where `run_on !== undefined` — and is called by the
+    engine, `--dry-run`, `scripts/generate-dashboard.ts` and
+    `scripts/workflow-diagram.ts` alike. There is no second topological sort:
+    `Engine.runNodes` is called a second time over that set once the graph's
+    verdict is known, with `continueOnFailure` so a failed node of the wave
+    does not stop its siblings, and ordering comes from the shared
+    `buildDependencies()` map.
+  - **Outcome Filtering**: evaluated in `Engine.gateNode`, next to `when`:
+    - `run_on: "always"` / `"every_attempt"` → any outcome passes.
+    - `run_on: "success"` → skipped when the graph failed.
+    - `run_on: "failure"` → skipped when the graph succeeded.
+    A node reached while `runOutcome` is still `"pending"` throws — that is an
+    engine defect, not a config one. Resume: a completed node is re-scheduled
+    only for `run_on: "every_attempt"`, and only when its
+    `NodeState.completed_attempt` is not the current `RunState.attempt`.
   - **HITL via Engine-Owned MCP Server** (FR-E8, FR-E64; hitl-via-engine-mcp):
     Engine ships a single stdio MCP server (`flowai-workflow-hitl`)
     exposing one tool `request_human_input`. Detection uses the

@@ -15,12 +15,7 @@ import {
   runPrepareCommand,
   workflowUsesClaude,
 } from "./engine.ts";
-import {
-  collectPostWorkflowNodes,
-  executePostWorkflow,
-  runFailureHook,
-  sortPostWorkflowNodes,
-} from "./post-workflow.ts";
+import { collectPostWorkflowNodes, runFailureHook } from "./post-workflow.ts";
 import type { AgentResult } from "./agent.ts";
 import {
   createRunState,
@@ -604,50 +599,6 @@ Deno.test("RunState — no failed nodes when all complete successfully", () => {
   const failed = getNodesByStatus(state, "failed");
   assertEquals(failed.length, 0);
 });
-
-// --- post-workflow node ordering tests ---
-
-Deno.test("sortPostWorkflowNodes — orders by dependency (commit-meta after meta-agent)", () => {
-  const nodes: Record<string, NodeConfig> = {
-    "commit-meta": {
-      type: "agent",
-      label: "Commit Meta",
-      inputs: ["meta-agent"],
-      run_on: "success",
-    },
-    "meta-agent": {
-      type: "agent",
-      label: "Meta-Agent",
-      run_on: "always",
-    },
-  };
-  const postWorkflowIds = ["commit-meta", "meta-agent"];
-  const sorted = sortPostWorkflowNodes(postWorkflowIds, nodes);
-  assertEquals(sorted, ["meta-agent", "commit-meta"]);
-});
-
-Deno.test("sortPostWorkflowNodes — single node returns as-is", () => {
-  const nodes: Record<string, NodeConfig> = {
-    "meta-agent": {
-      type: "agent",
-      label: "Meta-Agent",
-      run_on: "always",
-    },
-  };
-  const sorted = sortPostWorkflowNodes(["meta-agent"], nodes);
-  assertEquals(sorted, ["meta-agent"]);
-});
-
-Deno.test("sortPostWorkflowNodes — no dependencies preserves alphabetical order", () => {
-  const nodes: Record<string, NodeConfig> = {
-    "cleanup": { type: "agent", label: "Cleanup", run_on: "always" },
-    "meta-agent": { type: "agent", label: "Meta-Agent", run_on: "always" },
-  };
-  const sorted = sortPostWorkflowNodes(["cleanup", "meta-agent"], nodes);
-  assertEquals(sorted, ["cleanup", "meta-agent"]);
-});
-
-// --- collectAllNodeIds tests ---
 
 Deno.test("collectAllNodeIds — includes top-level and nested body node IDs", () => {
   const config: WorkflowConfig = {
@@ -1247,149 +1198,6 @@ Deno.test("runPrepareCommand — interpolates run_id in command", async () => {
 });
 
 // --- FR-E34: on_error: continue interaction tests ---
-
-Deno.test("FR-E34 — continue-d failure: info log emitted, hook not called", async () => {
-  const tmpScript = await Deno.makeTempFile({ suffix: ".sh" });
-  try {
-    await Deno.writeTextFile(tmpScript, "#!/bin/bash\necho 'HOOK_CALLED'");
-    await Deno.chmod(tmpScript, 0o755);
-    const cap = createCapture();
-    const out = new OutputManager("normal", cap.writer);
-    const state = createRunState("fre34-t1", "cfg.yaml", ["p1"], {}, {});
-    const nodes: Record<string, NodeConfig> = {
-      p1: { type: "agent", label: "P1", run_on: "success" },
-    };
-    // workflowSuccess=true: continue-d failure does NOT set workflowSuccess false
-    await executePostWorkflow({
-      nodeIds: ["p1"],
-      nodes,
-      state,
-      workflowSuccess: true,
-      failureScript: tmpScript,
-      output: out,
-      executeNode: (_id) => {
-        // Simulate Task 1 log emission at on_error: continue branch
-        out.status(
-          "engine",
-          `node ${_id}: failure suppressed by on_error: continue`,
-        );
-        return Promise.resolve(true);
-      },
-    });
-    const joined = cap.lines.join("");
-    assertEquals(
-      joined.includes("failure suppressed by on_error: continue"),
-      true,
-    );
-    assertEquals(joined.includes("HOOK_CALLED"), false);
-  } finally {
-    await Deno.remove(tmpScript);
-  }
-});
-
-Deno.test("FR-E34 — all failures continue-d: workflowSuccess true, hook not called", async () => {
-  const tmpScript = await Deno.makeTempFile({ suffix: ".sh" });
-  try {
-    await Deno.writeTextFile(tmpScript, "#!/bin/bash\necho 'HOOK_CALLED'");
-    await Deno.chmod(tmpScript, 0o755);
-    const cap = createCapture();
-    const out = new OutputManager("normal", cap.writer);
-    // Replicate executeLevel loop: all nodes continue-d → workflowSuccess stays true
-    let workflowSuccess = true;
-    for (const result of [true, true]) {
-      if (!result) {
-        workflowSuccess = false;
-        break;
-      }
-    }
-    assertEquals(workflowSuccess, true);
-    const state = createRunState("fre34-t2", "cfg.yaml", ["p1"], {}, {});
-    const nodes: Record<string, NodeConfig> = {
-      p1: { type: "agent", label: "P1", run_on: "success" },
-    };
-    await executePostWorkflow({
-      nodeIds: ["p1"],
-      nodes,
-      state,
-      workflowSuccess,
-      failureScript: tmpScript,
-      output: out,
-      executeNode: (_id) => Promise.resolve(true),
-    });
-    const joined = cap.lines.join("");
-    assertEquals(joined.includes("HOOK_CALLED"), false);
-    assertEquals(joined.includes("Failure hook"), false);
-  } finally {
-    await Deno.remove(tmpScript);
-  }
-});
-
-Deno.test("FR-E34 — one fatal failure among continue-d: hook called exactly once", async () => {
-  const tmpScript = await Deno.makeTempFile({ suffix: ".sh" });
-  try {
-    await Deno.writeTextFile(tmpScript, "#!/bin/bash\necho 'HOOK_CALLED'");
-    await Deno.chmod(tmpScript, 0o755);
-    const cap = createCapture();
-    const out = new OutputManager("normal", cap.writer);
-    // Replicate executeLevel loop: node-a continue-d (true), node-b fatal (false)
-    let workflowSuccess = true;
-    for (const result of [true, false]) {
-      if (!result) {
-        workflowSuccess = false;
-        break;
-      }
-    }
-    assertEquals(workflowSuccess, false);
-    const state = createRunState("fre34-t3", "cfg.yaml", ["p1"], {}, {});
-    const nodes: Record<string, NodeConfig> = {
-      p1: { type: "agent", label: "P1", run_on: "failure" },
-    };
-    await executePostWorkflow({
-      nodeIds: ["p1"],
-      nodes,
-      state,
-      workflowSuccess,
-      failureScript: tmpScript,
-      output: out,
-      executeNode: (_id) => Promise.resolve(true),
-    });
-    const joined = cap.lines.join("");
-    // Hook called exactly once
-    const hookCount = (joined.match(/Failure hook completed/g) ?? []).length;
-    assertEquals(hookCount, 1);
-  } finally {
-    await Deno.remove(tmpScript);
-  }
-});
-
-Deno.test("FR-E34 — hook script fails after continue-d failure: warn emitted, no re-trigger", async () => {
-  const tmpScript = await Deno.makeTempFile({ suffix: ".sh" });
-  try {
-    await Deno.writeTextFile(tmpScript, "#!/bin/bash\nexit 1");
-    await Deno.chmod(tmpScript, 0o755);
-    const cap = createCapture();
-    const out = new OutputManager("normal", cap.writer);
-    const state = createRunState("fre34-t4", "cfg.yaml", ["p1"], {}, {});
-    const nodes: Record<string, NodeConfig> = {
-      p1: { type: "agent", label: "P1", run_on: "failure" },
-    };
-    // workflowSuccess=false: one fatal failure (hook is attempted)
-    await executePostWorkflow({
-      nodeIds: ["p1"],
-      nodes,
-      state,
-      workflowSuccess: false,
-      failureScript: tmpScript,
-      output: out,
-      executeNode: (_id) => Promise.resolve(true),
-    });
-    const joined = cap.lines.join("");
-    assertEquals(joined.includes("WARN"), true);
-    assertEquals(joined.includes("Failure hook completed"), false);
-  } finally {
-    await Deno.remove(tmpScript);
-  }
-});
 
 Deno.test("FR-E34 — log message format: failure suppressed by on_error: continue", () => {
   const cap = createCapture();

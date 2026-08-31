@@ -2365,3 +2365,27 @@ nodes:
     );
   }
 });
+
+Deno.test("FR-E11 every_attempt is a valid run_on value", () => {
+  const yaml = (value: string) =>
+    [
+      "name: run-on",
+      "version: '1'",
+      "nodes:",
+      "  report:",
+      "    type: command",
+      "    label: Report",
+      "    command: 'true'",
+      `    run_on: ${value}`,
+      "",
+    ].join("\n");
+
+  const config = parseConfig(yaml("every_attempt"));
+  assertEquals(config.nodes.report.run_on, "every_attempt");
+
+  assertThrows(
+    () => parseConfig(yaml("sometimes")),
+    Error,
+    "always, success, failure, every_attempt",
+  );
+});

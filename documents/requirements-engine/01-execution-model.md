@@ -162,6 +162,14 @@
   2. All failures suppressed → `workflowSuccess === true` → hook does NOT run.
   3. Any unsuppressed failure → `workflowSuccess === false` → hook runs once.
   4. Hook failure does not affect `on_error: continue` semantics (FR-E19 applies).
+  5. The hook fires on the workflow outcome alone. A workflow that declares no
+     `run_on` node at all still runs it on failure — it used to return before
+     the hook, because the hook lived inside the post-workflow scheduler
+     (FR-E99).
+
+  The hook runs once per engine invocation, between the graph and the outcome
+  wave, so a resumed run that fails again fires it again.
+- **Tasks:** [one-scheduler-run-outcome](../tasks/2026-08-30-one-scheduler-run-outcome.md)
 - **Motivation:** Without formal definition, workflow authors cannot predict
   whether the failure hook fires when a node is `continue`-d. Deterministic
   rules prevent silent unexpected hook invocations.

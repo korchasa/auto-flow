@@ -346,3 +346,24 @@ Deno.test("FR-E94 HTML canvas draws loop body nodes and their internal edges", (
   assertStringIncludes(html, '"inputs":["revise"]');
   assertStringIncludes(html, '"inputs":["revise/draft","prepare"]');
 });
+
+Deno.test("FR-E99 post-workflow nodes come from the engine helper", () => {
+  const cfg: WorkflowConfig = {
+    name: "post",
+    version: "1",
+    nodes: {
+      build: { type: "command", label: "Build", command: "true" },
+      report: {
+        type: "command",
+        label: "Report",
+        command: "true",
+        run_on: "every_attempt",
+      },
+    },
+  };
+  const markdown = renderWorkflowMarkdown(cfg, "workflow.yaml");
+  // Every `run_on` value groups under post-workflow, not just "always" —
+  // the rule is the engine's `collectPostWorkflowNodes`, not a local test.
+  assertStringIncludes(markdown, 'subgraph phase_post["post-workflow"]');
+  assertStringIncludes(markdown, "report");
+});

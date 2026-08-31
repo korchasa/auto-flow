@@ -140,7 +140,7 @@ Explicit splitting and merging of execution flows. Section of
   set of nodes actually running together rather than a level, and a branch node
   with no write scope of its own runs alone, because its FR-E37 check compares
   repository-wide snapshots and a sibling's write would fail it (FR-E91).
-- **Tasks:** [explicit-fork-join](../tasks/2026-08-30-explicit-fork-join.md)
+- **Tasks:** [explicit-fork-join](../tasks/2026-08-30-explicit-fork-join.md), [one-scheduler-run-outcome](../tasks/2026-08-30-one-scheduler-run-outcome.md)
 - **Dep:** FR-E95.
 - **Acceptance criteria:**
   - **Tests:** `scheduling_test.ts`, `config_fork_test.ts` (FR-E97;

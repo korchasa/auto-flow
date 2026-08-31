@@ -417,3 +417,33 @@ Deno.test("validateTemplateVars — multiple errors accumulated", () => {
   const errors = validateTemplateVars("{{foo.bar}} {{baz}}", []);
   assertEquals(errors.length, 2);
 });
+
+Deno.test("FR-E99 run is a known template prefix", () => {
+  assertEquals(
+    validateTemplateVars("{{run.outcome}} on attempt {{run.attempt}}", []),
+    [],
+  );
+  const errors = validateTemplateVars("{{run.bogus}}", []);
+  assertEquals(errors.length, 1);
+  assertEquals(
+    errors[0].includes("Unknown run property"),
+    true,
+    errors[0],
+  );
+});
+
+Deno.test("FR-E99 run outcome and attempt interpolate from the context", () => {
+  const ctx = makeCtx({ run: { outcome: "failure", attempt: 3 } });
+  assertEquals(
+    interpolate("{{run.outcome}}/{{run.attempt}}", ctx, "."),
+    "failure/3",
+  );
+});
+
+Deno.test("FR-E99 run variables outside a run context fail clearly", () => {
+  assertThrows(
+    () => interpolate("{{run.outcome}}", makeCtx(), "."),
+    Error,
+    "outside a run context",
+  );
+});

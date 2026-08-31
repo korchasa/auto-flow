@@ -112,6 +112,13 @@ example of engine usage.
   node runs they share ONE rolling FR-E50 guardrail bracket instead of a
   per-node one, because the snapshots are repository-wide and would otherwise
   blame whichever node happened to be inside the bracket.
+- **Outcome wave:** a node carrying `run_on` is scheduled by that same
+  scheduler, in a second pass that starts once the graph's verdict is known,
+  and is gated by the same `gateNode` — so `when:` works on it (FR-E99). The
+  verdict is a value: `{{run.outcome}}` and `{{run.attempt}}`. `always`,
+  `success` and `failure` run at most once per run, so `--resume` never
+  repeats them; `run_on: every_attempt` is the opt-in to running again on
+  each invocation.
 - **Continuation:** Re-invoking agents within same session on validation failure
   (max N per node)
 - **Resume:** Failed/interrupted runs resumable via `--resume <run-id>`;

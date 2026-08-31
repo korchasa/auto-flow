@@ -120,7 +120,7 @@ Every node accepts these **common** fields:
 - `label` (string, **required**) — shown in logs and status output.
 - `inputs` (string[], optional) — DAG edges; node IDs whose artifacts this node consumes.
 - `phase` (string, optional) — alternative to top-level `phases:`. Mutually exclusive with the top-level block.
-- `run_on` (`"always" | "success" | "failure"`, optional) — when set, node runs after all DAG levels complete (post-workflow). `run_always: true` is the legacy alias and is normalized to `run_on: "always"`.
+- `run_on` (`"always" | "success" | "failure" | "every_attempt"`, optional) — when set, node runs after the graph, once its outcome is known. The first three run at most once per run, so `--resume` does not repeat a node that already completed; `every_attempt` opts the node into running again on each resume. `run_always: true` is the legacy alias and is normalized to `run_on: "always"`. The outcome is readable as `{{run.outcome}}` and the invocation counter as `{{run.attempt}}`, in prompts and in `when` predicates alike.
 - `before` (string, optional) — shell command run before the node; templated.
 - `after` (string, optional) — shell command run after success; templated.
 - `settings` (object, optional) — overrides `max_continuations`, `timeout_seconds`, `on_error`, `max_retries`, `retry_delay_seconds` (any unknown key throws).

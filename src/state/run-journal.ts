@@ -343,10 +343,20 @@ function applyJournalEvents(events: RunJournalEvent[]): RunState {
           // carry `env_keys` and replay to an empty map that the engine
           // refills from the live environment on resume.
           env: event.env ?? {},
+          // FR-E99: a journal written before the attempt counter existed has
+          // no `run_attempt_started` record; normalising to 1 here spares
+          // every reader an `?? 1`.
+          attempt: state?.attempt ?? 1,
           nodes: state?.nodes ?? {},
           total_cost_usd: state?.total_cost_usd,
           claude_cli_version: state?.claude_cli_version,
         };
+        break;
+      }
+      case "run_attempt_started": {
+        const current = requireState(state, event);
+        assertSameRun(current, event);
+        current.attempt = event.attempt;
         break;
       }
       case "run_metadata_updated": {

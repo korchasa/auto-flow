@@ -41,7 +41,7 @@
 ## 4. Non-Functional Requirements
 
 - **Isolation:** Each agent runs in its own runtime process with no shared state except file artifacts. Concurrency unit = workflow folder: at most one run per `<workflowDir>` at a time, enforced by the per-workflow PID lock (FR-E54). Distinct workflow folders in the same repo run independently in parallel — each owns its `runs/` and `state.json` namespace (per-run worktrees live under `runs/<run-id>/worktree/`, FR-E57).
-- **Fault tolerance:** If a node fails (agent error, timeout, continuation limit exhausted), the workflow stops. Post-workflow nodes with `run_on` config execute based on outcome. Manual restart via `--resume <run-id>`.
+- **Fault tolerance:** If a node fails (agent error, timeout, continuation limit exhausted), the workflow stops. Post-workflow nodes with `run_on` config execute based on outcome, through the same scheduler and gate as every other node (FR-E99); `run_on: every_attempt` is the opt-in to running again on each resume. Manual restart via `--resume <run-id>`.
 - **Timeouts:** Each node has a configurable timeout (default: 30 min). Engine enforces timeout per node. On timeout, node is treated as failed.
 - **Observability:** 3 verbosity levels (`-q`/default/`-v`/`-s`); status lines with timestamps; per-node result summaries; full logs stored per node in `<run-dir>/logs/`.
 - **Domain-agnostic:** Engine MUST NOT contain git, GitHub, branch, PR, or any domain-specific logic. All domain workflows implemented via agent nodes wired in workflow YAML configs.

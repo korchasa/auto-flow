@@ -6,9 +6,15 @@
  * cost chart. Entry point: {@link renderHtml}.
  * CLI: deno task dashboard --run-dir <path>
  */
-import type { CliRunOutput, NodeState, RunState } from "../src/types.ts";
+import type {
+  CliRunOutput,
+  NodeConfig,
+  NodeState,
+  RunState,
+} from "../src/types.ts";
 import { parse as parseYaml } from "@std/yaml";
 import { replayRunJournal } from "../src/state/run-journal.ts";
+import { collectPostWorkflowNodes } from "../src/engine/post-workflow.ts";
 
 /** Escape HTML special chars to prevent XSS. */
 export function escHtml(str: string): string {
@@ -337,6 +343,22 @@ export function renderCostChart(bars: CostBar[], totalCost: number): string {
 }
 
 /**
+ * FR-E99: the post-workflow node ids of a parsed workflow config.
+ *
+ * A thin adapter over the engine's {@link collectPostWorkflowNodes} so the
+ * dashboard groups by the same rule the engine schedules by — it used to test
+ * `run_on === "always"` itself and so missed every other value.
+ */
+export function postWorkflowNodesOf(
+  // deno-lint-ignore no-explicit-any
+  config: Record<string, any> | undefined,
+): string[] {
+  const nodes = config?.nodes;
+  if (!nodes || typeof nodes !== "object") return [];
+  return collectPostWorkflowNodes(nodes as Record<string, NodeConfig>);
+}
+
+/**
  * Render the full self-contained HTML dashboard page.
  * Delegates phase-grouping to groupNodesByPhase(); no inline grouping logic.
  * Per-phase status badges computed via computePhaseStatus() using alwaysNodes set.
@@ -552,15 +574,7 @@ if (import.meta.main) {
     if (config.phases && typeof config.phases === "object") {
       phases = config.phases as Record<string, string[]>;
     }
-    if (config.nodes && typeof config.nodes === "object") {
-      // deno-lint-ignore no-explicit-any
-      const configNodes = config.nodes as Record<string, any>;
-      for (const [nodeId, nodeConfig] of Object.entries(configNodes)) {
-        if (nodeConfig?.run_on === "always") {
-          alwaysNodes.add(nodeId);
-        }
-      }
-    }
+    for (const nodeId of postWorkflowNodesOf(config)) alwaysNodes.add(nodeId);
   } catch {
     // Config unreadable — proceed without phase grouping or always-nodes
   }

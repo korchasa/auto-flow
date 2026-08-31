@@ -46,11 +46,7 @@ import { acquireLock, defaultLockPath, releaseLock } from "../state/lock.ts";
 import { onShutdown } from "../process-registry.ts";
 import { OutputManager } from "../output.ts";
 import type { RunSummary } from "../output.ts";
-import {
-  collectPostWorkflowNodes,
-  executePostWorkflow,
-  sortPostWorkflowNodes,
-} from "./post-workflow.ts";
+import { collectPostWorkflowNodes, runFailureHook } from "./post-workflow.ts";
 import {
   buildTaskPaths,
   createRunState,
@@ -128,6 +124,11 @@ export class Engine {
    * an operator saying "I already handled this", and their dependents must
    * still run. A `when` skip means the branch was not taken. */
   private whenSkipped = new Set<string>();
+
+  /** FR-E99: verdict of the graph wave, and the value `run_on` and
+   * `{{run.outcome}}` are evaluated against. `pending` until the graph has
+   * finished, so a node inside the graph cannot read its own run's verdict. */
+  private runOutcome: "pending" | "success" | "failure" = "pending";
   /** FR-E91: true while a concurrent level runs inside one guardrail bracket.
    * Nodes then skip their own bracket — see `runNodes`. */
   private levelGuardrailActive = false;
@@ -169,11 +170,7 @@ export class Engine {
       for (const [id, node] of Object.entries(this.config.nodes)) {
         labels[id] = node.label;
       }
-      const rawPostWorkflowIds = collectPostWorkflowNodes(this.config.nodes);
-      const postWorkflowNodeIds = sortPostWorkflowNodes(
-        rawPostWorkflowIds,
-        this.config.nodes,
-      );
+      const postWorkflowNodeIds = collectPostWorkflowNodes(this.config.nodes);
       const filteredLevels = levels
         .map((level) => level.filter((id) => !postWorkflowNodeIds.includes(id)))
         .filter((level) => level.length > 0);
@@ -331,6 +328,13 @@ export class Engine {
     if (!this.options.resume) {
       await this.emitBootstrapJournal(levels);
     }
+    // FR-E99: every engine invocation over this run is a fact, the fresh one
+    // included. `run_started` is emitted once; counting these is what tells a
+    // resumed run which attempt it is.
+    const attempt = (this.state.attempt ?? 0) + 1;
+    this.state.attempt = attempt;
+    await this.journal?.append({ kind: "run_attempt_started", attempt });
+
     await this.captureCliVersion();
 
     // FR-E47: pre-execution budget check (applies to fresh and resumed runs).
@@ -364,13 +368,10 @@ export class Engine {
       );
     }
 
-    // Identify post-workflow nodes (run_on set) — execute after all DAG levels
-    // Sort topologically so dependencies within post-workflow subset are respected
-    const rawPostWorkflowIds = collectPostWorkflowNodes(this.config.nodes);
-    const postWorkflowNodeIds = sortPostWorkflowNodes(
-      rawPostWorkflowIds,
-      this.config.nodes,
-    );
+    // FR-E99: the nodes that wait for the run's verdict. They are scheduled by
+    // the same `runNodes` as the graph, so their order comes from the shared
+    // dependency map and needs no topological sort of its own.
+    const postWorkflowNodeIds = collectPostWorkflowNodes(this.config.nodes);
 
     // Filter post-workflow nodes out of regular DAG levels
     const filteredLevels = levels
@@ -403,18 +404,24 @@ export class Engine {
       this.output.error((err as Error).message);
     }
 
-    // Execute post-workflow nodes (filtered by run_on condition)
-    await executePostWorkflow({
-      nodeIds: postWorkflowNodeIds,
-      nodes: this.config.nodes,
-      state: this.state,
-      workflowSuccess,
-      failureScript: this.config.defaults?.on_failure_script,
-      output: this.output,
-      executeNode: (nodeId) => this.executeNode(nodeId),
-      nodeSkipped: (nodeId) => this.nodeSkipped(nodeId),
-      cwd,
-    });
+    // FR-E99: the outcome is known, so the nodes that wait on it become
+    // runnable. Same scheduler, same gate — `run_on` and `when` are both
+    // decided by `gateNode` now. The hook fires on its own condition, not on
+    // the presence of such nodes (FR-E34).
+    this.runOutcome = workflowSuccess ? "success" : "failure";
+    if (!workflowSuccess) {
+      await runFailureHook(
+        this.config.defaults?.on_failure_script,
+        this.output,
+        cwd,
+      );
+    }
+    if (postWorkflowNodeIds.length > 0) {
+      await this.runNodes(postWorkflowNodeIds, {
+        continueOnFailure: true,
+        outcomeWave: true,
+      });
+    }
 
     // Finalize run state
     if (workflowSuccess) {
@@ -478,16 +485,23 @@ export class Engine {
    * `defaults.max_parallel` stays the global cap on how many run at once, and
    * with its default of 1 the order is the same as before, one node at a time.
    */
-  private async runNodes(nodeIds: string[]): Promise<boolean> {
+  private async runNodes(
+    nodeIds: string[],
+    opts: { continueOnFailure?: boolean; outcomeWave?: boolean } = {},
+  ): Promise<boolean> {
     const deps = buildDependencies(this.config);
     const scheduled = new Set(nodeIds);
     const pending = new Set<string>();
     const satisfied = new Set<string>();
     for (const id of nodeIds) {
       // Resume: a node already completed in a previous attempt is a dependency
-      // that is met, not work to redo.
-      if (isNodeCompleted(this.state, id)) satisfied.add(id);
-      else pending.add(id);
+      // that is met, not work to redo — unless it asked to be reconsidered
+      // every attempt (FR-E99).
+      if (
+        isNodeCompleted(this.state, id) && !this.rerunsThisAttempt(id, opts)
+      ) {
+        satisfied.add(id);
+      } else pending.add(id);
     }
 
     const maxParallel = this.config.defaults?.max_parallel ?? 1;
@@ -543,7 +557,10 @@ export class Engine {
             id,
             this.runScheduledNode(id, guard).then((ok) => {
               if (ok) satisfied.add(id);
-              else failed = true;
+              // FR-E34: a node of the outcome wave takes its own verdict down,
+              // not the wave's — its siblings still run, and the run's status
+              // stays the verdict the graph produced.
+              else if (!opts.continueOnFailure) failed = true;
               return id;
             }),
           );
@@ -576,6 +593,22 @@ export class Engine {
     }
 
     return !failed;
+  }
+
+  /**
+   * FR-E99: true when a completed node must be reconsidered in this wave.
+   *
+   * Only `run_on: every_attempt` opts in, and only across attempts — a node
+   * that already completed in the CURRENT attempt is left alone, which is
+   * what stops it from re-entering itself inside one invocation.
+   */
+  private rerunsThisAttempt(
+    id: string,
+    opts: { outcomeWave?: boolean },
+  ): boolean {
+    if (!opts.outcomeWave) return false;
+    if (this.config.nodes[id]?.run_on !== "every_attempt") return false;
+    return this.state.nodes[id]?.completed_attempt !== this.state.attempt;
   }
 
   /**
@@ -612,6 +645,30 @@ export class Engine {
       await this.nodeSkipped(id);
       this.output.nodeSkipped(id, `input '${gatedInput}' was skipped`);
       return false;
+    }
+
+    // FR-E11 / FR-E99: a node that waits for the run's verdict is filtered by
+    // it here, next to `when`, instead of in a scheduler of its own.
+    const runOn = this.config.nodes[id].run_on;
+    if (runOn !== undefined) {
+      if (this.runOutcome === "pending") {
+        throw new Error(
+          `Node '${id}' declares run_on but was scheduled before the run outcome was known`,
+        );
+      }
+      const wanted = runOn === "success" || runOn === "failure"
+        ? runOn
+        : undefined;
+      if (wanted !== undefined && wanted !== this.runOutcome) {
+        await this.nodeSkipped(id);
+        this.output.nodeSkipped(
+          id,
+          `skipped: run_on=${runOn} but workflow ${
+            this.runOutcome === "success" ? "succeeded" : "failed"
+          }`,
+        );
+        return false;
+      }
     }
 
     const when = this.config.nodes[id].when;
@@ -1265,6 +1322,13 @@ export class Engine {
     costUsd?: number,
     result?: string,
   ): Promise<void> {
+    // FR-E99: record which invocation completed an outcome-wave node, so a
+    // later attempt can tell "ran in an earlier attempt" from "ran in this
+    // one". Stamped before the transition, so the journal snapshot carries it.
+    if (this.config.nodes[nodeId]?.run_on !== undefined) {
+      const node = this.state.nodes[nodeId];
+      if (node) node.completed_attempt = this.state.attempt ?? 1;
+    }
     await nodeCompleted(
       this.state,
       nodeId,
@@ -1347,6 +1411,10 @@ export class Engine {
       workflow_dir: this.workflowDir,
       args: this.state.args,
       env,
+      run: {
+        outcome: this.runOutcome,
+        attempt: this.state.attempt ?? 1,
+      },
       loop: loopIteration !== undefined
         ? { iteration: loopIteration }
         : undefined,

@@ -2,8 +2,10 @@
 
 ## FR
 
+- [FR-E11](requirements-engine/02-nodes-and-models.md#311-fr-e11-conditional-post-workflow-node-execution-run_on) — Conditional post-workflow node execution (`run_on`), including its resume semantics — [x]
 - [FR-E18](requirements-engine/05-cli-and-observability.md#318-fr-e18-stream-log-timestamps) — Stream-log lines prefixed with `[HH:MM:SS]` wall-clock timestamp (engine-owned write under ACP) — [x]
 - [FR-E20](requirements-engine/05-cli-and-observability.md#320-fr-e20-repeated-file-read-warning) — Stream-log `[WARN]` when same file path read >2 times in one node run — [x]
+- [FR-E34](requirements-engine/01-execution-model.md#334-fr-e34-error-handling-precedence-on_error-vs-on_failure_script) — Error-handling precedence (`on_error` vs `on_failure_script`) — [x]
 - [FR-E39](requirements-engine/06-distribution-and-housekeeping.md#339-fr-e39-standalone-binary-distribution) — Standalone binary distribution via `deno compile` + GitHub Release assets — [x]
 - [FR-E41](requirements-engine/06-distribution-and-housekeeping.md#341-fr-e41-cli-auto-update-and-automated-release-pipeline) — Automated CI release pipeline with conventional-commit version bumping — [x]
 - [FR-E43](requirements-engine/02-nodes-and-models.md#343-fr-e43-runtime-fallback-fallback) — Runtime fallback (`defaults.fallback`): switch entire runtime on overload / quota / availability errors — [ ]
@@ -17,9 +19,11 @@
 - [FR-E77](requirements-engine/04-runtime-and-hooks.md#377-fr-e77-acp-as-the-sole-runtime-transport) — ACP as the sole runtime transport (implicit `transport: "acp"`, no config knob) — [x]
 - [FR-E78](requirements-engine/07-mcp-and-plugin-runtime.md#378-fr-e78-plugin-precondition--release-binary-distribution) — Plugin precondition + release binary distribution (supersedes FR-E74 launcher) — [ ]
 - [FR-E80](requirements-engine/05-cli-and-observability.md#380-fr-e80-cumulative-wall-clock-retry-cap) — Cumulative wall-clock retry cap per node via AbortSignal pass-through — [x]
+- [FR-E89](requirements-engine/08-graph-and-isolation.md#389-fr-e89-conditional-node-execution-when) — Conditional node execution (`when`) on any node — [x]
 - [FR-E94](requirements-engine/09-development-visualization.md#394-fr-e94-static-workflow-diagram) — Interactive HTML workflow canvas plus a Mermaid fallback, grouped by phase — [ ]
 - [FR-E95](requirements-engine/10-fork-join.md#395-fr-e95-explicit-forkjoin) — Explicit `fork`/`join` branch groups with static and agent-decided branches — [ ]
 - [FR-E96](requirements-engine/10-fork-join.md#396-fr-e96-captured-node-answers-and-branch-manifest) — Captured node answers and per-group branch manifest for the join node — [ ]
 - [FR-E97](requirements-engine/10-fork-join.md#397-fr-e97-input-driven-node-scheduling) — Input-driven node scheduling replacing the DAG-level barrier — [ ]
 - [FR-E98](requirements-engine/11-acp-transport-contract.md#398-fr-e98-acp-unsupported-invoke-options-never-leave-the-engine) — The engine sends no invoke option the ACP wire rejects — [x]
+- [FR-E99](requirements-engine/12-run-outcome.md#399-fr-e99-run-outcome-as-a-scheduling-value) — Run outcome as a scheduling value; one scheduler for the whole graph — [ ]
 - [FR-E9](requirements-engine/01-execution-model.md#39-fr-e9-run-artifacts-folder-structure) — Run artifacts live under the selected workflow run directory — [x]
