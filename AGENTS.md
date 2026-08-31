@@ -445,6 +445,19 @@ Publish gotchas honored in `deno.json#publish`:
   `packageFiles: [{ filename: "deno.json", type: "json" }]` and
   `bumpFiles: [{ filename: "deno.json", type: "json" }]`. When cloning the
   CI skeleton to a new repo, copy both files together.
+- **Never let `commit-and-tag-version` pick the bump level.** While the
+  version is `0.x` it applies pre-1.0 semantics of its own — a `feat`
+  bumps only PATCH, a breaking change bumps MINOR — and neither
+  `preMajor: false` in `.versionrc.json` nor the `preset` object form
+  overrides it (both verified 31.08.2026 against 13.1.2). That is how
+  FR-E99, a feature, shipped as 0.9.2. CI computes the level with
+  `scripts/release-level.ts` over `<last-tag>..HEAD` and passes it as
+  `--release-as`; the rules live in `scripts/release-level_test.ts` and
+  the CI wiring is locked by `scripts/ci_yaml_test.ts`. A merge commit
+  carries no conventional-commit type, so the range must list every
+  commit it brought in — first-parent history would release nothing.
+  To correct a version number by hand, dispatch `ci.yml` with the
+  `release_as` input instead of hand-editing `deno.json`.
 - Dev-only paths (`scripts/`, `documents/`, `.github/`, `.claude/`,
   `.devcontainer/`, `AGENTS.md`, `CLAUDE.md`, `CHANGELOG.md`,
   `.versionrc.json`) are listed in `publish.exclude` so the JSR tarball

@@ -85,10 +85,17 @@
   - [x] AC6: `.versionrc.json` configures `standard-version` for conventional
     commit bumping. Evidence: `.versionrc.json`.
   - [x] AC7: `.github/workflows/ci.yml` auto-detects releasable commits on
-    `main` push, bumps version, tags. Evidence: `.github/workflows/ci.yml:37-68`.
-  - [x] AC8: `.github/workflows/release.yml` generates release notes via
+    `main` push, bumps version, tags. Evidence: `.github/workflows/ci.yml`,
+    job `release`, step `create-release`.
+  - [x] AC8: the `publish-github` job generates release notes via
     `scripts/generate-release-notes.ts`. Evidence:
-    `.github/workflows/release.yml:62-73`.
+    `.github/workflows/ci.yml`, job `publish-github`.
+  - [x] AC10: the bump level is decided by `scripts/release-level.ts` over the
+    whole commit range and forced with `--release-as`, so a `feat` releases
+    MINOR even while the version is `0.x` and a typeless merge subject hides
+    nothing. A breaking change is capped at MINOR until 1.0.0. Manual
+    override: `workflow_dispatch` input `release_as`. Evidence:
+    `deno task test --filter "FR-E41"`.
   - AC2-AC5, AC9: removed — self-update functionality and its tests
     deleted; criteria no longer applicable.
 

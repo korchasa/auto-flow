@@ -240,16 +240,23 @@
 ### 3.6 Release CI Workflow — FR-E39, FR-E41
 
 - **Purpose:** Automated release pipeline: check, version bump, compile, publish.
-- **Two-workflow design:**
-  - `ci.yml` (on push to `main` + PRs): `deno task check` → detect releasable
-    conventional commits since last tag → `standard-version` bumps
-    `deno.json` version + CHANGELOG.md → git tag `v<ver>` → push
-  - `release.yml` (on tag `v*`): matrix compile (4 targets) → generate
-    release notes via `scripts/generate-release-notes.ts` → `gh release create`
-    with binary assets
-- **Version bumping:** `.versionrc.json` configures `standard-version` (npm
-  package). Reads conventional commits, updates `deno.json` version field,
-  generates `CHANGELOG.md`. Task: `deno task release`.
+- **One workflow, staged jobs** (`ci.yml`, on push to any branch + PRs +
+  `workflow_dispatch`): `deno task check` and plugin-install acceptance →
+  `release` job decides the bump level, tags, pushes → matrix compile →
+  `sync-plugins` → `publish-github` (release notes via
+  `scripts/generate-release-notes.ts`, assets `dist/*`) + `publish-jsr`.
+  Every job past `release` is gated on `needs.release.outputs.released`.
+- **Bump level:** decided by `scripts/release-level.ts` over the commits of
+  `<last-tag>..HEAD`, then forced with `--release-as`. `feat` → MINOR,
+  `fix`/`perf`/`refactor`/`build`/`engine`/`engine+sdlc` → PATCH, everything
+  else (including `sdlc` and a typeless merge subject) → no release. A
+  breaking change is capped at MINOR while the version is `0.x` and becomes
+  MAJOR from 1.0.0 on. `commit-and-tag-version` MUST NOT decide this: its own
+  pre-1.0 semantics release a `feat` as a PATCH, which shipped FR-E99 as
+  0.9.2. `workflow_dispatch` accepts `release_as` to force a level by hand.
+- **Version bumping:** `.versionrc.json` configures `commit-and-tag-version`
+  (npm package). Updates the `deno.json` version field and generates
+  `CHANGELOG.md`. Task: `deno task release`.
 - **Release notes:** `scripts/generate-release-notes.ts` — parses conventional
   commit subjects between tags, categorizes (feat/fix/refactor/perf/docs/build),
   generates markdown with GitHub compare link.
