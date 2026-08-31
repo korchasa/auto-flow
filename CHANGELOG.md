@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.10.0](https://github.com/korchasa/flowai-workflow/compare/v0.9.2...v0.10.0) (2026-08-31)
+
+### Continuous Integration
+
+* decide the release level in the repo, not in the bump tool ([4bbc86d](https://github.com/korchasa/flowai-workflow/commit/4bbc86d7eac3985a4b504dc66d34f872c14f4fe5))
 ## [0.9.2](https://github.com/korchasa/flowai-workflow/compare/v0.9.1...v0.9.2) (2026-08-31)
 
 ### Features
