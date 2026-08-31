@@ -131,9 +131,10 @@ isolation. Reference shapes are named per FR.
 
 ### 3.89 FR-E89: Conditional Node Execution (`when`)
 
-- **Description:** Any node MAY carry `when: "<shell predicate>"`. The engine
-  evaluates it immediately before the node would run: exit `0` runs the node,
-  any other code skips it. The skip propagates — every node that lists a
+- **Description:** Any node MAY carry `when: "<shell predicate>"` — a node of
+  the outcome wave (FR-E99) included, which was not true while those nodes had
+  a scheduler of their own. The engine evaluates it immediately before the node
+  would run: exit `0` runs the node, any other code skips it. The skip propagates — every node that lists a
   gated-out node in its `inputs` is skipped too, transitively.
 
   **Config schema:**
@@ -150,7 +151,8 @@ isolation. Reference shapes are named per FR.
   - The predicate runs through `bash -c` in the run's working directory (the
     worktree when isolation is on) with the node's full template context:
     `{{args.*}}`, `{{env.*}}`, `{{input.*}}`, `{{node_dir}}`, `{{run_dir}}`,
-    and `{{loop.iteration}}` for body nodes.
+    `{{run.outcome}}` / `{{run.attempt}}` (FR-E99), and `{{loop.iteration}}`
+    for body nodes.
   - A gated-out node reaches status `skipped`, not `failed`; the run's own
     status is unaffected and downstream levels continue.
   - Skip propagation is scoped to `when` gates. `--skip` and `--only` also
@@ -162,6 +164,7 @@ isolation. Reference shapes are named per FR.
     1 runs on iteration 2 if its predicate then passes.
   - An unresolvable template variable throws rather than degrading into a gate
     that always closes.
+- **Tasks:** [one-scheduler-run-outcome](../tasks/2026-08-30-one-scheduler-run-outcome.md)
 - **Motivation:** Every branch was an unconditional node, so a workflow that
   should take one of two paths had to run both and instruct the unwanted one
   to do nothing — spending a model call and a context window on a no-op, and

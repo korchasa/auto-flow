@@ -16,7 +16,8 @@
     `allowed_paths` present, not user-configured in YAML),
     `NodeConfig.allowed_paths` (`string[]`, optional — FR-E37: glob patterns
     defining allowed file modifications for scope-based detection),
-    `NodeConfig.run_on` (`"always"|"success"|"failure"`), `NodeConfig.phase`,
+    `NodeConfig.run_on` (`"always"|"success"|"failure"|"every_attempt"`),
+    `NodeConfig.phase`,
     `NodeConfig.env`, `NodeConfig.model` (per-node runtime model override),
     `NodeConfig.runtime`, `NodeConfig.runtime_args`,
     `WorkflowDefaults.model` (default model for all nodes),
@@ -54,7 +55,7 @@
     `run_on` normalization. `extractWorktreeDisabled()`: lightweight pre-parse
     extracting only `defaults.worktree_disabled` for two-phase loading (FR-E24). `validateNode()`: if `run_on` present, must be
     one of `"always"|"success"|"failure"`; error:
-    `Node '<id>' has invalid run_on value '<val>'. Must be one of: always, success, failure`.
+    `Node '<id>' has invalid run_on value '<val>'. Must be one of: always, success, failure, every_attempt`.
     `validateFileReferences(config)` (FR-E32): scans all `task_template`
     and `prompt` fields (incl. loop body nodes) for `{{file("...")}}` regex,
     checks file existence via `Deno.statSync()`. Skips paths containing `{{`

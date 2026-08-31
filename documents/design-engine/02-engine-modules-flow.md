@@ -315,13 +315,17 @@
 - **Node types:** `agent`, `merge`, `loop` (with inline `nodes` sub-object
     for body node definitions), `human`
 - **Node flags:**
-  - `run_on?: "always" | "success" | "failure"` — execution condition for
-    post-workflow nodes. When set, node is excluded from DAG levels and executes
-    in a post-workflow step after all DAG levels complete:
-    - `"always"` — execute regardless of workflow outcome.
+  - `run_on?: "always" | "success" | "failure" | "every_attempt"` — execution
+    condition for outcome-wave nodes. When set, the node is excluded from the
+    graph wave and scheduled by a second `runNodes` call once the verdict is
+    known (FR-E99):
+    - `"always"` — execute regardless of workflow outcome, once per run.
     - `"success"` — execute only if workflow succeeded.
-    - `"failure"` — execute only if workflow failed. Skipped nodes get
-      `markNodeSkipped()` status.
+    - `"failure"` — execute only if workflow failed.
+    - `"every_attempt"` — regardless of outcome, and reconsidered on every
+      engine invocation.
+    Filtering happens in `gateNode`, so a filtered node reaches `skipped`
+    through the same `nodeSkipped()` path as a `when` gate or a `--skip`.
     Backward compat: `run_always: true` in YAML normalized to `run_on: "always"`
     by config loader (see `config.ts` normalization). `run_always` deleted
     post-normalization — not visible to engine runtime.

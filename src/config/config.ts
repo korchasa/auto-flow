@@ -873,10 +873,10 @@ function validateNode(
 
   // Validate run_on enum if present
   if (node.run_on !== undefined) {
-    const validRunOn = ["always", "success", "failure"];
+    const validRunOn = ["always", "success", "failure", "every_attempt"];
     if (!validRunOn.includes(node.run_on as string)) {
       throw new Error(
-        `Node '${id}' has invalid run_on value '${node.run_on}'. Must be one of: always, success, failure`,
+        `Node '${id}' has invalid run_on value '${node.run_on}'. Must be one of: always, success, failure, every_attempt`,
       );
     }
   }

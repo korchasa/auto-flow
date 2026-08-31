@@ -451,3 +451,35 @@ Deno.test("lifecycle replay — Engine.run writes journal and no state json", as
     await Deno.remove(tmpDir, { recursive: true });
   }
 });
+
+Deno.test("FR-E99 attempt counter and per-node attempt stamp survive replay", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    const writer = await RunJournalWriter.open(dir, "run-att");
+    await appendRunStart(writer, "run-att");
+    await writer.append({ kind: "run_attempt_started", attempt: 1 });
+    const state = createRunState("run-att", "workflow.yaml", ["build"], {}, {});
+    state.nodes.build.completed_attempt = 1;
+    await nodeCompleted(state, "build", undefined, "done", undefined, writer);
+    // Second engine invocation on the same run: only the attempt fact is new.
+    await writer.append({ kind: "run_attempt_started", attempt: 2 });
+
+    const replayed = await loadStateFromJournal(dir);
+    assertEquals(replayed.attempt, 2);
+    assertEquals(replayed.nodes.build.completed_attempt, 1);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E99 a journal with no attempt record replays as attempt 1", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    const writer = await RunJournalWriter.open(dir, "run-old");
+    await appendRunStart(writer, "run-old");
+    const replayed = await loadStateFromJournal(dir);
+    assertEquals(replayed.attempt, 1);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});

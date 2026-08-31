@@ -143,7 +143,7 @@ graph TD
     Validate -->|pass| State["State Manager<br/>state.json"]
     State --> Next["Next Level / Post-workflow"]
 
-    Executor --> PostWorkflow["Post-Workflow Nodes<br/>run_on: always|success|failure"]
+    Executor --> PostWorkflow["Post-Workflow Nodes<br/>run_on: always|success|failure|every_attempt"]
     PostWorkflow --> Summary["Run Summary<br/>cost, duration, results"]
 ```
 

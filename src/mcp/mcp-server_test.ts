@@ -698,3 +698,49 @@ Deno.test("FR-E73 mcp-server still reads a legitimate nested artifact path", asy
     await fixture.cleanup();
   }
 });
+
+Deno.test("FR-E99 get_state distinguishes a re-run outcome-wave node", async () => {
+  const fixture = await setupFixtureWorkflow();
+  try {
+    const runId = "run-attempt-2";
+    const runDir = getRunDir(runId, fixture.workflowDir);
+    await Deno.mkdir(runDir, { recursive: true });
+    const writer = await RunJournalWriter.open(runDir, runId);
+    await writer.append({
+      kind: "run_started",
+      config_path: "workflow.yaml",
+      started_at: "2026-05-24T00:00:00.000Z",
+      ts: "2026-05-24T00:00:00.000Z",
+      args: {},
+      env_keys: [],
+    });
+    await writer.append({ kind: "run_attempt_started", attempt: 1 });
+    const state = createRunState(runId, "workflow.yaml", ["build"], {}, {});
+    await nodeStarted(state, "build", undefined, writer);
+    state.nodes.build.completed_attempt = 1;
+    await nodeCompleted(state, "build", undefined, "done", undefined, writer);
+    // A second engine invocation over the same run.
+    await writer.append({ kind: "run_attempt_started", attempt: 2 });
+
+    const { client, shutdown } = await startServerWithClient(
+      fixture.workflowDir,
+    );
+    const result = await client.callTool({
+      name: "get_state",
+      arguments: { run_id: runId },
+    });
+    const replayed = parseToolJson(
+      result as { content: Array<{ text: string }> },
+    ) as {
+      attempt?: number;
+      nodes: Record<string, { completed_attempt?: number }>;
+    };
+    // The run is on attempt 2 while `build` last completed in attempt 1 — a
+    // supervisor can tell "ran in an earlier attempt" from "ran in this one".
+    assertEquals(replayed.attempt, 2);
+    assertEquals(replayed.nodes.build.completed_attempt, 1);
+    await shutdown();
+  } finally {
+    await fixture.cleanup();
+  }
+});

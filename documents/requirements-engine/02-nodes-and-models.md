@@ -64,11 +64,30 @@ redefined role as the node's answer, are specified in
     `run_always: true` behavior).
   - `run_on: success` — execute only when all regular DAG nodes passed.
   - `run_on: failure` — execute only when workflow failed.
+  - `run_on: every_attempt` — regardless of outcome AND reconsidered on every
+    engine invocation (FR-E99).
   - Nodes without `run_on` execute in normal DAG order (no change).
+
+  **Resume semantics.** `always`, `success` and `failure` run at most once per
+  run: a node that already completed is left alone on `--resume`, which is
+  what keeps a non-idempotent effect — merging a pull request, publishing a
+  release — from happening twice. `every_attempt` is the opt-in to the other
+  reading: such a node is put back in front of the gate on each invocation,
+  and runs again unless it already completed in the CURRENT attempt.
+  Narrowing it by outcome is `when`'s job, and the two compose —
+  `run_on: every_attempt` with `when: '[ "{{run.outcome}}" = "failure" ]'`
+  reads "every attempt, while the run is failing".
+
+  **Selection and filtering.** The set of nodes carrying `run_on` is produced
+  by one exported helper (`collectPostWorkflowNodes`) that the engine,
+  `--dry-run`, the dashboard and the diagram all call; the filter by outcome
+  is evaluated in `Engine.gateNode` next to `when` (FR-E99), not in a
+  scheduler of its own.
 
   **Backward compatibility:** `run_always: true` in config is normalized to
   `run_on: "always"` during config loading. `run_always: false` (or absent) is
   unchanged (no `run_on` set).
+- **Tasks:** [one-scheduler-run-outcome](../tasks/2026-08-30-one-scheduler-run-outcome.md)
 - **Motivation:** `run_always: true` causes committer nodes to run on failure,
   creating PRs with `Closes #N` that merge broken code. Prompt-level guards are
   unreliable (LLM can ignore them). Engine-level gating is required.

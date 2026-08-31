@@ -7,6 +7,7 @@ import {
   type CostBar,
   escHtml,
   groupNodesByPhase,
+  postWorkflowNodesOf,
   printUsage,
   readNodeLog,
   readRunState,
@@ -1007,4 +1008,17 @@ Deno.test("checkArgs — valid --run-dir arg returns null (ok)", () => {
 Deno.test("checkArgs — empty args returns null", () => {
   const result = checkArgs([]);
   assertEquals(result, null);
+});
+
+Deno.test("FR-E99 always-node set comes from the engine helper", () => {
+  const config = {
+    nodes: {
+      build: { type: "command", label: "Build" },
+      report: { type: "command", label: "Report", run_on: "every_attempt" },
+      commit: { type: "command", label: "Commit", run_on: "always" },
+    },
+  };
+  assertEquals(postWorkflowNodesOf(config), ["report", "commit"]);
+  assertEquals(postWorkflowNodesOf(undefined), []);
+  assertEquals(postWorkflowNodesOf({}), []);
 });

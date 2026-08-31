@@ -8,6 +8,7 @@
 import { join, resolve } from "@std/path";
 import { parse as parseYaml } from "@std/yaml";
 import type { NodeConfig, WorkflowConfig } from "../src/types.ts";
+import { collectPostWorkflowNodes } from "../src/engine/post-workflow.ts";
 
 export interface DiagramArgs {
   input?: string;
@@ -860,11 +861,8 @@ function phaseLayout(config: WorkflowConfig): PhaseLayout {
     }
   }
 
-  const postNodes = new Set(
-    Object.entries(config.nodes)
-      .filter(([, node]) => node.run_on !== undefined)
-      .map(([nodeId]) => nodeId),
-  );
+  // FR-E99: one definition of "post-workflow node", shared with the engine.
+  const postNodes = new Set(collectPostWorkflowNodes(config.nodes));
   for (const nodeId of postNodes) phaseByNode.set(nodeId, "post-workflow");
 
   const inferred = new Map<string, string>();

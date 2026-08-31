@@ -325,9 +325,16 @@ export interface NodeConfig {
   when?: string;
 
   // post-workflow execution
-  /** When set, node executes after all DAG levels complete.
-   * "always" = regardless of outcome, "success" = only on success, "failure" = only on failure. */
-  run_on?: "always" | "success" | "failure";
+  /** When set, the node executes after the graph, once its outcome is known.
+   * "always" = regardless of outcome, "success" = only on success, "failure"
+   * = only on failure — each of the three runs at most once per run, so a
+   * node that already completed is left alone on `--resume`.
+   * "every_attempt" (FR-E99) = regardless of outcome AND reconsidered on
+   * every engine invocation, so a resumed run runs it again. Narrowing it by
+   * outcome is `when`'s job: `run_on: every_attempt` with
+   * `when: '[ "{{run.outcome}}" = "failure" ]'` reads "every attempt, while
+   * the run is failing". */
+  run_on?: "always" | "success" | "failure" | "every_attempt";
 
   /** Legacy flag superseded by run_on; config loader normalizes it automatically.
    * @deprecated Use run_on instead. */
@@ -493,6 +500,11 @@ export interface NodeState {
   cost_usd?: number;
   /** Excerpt of agent result text, persisted for summary display (FR-E15, FR-E22). */
   result?: string;
+  /** FR-E99: engine invocation in which this node last reached `completed`.
+   * Set for nodes of the outcome wave only — it is what tells a
+   * `run_on: every_attempt` node "you already ran in THIS attempt" apart from
+   * "you ran in an earlier one". */
+  completed_attempt?: number;
 }
 
 /** Optional metadata copied from a node state into a lifecycle event. */
@@ -539,6 +551,7 @@ export type NodeLifecycleCallback = (
 /** Versioned durable lifecycle event kinds stored in `journal.jsonl`. */
 export type RunJournalEventKind =
   | "run_started"
+  | "run_attempt_started"
   | "run_metadata_updated"
   | "workflow_loaded"
   | "node_declared"
@@ -609,6 +622,20 @@ export interface RunStartedJournalEvent extends RunJournalEventBase {
    * @deprecated Use {@link RunStartedJournalEvent.env_keys}.
    */
   env?: Record<string, string>;
+}
+
+/** FR-E99: one engine invocation over this run.
+ *
+ * `run_started` is emitted once, by the fresh run; every invocation — the
+ * fresh one included — emits this. Counting them is how a resumed run knows
+ * which attempt it is, which is what `run_on: every_attempt` and
+ * `{{run.attempt}}` are defined against. A journal written before this event
+ * existed replays as attempt 1. */
+export interface RunAttemptStartedJournalEvent extends RunJournalEventBase {
+  /** Event kind. */
+  kind: "run_attempt_started";
+  /** One-based invocation counter: 1 for the fresh run, +1 per resume. */
+  attempt: number;
 }
 
 /** Run metadata update fact. */
@@ -735,6 +762,7 @@ export interface RunTerminalJournalEvent extends RunJournalEventBase {
 /** Any durable lifecycle event stored in `journal.jsonl`. */
 export type RunJournalEvent =
   | RunStartedJournalEvent
+  | RunAttemptStartedJournalEvent
   | RunMetadataUpdatedJournalEvent
   | WorkflowLoadedJournalEvent
   | NodeDeclaredJournalEvent
@@ -778,6 +806,10 @@ export interface RunState {
   total_cost_usd?: number;
   /** Claude CLI version string captured at run start via `claude --version` (FR-E49). */
   claude_cli_version?: string;
+  /** FR-E99: one-based engine invocation counter — 1 for the fresh run, +1
+   * per resume. Absent in states replayed from journals written before the
+   * counter existed; readers treat absence as 1. */
+  attempt?: number;
 }
 
 // --- Template Context ---
@@ -818,6 +850,18 @@ export interface TemplateContext {
   /** Maps dependency node IDs to their workDir-relative artifact directory
    * paths. Engine FS code must wrap each value with `workPath(workDir, …)`. */
   input: Record<string, string>;
+  /** FR-E99 run context: the outcome of the graph and the invocation counter.
+   * Present whenever the engine builds the context; absent in the bare
+   * literals unit tests construct, where `{{run.*}}` then fails clearly
+   * rather than resolving to a guess. `outcome` reads `pending` until the
+   * graph has finished, so a node inside the graph cannot read its own
+   * verdict. */
+  run?: {
+    /** Graph verdict: `pending` while the graph runs, then its result. */
+    outcome: "pending" | "success" | "failure";
+    /** One-based engine invocation counter for this run. */
+    attempt: number;
+  };
   /** Loop context; only present for nodes executing inside a loop body. */
   loop?: {
     /** Zero-based iteration counter of the enclosing loop. */

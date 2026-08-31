@@ -2,7 +2,8 @@
  * @module
  * Template interpolation engine: resolves `{{var}}` placeholders in prompt
  * and hook strings using the provided {@link TemplateContext}.
- * Supports dotted paths (input.*, args.*, env.*, loop.iteration, branch.*),
+ * Supports dotted paths (input.*, args.*, env.*, loop.iteration, run.*,
+ * branch.*),
  * direct keys (node_dir, run_dir, run_id), file inclusion via
  * `{{file("path")}}` / `{{flow_file("path")}}`, and shell substitution via
  * `{{bash("cmd")}}`.
@@ -201,6 +202,20 @@ function resolve(
       }
       return String(ctx.loop.iteration);
 
+    case "run": {
+      if (suffix !== "outcome" && suffix !== "attempt") {
+        throw new Error(
+          `Unknown run property in template variable: {{${key}}}. Supported: run.outcome, run.attempt.`,
+        );
+      }
+      if (!ctx.run) {
+        throw new Error(
+          `Template variable {{${key}}} used outside a run context.`,
+        );
+      }
+      return suffix === "outcome" ? ctx.run.outcome : String(ctx.run.attempt);
+    }
+
     case "branch": {
       if (!isBranchProperty(suffix)) {
         throw new Error(
@@ -272,7 +287,8 @@ function readBranchValue(
  *
  * Pure function — no I/O. Returns an array of error descriptions; empty = valid.
  * Known prefixes: `input` (suffix must be in knownInputs), `env`, `args`,
- * `loop` (only `loop.iteration`), `branch` (only inside a fork group — pass
+ * `loop` (only `loop.iteration`), `run` (only `run.outcome` / `run.attempt`),
+ * `branch` (only inside a fork group — pass
  * `allowBranch`). Known direct keys: `run_dir`, `run_id`, `node_dir`.
  * `file("...")` and `flow_file("...")` patterns are always accepted.
  */
@@ -329,6 +345,14 @@ export function validateTemplateVars(
         if (suffix !== "iteration") {
           errors.push(
             `Unknown loop property in template variable: {{${key}}}. Only 'loop.iteration' is supported.`,
+          );
+        }
+        break;
+
+      case "run":
+        if (suffix !== "outcome" && suffix !== "attempt") {
+          errors.push(
+            `Unknown run property in template variable: {{${key}}}. Supported: run.outcome, run.attempt.`,
           );
         }
         break;

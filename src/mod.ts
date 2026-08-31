@@ -28,6 +28,7 @@ export type {
   PermissionMode,
   ReasoningEffort,
   ResolvedNodeSettings,
+  RunAttemptStartedJournalEvent,
   RunJournalEvent,
   RunJournalEventBase,
   RunJournalEventKind,
