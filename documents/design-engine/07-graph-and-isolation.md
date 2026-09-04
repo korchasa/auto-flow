@@ -162,11 +162,14 @@ out.
 **Two skip vocabularies.** `NodeStatus.skipped` already covers `--skip` and
 `--only`. Those mean "the operator handled this", and their dependents must
 still run; changing that would break existing resume workflows. So FR-E89
-keeps its own `Engine#whenSkipped: Set<string>` and propagates only from it. A
-node whose `inputs` intersect that set is added to the set and skipped with
-the offending input named.
+keeps its own `Engine#untaken: Map<string, "when" | "failed" | "upstream">`
+and propagates only from it. A node whose `inputs` name an entry is recorded
+as `upstream` and skipped with the offending input named. The reason is
+carried because the message distinguishes an input that was gated out from
+one that failed where the run carried on regardless — reading "was skipped"
+about a failure sends a reader hunting for a `when` gate that is not there.
 
-The set is in-memory and per-run. On resume, non-completed nodes are
+The map is in-memory and per-run, cleared at the top of `run()`. On resume, non-completed nodes are
 re-evaluated from scratch — including their gates — which is the correct
 reading: a predicate over the working tree may legitimately answer differently
 after the fix that prompted the resume.

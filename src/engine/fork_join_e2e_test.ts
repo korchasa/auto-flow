@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { Engine } from "./engine.ts";
 
 /**
@@ -354,6 +354,135 @@ Deno.test("FR-E95 a static branch's nodes resolve branch.key and branch.index", 
     assertEquals(await read("check-a"), "alpha\n");
     // … and its artifacts stay in its own directory, not a per-branch subdir.
     assertEquals(state.nodes["check-a"].status, "completed");
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E95 a runtime branch key colliding with a static branch fails before any branch runs", async () => {
+  const { dir, state } = await runWorkflow(
+    [
+      HEADER,
+      "  list:",
+      "    type: command",
+      "    label: List",
+      "    command: printf 'alpha\\nbeta\\n' > items.txt",
+      "  alpha:",
+      "    type: command",
+      "    label: Alpha",
+      "    inputs: [list]",
+      "    fork: g.alpha",
+      "    command: touch alpha-ran.txt",
+      "  review:",
+      "    type: command",
+      "    label: Review",
+      "    inputs: [list]",
+      "    fork:",
+      "      group: g",
+      "      branches: items.txt",
+      "      key: value",
+      "    command: 'echo {{branch.value}} >> seen.txt'",
+      JOIN_NODE(),
+      "",
+    ].join("\n"),
+    "run-fk-collide",
+  );
+  try {
+    assertEquals(state.nodes.review.status, "failed");
+    assertStringIncludes(
+      state.nodes.review.error ?? "",
+      "collides with a static branch",
+    );
+    // Expansion failed, so not one branch of the group ran.
+    await assertRejects(() => Deno.stat(`${dir}/seen.txt`));
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+/** A group of two static branches, each one node, sharing one join. */
+const STATIC_GROUP = (alphaCmd: string, betaCmd: string, joinExtra = "") =>
+  [
+    HEADER,
+    "  alpha:",
+    "    type: command",
+    "    label: Alpha",
+    "    fork: g.alpha",
+    `    command: '${alphaCmd}'`,
+    "  beta:",
+    "    type: command",
+    "    label: Beta",
+    "    fork: g.beta",
+    `    command: '${betaCmd}'`,
+    JOIN_NODE(joinExtra),
+    "",
+  ].join("\n");
+
+Deno.test("FR-E95 static branches: collect runs the join and records the failed branch", async () => {
+  const { dir, state } = await runWorkflow(
+    STATIC_GROUP(
+      "echo alpha >> seen.txt; false",
+      "echo beta >> seen.txt",
+      "    failure_mode: collect",
+    ),
+    "run-fk-static-collect",
+  );
+  try {
+    assertEquals(state.nodes.alpha.status, "failed");
+    assertEquals(state.nodes.beta.status, "completed");
+    // Every branch ran, and the join was not held back by the failed one.
+    assertEquals(
+      (await Deno.readTextFile(`${dir}/seen.txt`)).trim().split("\n").sort(),
+      ["alpha", "beta"],
+    );
+    assertEquals(state.nodes.integrate.status, "completed");
+
+    const manifest = JSON.parse(
+      await Deno.readTextFile(
+        `${dir}/runs/run-fk-static-collect/integrate/branches.json`,
+      ),
+    ) as { branches: { branch: string; status: string }[] };
+    assertEquals(
+      manifest.branches.map((b) => [b.branch, b.status]),
+      [["alpha", "failed"], ["beta", "completed"]],
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E95 static branches: all_or_nothing lets siblings finish but skips the join", async () => {
+  const { dir, state } = await runWorkflow(
+    STATIC_GROUP(
+      "echo alpha >> seen.txt; false",
+      "echo beta >> seen.txt",
+      "    failure_mode: all_or_nothing",
+    ),
+    "run-fk-static-aon",
+  );
+  try {
+    assertEquals(state.nodes.alpha.status, "failed");
+    assertEquals(state.nodes.beta.status, "completed");
+    assertEquals(state.nodes.integrate.status, "skipped");
+    assertEquals(state.status, "failed");
+    await assertRejects(() => Deno.stat(`${dir}/joined.txt`));
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E95 static branches: fail_fast stops the group at the first failure", async () => {
+  const { dir, state } = await runWorkflow(
+    STATIC_GROUP("echo alpha >> seen.txt; false", "echo beta >> seen.txt"),
+    "run-fk-static-failfast",
+  );
+  try {
+    assertEquals(state.nodes.alpha.status, "failed");
+    // beta never started, and neither did the join.
+    assertEquals(state.nodes.beta?.status, "pending");
+    assertEquals(state.nodes.integrate?.status, "pending");
+    assertEquals(state.status, "failed");
+    await assertRejects(() => Deno.stat(`${dir}/joined.txt`));
   } finally {
     await Deno.remove(dir, { recursive: true });
   }

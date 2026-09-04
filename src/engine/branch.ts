@@ -114,19 +114,28 @@ export function slugifyKey(value: string): string {
  * `value.<field>` to read a field of an object item. Two branches of one group
  * may not share a name: unlike a `for_each` item, a branch name addresses a
  * worktree and a manifest entry, so a silent suffix would hide which branch
- * produced which answer.
+ * produced which answer. `reserved` carries the group's static branch names for
+ * the same reason — a runtime branch that takes a static branch's name would
+ * write into its artifact directory and its worktree.
  */
 export function assignKeys(
   values: readonly unknown[],
   keyPath: string | undefined,
+  reserved?: ReadonlySet<string>,
 ): BranchItem[] {
   const seen = new Set<string>();
   return values.map((value, index) => {
-    if (keyPath === undefined) return { index, value, key: String(index) };
-    const key = slugifyKey(readKeyField(value, keyPath, index));
+    const key = keyPath === undefined
+      ? String(index)
+      : slugifyKey(readKeyField(value, keyPath, index));
     if (seen.has(key)) {
       throw new Error(
         `duplicate branch key '${key}' (item ${index}) — branch names must be unique within a group`,
+      );
+    }
+    if (reserved?.has(key)) {
+      throw new Error(
+        `branch key '${key}' (item ${index}) collides with a static branch of the same group`,
       );
     }
     seen.add(key);
@@ -179,6 +188,7 @@ export async function resolveBranchItems(
   node: NodeConfig,
   ctx: TemplateContext,
   cwd?: string,
+  reserved?: ReadonlySet<string>,
 ): Promise<BranchItem[]> {
   const cfg = node.fork;
   if (cfg === undefined || typeof cfg === "string") {
@@ -198,7 +208,7 @@ export async function resolveBranchItems(
     );
   }
 
-  return assignKeys(parseBranchSource(text), cfg.key);
+  return assignKeys(parseBranchSource(text), cfg.key, reserved);
 }
 
 /**

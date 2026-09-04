@@ -556,6 +556,7 @@ export type RunJournalEventKind =
   | "workflow_loaded"
   | "node_declared"
   | "node_directory_declared"
+  | "branches_expanded"
   | "node_started"
   | "node_completed"
   | "node_failed"
@@ -682,6 +683,24 @@ export interface NodeDirectoryDeclaredJournalEvent extends RunJournalEventBase {
   node_dir: string;
 }
 
+/**
+ * FR-E95/FR-E97: the branch set a dynamic `fork` expanded into.
+ *
+ * Durable because the list is produced at runtime by an earlier node: a
+ * resumed run must rebuild the branches it actually ran, not whatever the
+ * source file says now.
+ */
+export interface BranchesExpandedJournalEvent extends RunJournalEventBase {
+  /** Event kind. */
+  kind: "branches_expanded";
+  /** Node that carries the `fork`. */
+  node_id: string;
+  /** Fork group the branches belong to. */
+  group: string;
+  /** The expanded branches, in execution order. */
+  branches: { index: number; key: string; value: unknown }[];
+}
+
 /** Durable node transition fact aligned with `NodeLifecycleEvent`. */
 export interface NodeLifecycleJournalEvent
   extends RunJournalEventBase, NodeLifecycleMetadata {
@@ -767,6 +786,7 @@ export type RunJournalEvent =
   | WorkflowLoadedJournalEvent
   | NodeDeclaredJournalEvent
   | NodeDirectoryDeclaredJournalEvent
+  | BranchesExpandedJournalEvent
   | NodeLifecycleJournalEvent
   | AttemptJournalEvent
   | LoopIterationJournalEvent

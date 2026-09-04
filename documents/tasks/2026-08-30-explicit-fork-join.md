@@ -1,6 +1,6 @@
 ---
 date: "2026-08-30"
-status: in progress
+status: done
 implements: [FR-E95, FR-E96, FR-E97, FR-E37, FR-E90, FR-E91]
 tags: [engine, graph, parallelism, isolation]
 related_tasks:
@@ -288,13 +288,22 @@ to the selected design:
       Test: `src/engine/branch_test.ts::FR-E95 ...`,
       `src/engine/fork_join_e2e_test.ts::FR-E95 ...`.
       Evidence: `deno task check`.
-- [ ] FR-E95 A dynamic branch key colliding with a static branch of the same
+- [x] FR-E95 A dynamic branch key colliding with a static branch of the same
       group fails at expansion, before any branch of that group starts.
-      Test: `src/engine/branch_test.ts::FR-E95 ...`.
+      `assignKeys` takes the group's static names as `reserved`;
+      `executeFork` passes them.
+      Test: `src/engine/branch_test.ts::FR-E95 ...`,
+      `src/engine/fork_join_e2e_test.ts::FR-E95 ...`.
       Evidence: `deno task check`.
-- [ ] FR-E95 `failure_mode: fail_fast | collect | all_or_nothing` on the join
-      decides what a failed branch does to its siblings and to the join.
-      Test: `src/engine/fork_join_e2e_test.ts::FR-E95 ...`.
+- [x] FR-E95 `failure_mode: fail_fast | collect | all_or_nothing` on the join
+      decides what a failed branch does to its siblings and to the join —
+      static and runtime branches alike, through `branchFailureMode` /
+      `absorbBranchFailure` in the scheduler rather than inside `executeFork`.
+      `collect` releases the join and skips the rest of the failed branch;
+      `all_or_nothing` lets the siblings finish, skips the join and fails
+      the run.
+      Test: `src/engine/fork_join_e2e_test.ts::FR-E95 ...` (three static-group
+      tests plus the existing runtime ones).
       Evidence: `deno task check`.
 - [x] FR-E96 Every node's answer is captured: an agent's final message, a
       command's stdout, or the `after` hook's stdout when the node declares
@@ -335,10 +344,12 @@ to the selected design:
       load; a `loop` node may not sit inside a branch.
       Test: `src/config/config_fork_test.ts::FR-E97 ...`.
       Evidence: `deno task check`.
-- [ ] FR-E97 Resume skips completed nodes and journal replay reconstructs
+- [x] FR-E97 Resume skips completed nodes and journal replay reconstructs
       state under readiness-driven scheduling, including the branch set of a
-      dynamic fork.
-      Test: `src/state/lifecycle-replay_test.ts::FR-E97 ...`.
+      dynamic fork: `executeFork` appends a `branches_expanded` record and a
+      resumed run replays it instead of re-reading the source file.
+      Test: `src/state/lifecycle-replay_test.ts::FR-E97 ...` (a join reached
+      after the fork completed, and a fork the resume re-runs).
       Evidence: `deno task check`.
 - [x] FR-E91 A branch that declares `allowed_paths` gets exactly one worktree
       shared by every node of that branch, keyed by `<group>.<branch>`; a
@@ -355,11 +366,19 @@ to the selected design:
       Test: `src/isolation/scope-check_test.ts::FR-E37 ...`,
       `src/isolation/branch-scope_test.ts::FR-E37 ...`.
       Evidence: `deno task check`.
-- [ ] FR-E37 Two shared-tree nodes running at the same time are not failed
+- [x] FR-E37 Two shared-tree nodes running at the same time are not failed
       for each other's writes: the check brackets the running set once against
       the union of their scopes, and an in-scope write by one does not
-      violate the other.
-      Test: `src/isolation/scope-check_test.ts::FR-E37 ...`.
+      violate the other. The claim in the original Follow-ups — that
+      `GroupGuardrail` already made this true — was wrong: the FR-E37 check is
+      a separate per-node bracket in `agent.ts`, and it needed the same
+      rolling union (`Engine.forgivenScopes`, `bracketScopes`). The same fix
+      stops a node being failed for the engine's own writes into the run
+      directory, which the repository-wide snapshot had been reporting against
+      it.
+      Test: `src/isolation/scope-check_test.ts::FR-E37 ...` (git-backed, two
+      concurrent agent nodes, `max_continuations: 0` so a violation fails the
+      node outright instead of buying an extra turn).
       Evidence: `deno task check`.
 - [x] FR-E37 Overlapping `allowed_paths` between two branches of one group is
       refused at config load, before any branch of the group starts. The
@@ -586,28 +605,30 @@ Files: `src/engine/agent.ts`, `src/engine/command.ts`,
 
 ## Follow-ups
 
-Four Definition-of-Done items are NOT satisfied by this implementation and stay
-unticked above. They are listed first because they are unfinished scope, not
-future ideas:
+The four Definition-of-Done items this task left unfinished were closed on
+2026-09-04; every box above is ticked. What is listed here is future work, not
+unfinished scope.
 
-- **`failure_mode` for static branches.** `collect` and `all_or_nothing` are
-  honoured only on the dynamic fan-out path (`joinFailureMode` inside
-  `executeFork`). A group of static branches still behaves as `fail_fast`
-  whatever the join declares, so the field is accepted and partly ignored —
-  the worst of the three states. Fix before anyone writes a static group that
-  relies on `collect`.
-- **Journalling a dynamic fork's expanded branch set.** Resume replays node
-  states, but the branch list a runtime fork produced is not a journal fact, so
-  a resumed run re-reads the source and may expand a different set. Static
-  groups are unaffected.
-- **A static branch key colliding with a dynamic one in the same group.** The
-  collision is caught only among the runtime items themselves
-  (`assignKeys`), not against the group's static branch names.
-- **Two shared-tree nodes running together are not failed for each other's
-  writes.** The rolling `GroupGuardrail` unions their scopes, which is the
-  mechanism that makes this true, but nothing asserts the non-failure end to
-  end; `guardrail_level_test.ts` only covers the message and the disabled
-  path.
+Two things the closing work turned up outside this task's own surface, both
+fixed here rather than left as a trap:
+
+- A failed node of the FR-E34 outcome wave left its dependants unreachable, and
+  a ready set with nothing runnable in it makes the scheduler throw — so a
+  `run_on` node that another `run_on` node took as input killed a run whose
+  graph had already completed. The wave now marks such dependants untaken, the
+  way FR-E89 does. Test: `src/engine/outcome-wave_test.ts::FR-E34 ...`; the
+  sibling test locks the other half, that an ordinary failed node outside any
+  fork group still stops the run.
+- The FR-E37 scope check reported the engine's own writes into the run
+  directory against the node, which is what made a violation look terminal in
+  one test and forgiven in another. Recorded with the FR-E37 item above.
+
+One correction the closing work produced: a scope violation does NOT reliably
+fail a node. It is injected as a validation failure, so the continuation loop
+re-prompts the agent, and the next iteration compares against the updated
+snapshot — an agent that simply stops writing is then forgiven. Only
+`max_continuations: 0` makes a violation terminal. Whether that is the wanted
+behaviour is a question for FR-E37, not something this task decided.
 
 - Answer shape validation (`output:` with a JSON Schema on a node, so the
   engine rejects a malformed answer and re-prompts through the FR-E1

@@ -483,3 +483,137 @@ Deno.test("FR-E99 a journal with no attempt record replays as attempt 1", async 
     await Deno.remove(dir, { recursive: true });
   }
 });
+
+Deno.test("FR-E97 a resumed run rebuilds a dynamic fork's branch set from the journal", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  const workflow = [
+    "name: fork-resume",
+    "version: '1'",
+    "defaults:",
+    "  worktree_disabled: true",
+    "nodes:",
+    "  list:",
+    "    type: command",
+    "    label: List",
+    "    command: printf 'alpha\\nbeta\\n' > items.txt",
+    "  review:",
+    "    type: command",
+    "    label: Review",
+    "    inputs: [list]",
+    "    fork:",
+    "      group: g",
+    "      branches: items.txt",
+    "      key: value",
+    "    command: 'echo {{branch.value}} > {{node_dir}}/seen.txt'",
+    "  integrate:",
+    "    type: command",
+    "    label: Integrate",
+    "    join: g",
+    "    command: test -f go.txt",
+    "",
+  ].join("\n");
+
+  const engine = (resume: boolean) =>
+    new Engine({
+      config_path: "workflow.yaml",
+      run_id: "run-fork-resume",
+      verbosity: "quiet",
+      args: {},
+      env_overrides: {},
+      lock_path: "test.lock",
+      ...(resume ? { resume: true } : {}),
+    });
+
+  try {
+    await Deno.writeTextFile(`${tmpDir}/workflow.yaml`, workflow);
+    Deno.chdir(tmpDir);
+
+    // First attempt: the fork expands into alpha and beta, the join fails.
+    const first = await engine(false).run();
+    assertEquals(first.nodes.review.status, "completed");
+    assertEquals(first.nodes.integrate.status, "failed");
+
+    // The source the fork read is gone by the time the run resumes — the
+    // branch set must come from the journal, not from a second read.
+    await Deno.writeTextFile(`${tmpDir}/items.txt`, "gamma\n");
+    await Deno.writeTextFile(`${tmpDir}/go.txt`, "");
+
+    const second = await engine(true).run();
+    assertEquals(second.nodes.integrate.status, "completed");
+
+    const manifest = JSON.parse(
+      await Deno.readTextFile(
+        "runs/run-fork-resume/integrate/branches.json",
+      ),
+    ) as { branches: { branch: string }[] };
+    assertEquals(manifest.branches.map((b) => b.branch), ["alpha", "beta"]);
+  } finally {
+    Deno.chdir(origCwd);
+    await Deno.remove(tmpDir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E97 a resumed fork re-runs the journalled branches, not the current source", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  const workflow = [
+    "name: fork-resume-failed",
+    "version: '1'",
+    "defaults:",
+    "  worktree_disabled: true",
+    "nodes:",
+    "  list:",
+    "    type: command",
+    "    label: List",
+    "    command: printf 'alpha\\nbeta\\n' > items.txt",
+    "  review:",
+    "    type: command",
+    "    label: Review",
+    "    inputs: [list]",
+    "    fork:",
+    "      group: g",
+    "      branches: items.txt",
+    "      key: value",
+    "    command: 'echo {{branch.value}} >> seen.txt; test {{branch.value}} != beta'",
+    "  integrate:",
+    "    type: command",
+    "    label: Integrate",
+    "    join: g",
+    "    command: 'true'",
+    "",
+  ].join("\n");
+
+  const engine = (resume: boolean) =>
+    new Engine({
+      config_path: "workflow.yaml",
+      run_id: "run-fork-resume-failed",
+      verbosity: "quiet",
+      args: {},
+      env_overrides: {},
+      lock_path: "test.lock",
+      ...(resume ? { resume: true } : {}),
+    });
+
+  try {
+    await Deno.writeTextFile(`${tmpDir}/workflow.yaml`, workflow);
+    Deno.chdir(tmpDir);
+
+    const first = await engine(false).run();
+    assertEquals(first.nodes.review.status, "failed");
+
+    // The list node already completed, so a resume will not rewrite this file
+    // — the fork must ignore it and replay its own branch set.
+    await Deno.writeTextFile(`${tmpDir}/items.txt`, "gamma\n");
+
+    await engine(true).run();
+
+    assertEquals(
+      (await Deno.readTextFile(`${tmpDir}/seen.txt`)).trim().split("\n"),
+      ["alpha", "beta", "alpha", "beta"],
+    );
+  } finally {
+    Deno.chdir(origCwd);
+    await Deno.remove(tmpDir, { recursive: true });
+  }
+});

@@ -111,7 +111,11 @@ example of engine usage.
   `allowed_paths` (FR-E91). Leak attribution is handled — while more than one
   node runs they share ONE rolling FR-E50 guardrail bracket instead of a
   per-node one, because the snapshots are repository-wide and would otherwise
-  blame whichever node happened to be inside the bracket.
+  blame whichever node happened to be inside the bracket. The FR-E37
+  `allowed_paths` check answers the same problem the same way: a node's
+  violations are computed against its own scope, plus the run directory the
+  engine itself writes into, plus the scopes of every other node that has been
+  inside the current bracket.
 - **Outcome wave:** a node carrying `run_on` is scheduled by that same
   scheduler, in a second pass that starts once the graph's verdict is known,
   and is gated by the same `gateNode` — so `when:` works on it (FR-E99). The

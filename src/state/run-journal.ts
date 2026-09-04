@@ -407,6 +407,10 @@ function applyJournalEvents(events: RunJournalEvent[]): RunState {
         current.nodes[event.node_id] = node;
         break;
       }
+      case "branches_expanded":
+        // A fork's branch set is a fact the engine reads back on resume; it
+        // says nothing about node state, so replay carries it and stops.
+        break;
       case "loop_iteration_started":
       case "loop_iteration_completed":
       case "loop_iteration_failed": {

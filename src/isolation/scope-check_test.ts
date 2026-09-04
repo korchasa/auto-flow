@@ -1,4 +1,6 @@
 // FR-E37: scope-based file modification detection (allowed_paths).
+import { Engine } from "../engine/engine.ts";
+import { createFakeRuntime } from "../testing/fake-runtime.ts";
 import { assertEquals } from "@std/assert";
 import { findViolations, snapshotModifiedFiles } from "./scope-check.ts";
 
@@ -107,4 +109,100 @@ Deno.test("FR-E37 an empty allowed_paths rejects every new modification", () => 
     findViolations(new Set(["pre.txt"]), new Set(["pre.txt"]), []),
     [],
   );
+});
+
+/**
+ * FR-E37 end to end: two nodes of one run share the run's tree, so the
+ * repository-wide snapshot each of them takes also sees what the other wrote.
+ * The check therefore brackets the running set once against the union of their
+ * scopes — a node may not be failed for a sibling's in-scope write.
+ */
+Deno.test("FR-E37 two shared-tree nodes running together survive each other's writes", async () => {
+  const dir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  const git = async (...args: string[]) => {
+    const out = await new Deno.Command("git", {
+      args,
+      cwd: dir,
+      stdout: "null",
+      stderr: "piped",
+    }).output();
+    if (!out.success) {
+      throw new Error(
+        `git ${args.join(" ")}: ${new TextDecoder().decode(out.stderr)}`,
+      );
+    }
+  };
+  await git("init", "--initial-branch=main");
+  await git("config", "user.email", "test@test.com");
+  await git("config", "user.name", "Test");
+  await Deno.writeTextFile(`${dir}/README.md`, "initial\n");
+  await git("add", "README.md");
+  await git("commit", "-m", "init");
+
+  await Deno.writeTextFile(
+    `${dir}/workflow.yaml`,
+    [
+      "name: shared-tree",
+      "version: '1'",
+      "defaults:",
+      "  worktree_disabled: true",
+      "  max_parallel: 2",
+      // A scope violation must fail the node outright rather than buy an
+      // extra agent turn — otherwise this test passes whether or not the
+      // check ever runs.
+      "  max_continuations: 0",
+      "nodes:",
+      "  alpha:",
+      "    type: agent",
+      "    label: Alpha",
+      "    runtime: opencode",
+      "    prompt: write alpha",
+      "    allowed_paths: ['out/alpha/**']",
+      "  beta:",
+      "    type: agent",
+      "    label: Beta",
+      "    runtime: opencode",
+      "    prompt: write beta",
+      "    allowed_paths: ['out/beta/**']",
+      "",
+    ].join("\n"),
+  );
+
+  // Both invocations are held until the second one arrives, so each node's
+  // before/after snapshot definitely spans the other node's write.
+  let release!: () => void;
+  const bothStarted = new Promise<void>((resolve) => (release = resolve));
+  let started = 0;
+
+  try {
+    Deno.chdir(dir);
+    const engine = new Engine({
+      config_path: "workflow.yaml",
+      run_id: "run-shared-tree",
+      verbosity: "quiet",
+      args: {},
+      env_overrides: {},
+      lock_path: "test.lock",
+      runtimeAdapter: createFakeRuntime(async ({ opts, reply, write }) => {
+        const name = opts.taskPrompt.includes("alpha") ? "alpha" : "beta";
+        if (++started === 2) release();
+        await bothStarted;
+        await write(`out/${name}/file.txt`, `${name}\n`);
+        return reply({ result: `wrote ${name}` });
+      }),
+    });
+    const state = await engine.run();
+
+    assertEquals(state.nodes.alpha.status, "completed");
+    assertEquals(state.nodes.beta.status, "completed");
+    assertEquals(
+      await Deno.readTextFile(`${dir}/out/alpha/file.txt`),
+      "alpha\n",
+    );
+    assertEquals(await Deno.readTextFile(`${dir}/out/beta/file.txt`), "beta\n");
+  } finally {
+    Deno.chdir(origCwd);
+    await Deno.remove(dir, { recursive: true });
+  }
 });

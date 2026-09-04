@@ -100,6 +100,32 @@ aborts as soon as it crosses the cap rather than at the next level boundary.
 `executeLevel`, `executeLevelWithLevelGuardrail`, `runLevelNodes` and
 `warnUnsafeParallelism` are gone.
 
+**Failure modes.** `branchFailureMode(nodeId)` resolves a node's group through
+`branchOf` and reads `failure_mode` off that group's join, so one rule governs
+static and runtime branches alike. On a node failure `absorbBranchFailure`
+decides whether the scheduler stops: `fail_fast` returns false and the run
+stops as before; `collect` and `all_or_nothing` return true, and the failed
+node is added to `satisfied` — so the join is reached — and to `untaken` as
+`failed`, so the rest of ITS branch is skipped the way any untaken path is.
+`all_or_nothing` additionally records the group in `failedGroups`, which
+`gateNode` reads to skip that group's join and which makes `runNodes` return
+false; the per-run state (`failedGroups`, `runningScopes`, `bracketScopes`,
+`untaken`, `journalledBranches`) is cleared at the top of `run()` so a reused
+Engine does not carry one run's failures into the next — an `untaken` entry
+left from a previous run would skip a dependant even after its input re-ran
+and succeeded. The outcome wave reaches the same
+`satisfied` + `untaken` marking through `continueOnFailure` rather than
+through a branch mode — a different reason for the same need, since both
+schedule past a failure (FR-E34). Without adding the failed node to `satisfied` the join would simply
+never become ready, leaving it `pending` with no reason recorded.
+
+**Durable branch set.** `executeFork` appends a `branches_expanded` journal
+record (node id, group, and each branch's index, key and value) the first time
+it expands a list. On resume `Engine.run` replays those records into
+`journalledBranches` and `expandedBranches`, so a re-run of the fork uses the
+recorded items instead of re-reading a source file that may have changed, and
+a join reached after the resume still finds every branch in its manifest.
+
 **Rolling guardrail.** `GroupGuardrail.enter(nodeId, allowedPaths)` /
 `leave()` keep a depth counter: the first node to start opens one bracket, every
 node that joins while it is open is added to the union of scopes and to the
@@ -107,6 +133,16 @@ names in the message, and the last to leave closes it. This replaces the
 level bracket, because under readiness scheduling the set of nodes running
 together is not a level and has no index to name. `formatLeakMessage` takes
 `kind: "node" | "group"`.
+
+**Rolling scope check.** FR-E37 has the same attribution problem and gets the
+same answer one layer down. `Engine.forgivenScopes(nodeId)` hands `runAgent`
+the run directory plus the scopes of every other node that has been inside the
+current bracket — `bracketScopes` is cleared only when the last running node
+leaves, because a node that finished early still wrote into the tree the
+others are checked against. `findViolations` compares against that union, so a
+sibling's in-scope write and the engine's own artifact writes are not reported
+against a node, while a write outside all of them still fails everyone in the
+bracket.
 
 **Derived isolation.** `effectiveAllowedPaths(node, inBranch)` returns
 `node.allowed_paths ?? (inBranch ? [] : undefined)`, `isolatedBranches(config)`

@@ -61,9 +61,22 @@ Explicit splitting and merging of execution flows. Section of
   there is nothing to disambiguate.
 
   **Failure mode.** `failure_mode` on the join decides what a failed branch
-  does to its siblings: `fail_fast` (default) stops the group at the first
-  failure, `collect` lets every branch finish and records the failures in the
-  manifest, `all_or_nothing` fails the group without running the join.
+  does to its siblings and to the join, and governs static and runtime
+  branches alike:
+
+  - `fail_fast` (default) stops the group at the first failure. A branch that
+    has not started does not, the join does not run, and the run fails.
+  - `collect` lets every branch finish. A failed branch counts as finished, so
+    the join runs and reads each branch's outcome from the manifest; the rest
+    of the failed branch itself is skipped, as any untaken path is. The
+    verdict then belongs to the join, which is why a failed branch alone does
+    not fail the run.
+  - `all_or_nothing` also lets the siblings finish, but the group is failed:
+    its join is skipped with the group named, and the run fails.
+
+  **A runtime branch may not take a static branch's name.** The two would
+  share an artifact directory and a worktree key, so the expansion fails
+  before any branch of that group starts, naming the offending item.
 
   **Rejected at config load:** a group with no `join`; a `join` naming a group
   nothing forks into; two `join` nodes for one group; a node carrying both
@@ -81,8 +94,9 @@ Explicit splitting and merging of execution flows. Section of
     naming from scalars and object fields, duplicate-name rejection, membership
     propagation along `inputs`, group/join pairing errors, `branch.*` scope and
     its static-branch values,
-    one execution per branch, per-branch artifact directories, `fail_fast`
-    versus `collect`, empty and unreadable branch sources).
+    one execution per branch, per-branch artifact directories, the three
+    failure modes over both static and runtime branches, a runtime key
+    colliding with a static branch, empty and unreadable branch sources).
 
 ### 3.96 FR-E96: Captured Node Answers and Branch Manifest
 
@@ -134,6 +148,13 @@ Explicit splitting and merging of execution flows. Section of
   disagree. Cycle detection lives in the same place and still throws at load,
   including for a cycle closed through a join edge.
 
+  **A runtime branch set is a durable fact.** When a `fork` expands a list
+  into branches, the engine appends a `branches_expanded` record to the run
+  journal. A resumed run replays that record instead of re-reading the source
+  file, so it runs the branches the first attempt ran even when the file has
+  changed since — and a join reached after a resume still finds every branch
+  in its manifest.
+
   **Concurrency.** `defaults.max_parallel` stays the global cap on how many
   nodes run at once; its default of 1 keeps the order one node at a time. Two
   scheduling constraints protect attribution: the FR-E50 guardrail brackets the
@@ -148,6 +169,10 @@ Explicit splitting and merging of execution flows. Section of
     a join running after every branch, join edges naming branch terminals only,
     a cycle through a join edge failing at load, `fork`/`join` rejected inside
     a loop body, and a `loop` node rejected inside a branch).
+  - **Tests:** `lifecycle-replay_test.ts` (FR-E97; regression-locked; a
+    resumed run rebuilding a dynamic fork's branch set from the journal, both
+    for a join reached after the fork completed and for a fork the resume
+    re-runs).
   - [x] `--dry-run` renders a fork graph in execution order — every branch
     before its join — because `buildLevels` projects the dependency map the
     executor reads. Evidence: `src/engine/dag.ts:buildLevels`; a two-branch

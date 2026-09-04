@@ -5,6 +5,7 @@
 
 export type {
   AttemptJournalEvent,
+  BranchesExpandedJournalEvent,
   CliRunOutput,
   EngineOptions,
   ErrorCategory,

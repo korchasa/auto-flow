@@ -126,3 +126,19 @@ Deno.test("FR-E95 assignKeys — `value` on an object item is rejected", () => {
     "item 0",
   );
 });
+
+Deno.test("FR-E95 assignKeys — a runtime key colliding with a static branch is rejected", () => {
+  assertThrows(
+    () => assignKeys([{ id: "alpha" }], "value.id", new Set(["alpha"])),
+    Error,
+    "branch key 'alpha' (item 0) collides with a static branch of the same group",
+  );
+});
+
+Deno.test("FR-E95 assignKeys — numbered keys are checked against static branches too", () => {
+  assertThrows(
+    () => assignKeys(["a", "b"], undefined, new Set(["1"])),
+    Error,
+    "collides with a static branch",
+  );
+});

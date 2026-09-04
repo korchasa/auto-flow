@@ -21,6 +21,15 @@ read. Index: [requirements-engine.md](../requirements-engine.md).
   exists. `on_failure_script` fires between the waves whenever the outcome is
   failure, independently of whether the workflow declares any `run_on` node.
 
+  **A failed wave node skips its dependants.** Because the wave carries on
+  past a failure, a node that takes the failed one as input would otherwise
+  stay unreachable, and a ready set with nothing runnable in it makes the
+  scheduler throw — taking down a run whose graph had already completed. The
+  failed node therefore counts as finished for scheduling and marks its
+  dependants untaken, so they are skipped for want of their input, exactly as
+  a node downstream of an untaken `when` branch is (FR-E89). The run's status
+  still comes from the graph, not from the wave.
+
   **The value.** `TemplateContext.run` carries `outcome`
   (`pending | success | failure`) and `attempt` (one-based engine invocation
   counter). Both are addressable as `{{run.outcome}}` and `{{run.attempt}}`
@@ -60,7 +69,10 @@ read. Index: [requirements-engine.md](../requirements-engine.md).
   FR-E89 (`when`), FR-E97 (input-driven scheduling).
 
 - **Acceptance criteria:**
-  - **Tests:** `src/engine/outcome-wave_test.ts`,
+  - **Tests:** `src/engine/outcome-wave_test.ts` (including a failed wave node
+    whose dependant is skipped rather than stalling the scheduler, and the
+    regression lock that an ordinary failed graph node outside any fork group
+    still stops the run),
     `src/state/lifecycle-replay_test.ts`, `src/config/template_test.ts`,
     `src/mcp/mcp-server_test.ts`, `scripts/generate-dashboard_test.ts`,
     `scripts/workflow-diagram_test.ts` (FR-E99; regression-locked).

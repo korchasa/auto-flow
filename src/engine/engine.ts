@@ -119,11 +119,14 @@ export class Engine {
    * phase` mappings isolated. Defaults to an empty registry until the run
    * starts (so dry-run path computations behave as before). */
   private phaseRegistry: PhaseRegistry = PhaseRegistry.empty();
-  /** Nodes skipped by an FR-E89 `when` gate during this run. Kept apart from
-   * the `skipped` node status, which also covers `--skip`/`--only`: those are
-   * an operator saying "I already handled this", and their dependents must
-   * still run. A `when` skip means the branch was not taken. */
-  private whenSkipped = new Set<string>();
+  /** Nodes this run did not take, and why. Kept apart from the `skipped`
+   * node status, which also covers `--skip`/`--only`: those are an operator
+   * saying "I already handled this", and their dependents must still run.
+   * `when` is an FR-E89 gate that was not satisfied, `failed` a node that
+   * failed where the run carries on regardless (a branch the group absorbs,
+   * or the outcome wave), `upstream` a node whose own input was untaken. The
+   * reason is carried because a dependent's skip message names it. */
+  private untaken = new Map<string, "when" | "failed" | "upstream">();
 
   /** FR-E99: verdict of the graph wave, and the value `run_on` and
    * `{{run.outcome}}` are evaluated against. `pending` until the graph has
@@ -132,6 +135,15 @@ export class Engine {
   /** FR-E91: true while a concurrent level runs inside one guardrail bracket.
    * Nodes then skip their own bracket — see `runNodes`. */
   private levelGuardrailActive = false;
+  /** FR-E95: groups whose join must not run — a branch of each failed under
+   * `failure_mode: all_or_nothing`. */
+  private failedGroups = new Set<string>();
+  /** FR-E37: write scopes of the nodes running right now, by node id. */
+  private runningScopes = new Map<string, readonly string[]>();
+  /** FR-E37: the same scopes for every node that has been inside the current
+   * bracket, kept until the last of them leaves — a node that finished early
+   * still wrote into the tree the others are being checked against. */
+  private bracketScopes = new Map<string, readonly string[]>();
   /** FR-E95: node → its branch, resolved once per run from the config. */
   private membership:
     | Map<string, { group: string; branch: string }>
@@ -141,6 +153,10 @@ export class Engine {
   private branchTrees = new Map<string, string>();
   /** FR-E95: branch names a runtime fork expanded into, per group. */
   private expandedBranches = new Map<string, string[]>();
+  /** FR-E97: branch sets recovered from the journal of a resumed run, by the
+   * id of the node that forked. A resume must run the branches the first
+   * attempt expanded, not whatever the source file holds now. */
+  private journalledBranches = new Map<string, BranchItem[]>();
 
   /** Create an engine instance with the given options and optional user-input provider. */
   constructor(options: EngineOptions, userInput: UserInput = terminalInput) {
@@ -153,6 +169,16 @@ export class Engine {
   /** Run the workflow. Main entry point. */
   async run(): Promise<RunState> {
     this.startTime = Date.now();
+    // Per-run state, cleared here so a host that reuses one Engine for
+    // sequential runs (FR-E59) does not carry a previous run's failed groups
+    // into this one's verdict. `untaken` matters most on a resume: a node it
+    // still records as failed would have its dependants skipped even after
+    // the node re-runs and succeeds.
+    this.failedGroups.clear();
+    this.runningScopes.clear();
+    this.bracketScopes.clear();
+    this.untaken.clear();
+    this.journalledBranches.clear();
 
     // Phase 1: Minimal YAML pre-parse — extract worktree_disabled
     const rawYaml = await Deno.readTextFile(this.options.config_path);
@@ -250,7 +276,16 @@ export class Engine {
     // Initialize or resume state
     if (this.options.resume && this.options.run_id) {
       const runDir = getRunDir(this.options.run_id, this.workflowDir);
-      this.state = (await replayRunJournal(runDir)).state;
+      const replay = await replayRunJournal(runDir);
+      this.state = replay.state;
+      for (const event of replay.events) {
+        if (event.kind !== "branches_expanded") continue;
+        this.journalledBranches.set(event.node_id, event.branches);
+        this.expandedBranches.set(
+          event.group,
+          event.branches.map((branch) => branch.key),
+        );
+      }
       this.journal = await RunJournalWriter.open(runDir, this.options.run_id);
       this.state.status = "running";
       delete this.state.completed_at;
@@ -560,7 +595,27 @@ export class Engine {
               // FR-E34: a node of the outcome wave takes its own verdict down,
               // not the wave's — its siblings still run, and the run's status
               // stays the verdict the graph produced.
-              else if (!opts.continueOnFailure) failed = true;
+              else if (
+                !opts.continueOnFailure && !this.absorbBranchFailure(id)
+              ) {
+                failed = true;
+              }
+              // A failure the run carries on past must not leave the graph
+              // stalled: the failed node counts as finished, so whatever
+              // waited on it is reached and skipped for want of its input
+              // rather than left unreachable — an unreachable node makes the
+              // loop below throw. Two cases qualify. FR-E95: a branch failure
+              // the group absorbs, where the join is reached and, under
+              // `all_or_nothing`, skipped there. FR-E34: any failure in the
+              // outcome wave, which runs to the end by contract.
+              const mode = this.branchFailureMode(id);
+              const carriesOn = mode === "collect" ||
+                mode === "all_or_nothing" ||
+                opts.continueOnFailure === true;
+              if (!ok && carriesOn) {
+                satisfied.add(id);
+                this.untaken.set(id, "failed");
+              }
               return id;
             }),
           );
@@ -592,7 +647,35 @@ export class Engine {
       this.levelGuardrailActive = false;
     }
 
-    return !failed;
+    return !failed && this.failedGroups.size === 0;
+  }
+
+  /**
+   * FR-E95: decide what a failed branch node does to the rest of the run.
+   *
+   * Returns true when the failure must NOT stop the scheduler: `collect`
+   * hands the verdict to the join, and `all_or_nothing` lets the siblings
+   * finish while marking the group failed, so its join is skipped and the run
+   * still ends failed. `fail_fast` — the default, and every node outside a
+   * group — returns false and stops the run as before.
+   */
+  private absorbBranchFailure(nodeId: string): boolean {
+    const mode = this.branchFailureMode(nodeId);
+    if (mode === "collect") return true;
+    if (mode === "all_or_nothing") {
+      const own = this.branchOf(nodeId);
+      if (own) this.failedGroups.add(own.group);
+      return true;
+    }
+    return false;
+  }
+
+  /** The failure mode governing a node, or undefined when it is in no group. */
+  private branchFailureMode(
+    nodeId: string,
+  ): "fail_fast" | "collect" | "all_or_nothing" | undefined {
+    const own = this.branchOf(nodeId);
+    return own === undefined ? undefined : this.joinFailureMode(own.group);
   }
 
   /**
@@ -638,12 +721,32 @@ export class Engine {
     // `{{input.<id>}}` references have no artifacts to resolve, so running it
     // could only fail — and only after spending an agent call to get there.
     const gatedInput = (this.config.nodes[id].inputs ?? []).find((inputId) =>
-      this.whenSkipped.has(inputId)
+      this.untaken.has(inputId)
     );
     if (gatedInput !== undefined) {
-      this.whenSkipped.add(id);
+      this.untaken.set(id, "upstream");
       await this.nodeSkipped(id);
-      this.output.nodeSkipped(id, `input '${gatedInput}' was skipped`);
+      // Name what actually happened to the input: a failure the run carried
+      // on past reads as a skip otherwise, and sends whoever is diagnosing
+      // the run looking for a `when` gate that is not there.
+      this.output.nodeSkipped(
+        id,
+        this.untaken.get(gatedInput) === "failed"
+          ? `input '${gatedInput}' failed`
+          : `input '${gatedInput}' was skipped`,
+      );
+      return false;
+    }
+
+    // FR-E95: `all_or_nothing` fails the whole group, so its join never runs
+    // — the branches it would have merged are not all there.
+    const joins = this.config.nodes[id].join;
+    if (joins !== undefined && this.failedGroups.has(joins)) {
+      await this.nodeSkipped(id);
+      this.output.nodeSkipped(
+        id,
+        `group '${joins}' failed under failure_mode: all_or_nothing`,
+      );
       return false;
     }
 
@@ -679,7 +782,7 @@ export class Engine {
         this.workDir !== "." ? this.workDir : undefined,
       );
       if (!predicate.satisfied) {
-        this.whenSkipped.add(id);
+        this.untaken.set(id, "when");
         await this.nodeSkipped(id);
         this.output.nodeSkipped(
           id,
@@ -719,11 +822,17 @@ export class Engine {
       }
     }
     if (guard) await guard.enter(id, this.config.nodes[id].allowed_paths ?? []);
+    if (this.runningScopes.size === 0) this.bracketScopes.clear();
+    const scope = this.config.nodes[id].allowed_paths ?? [];
+    this.runningScopes.set(id, scope);
+    this.bracketScopes.set(id, scope);
     let ok = false;
     try {
       ok = await this.executeNode(id);
     } catch (err) {
       this.output.error((err as Error).message);
+    } finally {
+      this.runningScopes.delete(id);
     }
     if (!guard) return ok;
     const leak = await guard.leave();
@@ -749,11 +858,21 @@ export class Engine {
     const cwd = this.workDir !== "." ? this.workDir : undefined;
 
     let items;
-    try {
-      items = await resolveBranchItems(node, this.buildContext(nodeId), cwd);
-    } catch (err) {
-      await this.nodeFailed(nodeId, (err as Error).message, "unknown");
-      return false;
+    const journalled = this.journalledBranches.get(nodeId);
+    if (journalled !== undefined) {
+      items = journalled;
+    } else {
+      try {
+        items = await resolveBranchItems(
+          node,
+          this.buildContext(nodeId),
+          cwd,
+          this.staticBranchNames(cfg.group),
+        );
+      } catch (err) {
+        await this.nodeFailed(nodeId, (err as Error).message, "unknown");
+        return false;
+      }
     }
 
     if (items.length === 0) {
@@ -762,6 +881,18 @@ export class Engine {
     }
     this.output.status(nodeId, `fork: ${items.length} branches`);
     this.expandedBranches.set(cfg.group, items.map((item) => item.key));
+    if (journalled === undefined) {
+      await this.journal?.append({
+        kind: "branches_expanded",
+        node_id: nodeId,
+        group: cfg.group,
+        branches: items.map(({ index, key, value }) => ({
+          index,
+          key,
+          value,
+        })),
+      });
+    }
     if (maxConcurrent > 1 && node.isolation !== "worktree") {
       this.output.warn(
         `Node '${nodeId}': fork.max_concurrent=${maxConcurrent} — all branches share one worktree, so the FR-E50 guardrail can mis-attribute concurrent writes between them (FR-E91: set 'isolation: worktree' to give each branch its own tree)`,
@@ -882,13 +1013,7 @@ export class Engine {
   private staticBranch(nodeId: string): TemplateContext["branch"] | undefined {
     const own = this.branchOf(nodeId);
     if (!own || own.branch === DYNAMIC_BRANCH) return undefined;
-    const names = [
-      ...new Set(
-        [...this.branchMembership().values()]
-          .filter((m) => m.group === own.group && m.branch !== DYNAMIC_BRANCH)
-          .map((m) => m.branch),
-      ),
-    ].sort();
+    const names = [...this.staticBranchNames(own.group)].sort();
     return {
       index: names.indexOf(own.branch),
       value: own.branch,
@@ -896,11 +1021,49 @@ export class Engine {
     };
   }
 
+  /**
+   * FR-E95: the names of a group's branches that are spelled out in the config.
+   *
+   * A runtime branch may not take one of them: the two would share an artifact
+   * directory and a worktree key, so the static branch's work would be
+   * overwritten by whichever of them ran last.
+   */
+  private staticBranchNames(group: string): Set<string> {
+    const names = new Set<string>();
+    for (const m of this.branchMembership().values()) {
+      if (m.group === group && m.branch !== DYNAMIC_BRANCH) names.add(m.branch);
+    }
+    return names;
+  }
+
   /** Branch membership of every node, computed once per run. */
   private branchOf(
     nodeId: string,
   ): { group: string; branch: string } | undefined {
     return this.branchMembership().get(nodeId);
+  }
+
+  /**
+   * FR-E37: the write scopes a node's check forgives — the run's own artifact
+   * directory, plus every other node in the current bracket.
+   *
+   * The scope check snapshots the whole tree, so it sees the engine's own
+   * artifact writes and a sibling's writes inside this node's bracket and
+   * cannot tell whose they are. Forgiving them is the same answer the FR-E50
+   * guardrail gives for the same problem — the check can only be as strict as
+   * its most permissive concurrent member.
+   */
+  private forgivenScopes(nodeId: string): readonly string[] {
+    // The engine writes the stream log, answers and run state into the run
+    // directory while the node works. Those are its writes, not the agent's,
+    // and git reports them without the `./` a run dir may carry.
+    const runDir = getRunDir(this.state.run_id, this.workflowDir)
+      .replace(/^\.\//, "");
+    const scopes: string[] = [`${runDir}/**`];
+    for (const [id, paths] of this.bracketScopes) {
+      if (id !== nodeId) scopes.push(...paths);
+    }
+    return scopes;
   }
 
   /** Node → branch for the whole graph, resolved once per run. */
@@ -1191,6 +1354,7 @@ export class Engine {
         phaseRegistry: this.phaseRegistry,
         journal: this.journal,
         nodeGuardrail: !this.levelGuardrailActive,
+        forgivenScopes: (id) => this.forgivenScopes(id),
         nodeFailed: (id, error, errorCategory) =>
           this.nodeFailed(id, error, errorCategory),
         nodeWaiting: (id, sessionId, questionJson) =>

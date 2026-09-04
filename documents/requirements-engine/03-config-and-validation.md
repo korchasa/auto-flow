@@ -93,6 +93,16 @@
   one case where the check matters most. Outside a branch the field stays
   optional and absent still means unchecked.
 
+  **The check forgives what the node did not write.** The snapshots are
+  repository-wide, so they also catch the engine's own writes into the run
+  directory (stream log, answers, state) and, while more than one node runs in
+  one tree, a sibling's writes. Neither is the node's edit and neither can be
+  told apart from one, so the check compares against the node's
+  `allowed_paths` plus the run directory plus the scopes of every other node
+  that has been inside the current bracket — the same answer the FR-E50
+  guardrail gives to the same problem. A write outside all of them still fails
+  every node in the bracket.
+
   **Sibling scopes must not overlap.** When two branches of one group both
   declare `allowed_paths`, config load rejects the pair unless the two glob
   sets are provably disjoint. The comparison is conservative — a pattern it
@@ -108,8 +118,9 @@
     `branch-scope_test.ts`
     (FR-E37; regression-locked; `findViolations` pure function,
     `snapshotModifiedFiles` baseline, agent integration, shared
-    continuation budget, the empty scope derived inside a branch, and
-    overlap rejection between sibling branch scopes).
+    continuation budget, the empty scope derived inside a branch,
+    overlap rejection between sibling branch scopes, and two shared-tree nodes
+    running together that are not failed for each other's in-scope writes).
 
 
 

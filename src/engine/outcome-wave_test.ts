@@ -372,3 +372,76 @@ Deno.test("FR-E99 an outcome-wave node downstream of a skipped input is skipped"
     assertEquals(await countLines(`${dir}/post-ran.txt`), 0);
   });
 });
+
+Deno.test("FR-E34 a failed wave node skips its dependants instead of stalling the wave", async () => {
+  await withDir(async (dir) => {
+    await writeWorkflow(dir, [
+      "defaults:",
+      "  worktree_disabled: true",
+      "nodes:",
+      "  graph:",
+      "    type: command",
+      "    label: Graph",
+      "    command: 'true'",
+      "  notify:",
+      "    type: command",
+      "    label: Notify",
+      "    run_on: always",
+      "    command: exit 1",
+      "  after-notify:",
+      "    type: command",
+      "    label: After notify",
+      "    run_on: always",
+      "    inputs: [notify]",
+      "    command: touch after.txt",
+    ]);
+
+    // The wave keeps going after one of its nodes fails (FR-E34), so the
+    // dependant must be skipped for want of its input rather than left
+    // unreachable — an unreachable node makes the scheduler throw
+    // "Cannot resolve dependencies", which would take down a run the graph
+    // had already completed.
+    const state = await runEngine(dir, "run-wave-dependant");
+
+    assertEquals(state.nodes.notify.status, "failed");
+    assertEquals(state.nodes["after-notify"].status, "skipped");
+    assertEquals(state.status, "completed");
+
+    let ran = true;
+    try {
+      await Deno.stat(`${dir}/after.txt`);
+    } catch {
+      ran = false;
+    }
+    assertEquals(ran, false);
+  });
+});
+
+Deno.test("FR-E34 a failed graph node outside any branch still stops the run", async () => {
+  await withDir(async (dir) => {
+    await writeWorkflow(dir, [
+      "defaults:",
+      "  worktree_disabled: true",
+      "nodes:",
+      "  first:",
+      "    type: command",
+      "    label: First",
+      "    command: exit 1",
+      "  second:",
+      "    type: command",
+      "    label: Second",
+      "    inputs: [first]",
+      "    command: touch second.txt",
+    ]);
+
+    // Regression lock for the branch-absorption rule: only a node inside a
+    // fork group under `collect` / `all_or_nothing` may be absorbed. An
+    // ordinary node takes the run down with it, and its dependant is never
+    // reached — neither skipped nor run.
+    const state = await runEngine(dir, "run-plain-failure");
+
+    assertEquals(state.nodes.first.status, "failed");
+    assertEquals(state.nodes.second.status, "pending");
+    assertEquals(state.status, "failed");
+  });
+});

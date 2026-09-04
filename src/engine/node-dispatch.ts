@@ -82,6 +82,12 @@ export interface EngineContext {
    * level runs its nodes concurrently, where one bracket around the level
    * replaces the per-node ones. */
   nodeGuardrail: boolean;
+  /** FR-E37: write scopes the scope check must forgive for a node — the run's
+   * own artifact directory plus the scopes of every OTHER node sharing this
+   * node's tree right now. The check compares repository-wide snapshots, so
+   * both land inside the node's bracket; forgiving them is what stops one
+   * node failing for another's file. */
+  forgivenScopes?: (nodeId: string) => readonly string[];
   /** Mark a node as running and publish optional lifecycle callback. */
   nodeStarted: (nodeId: string) => Promise<void>;
   /** Mark a node as completed and publish optional lifecycle callback. */
@@ -186,6 +192,7 @@ export async function executeAgentNode(
     },
     () =>
       runAgent({
+        forgivenScopes: eng.forgivenScopes,
         node,
         ctx,
         settings,

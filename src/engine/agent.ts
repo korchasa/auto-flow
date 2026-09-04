@@ -161,6 +161,14 @@ export interface AgentRunOptions {
    * instead of the ai-ide-cli default singleton. Omit to keep the legacy
    * singleton behavior. */
   processRegistry?: ProcessRegistry;
+  /** FR-E37: write scopes the check forgives on top of the node's own
+   * `allowed_paths` — the run's artifact directory, which the engine itself
+   * writes into, and the scopes of the other nodes sharing this node's tree.
+   * The snapshots are repository-wide, so both land inside this node's
+   * bracket and would otherwise be reported against it. Consulted only when
+   * `nodeId` is given: a direct `runAgent` call outside the engine has no
+   * node to attribute writes to, and keeps the plain `allowed_paths` check. */
+  forgivenScopes?: (nodeId: string) => readonly string[];
 }
 
 /**
@@ -248,6 +256,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     allowedTools,
     disallowedTools,
     processRegistry,
+    forgivenScopes,
   } = opts;
   const adapter = runtimeAdapter ?? getRuntimeAdapter(runtime);
   const extraArgs = applyBudgetFlags(runtimeArgs, runtime, maxTurns);
@@ -529,7 +538,14 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
         const violations = findViolations(
           beforeSnapshot,
           afterSnapshot,
-          node.allowed_paths,
+          [
+            ...node.allowed_paths,
+            // FR-E37: the engine's own writes into the run directory, and the
+            // scopes of whoever else shares this tree right now. Neither is
+            // this node's edit, and a repository-wide snapshot cannot tell
+            // them apart from one.
+            ...(nodeId === undefined ? [] : forgivenScopes?.(nodeId) ?? []),
+          ],
         );
         if (violations.length > 0) {
           const scopeRule: ValidationRule = { type: "scope_check", path: "" };
