@@ -59,6 +59,10 @@ example of engine usage.
   find version … newer than the specified minimum dependency date`) until
   the lock is restored/updated.
 - Shell/Bash (legacy stage orchestration scripts)
+- Python 3 (standalone dev scripts, stdlib only, no virtualenv — e.g.
+  `scripts/tasks-overview.py`). **Outside `deno task check`:** its walk
+  whitelists `.ts/.tsx/.js/.jsx/.sh` (`scripts/check.ts`), so a Python
+  script gets no formatter, linter or test gate. Verify one by running it.
 - Docker (devcontainer runtime environment)
 - Claude Code CLI (`claude`) (AI agent runtime)
 - `gh` CLI (GitHub API interaction: PRs, issue comments)

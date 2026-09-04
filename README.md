@@ -458,7 +458,8 @@ src/                             # All engine source, grouped by domain
   mcp/                           # engine MCP server + CLI commands
   init/                          # Project scaffolder (`flowai-workflow init`)
 # ACP runtime layer = external @korchasa/ai-ide-cli dependency (JSR, ^0.8.12)
-scripts/                         # Dev tooling (check, compile, dashboard, release-notes)
+scripts/                         # Dev tooling (check, compile, dashboard,
+                                 # release-notes, tasks-overview)
 .flowai-workflow/                # One folder per workflow (FR-S47)
   github-inbox/                  # Workflow folder = portable unit
     workflow.yaml
