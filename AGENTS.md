@@ -732,5 +732,23 @@ When the root cause is outside your control (missing API keys/URLs, missing gene
 - **Context compression:** The system auto-compresses prior messages near
   context limits. Write down important facts from tool results in your text
   response — original tool results may be cleared later.
+- **A background job notifies you; polling it does not.** A command started
+  in the background re-invokes you when it exits, so every poll in between
+  re-sends the whole conversation to be told "still running". Start it, do
+  other work, and read the result once. Verified 2026-09-05: `deno task
+  check` was polled six times while it ran — six full round-trips, no
+  information.
+- **A passed check stays passed.** Do not re-run `deno task check` on a tree
+  you have not changed since it passed. That includes a tree you changed for
+  a probe and restored: `diff -q <file> <backup>` reporting no difference is
+  the evidence the check would reproduce, and it costs a second instead of
+  two minutes.
+- **Name a file by listing it, never from memory.** A test module's name does
+  not follow from the module it covers — `src/state/run-journal.ts` is
+  covered by `journal-chain_test.ts`, and `run-journal_test.ts` does not
+  exist. `deno test` aborts the entire invocation on one missing path
+  (`error: Import '…' failed, not found`), so a single guessed name in a
+  multi-module command loses every module in it. Run `ls <dir>/*_test.ts`
+  first.
 
 > **Before you start:** read `documents/requirements-engine.md` (or `requirements-sdlc.md`) and `documents/design-engine.md` (or `design-sdlc.md`) if you haven't in this session. These are thin index files — read the index, then open only the section file(s) from `documents/requirements-engine/`, `requirements-sdlc/`, `design-engine/`, or `design-sdlc/` that your task touches. Index files contain FR-ID → section-file maps.
