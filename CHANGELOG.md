@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.11.0](https://github.com/korchasa/flowai-workflow/compare/v0.10.0...v0.11.0) (2026-09-04)
+
+### Features
+
+* **engine:** complete fork/join failure modes, keys and resume ([ddea500](https://github.com/korchasa/flowai-workflow/commit/ddea50059771383ac112f3787e78956b4fa02d65))
+
+### Chores
+
+* **scripts:** add tasks-overview.py for task status listing ([1d7d263](https://github.com/korchasa/flowai-workflow/commit/1d7d26392ce56ea8f13b5185788d24d2f5d86849))
 ## [0.10.0](https://github.com/korchasa/flowai-workflow/compare/v0.9.2...v0.10.0) (2026-08-31)
 
 ### Continuous Integration
