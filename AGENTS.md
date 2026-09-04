@@ -674,6 +674,23 @@ The goal is to identify the root cause, not to suppress the symptom. A quick wor
 
 Before drawing a conclusion from a single signal:
 
+- **A probe you have not validated is not evidence, and a check batched with
+  the action it gates is not a gate.** Two failure modes, one root: acting on
+  output you never actually read. (a) Before believing an empty or zero-count
+  result from `grep`/`awk`/a script over machine output, run a positive
+  control — the same probe against a line you KNOW matches. Machine output
+  carries escapes, tabs and shell-specific redirection order that silently
+  defeat a plausible-looking pattern: `2>&1 >/dev/null` in zsh does not do
+  what it does in bash, and `gh run view --log-failed` writes ANSI sequences
+  as the literal characters `^[`, so an ANSI-stripping regex removes nothing
+  and every pattern anchored on `error:` returns zero. Zero then reads as
+  "clean" when it means "the probe is broken". (b) A command whose output is
+  supposed to DECIDE whether the next command runs MUST be its own tool call.
+  `git fetch && git rev-list --left-right --count && git push` in one line
+  satisfies the letter of the divergence check and none of its purpose — the
+  push has already fired by the time the counts are on screen. The same holds
+  for any gate: read the number, then act.
+
 - **Hierarchy of hypotheses for "X doesn't work" reports on
   RPC/IPC subsystems (MCP, HITL, engine subprocess)**. Validate
   cheapest layers first: (1) is the target process alive?
