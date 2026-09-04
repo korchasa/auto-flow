@@ -1,4 +1,6 @@
 ---
+date: "2026-07-26"
+status: done
 implements:
   - FR-E25
   - FR-E50

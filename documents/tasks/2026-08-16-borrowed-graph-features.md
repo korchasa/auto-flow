@@ -1,4 +1,6 @@
 ---
+date: "2026-08-16"
+status: done
 implements:
   - FR-E87
   - FR-E88
@@ -52,19 +54,26 @@ predicate, `command` node, per-task worktree), Microsoft Conductor
 
 ## Definition of Done
 
-- [ ] FR-E87 `loop.until` — shell predicate exit, mutually exclusive
+- [x] FR-E87 `loop.until` — shell predicate exit, mutually exclusive
       with the condition triple.
-- [ ] FR-E88 `type: command` — first-class command node with deps,
+- [x] FR-E88 `type: command` — first-class command node with deps,
       timeout, artifact capture.
-- [ ] FR-E89 `when:` — conditional edge predicate, skip semantics.
-- [ ] FR-E90 `for_each` — data-driven fan-out over a predecessor
-      artifact list.
-- [ ] FR-E91 per-node worktree — opt-in isolation scope so parallelism
+- [x] FR-E89 `when:` — conditional edge predicate, skip semantics.
+- [x] FR-E90 `for_each` — **superseded by FR-E95, not delivered.**
+      `fork`/`join` replaced the block: it keeps the expansion, lets a
+      branch span several nodes, and lets list items carry their own
+      prompt and scope. The key no longer exists in the language — a
+      config still using it fails at load with a message naming `fork`
+      as its replacement (`src/config/config.ts:548`).
+      Evidence: `documents/requirements-engine/08-graph-and-isolation.md:191`
+      ("Superseded by FR-E95"), `documents/requirements-engine/10-fork-join.md:90`
+      ("Supersedes: FR-E90"), `src/config/config_fork_test.ts:332`.
+- [x] FR-E91 per-node worktree — opt-in isolation scope so parallelism
       stops contradicting FR-E50.
-- [ ] FR-E92 journal hash chain + `verify` command.
-- [ ] FR-E93 `type: hitl` — HITL as a node type.
-- [ ] SRS + SDS updated for each FR.
-- [ ] `deno task check` green.
+- [x] FR-E92 journal hash chain + `verify` command.
+- [x] FR-E93 `type: hitl` — HITL as a node type.
+- [x] SRS + SDS updated for each FR.
+- [x] `deno task check` green.
 
 ## Solution
 

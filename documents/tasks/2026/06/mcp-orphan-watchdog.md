@@ -1,4 +1,6 @@
 ---
+date: "2026-06-21"
+status: done
 implements:
   - FR-E83  # Parent-Death Watchdog for stdio MCP entrypoints
 ---

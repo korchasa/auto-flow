@@ -1,4 +1,6 @@
 ---
+date: "2026-06-21"
+status: done
 implements:
   - FR-E84  # candidate new FR — "MCP start_run tool"; confirmed after variant pick
 ---
@@ -62,17 +64,17 @@ cancel, patch, and answer — but cannot *start*.
 
 ## Definition of Done
 
-- [ ] (FR-E84) MCP exposes a start tool that begins a fresh run for the
+- [x] (FR-E84) MCP exposes a start tool that begins a fresh run for the
       resolved workflow — Test: `src/mcp/mcp-server_test.ts` — Evidence: `deno task check`
-- [ ] (FR-E84) Start logic lives in `src/mcp/commands.ts` as the single
+- [x] (FR-E84) Start logic lives in `src/mcp/commands.ts` as the single
       `Engine({resume:false})` site, shared with CLI — Test: `src/mcp/commands_test.ts` — Evidence: `deno task check`
-- [ ] (FR-E84) Tool rejects starting when a run already holds the workflow lock
+- [x] (FR-E84) Tool rejects starting when a run already holds the workflow lock
       (no parallel `Engine.run()`) — Test: `src/mcp/mcp-server_test.ts` — Evidence: `deno task check`
-- [ ] (FR-E84) FR-E73 tool-count acceptance + no-workflow tool list updated to
+- [x] (FR-E84) FR-E73 tool-count acceptance + no-workflow tool list updated to
       the new count — Test: `src/mcp/mcp-server_test.ts` — Evidence: `deno task check`
-- [ ] SRS FR-E84 section added with `**Acceptance:**`; SDS §5 + tool list +
+- [x] SRS FR-E84 section added with `**Acceptance:**`; SDS §5 + tool list +
       §5.7 deferred note updated — Evidence: `deno publish --dry-run`
-- [ ] `deno task check` green — Evidence: `deno task check`
+- [x] `deno task check` green — Evidence: `deno task check`
 
 ## Solution
 

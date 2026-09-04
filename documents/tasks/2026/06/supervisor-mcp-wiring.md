@@ -1,4 +1,6 @@
 ---
+date: "2026-06-22"
+status: done
 implements:
   - FR-E85  # candidate new FR — "non-blocking resume_node (wait flag)"
 ---
@@ -64,36 +66,36 @@ close the one gap that blocks a full migration — a NON-BLOCKING resume (today
 
 ### Phase 1 — Non-blocking resume (engine, FR-E85)
 
-- [ ] (FR-E85) `resume_node` accepts `wait` (default true = current blocking
+- [x] (FR-E85) `resume_node` accepts `wait` (default true = current blocking
       behavior). `wait:false` launches a detached `run <wf> --resume <id>` and
       returns `{run_id, pid, wait:false}` — Test: `src/mcp/mcp-server_test.ts` — Evidence: `deno task check`
-- [ ] (FR-E85) Background resume lives in `commands.ts` reusing a generalized
+- [x] (FR-E85) Background resume lives in `commands.ts` reusing a generalized
       `buildEngineRunCommand` (fresh `--run-id` | recovery `--resume`) — Test: `src/mcp/commands_test.ts` — Evidence: `deno task check`
-- [ ] (FR-E85) `wait:false` resume rejects when a LIVE run holds the lock
+- [x] (FR-E85) `wait:false` resume rejects when a LIVE run holds the lock
       (that is attach-live, not resume) via `liveLockHolder` — Test: `src/mcp/commands_test.ts` — Evidence: `deno task check`
-- [ ] SRS FR-E85 section + SDS §5.2/§5.7 updated (resume now has a
+- [x] SRS FR-E85 section + SDS §5.2/§5.7 updated (resume now has a
       non-blocking variant) — Evidence: `deno publish --dry-run`
 
 ### Phase 2 — Supervisor → MCP (sdlc/plugin)
 
-- [ ] `supervisor.md` `tools:` adds
+- [x] `supervisor.md` `tools:` adds
       `mcp__plugin_flowai-workflow_flowai-workflow__*` (start_run, resume_node,
       get_state, tail_artifacts, list_runs, cancel_run, provide_human_input,
       get_workflow) — Evidence: `plugin-src/shared/agents/supervisor.md:4`
-- [ ] "Engine is long-running" + "Attach Modes" prose rewritten to MCP-first:
+- [x] "Engine is long-running" + "Attach Modes" prose rewritten to MCP-first:
       fresh→`start_run wait:false`, recovery→`resume_node wait:false`,
       poll→`get_state`/`tail_artifacts`/`list_runs`, liveness→`get_state`+lock,
       HITL→`provide_human_input`; Bash kept as explicit fallback — Evidence: `plugin-src/shared/agents/supervisor.md`
-- [ ] Codex twin `…/skills/supervisor/SKILL.md` updated by concern — Evidence: file diff
-- [ ] AGENTS.md supervisor/attach-mode notes reflect MCP-first + Bash fallback — Evidence: `AGENTS.md`
-- [ ] Payload build still classifies both files correctly — Test: `scripts/build-plugin-payload_test.ts` — Evidence: `deno task check`
+- [x] Codex twin `…/skills/supervisor/SKILL.md` updated by concern — Evidence: file diff
+- [x] AGENTS.md supervisor/attach-mode notes reflect MCP-first + Bash fallback — Evidence: `AGENTS.md`
+- [x] Payload build still classifies both files correctly — Test: `scripts/build-plugin-payload_test.ts` — Evidence: `deno task check`
 
 ### Phase 3 — Orchestrator (decision, no wiring)
 
-- [ ] Record in AGENTS.md / this task that `orchestrator` stays Bash/report-based
+- [x] Record in AGENTS.md / this task that `orchestrator` stays Bash/report-based
       (policy-only, forbidden from `runs/**`) — no MCP tools added — Evidence: `AGENTS.md`
 
-- [ ] `deno task check` green; `deno publish --dry-run` clean — Evidence: `deno task check`
+- [x] `deno task check` green; `deno publish --dry-run` clean — Evidence: `deno task check`
 
 ## Solution
 

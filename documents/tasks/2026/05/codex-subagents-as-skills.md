@@ -1,4 +1,6 @@
 ---
+date: "2026-06-02"
+status: in progress
 implements:
   - FR-E76  # new: Codex subagent delivery as skills (orchestrator/supervisor)
 ---
@@ -157,8 +159,12 @@ Ran live experiments against the real Codex CLI (`/tmp/codex-skill-exp`,
       codex-skills-present + claude-unaffected assertions (FR-E76;
       regression-locked).
       Evidence: `scripts/build-plugin-payload_test.ts:60` ("FR-E76 codex drops shared agents, claude keeps them, codex skills route to codex only").
-- [ ] `deno task check` green; `deno task sync-plugins -- --dry-run` shows the
+- [x] `deno task check` green; `deno task sync-plugins -- --dry-run` shows the
       two new Codex skills and no Codex `agents/` entries.
+      Evidence: `deno task check` exit 0; dry-run builds 90 files and the
+      payload carries `codex/…/skills/{orchestrator,supervisor}/SKILL.md`
+      with no plugin `agents/` entry under `codex/`, while
+      `claude/…/agents/{orchestrator,supervisor}.md` are kept.
 - [ ] Manual Codex smoke (manual — korchasa): install via
       `deno task sync-plugins-local`; in a Codex session `$orchestrate`
       spawns a `worker`, the worker loads the `orchestrator` skill, and the

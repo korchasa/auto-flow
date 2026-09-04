@@ -1,4 +1,6 @@
 ---
+date: "2026-05-31"
+status: done
 implements:
   - FR-E75  # new: Local HITL Answer Channel + unified command layer
 ---

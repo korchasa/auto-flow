@@ -1,3 +1,7 @@
+---
+date: "2026-06-21"
+status: done
+---
 # Harden Codex install-acceptance against LLM-gate flakiness (variants 3+4+5)
 
 Scope: sdlc (CI + acceptance script). Follow-up to investigate report on CI
