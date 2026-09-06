@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.12.0](https://github.com/korchasa/flowai-workflow/compare/v0.11.0...v0.12.0) (2026-09-06)
+
+### Features
+
+* **engine:** session continuation across attempts (FR-E100) ([5975f04](https://github.com/korchasa/flowai-workflow/commit/5975f0497c139d5b0e682eabe0f1165636fbd9cf))
+
+### Chores
+
+* **tasks:** backfill task statuses and fix the DoD progress counter ([3ba5182](https://github.com/korchasa/flowai-workflow/commit/3ba51826693c1384f10fbfc9d4b3de559f0ada8c))
 ## [0.11.0](https://github.com/korchasa/flowai-workflow/compare/v0.10.0...v0.11.0) (2026-09-04)
 
 ### Features
