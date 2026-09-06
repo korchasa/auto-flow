@@ -135,7 +135,13 @@ example of engine usage.
   (`config_error`) — no fallback to fresh
   (max N per node)
 - **Resume:** Failed/interrupted runs resumable via `--resume <run-id>`;
-  completed nodes skipped based on `state.json`
+  completed nodes skipped based on the run state replayed from
+  `runs/<run-id>/journal.jsonl` (FR-E69). **No `state.json` file is written**
+  — the in-memory `RunState` is rebuilt from the journal on every resume and
+  by the MCP `get_state` tool, so a test or script that reads
+  `runs/<run-id>/state.json` finds nothing (verified 2026-09-07: an
+  engine test asserted that path and failed with NotFound; the fix was
+  `replayRunJournal(runDir)`)
 - **Worktree base ref:** runs are checked out from `origin/<base>` (default
   `origin/main`), not local `HEAD` ([worktree.ts](worktree.ts) `createWorktree`).
   Any local edit to a workflow's `workflow.yaml`, `agents/*.md`, or other
@@ -266,7 +272,7 @@ example of engine usage.
     Imported from `kazar-fairy-taler` as a reusable template; retains
     LumaTale-specific `direction` taxonomy as an example)
   Each is self-contained: `workflow.yaml`, `agents/agent-*.md`, `memory/`,
-  `scripts/`, `runs/<run-id>/{state.json, <node-id>/, worktree/}` (FR-E57:
+  `scripts/`, `runs/<run-id>/{journal.jsonl, <node-id>/, worktree/}` (FR-E57:
   the per-run git worktree lives alongside the run's state and artifacts
   under one `runs/<run-id>/` umbrella; the legacy top-level `worktrees/`
   directory is gone). Select one by passing it as the mandatory
