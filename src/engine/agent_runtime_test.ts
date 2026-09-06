@@ -590,3 +590,138 @@ Deno.test("FR-E80 HITL capture clears the timer (no abort after capture)", async
   // No throw / no rejection means the timer was properly cleared.
   assertEquals(result.error_category, undefined);
 });
+
+// --- FR-E100: session continuation across attempts ---
+
+function capabilitiesOff() {
+  return {
+    permissionMode: false,
+    mcpInjection: false,
+    transcript: false,
+    interactive: false,
+    toolUseObservation: false,
+    session: false,
+    capabilityInventory: false,
+    commandsFastChannel: false,
+    toolFilter: false,
+    reasoningEffort: false,
+  };
+}
+
+Deno.test("FR-E100 runAgent — resumeSessionId on the initial invoke uses the resume shape", async () => {
+  const nodeDir = Deno.makeTempDirSync();
+  const calls: RuntimeInvokeOptions[] = [];
+  const runtimeAdapter: RuntimeAdapter = {
+    id: "opencode",
+    capabilities: capabilitiesOff(),
+    launchInteractive() {
+      throw new Error("not implemented");
+    },
+    invoke: (opts) => {
+      calls.push(opts);
+      return Promise.resolve({
+        output: {
+          runtime: "opencode",
+          result: "continued",
+          session_id: "ses-prev",
+          total_cost_usd: 0.01,
+          duration_ms: 1,
+          duration_api_ms: 1,
+          num_turns: 1,
+          is_error: false,
+        },
+      });
+    },
+  };
+
+  const result = await runAgent({
+    node: {
+      type: "agent",
+      label: "Build",
+      prompt: "fix the review findings",
+      system_prompt: "You are the developer.",
+    } as NodeConfig,
+    ctx: makeCtx(nodeDir),
+    settings: makeSettings(),
+    runtime: "opencode",
+    runtimeAdapter,
+    nodeId: "build",
+    resumeSessionId: "ses-prev",
+  });
+
+  assertEquals(result.success, true);
+  assertEquals(result.session_id, "ses-prev");
+  assertEquals(calls.length, 1);
+  assertEquals(calls[0].transport, "acp");
+  assertEquals(calls[0].resumeSessionId, "ses-prev");
+  assertEquals(calls[0].taskPrompt, "fix the review findings");
+  assertEquals(calls[0].systemPrompt, undefined);
+  assertEquals(calls[0].systemPromptFile, undefined);
+  assertEquals(calls[0].agent, undefined);
+});
+
+Deno.test("FR-E100 runAgent — session/load not advertised fails with config_error", async () => {
+  const nodeDir = Deno.makeTempDirSync();
+  const runtimeAdapter: RuntimeAdapter = {
+    id: "opencode",
+    capabilities: capabilitiesOff(),
+    launchInteractive() {
+      throw new Error("not implemented");
+    },
+    invoke: () => {
+      // The shape `@korchasa/ai-ide-cli` throws when the front lacks
+      // `loadSession`: the class is not exported, so the engine recognises
+      // it by the name the constructor sets and the `fields` it names.
+      const err = new Error(
+        "runtime 'opencode' does not support ACP option(s): resumeSessionId",
+      ) as Error & { fields: string[] };
+      err.name = "AcpUnsupportedOptionError";
+      err.fields = ["resumeSessionId"];
+      return Promise.reject(err);
+    },
+  };
+
+  const result = await runAgent({
+    node: { type: "agent", label: "Build", prompt: "build" } as NodeConfig,
+    ctx: makeCtx(nodeDir),
+    settings: makeSettings(),
+    runtime: "opencode",
+    runtimeAdapter,
+    nodeId: "build",
+    resumeSessionId: "ses-prev",
+  });
+
+  assertEquals(result.success, false);
+  assertEquals(result.error_category, "config_error");
+  assertEquals(
+    result.error,
+    "Node 'build' asks to continue a session, but runtime 'opencode' did not advertise session/load",
+  );
+});
+
+Deno.test("FR-E100 runAgent — any other throw from a resumed invoke is re-thrown", async () => {
+  const nodeDir = Deno.makeTempDirSync();
+  const runtimeAdapter: RuntimeAdapter = {
+    id: "opencode",
+    capabilities: capabilitiesOff(),
+    launchInteractive() {
+      throw new Error("not implemented");
+    },
+    invoke: () => Promise.reject(new Error("socket closed")),
+  };
+  let thrown: Error | undefined;
+  try {
+    await runAgent({
+      node: { type: "agent", label: "Build", prompt: "build" } as NodeConfig,
+      ctx: makeCtx(nodeDir),
+      settings: makeSettings(),
+      runtime: "opencode",
+      runtimeAdapter,
+      nodeId: "build",
+      resumeSessionId: "ses-prev",
+    });
+  } catch (err) {
+    thrown = err as Error;
+  }
+  assertEquals(thrown?.message, "socket closed");
+});

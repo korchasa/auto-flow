@@ -72,6 +72,8 @@ export const DEFAULT_WORKFLOW_DEFAULTS: Required<
   runtime: "claude",
   runtime_args: {},
   model: "",
+  // FR-E100: a new session per attempt unless a workflow opts in.
+  session: "fresh",
   hitl: {
     ask_script: "",
     check_script: "",
@@ -274,6 +276,16 @@ function validateSchema(config: Record<string, unknown>): void {
     if (defaults.budget !== undefined) {
       validateBudget("defaults", defaults.budget);
     }
+    // FR-E100: the workflow-wide policy takes the two generic values only; a
+    // node id names one ancestor and belongs on the node that continues it.
+    if (
+      defaults.session !== undefined && defaults.session !== "fresh" &&
+      defaults.session !== "continue"
+    ) {
+      throw new Error(
+        `defaults.session must be 'fresh' or 'continue' (got '${defaults.session}'); a node id is set per node`,
+      );
+    }
     if (defaults.max_parallel !== undefined) {
       const value = defaults.max_parallel;
       if (
@@ -390,6 +402,7 @@ const NODE_CONFIG_KEYS: readonly string[] = [
   "allowed_tools",
   "disallowed_tools",
   "memory_commit_deferred",
+  "session",
 ];
 
 /**
@@ -611,6 +624,7 @@ function validateNode(
   validateJoin(id, node);
   const allowBranch = true;
   validateIsolation(id, node, type);
+  validateSessionField(id, node, type);
 
   // FR-E89: `when` gates any node type, so it is checked before the
   // type-specific branches.
@@ -1149,6 +1163,19 @@ export function resolveBudget(
   return node.budget ?? loopParent?.budget ?? defaults?.budget;
 }
 
+/**
+ * FR-E100: which session an agent node's attempt runs in — `fresh`,
+ * `continue`, or the id of the ancestor whose session it re-enters. The node
+ * wins over `defaults.session`; the loop node is not a cascade level, because
+ * a loop owns no session of its own.
+ */
+export function resolveSession(
+  node: NodeConfig,
+  defaults: WorkflowDefaults | undefined,
+): string {
+  return node.session ?? defaults?.session ?? "fresh";
+}
+
 /** Reserved-keys in `runtime_args` that conflict with typed tool filter fields
  * (FR-E48). Claude CLI and engine own these flags. */
 const TOOL_FILTER_RESERVED_KEYS = [
@@ -1418,8 +1445,206 @@ function mergeDefaults(
     nodes: mergedNodes,
   };
   validateRuntimeCompatibility(result, warnSink);
+  validateSessionGraph(result, warnSink);
   validateFileReferences(result, workDir, workflowDir);
   return result;
+}
+
+/**
+ * FR-E100: per-node shape of `session` — a non-empty string on an `agent`
+ * node. What the value MEANS (an ancestor, a loop body, a matching runtime)
+ * needs the whole graph and is decided in {@link validateSessionGraph}.
+ */
+function validateSessionField(
+  id: string,
+  node: Record<string, unknown>,
+  type: string,
+): void {
+  if (node.session === undefined) return;
+  if (typeof node.session !== "string" || node.session.length === 0) {
+    throw new Error(
+      `Node '${id}' 'session' must be a non-empty string: 'fresh', 'continue' or the id of an agent node this node follows`,
+    );
+  }
+  if (type !== "agent") {
+    throw new Error(
+      `Node '${id}' 'session' is only valid on 'agent' nodes — a '${type}' node owns no runtime session`,
+    );
+  }
+}
+
+/** FR-E100: one agent node with a `session` value, and the loop it sits in. */
+interface SessionHolder {
+  id: string;
+  node: NodeConfig;
+  loopId?: string;
+  loopNode?: NodeConfig;
+}
+
+function sessionHolders(config: WorkflowConfig): SessionHolder[] {
+  const holders: SessionHolder[] = [];
+  for (const [id, node] of Object.entries(config.nodes)) {
+    if (node.session !== undefined) holders.push({ id, node });
+    if (node.type !== "loop" || !node.nodes) continue;
+    for (const [bodyId, bodyNode] of Object.entries(node.nodes)) {
+      if (bodyNode.session !== undefined) {
+        holders.push({
+          id: bodyId,
+          node: bodyNode,
+          loopId: id,
+          loopNode: node,
+        });
+      }
+    }
+  }
+  return holders;
+}
+
+/**
+ * FR-E100: is `targetId` upstream of `fromId` through `inputs`?
+ *
+ * A loop body node inherits the loop's inputs: what the loop waits for, its
+ * body waits for too, so a body node may continue a session recorded before
+ * the loop started.
+ */
+function isSessionAncestor(
+  config: WorkflowConfig,
+  fromId: string,
+  targetId: string,
+): boolean {
+  const loopOf = new Map<string, string>();
+  for (const [id, node] of Object.entries(config.nodes)) {
+    if (node.type !== "loop" || !node.nodes) continue;
+    for (const bodyId of Object.keys(node.nodes)) loopOf.set(bodyId, id);
+  }
+  const seen = new Set<string>();
+  const queue: string[] = [fromId];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const next = [...(findNodeConfig(config, id)?.inputs ?? [])];
+    const loopId = loopOf.get(id);
+    if (loopId !== undefined) next.push(...(config.nodes[loopId].inputs ?? []));
+    for (const input of next) {
+      if (input === targetId) return true;
+      queue.push(input);
+    }
+  }
+  return false;
+}
+
+/**
+ * FR-E100: check every `session` value against the graph.
+ *
+ * `continue` outside a loop body is a warning, not an error: nothing in this
+ * run recorded a session for the node, so it starts fresh, and rejecting it
+ * would make `defaults.session: continue` unusable on any workflow with a
+ * node before its loop. A node id is checked hard — the target must be an
+ * agent ancestor on the same runtime and in the same tree, and inside a fork
+ * group both ends must run branch by branch with matching keys.
+ */
+function validateSessionGraph(
+  config: WorkflowConfig,
+  warnSink?: ConfigWarnSink,
+): void {
+  const holders = sessionHolders(config);
+  if (holders.length === 0) return;
+  const membership = resolveBranchMembership(config);
+  const isolatedBranch = new Set<string>();
+  for (const [id, own] of membership) {
+    if (config.nodes[id]?.allowed_paths !== undefined) {
+      isolatedBranch.add(`${own.group}.${own.branch}`);
+    }
+  }
+  const inOwnTree = (id: string, node: NodeConfig): boolean => {
+    if (node.isolation === "worktree") return true;
+    const own = membership.get(id);
+    return own !== undefined &&
+      isolatedBranch.has(`${own.group}.${own.branch}`);
+  };
+
+  for (const { id, node, loopId, loopNode } of holders) {
+    const value = node.session!;
+    if (value === "fresh") continue;
+    if (value === "continue") {
+      if (loopId === undefined) {
+        warnSink?.(
+          `Node '${id}': session: continue has no effect outside a loop body — nothing earlier in the run records a session for this node, so it starts fresh`,
+        );
+      }
+      continue;
+    }
+    const target = findNodeConfig(config, value);
+    if (target === undefined) {
+      throw new Error(
+        `Node '${id}' session target '${value}' is not a node`,
+      );
+    }
+    if (target.type !== "agent") {
+      throw new Error(
+        `Node '${id}' session target '${value}' is not an agent node — only an agent attempt records a session`,
+      );
+    }
+    if (value === id || !isSessionAncestor(config, id, value)) {
+      throw new Error(
+        `Node '${id}' session target '${value}' is not an ancestor of '${id}' through 'inputs' — a session can only be continued after the attempt that opened it`,
+      );
+    }
+    const ownRuntime = resolveRuntimeConfig({
+      defaults: config.defaults,
+      node,
+      parent: loopNode,
+    }).runtime;
+    const targetRuntime = resolveRuntimeConfig({
+      defaults: config.defaults,
+      node: target,
+      parent: loopParentOf(config, value),
+    }).runtime;
+    if (ownRuntime !== targetRuntime) {
+      throw new Error(
+        `Node '${id}' runtime '${ownRuntime}' differs from session target '${value}' runtime '${targetRuntime}' — a session is bound to one runtime`,
+      );
+    }
+    if (inOwnTree(id, node) || inOwnTree(value, target)) {
+      throw new Error(
+        `Node '${id}' cannot continue the session of '${value}': the two nodes run in different trees (isolation: worktree, or a fork branch with allowed_paths) and a session is bound to one working directory`,
+      );
+    }
+    const ownBranch = membership.get(id);
+    const targetBranch = membership.get(value);
+    if (ownBranch !== undefined && targetBranch === undefined) {
+      throw new Error(
+        `Node '${id}' runs in a fork branch, but session target '${value}' does not — every branch would continue the same session`,
+      );
+    }
+    if (ownBranch === undefined && targetBranch !== undefined) {
+      throw new Error(
+        `Node '${id}' does not run in a fork branch, but session target '${value}' does — there is no single session to continue`,
+      );
+    }
+    if (
+      ownBranch !== undefined && targetBranch !== undefined &&
+      ownBranch.branch !== DYNAMIC_BRANCH &&
+      targetBranch.branch !== DYNAMIC_BRANCH &&
+      ownBranch.branch !== targetBranch.branch
+    ) {
+      throw new Error(
+        `Node '${id}' branch '${ownBranch.branch}' has no counterpart on session target '${value}' (branch '${targetBranch.branch}') — a branch continues the target's branch with the same key`,
+      );
+    }
+  }
+}
+
+/** The loop a body node belongs to, or undefined for a top-level node. */
+function loopParentOf(
+  config: WorkflowConfig,
+  nodeId: string,
+): NodeConfig | undefined {
+  for (const node of Object.values(config.nodes)) {
+    if (node.type === "loop" && node.nodes && nodeId in node.nodes) return node;
+  }
+  return undefined;
 }
 
 function validateRuntimeCompatibility(

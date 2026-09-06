@@ -74,3 +74,43 @@ Deno.test("FR-E91 isolation is rejected on a human node", () => {
     "only valid on 'agent' and 'command' nodes",
   );
 });
+
+Deno.test("FR-E100 session target in another worktree is rejected", () => {
+  // The target sits in a worktree of its own: the session's cwd is not ours.
+  assertThrows(
+    () =>
+      parseConfig(`${BASE}
+    isolation: worktree
+  fix:
+    type: agent
+    label: "Fix"
+    inputs: [build]
+    session: build
+    prompt: "fix it"
+`),
+    Error,
+    "Node 'fix' cannot continue the session of 'build': the two nodes run in different trees",
+  );
+
+  // A fork branch that declares allowed_paths gets a tree per branch (FR-E91).
+  assertThrows(
+    () =>
+      parseConfig(`${BASE}
+    fork: g.a
+    allowed_paths: ["src/**"]
+  fix:
+    type: agent
+    label: "Fix"
+    inputs: [build]
+    session: build
+    prompt: "fix it"
+  done:
+    type: command
+    label: "Done"
+    join: g
+    command: "true"
+`),
+    Error,
+    "Node 'fix' cannot continue the session of 'build': the two nodes run in different trees",
+  );
+});

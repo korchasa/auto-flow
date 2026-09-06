@@ -400,7 +400,18 @@ function applyJournalEvents(events: RunJournalEvent[]): RunState {
         const current = requireState(state, event);
         assertSameRun(current, event);
         const node = current.nodes[event.node_id] ?? { status: "pending" };
-        if (event.session_id !== undefined) node.session_id = event.session_id;
+        if (event.branch_key !== undefined) {
+          // FR-E100: a branch attempt records its session per key, and only
+          // when it succeeded — a failed branch leaves nothing to continue.
+          if (event.success === true && event.session_id !== undefined) {
+            node.branch_sessions = {
+              ...node.branch_sessions,
+              [event.branch_key]: event.session_id,
+            };
+          }
+        } else if (event.session_id !== undefined) {
+          node.session_id = event.session_id;
+        }
         if (event.continuations !== undefined) {
           node.continuations = event.continuations;
         }
@@ -495,7 +506,9 @@ export function resultExcerpt(result: string): string {
     .slice(0, 400);
 }
 
-/** Emit an attempt completion fact from an agent result-like payload. */
+/** Emit an attempt completion fact from an agent result-like payload.
+ * @param branchKey FR-E100: the fork branch the attempt ran for, when the
+ *   node runs once per branch. */
 export async function appendAttemptCompleted(
   journal: RunJournalWriter | undefined,
   nodeId: string,
@@ -508,6 +521,7 @@ export async function appendAttemptCompleted(
     error_category?: ErrorCategory;
   } | null,
   iteration?: number,
+  branchKey?: string,
 ): Promise<void> {
   if (!journal || !result) return;
   await journal.append({
@@ -516,6 +530,7 @@ export async function appendAttemptCompleted(
       : "attempt_completed",
     node_id: nodeId,
     iteration,
+    branch_key: branchKey,
     session_id: result.session_id ?? result.output?.session_id,
     continuations: result.continuations,
     cost_usd: result.output?.total_cost_usd,

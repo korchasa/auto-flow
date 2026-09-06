@@ -379,6 +379,7 @@ Workflow behavior is defined in a YAML config file. Key settings under `defaults
 - `timeout_seconds` — per-node timeout (default: 1800)
 - `permission_mode` — permission mode override (Claude: full support; opencode: only `bypassPermissions`)
 - `hitl` — Human-in-the-Loop config: `ask_script`, `check_script`, `poll_interval`, `timeout` (used by Claude directly and by OpenCode via injected local MCP)
+- `session` — which runtime session an agent node's attempt runs in (FR-E100): `fresh` (default) opens a new one per attempt; `continue` lets a loop body node re-enter the session of its own last successful iteration; on a node, `session: <node-id>` re-enters the session an agent ancestor recorded (branch by branch inside a fork group). A resumed attempt gets the task prompt only — no system prompt — and a missing session or a runtime front without `session/load` fails the node; there is no fallback to a fresh session
 
 Node-level overrides are supported for all defaults.
 

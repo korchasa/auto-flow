@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertStringIncludes } from "@std/assert";
 import type {
   EngineOptions,
   NodeConfig,
@@ -1763,5 +1763,275 @@ Deno.test("FR-E86 Engine.run() surfaces a runtime failure without touching a rea
   } finally {
     Deno.chdir(origCwd);
     await Deno.remove(tmpDir, { recursive: true });
+  }
+});
+
+// --- FR-E100: session continuation across attempts ---
+
+/** Run a workflow YAML from a temp dir with an injected fake runtime. */
+async function runWithFake(
+  yaml: string,
+  runId: string,
+  adapter: EngineOptions["runtimeAdapter"],
+): Promise<{ dir: string; state: Awaited<ReturnType<Engine["run"]>> }> {
+  const dir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  await Deno.writeTextFile(`${dir}/workflow.yaml`, yaml);
+  try {
+    Deno.chdir(dir);
+    const engine = new Engine(makeOptions({
+      config_path: "workflow.yaml",
+      run_id: runId,
+      lock_path: "test.lock",
+      runtimeAdapter: adapter,
+    }));
+    const state = await engine.run();
+    return { dir, state };
+  } finally {
+    Deno.chdir(origCwd);
+  }
+}
+
+/** The `<key>=<value>` pairs a test prompt encodes, e.g. `dir={{node_dir}}`. */
+function promptFields(taskPrompt: string | undefined): Record<string, string> {
+  const fields: Record<string, string> = {};
+  for (const part of (taskPrompt ?? "").split(" ")) {
+    const eq = part.indexOf("=");
+    if (eq > 0) fields[part.slice(0, eq)] = part.slice(eq + 1);
+  }
+  return fields;
+}
+
+const SESSION_HEADER = [
+  "name: session",
+  "version: '1'",
+  "defaults:",
+  "  runtime: opencode",
+  "  worktree_disabled: true",
+].join("\n");
+
+Deno.test("FR-E100 executeLoopNode — records the body node session id in state after each attempt", async () => {
+  const adapter = createFakeRuntime(async (call) => {
+    const { dir } = promptFields(call.opts.taskPrompt);
+    const verdict = call.index === 1 ? "FAIL" : "PASS";
+    await call.write(`${dir}/report.md`, `---\nverdict: ${verdict}\n---\n`);
+    return call.reply({ result: verdict, sessionId: `ses-${call.index}` });
+  });
+  const { dir, state } = await runWithFake(
+    [
+      SESSION_HEADER,
+      "nodes:",
+      "  fix:",
+      "    type: loop",
+      "    label: Fix",
+      "    condition_node: verify",
+      "    condition_field: verdict",
+      "    exit_value: PASS",
+      "    max_iterations: 3",
+      "    nodes:",
+      "      verify:",
+      "        type: agent",
+      "        label: Verify",
+      "        session: continue",
+      "        prompt: verify dir={{node_dir}}",
+      "",
+    ].join("\n"),
+    "run-loop-session",
+    adapter,
+  );
+  try {
+    assertEquals(state.status, "completed");
+    assertEquals(adapter.calls.length, 2);
+    assertEquals(adapter.calls[0].resumeSessionId, undefined);
+    assertEquals(adapter.calls[1].resumeSessionId, "ses-1");
+    assertEquals(state.nodes.verify.session_id, "ses-2");
+    // The durable record agrees with the live one (FR-E69: the journal is
+    // what `--resume` rebuilds state from).
+    const replay = await replayRunJournal(`${dir}/runs/run-loop-session`);
+    assertEquals(replay.state.nodes.verify.session_id, "ses-2");
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+const FORK_CHAIN = (reviseFork: string[]) =>
+  [
+    SESSION_HEADER,
+    "nodes:",
+    "  list:",
+    "    type: command",
+    "    label: List",
+    "    command: printf 'alpha\\nbeta\\n' > items.txt",
+    "  write:",
+    "    type: agent",
+    "    label: Write",
+    "    inputs: [list]",
+    "    fork:",
+    "      group: g",
+    "      branches: items.txt",
+    "      key: value",
+    "    prompt: write key={{branch.key}}",
+    "  audit:",
+    "    type: command",
+    "    label: Audit",
+    "    join: g",
+    "    command: 'true'",
+    "  revise:",
+    "    type: agent",
+    "    label: Revise",
+    "    inputs: [write, audit]",
+    ...reviseFork,
+    "    session: write",
+    "    prompt: revise key={{branch.key}}",
+    "  done:",
+    "    type: command",
+    "    label: Done",
+    "    join: h",
+    "    command: 'true'",
+    "",
+  ].join("\n");
+
+Deno.test("FR-E100 session: <node> on a fork node continues the same-key branch session", async () => {
+  const adapter = createFakeRuntime((call) => {
+    const { key } = promptFields(call.opts.taskPrompt);
+    return call.reply({ result: key, sessionId: `ses-${key}` });
+  });
+  const { dir, state } = await runWithFake(
+    FORK_CHAIN([
+      "    fork:",
+      "      group: h",
+      "      branches: items.txt",
+      "      key: value",
+    ]),
+    "run-fork-session",
+    adapter,
+  );
+  try {
+    assertEquals(state.status, "completed");
+    assertEquals(state.nodes.write.branch_sessions, {
+      alpha: "ses-alpha",
+      beta: "ses-beta",
+    });
+    const revise = adapter.calls.filter((c) =>
+      c.taskPrompt?.startsWith("revise")
+    );
+    assertEquals(revise.length, 2);
+    for (const call of revise) {
+      const { key } = promptFields(call.taskPrompt);
+      assertEquals(call.resumeSessionId, `ses-${key}`);
+      assertEquals(call.systemPrompt, undefined);
+    }
+    assertEquals(state.nodes.revise.branch_sessions, {
+      alpha: "ses-alpha",
+      beta: "ses-beta",
+    });
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E100 a branch key without a counterpart fails that branch by name", async () => {
+  const adapter = createFakeRuntime((call) => {
+    const { key } = promptFields(call.opts.taskPrompt);
+    return call.reply({ result: key, sessionId: `ses-${key}` });
+  });
+  const { dir, state } = await runWithFake(
+    FORK_CHAIN([
+      "    fork:",
+      "      group: h",
+      "      branches: other.txt",
+      "      key: value",
+    ]).replace(
+      "    command: 'true'\n  revise:",
+      "    command: printf 'alpha\\ngamma\\n' > other.txt\n  revise:",
+    ),
+    "run-fork-mismatch",
+    adapter,
+  );
+  try {
+    assertEquals(state.nodes.revise.status, "failed");
+    assertStringIncludes(
+      state.nodes.revise.error ?? "",
+      "Node 'revise' asks to continue the session of 'write' for branch 'gamma' (session: write), but no completed attempt of 'write' recorded one for that branch",
+    );
+    // Branch alpha still continued its counterpart.
+    const alpha = adapter.calls.find((c) =>
+      c.taskPrompt === "revise key=alpha"
+    );
+    assertEquals(alpha?.resumeSessionId, "ses-alpha");
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E100 fork branch records branch_sessions after a HITL round", async () => {
+  const adapter = createFakeRuntime(async (call) => {
+    if (call.opts.resumeSessionId !== undefined) {
+      // The human answered; the branch finishes in the same session.
+      return call.reply({
+        result: "revised",
+        sessionId: call.opts.resumeSessionId,
+      });
+    }
+    const { key } = promptFields(call.opts.taskPrompt);
+    await call.opts.onToolUseObserved?.({
+      runtime: "opencode",
+      id: `tool-${key}`,
+      name: "flowai-workflow-hitl_request_human_input",
+      input: { question: `Approve ${key}?` },
+      turn: 1,
+    });
+    return call.reply({ result: "asked", sessionId: `ses-${key}` });
+  }, { capabilities: { mcpInjection: true, toolUseObservation: true } });
+  const yaml = [
+    SESSION_HEADER,
+    "  hitl:",
+    "    ask_script: ask.sh",
+    "    check_script: check.sh",
+    "    poll_interval: 1",
+    "    timeout: 10",
+    "nodes:",
+    "  list:",
+    "    type: command",
+    "    label: List",
+    "    command: printf 'alpha\\nbeta\\n' > items.txt",
+    "  write:",
+    "    type: agent",
+    "    label: Write",
+    "    inputs: [list]",
+    "    fork:",
+    "      group: g",
+    "      branches: items.txt",
+    "      key: value",
+    "    prompt: write key={{branch.key}}",
+    "  audit:",
+    "    type: command",
+    "    label: Audit",
+    "    join: g",
+    "    command: 'true'",
+    "",
+  ].join("\n");
+  const dir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  await Deno.writeTextFile(`${dir}/workflow.yaml`, yaml);
+  await Deno.writeTextFile(`${dir}/ask.sh`, "exit 0\n");
+  await Deno.writeTextFile(`${dir}/check.sh`, "echo yes\n");
+  try {
+    Deno.chdir(dir);
+    const engine = new Engine(makeOptions({
+      config_path: "workflow.yaml",
+      run_id: "run-fork-hitl",
+      lock_path: "test.lock",
+      runtimeAdapter: adapter,
+    }));
+    const state = await engine.run();
+    assertEquals(state.status, "completed");
+    assertEquals(state.nodes.write.branch_sessions, {
+      alpha: "ses-alpha",
+      beta: "ses-beta",
+    });
+  } finally {
+    Deno.chdir(origCwd);
+    await Deno.remove(dir, { recursive: true });
   }
 });

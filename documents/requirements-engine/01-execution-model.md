@@ -5,7 +5,8 @@
 
 ### 3.1 FR-E1: Continuation Mechanism
 
-- **Description:** Each stage script wraps the selected agent runtime invocation and validates the agent's output before considering the stage complete. If validation fails, the script re-invokes the agent in the same session using the runtime's session-resume mechanism (`claude --resume`, `opencode run --session`) with a description of the problem, giving the agent a chance to fix its output without starting from scratch.
+- **Description:** Each stage script wraps the selected agent runtime invocation and validates the agent's output before considering the stage complete. If validation fails, the script re-invokes the agent in the same session using the runtime's session-resume mechanism (`claude --resume`, `opencode run --session`) with a description of the problem, giving the agent a chance to fix its output without starting from scratch. This is continuation WITHIN one attempt; continuing a session across attempts (the next loop iteration, a later node) is FR-E100 (`session:`), which reuses the same resume invoke shape.
+- **Tasks:** [session-continuation-across-attempts](../tasks/2026-09-07-session-continuation-across-attempts.md)
 - **Acceptance criteria:**
   - **Tests:** `agent_test.ts`, `validate_test.ts`, `scope-check_test.ts`
     (regression-locked; continuation loop with limit + session-resume,

@@ -3,6 +3,7 @@ import {
   DEFAULT_SETTINGS,
   extractWorktreeDisabled,
   parseConfig,
+  resolveSession,
 } from "./config.ts";
 import type { NodeConfig } from "../types.ts";
 
@@ -2387,5 +2388,275 @@ Deno.test("FR-E11 every_attempt is a valid run_on value", () => {
     () => parseConfig(yaml("sometimes")),
     Error,
     "always, success, failure, every_attempt",
+  );
+});
+
+// --- FR-E100: session continuation across attempts ---
+
+const SESSION_CHAIN = `
+name: w
+version: "1"
+defaults:
+  runtime: opencode
+nodes:
+  write:
+    type: agent
+    label: Write
+    prompt: write
+  audit:
+    type: agent
+    label: Audit
+    inputs: [write]
+    prompt: audit
+`;
+
+Deno.test("FR-E100 validateNode — session field placement and runtime match", () => {
+  // A downstream agent node may continue an agent ancestor's session.
+  const ok = parseConfig(`${SESSION_CHAIN}
+  revise:
+    type: agent
+    label: Revise
+    inputs: [audit]
+    session: write
+    prompt: revise
+`);
+  assertEquals(ok.nodes.revise.session, "write");
+
+  // Only agent nodes own a session.
+  assertThrows(
+    () =>
+      parseConfig(`${SESSION_CHAIN}
+  check:
+    type: command
+    label: Check
+    inputs: [audit]
+    session: write
+    command: "true"
+`),
+    Error,
+    "'session' is only valid on 'agent' nodes",
+  );
+
+  // A loop node is not a cascade level for `session`.
+  assertThrows(
+    () =>
+      parseConfig(`${SESSION_CHAIN}
+  fix:
+    type: loop
+    label: Fix
+    inputs: [audit]
+    session: continue
+    condition_node: verify
+    condition_field: verdict
+    exit_value: PASS
+    max_iterations: 2
+    nodes:
+      verify:
+        type: agent
+        label: Verify
+        prompt: verify
+`),
+    Error,
+    "'session' is only valid on 'agent' nodes",
+  );
+
+  // The target must be a node.
+  assertThrows(
+    () =>
+      parseConfig(`${SESSION_CHAIN}
+  revise:
+    type: agent
+    label: Revise
+    inputs: [audit]
+    session: ghost
+    prompt: revise
+`),
+    Error,
+    "session target 'ghost' is not a node",
+  );
+
+  // The target must be an agent node.
+  assertThrows(
+    () =>
+      parseConfig(`${SESSION_CHAIN}
+  list:
+    type: command
+    label: List
+    command: "true"
+  revise:
+    type: agent
+    label: Revise
+    inputs: [audit, list]
+    session: list
+    prompt: revise
+`),
+    Error,
+    "session target 'list' is not an agent node",
+  );
+
+  // The target must be an ancestor through `inputs`.
+  assertThrows(
+    () =>
+      parseConfig(`${SESSION_CHAIN}
+  revise:
+    type: agent
+    label: Revise
+    session: write
+    prompt: revise
+`),
+    Error,
+    "session target 'write' is not an ancestor of 'revise'",
+  );
+
+  // A session is bound to one runtime.
+  assertThrows(
+    () =>
+      parseConfig(`${SESSION_CHAIN}
+  revise:
+    type: agent
+    label: Revise
+    inputs: [audit]
+    runtime: claude
+    session: write
+    prompt: revise
+`),
+    Error,
+    "runtime 'claude' differs from session target 'write' runtime 'opencode'",
+  );
+
+  // `defaults.session` takes the two generic values only.
+  assertThrows(
+    () =>
+      parseConfig(`${
+        SESSION_CHAIN.replace(
+          "  runtime: opencode",
+          "  runtime: opencode\n  session: write",
+        )
+      }`),
+    Error,
+    "defaults.session must be 'fresh' or 'continue'",
+  );
+
+  // `continue` outside a loop body has nothing to continue: a warning, not an error.
+  const warnings: string[] = [];
+  parseConfig(
+    `${SESSION_CHAIN}
+  revise:
+    type: agent
+    label: Revise
+    inputs: [audit]
+    session: continue
+    prompt: revise
+`,
+    undefined,
+    undefined,
+    (m) => warnings.push(m),
+  );
+  assertEquals(
+    warnings.some((m) =>
+      m.includes("Node 'revise'") && m.includes("no effect outside a loop body")
+    ),
+    true,
+    `expected a session warning, got ${JSON.stringify(warnings)}`,
+  );
+
+  // Static fork branches must carry the same key on both ends.
+  assertThrows(
+    () =>
+      parseConfig(`${SESSION_CHAIN}
+  write-b:
+    type: agent
+    label: Write B
+    fork: g.b
+    prompt: write
+  revise:
+    type: agent
+    label: Revise
+    inputs: [write-b]
+    fork: h.a
+    session: write-b
+    prompt: revise
+  join-g:
+    type: command
+    label: Join G
+    join: g
+    command: "true"
+  join-h:
+    type: command
+    label: Join H
+    join: h
+    command: "true"
+`),
+    Error,
+    "branch 'a' has no counterpart on session target 'write-b' (branch 'b')",
+  );
+
+  // A branch node cannot continue a target that ran once for every branch.
+  assertThrows(
+    () =>
+      parseConfig(`${SESSION_CHAIN}
+  revise:
+    type: agent
+    label: Revise
+    inputs: [audit]
+    fork: h.a
+    session: write
+    prompt: revise
+  join-h:
+    type: command
+    label: Join H
+    join: h
+    command: "true"
+`),
+    Error,
+    "runs in a fork branch, but session target 'write' does not",
+  );
+});
+
+Deno.test("FR-E100 validateNode — loop body session continue is accepted", () => {
+  const warnings: string[] = [];
+  const config = parseConfig(
+    `${SESSION_CHAIN}
+  fix:
+    type: loop
+    label: Fix
+    inputs: [audit]
+    condition_node: verify
+    condition_field: verdict
+    exit_value: PASS
+    max_iterations: 2
+    nodes:
+      build:
+        type: agent
+        label: Build
+        session: continue
+        prompt: build
+      verify:
+        type: agent
+        label: Verify
+        inputs: [build]
+        session: write
+        prompt: verify
+`,
+    undefined,
+    undefined,
+    (m) => warnings.push(m),
+  );
+  assertEquals(config.nodes.fix.nodes?.build.session, "continue");
+  assertEquals(config.nodes.fix.nodes?.verify.session, "write");
+  assertEquals(warnings.some((m) => m.includes("session")), false);
+});
+
+Deno.test("FR-E100 resolveSession — node overrides defaults", () => {
+  const node = { type: "agent", label: "n", prompt: "p" } as NodeConfig;
+  assertEquals(resolveSession(node, undefined), "fresh");
+  assertEquals(resolveSession(node, { session: "continue" }), "continue");
+  assertEquals(
+    resolveSession({ ...node, session: "fresh" }, { session: "continue" }),
+    "fresh",
+  );
+  assertEquals(
+    resolveSession({ ...node, session: "write" }, { session: "continue" }),
+    "write",
   );
 });

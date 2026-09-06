@@ -41,7 +41,12 @@ import {
 import { resultExcerpt } from "../state/run-journal.ts";
 import type { OutputManager } from "../output.ts";
 import { resolveRuntimeConfig } from "@korchasa/ai-ide-cli/runtime";
-import { resolveBudget, resolveToolFilter } from "../config/config.ts";
+import {
+  resolveBudget,
+  resolveSession,
+  resolveToolFilter,
+} from "../config/config.ts";
+import { resolveSessionToContinue } from "./session.ts";
 
 /** Reason a loop exited. Undefined on failure. */
 export type LoopExitReason =
@@ -398,6 +403,15 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         parent: loopNode,
       });
 
+      // FR-E100: decide which session this attempt re-enters BEFORE the node
+      // is marked running — eligibility reads the status the previous
+      // iteration left, and `markNodeStarted` would hide it.
+      const session = resolveSessionToContinue(
+        state,
+        bodyNodeId,
+        resolveSession(bodyNode, config.defaults),
+      );
+
       state.nodes[bodyNodeId].iteration = iteration;
       opts.onNodeStart?.(bodyNodeId, iteration);
       if (opts.nodeStarted) {
@@ -420,11 +434,24 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
         loopNode,
       );
 
+      if ("sessionId" in session) {
+        opts.output?.status(bodyNodeId, `session: continuing ${session.owner}`);
+      }
+
       // FR-E88: a command body node runs a shell command instead of an agent.
       // Its outcome is projected onto AgentResult so the surrounding
       // bookkeeping (budget, journal, condition extraction) stays uniform.
+      // FR-E100: a session the node asked for but nobody recorded is a
+      // failed attempt before any runtime turn — no fallback to a fresh one.
       let result: AgentResult = bodyNode.type === "command"
         ? await runCommandBodyNode(bodyNode, ctx, settings, opts.cwd)
+        : "error" in session
+        ? {
+          success: false,
+          continuations: 0,
+          error: session.error,
+          error_category: "config_error",
+        }
         : await runAgent({
           node: bodyNode,
           ctx,
@@ -445,6 +472,9 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
           cwd: opts.cwd,
           maxTurns: resolvedBudget?.max_turns,
           processRegistry: opts.processRegistry,
+          resumeSessionId: "sessionId" in session
+            ? session.sessionId
+            : undefined,
         });
 
       // The agent asked a human something. Its artifact does not exist yet,
@@ -471,6 +501,13 @@ export async function runLoop(opts: LoopRunOptions): Promise<LoopResult> {
             routerOwnsFailure = true;
           }
         }
+      }
+
+      // FR-E100: keep the live state's session current after EVERY attempt,
+      // the way the journal already is — the next iteration reads it here.
+      const attemptSession = result.session_id ?? result.output?.session_id;
+      if (attemptSession !== undefined) {
+        state.nodes[bodyNodeId].session_id = attemptSession;
       }
 
       bodyResults.push(result);

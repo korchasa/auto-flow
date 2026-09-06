@@ -25,6 +25,7 @@ import type {
 import type {
   ExtraArgsMap,
   RuntimeAdapter,
+  RuntimeInvokeResult,
 } from "@korchasa/ai-ide-cli/runtime/types";
 import { interpolate } from "../config/template.ts";
 import { getRuntimeAdapter } from "@korchasa/ai-ide-cli/runtime";
@@ -169,6 +170,13 @@ export interface AgentRunOptions {
    * `nodeId` is given: a direct `runAgent` call outside the engine has no
    * node to attribute writes to, and keeps the plain `allowed_paths` check. */
   forgivenScopes?: (nodeId: string) => readonly string[];
+  /** FR-E100: re-enter this runtime session on the INITIAL invoke instead of
+   * opening a new one — the session an earlier attempt of this node, or of an
+   * ancestor node, recorded. The invoke then takes the continuation shape:
+   * task prompt, no system prompt, no `agent`. A front that did not advertise
+   * `session/load` fails the node with `config_error`; nothing falls back to
+   * a fresh session. */
+  resumeSessionId?: string;
 }
 
 /**
@@ -231,6 +239,13 @@ export function acpUnsupportedIntent(
  * failure. Context preservation is critical when artefacts are large (e.g. a
  * half-written implementation) and only a small section needs correction.
  *
+ * The same argument holds ACROSS attempts (FR-E100): a loop body fixing what a
+ * reviewer found, or a node rewriting what an ancestor wrote, loses the whole
+ * context of the first attempt when it starts fresh. `resumeSessionId` lets
+ * the caller hand such a session in, and the initial invoke then takes the
+ * very shape the continuation below already uses — so a resumed attempt and a
+ * validation continuation are one code path as far as the runtime can tell.
+ *
  * Why a loop rather than one-shot: the number of continuations needed is
  * unknown upfront — each pass may fix some failures while exposing others.
  * The loop terminates on either allPassed() or exhausting max_continuations,
@@ -257,6 +272,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     disallowedTools,
     processRegistry,
     forgivenScopes,
+    resumeSessionId,
   } = opts;
   const adapter = runtimeAdapter ?? getRuntimeAdapter(runtime);
   const extraArgs = applyBudgetFlags(runtimeArgs, runtime, maxTurns);
@@ -357,14 +373,18 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     beforeSnapshot = await snapshotModifiedFiles(cwd);
   }
 
-  // Initial invocation
-  const systemPromptDelivery = await prepareSystemPromptDelivery({
-    nodeId,
-    runtime,
-    systemPromptTemplate: node.system_prompt,
-    ctx,
-    cwd,
-  });
+  // Initial invocation. FR-E100: a resumed session already holds its system
+  // prompt from its first turn, and the ACP resume shape carries none — so a
+  // continued attempt delivers the task prompt only.
+  const systemPromptDelivery = resumeSessionId === undefined
+    ? await prepareSystemPromptDelivery({
+      nodeId,
+      runtime,
+      systemPromptTemplate: node.system_prompt,
+      ctx,
+      cwd,
+    })
+    : {};
 
   // FR-E18/FR-E20: the engine is the SOLE writer of `${node_dir}/stream.log`.
   // Under ACP the library persists nothing — it only forwards raw
@@ -413,7 +433,11 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     // `@korchasa/ai-ide-cli` adapters route through the shared ACP client
     // instead of their default CLI subprocess path.
     transport: "acp",
-    agent: node.agent,
+    // FR-E100: the resume shape (see the continuation invoke below) names the
+    // session and nothing that only a new session takes.
+    ...(resumeSessionId === undefined
+      ? { agent: node.agent }
+      : { resumeSessionId }),
     ...systemPromptDelivery,
     taskPrompt,
     extraArgs,
@@ -450,7 +474,26 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
 
   try {
     attempts++;
-    let result = await adapter.invoke(initialInvokeOptions);
+    let result: RuntimeInvokeResult;
+    try {
+      result = await adapter.invoke(initialInvokeOptions);
+    } catch (err) {
+      // FR-E100: the library THROWS when the front did not advertise
+      // `session/load` and the invoke asked to resume. The error class is not
+      // exported, so it is recognised by the name its constructor sets and the
+      // option it names; anything else is not ours to interpret.
+      if (resumeSessionId !== undefined && rejectsResumeSession(err)) {
+        return {
+          success: false,
+          continuations: 0,
+          error: `Node '${
+            nodeId ?? "<unknown>"
+          }' asks to continue a session, but runtime '${runtime}' did not advertise session/load`,
+          error_category: "config_error",
+        };
+      }
+      throw err;
+    }
     if (budgetController?.signal.aborted) {
       return buildBudgetExceeded(attempts);
     }
@@ -768,6 +811,19 @@ async function prepareSystemPromptDelivery(
   }
 
   return { systemPromptFile: childPath };
+}
+
+/**
+ * FR-E100: is this the `AcpUnsupportedOptionError` the ACP adapter throws for
+ * a `resumeSessionId` the front cannot load? Duck-typed on the stable `name`
+ * and `fields` the library documents, because the class itself is not among
+ * the package exports.
+ */
+function rejectsResumeSession(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const { name, fields } = err as { name?: unknown; fields?: unknown };
+  return name === "AcpUnsupportedOptionError" && Array.isArray(fields) &&
+    fields.includes("resumeSessionId");
 }
 
 function mapRuntimeErrorCategory(

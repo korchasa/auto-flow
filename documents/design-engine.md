@@ -36,3 +36,6 @@ across section files in [design-engine/](design-engine/) to fit within the
 - [08-fork-join.md](design-engine/08-fork-join.md) — Design for FR-E95..FR-E97:
   explicit fork/join and branch membership, captured node answers and the
   branch manifest, readiness scheduling with the rolling group guardrail.
+- [09-session-continuation.md](design-engine/09-session-continuation.md) —
+  Design for FR-E100: `session:` resolution, eligibility in `engine/session.ts`,
+  the resume shape on the initial invoke, per-branch session records.

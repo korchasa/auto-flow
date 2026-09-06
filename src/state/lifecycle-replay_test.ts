@@ -6,6 +6,7 @@ import {
   nodeStarted,
 } from "../engine/node-lifecycle.ts";
 import {
+  appendAttemptCompleted,
   getJournalPath,
   loadStateFromJournal,
   replayRunJournal,
@@ -615,5 +616,47 @@ Deno.test("FR-E97 a resumed fork re-runs the journalled branches, not the curren
   } finally {
     Deno.chdir(origCwd);
     await Deno.remove(tmpDir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E100 attempt_completed with branch_key restores branch_sessions", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    const writer = await RunJournalWriter.open(dir, "run-br");
+    await appendRunStart(writer, "run-br");
+    const state = createRunState("run-br", "workflow.yaml", ["build"], {}, {});
+    await nodeStarted(state, "build", undefined, writer);
+    // Branch `a` succeeded, branch `b` failed: only `a` leaves a session
+    // a later node may continue, and neither touches the node's own
+    // `session_id`. The run stops here — the fork never reached its own
+    // `node_completed` — so replay has only the attempt records to go on,
+    // which is the crash-mid-fork case `--resume` must survive.
+    await appendAttemptCompleted(
+      writer,
+      "build",
+      { success: true, continuations: 0, session_id: "ses-a" },
+      undefined,
+      "a",
+    );
+    await appendAttemptCompleted(
+      writer,
+      "build",
+      {
+        success: false,
+        continuations: 0,
+        session_id: "ses-b",
+        error: "boom",
+        error_category: "unknown",
+      },
+      undefined,
+      "b",
+    );
+
+    const replay = await replayRunJournal(dir);
+    assertEquals(replay.state.nodes.build.status, "running");
+    assertEquals(replay.state.nodes.build.branch_sessions, { a: "ses-a" });
+    assertEquals(replay.state.nodes.build.session_id, undefined);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
   }
 });

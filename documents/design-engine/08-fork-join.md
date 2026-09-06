@@ -126,6 +126,15 @@ it expands a list. On resume `Engine.run` replays those records into
 recorded items instead of re-reading a source file that may have changed, and
 a join reached after the resume still finds every branch in its manifest.
 
+**Per-branch session record (FR-E100).** Every branch runs
+`executeAgentNode` under the parent node id, so `state.nodes[id].session_id`
+would keep whichever branch finished last. A successful branch attempt
+therefore writes `branch_sessions[branch.key]` instead, the
+`attempt_completed` record carries `branch_key`, and a downstream fork node
+with `session: <node-id>` continues the target's branch with the same key —
+`revise` branch `k` re-enters `write` branch `k`. Design in
+09-session-continuation.
+
 **Rolling guardrail.** `GroupGuardrail.enter(nodeId, allowedPaths)` /
 `leave()` keep a depth counter: the first node to start opens one bracket, every
 node that joins while it is open is added to the union of scopes and to the

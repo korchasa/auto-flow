@@ -2,6 +2,8 @@
 
 ## FR
 
+- [FR-E1](requirements-engine/01-execution-model.md#31-fr-e1-continuation-mechanism) — Continuation mechanism: re-invoke the agent in the same session when validation fails — [x]
+- [FR-E100](requirements-engine/13-session-continuation.md#3100-fr-e100-session-continuation-across-attempts) — Session continuation across attempts (`session: fresh|continue|<node-id>` on agent nodes and in `defaults`) — [x]
 - [FR-E11](requirements-engine/02-nodes-and-models.md#311-fr-e11-conditional-post-workflow-node-execution-run_on) — Conditional post-workflow node execution (`run_on`), including its resume semantics — [x]
 - [FR-E18](requirements-engine/05-cli-and-observability.md#318-fr-e18-stream-log-timestamps) — Stream-log lines prefixed with `[HH:MM:SS]` wall-clock timestamp (engine-owned write under ACP) — [x]
 - [FR-E20](requirements-engine/05-cli-and-observability.md#320-fr-e20-repeated-file-read-warning) — Stream-log `[WARN]` when same file path read >2 times in one node run — [x]

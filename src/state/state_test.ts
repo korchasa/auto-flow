@@ -644,3 +644,13 @@ Deno.test("assertSafeRelativePath — accepts nested artifact paths", () => {
     assertSafeRelativePath(good, "filename");
   }
 });
+
+Deno.test("FR-E100 markNodeStarted keeps session_id and branch_sessions", () => {
+  const state = createRunState("run-s", "wf.yaml", ["build"], {}, {});
+  state.nodes.build.session_id = "ses-1";
+  state.nodes.build.branch_sessions = { a: "ses-a" };
+  markNodeStarted(state, "build");
+  assertEquals(state.nodes.build.status, "running");
+  assertEquals(state.nodes.build.session_id, "ses-1");
+  assertEquals(state.nodes.build.branch_sessions, { a: "ses-a" });
+});

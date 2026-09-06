@@ -128,6 +128,11 @@ example of engine usage.
   repeats them; `run_on: every_attempt` is the opt-in to running again on
   each invocation.
 - **Continuation:** Re-invoking agents within same session on validation failure
+  (FR-E1). Across attempts (FR-E100): `session: continue` on a loop body node
+  re-enters its last successful iteration's session, `session: <node-id>` on an
+  agent node re-enters an ancestor's (per branch key in a fork group); resumed
+  attempts get no system prompt, and a missing session fails the node
+  (`config_error`) — no fallback to fresh
   (max N per node)
 - **Resume:** Failed/interrupted runs resumable via `--resume <run-id>`;
   completed nodes skipped based on `state.json`

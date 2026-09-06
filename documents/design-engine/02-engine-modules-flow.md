@@ -279,7 +279,8 @@
   function-level JSDoc on exported functions. 4 complex functions require
   inline `// Why:` comments explaining non-obvious design decisions:
   (1) `runAgent()` in `agent.ts` — continuation/resume semantics with shared
-  session_id; (2) `validateNode()` in `config.ts` — recursive validation with
+  session_id, and `resumeSessionId` on the initial invoke (FR-E100, see
+  09-session-continuation); (2) `validateNode()` in `config.ts` — recursive validation with
   dual input-ID namespace; (3) `mergeDefaults()` in `config.ts` — 3-tier
   cascade order and legacy normalization; (4) `checkFrontmatterField()` in
   `validate.ts` — regex-over-YAML-parser for partial-document handling.

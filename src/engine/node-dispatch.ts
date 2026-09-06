@@ -8,7 +8,12 @@ import type { AgentResult } from "./agent.ts";
 import { resolveInputArtifacts, runAgent, runShellCommand } from "./agent.ts";
 import { persistAnswer } from "./answer.ts";
 import { interpolate } from "../config/template.ts";
-import { resolveBudget, resolveToolFilter } from "../config/config.ts";
+import {
+  resolveBudget,
+  resolveSession,
+  resolveToolFilter,
+} from "../config/config.ts";
+import { resolveSessionToContinue } from "./session.ts";
 import { runWithGuardrail } from "../isolation/guardrail.ts";
 import { handleAgentHitl } from "../hitl/hitl-handler.ts";
 import { isHitlConfigured } from "../hitl/hitl.ts";
@@ -168,6 +173,37 @@ export async function executeAgentNode(
     return result;
   }
 
+  // FR-E100: which session this attempt re-enters. Inside a fork group the
+  // record is per branch key. A session the node asked for but nobody
+  // recorded fails the node here, before any runtime turn — no fallback.
+  const branchKey = ctx.branch?.key;
+  const session = resolveSessionToContinue(
+    eng.state,
+    nodeId,
+    resolveSession(node, eng.config.defaults),
+    branchKey,
+  );
+  if ("error" in session) {
+    await eng.nodeFailed(nodeId, session.error, "config_error");
+    return null;
+  }
+  if ("sessionId" in session) {
+    eng.output.status(nodeId, `session: continuing ${session.owner}`);
+  }
+  // A branch attempt records its session under its key, and only when it
+  // succeeded; every branch runs under this one node id, so the node's own
+  // `session_id` would keep whichever branch finished last.
+  const recordSession = (r: AgentResult): void => {
+    const sid = r.session_id ?? r.output?.session_id;
+    if (sid === undefined) return;
+    const record = eng.state.nodes[nodeId];
+    if (branchKey === undefined) {
+      record.session_id = sid;
+    } else if (r.success) {
+      record.branch_sessions = { ...record.branch_sessions, [branchKey]: sid };
+    }
+  };
+
   // Normal path: run agent
   // Verbose: resolve and show input artifacts
   const inputArtifacts = await resolveInputArtifacts(ctx.input, eng.workDir);
@@ -212,6 +248,7 @@ export async function executeAgentNode(
         cwd,
         maxTurns: resolveBudget(node, eng.config.defaults)?.max_turns,
         processRegistry: eng.options.processRegistry,
+        resumeSessionId: "sessionId" in session ? session.sessionId : undefined,
       }),
   );
 
@@ -223,7 +260,13 @@ export async function executeAgentNode(
       error: leak.message,
       error_category: "scope_violation",
     };
-    await appendAttemptCompleted(eng.journal, nodeId, failed);
+    await appendAttemptCompleted(
+      eng.journal,
+      nodeId,
+      failed,
+      undefined,
+      branchKey,
+    );
     return failed;
   }
 
@@ -233,7 +276,13 @@ export async function executeAgentNode(
       result.error ?? "Agent failed",
       result.error_category ?? "unknown",
     );
-    await appendAttemptCompleted(eng.journal, nodeId, result);
+    await appendAttemptCompleted(
+      eng.journal,
+      nodeId,
+      result,
+      undefined,
+      branchKey,
+    );
     return result;
   }
 
@@ -263,7 +312,13 @@ export async function executeAgentNode(
         error: msg,
         error_category: "scope_violation",
       };
-      await appendAttemptCompleted(eng.journal, nodeId, failed);
+      await appendAttemptCompleted(
+        eng.journal,
+        nodeId,
+        failed,
+        undefined,
+        branchKey,
+      );
       return failed;
     }
   }
@@ -307,13 +362,19 @@ export async function executeAgentNode(
       nodeFailed: eng.nodeFailed,
       nodeWaiting: eng.nodeWaiting,
     });
-    await appendAttemptCompleted(eng.journal, nodeId, hitlResult);
+    // FR-E100: a branch that went through a human round is still continuable.
+    if (hitlResult) recordSession(hitlResult);
+    await appendAttemptCompleted(
+      eng.journal,
+      nodeId,
+      hitlResult,
+      undefined,
+      branchKey,
+    );
     return hitlResult;
   }
 
-  if (result.session_id) {
-    eng.state.nodes[nodeId].session_id = result.session_id;
-  }
+  recordSession(result);
   eng.state.nodes[nodeId].continuations = result.continuations;
 
   // Save agent log (JSON output + JSONL transcript)
@@ -327,7 +388,13 @@ export async function executeAgentNode(
   // a `join` can read it as a file, patch or verdict alike.
   if (result.success) await persistAnswer(ctx, result.answer ?? "");
 
-  await appendAttemptCompleted(eng.journal, nodeId, result);
+  await appendAttemptCompleted(
+    eng.journal,
+    nodeId,
+    result,
+    undefined,
+    branchKey,
+  );
   return result;
 }
 

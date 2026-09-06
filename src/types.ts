@@ -132,6 +132,11 @@ export interface NodeBudget {
 export interface WorkflowDefaults extends NodeSettings {
   /** When true, skip worktree creation and run in CWD (default false). */
   worktree_disabled?: boolean;
+  /** FR-E100: session policy for every agent node that says nothing itself.
+   * `continue` lets a loop body node pick up the session of its own last
+   * successful attempt; `fresh` (default) opens a new session per attempt. A
+   * node id is not accepted here — that value is per node. */
+  session?: "fresh" | "continue";
   /** Maximum parallel node executions; 0 means unlimited (default). */
   max_parallel?: number;
   /** Runtime used for agent execution when not overridden (default: claude). */
@@ -363,6 +368,16 @@ export interface NodeConfig {
   /** Per-node budget limits (FR-E47). Cascades: node → enclosing loop → defaults. */
   budget?: NodeBudget;
 
+  /** FR-E100: which runtime session this node's attempt runs in. `fresh`
+   * opens a new one (default); `continue` re-enters the session of the node's
+   * own last successful attempt in this run — only a loop body node has one,
+   * so elsewhere it is a no-op; a node id re-enters the session that agent
+   * ancestor recorded, branch by branch inside a fork group. The resumed
+   * invoke carries the task prompt but no system prompt, and a session that
+   * is missing, or a runtime front that cannot load one, fails the node —
+   * there is no fallback to a fresh session. Valid on `agent` nodes only. */
+  session?: string;
+
   /** Whitelist of tools (FR-E48). REPLACE-semantics cascade:
    * node → enclosing loop → defaults. Mutex with `disallowed_tools`. */
   allowed_tools?: string[];
@@ -494,6 +509,11 @@ export interface NodeState {
   continuations?: number;
   /** Claude CLI session ID for resume and log correlation. */
   session_id?: string;
+  /** FR-E100: session id per `branch.key` for a node that ran once per
+   * branch of a fork group. Every branch runs under this one node id, so a
+   * single `session_id` would keep whichever branch finished last; written
+   * only for a successful branch attempt. */
+  branch_sessions?: Record<string, string>;
   /** Serialized HitlQuestion JSON; populated when status is "waiting". */
   question_json?: string;
   /** Per-node cost from CliRunOutput.total_cost_usd (FR-E17). */
@@ -731,6 +751,10 @@ export interface AttemptJournalEvent extends RunJournalEventBase {
   node_id: string;
   /** Loop iteration for body-node attempts. */
   iteration?: number;
+  /** FR-E100: the fork branch this attempt ran for, when the node ran once
+   * per branch. Replay files `session_id` under `branch_sessions[branch_key]`
+   * instead of the node's single `session_id`. */
+  branch_key?: string;
   /** Runtime session ID, when reported. */
   session_id?: string;
   /** Number of continuations used by the attempt. */

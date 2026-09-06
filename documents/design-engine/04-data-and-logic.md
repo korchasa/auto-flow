@@ -29,7 +29,9 @@
     a key in `nodes`. Body node ordering derived from `inputs` declarations
     via topo-sort (>1 entry requires at least one `inputs` reference to
     prevent disconnected graph with arbitrary order).
-  - NodeState: `{ ..., cost_usd?: number, result?: string }` — per-node cost
+  - NodeState: `{ ..., cost_usd?: number, result?: string,
+    branch_sessions?: Record<string, string> }` — `branch_sessions` = session
+    per fork branch key (FR-E100, 09-session-continuation); per-node cost
     from `CliRunOutput.total_cost_usd` and result excerpt (≤400 chars) from
     inline excerpt logic (filter empty → take 3 → join ` | ` → truncate 400),
     both set at completion via `markNodeCompleted()` optional params (FR-E17,
@@ -53,8 +55,10 @@
   - RunJournalEvent: `{ schema_version, run_id, seq, event_id, kind, ts,
     ...payload }` — bootstrap, node lifecycle, attempt, loop, and terminal
     run facts, one JSONL record per fact (FR-E69).
-  - WorkflowDefaults: `{ ..., budget?: { max_usd?: number; max_turns?: number } }`
-    — default budget applied to all nodes via cascade merge (FR-E47)
+  - WorkflowDefaults: `{ ..., budget?: { max_usd?: number; max_turns?: number },
+    session?: "fresh"|"continue" }` — default budget applied to all nodes via
+    cascade merge (FR-E47); `session` = workflow-wide session policy, and
+    `NodeConfig.session?: string` its per-node override (FR-E100)
   - NodeConfig: `{ ..., run_on?: "always"|"success"|"failure", phase?: string,
     env?: Record<string, string>, model?: string,
     allowed_paths?: string[] }` — `run_on` for conditional post-workflow
@@ -287,7 +291,8 @@
        `<nodeDirAbs>/hitl.jsonl` (FR-E64; round counter from existing
        line count for crash-resume) BEFORE the resume call.
     8. Engine resumes the session through the same adapter
-       (`resumeSessionId` + same `mcpServers` so nested HITL works).
+       (`resumeSessionId` + same `mcpServers` so nested HITL works). A fork
+       branch records the resumed session under its key (FR-E100).
     9. On `timeout` exceeded: node marked `failed`.
   - **Runtime-Normalized Logging**:
     Agent outputs are persisted as runtime-agnostic JSON logs using the

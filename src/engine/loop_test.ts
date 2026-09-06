@@ -13,6 +13,7 @@ import type {
   CliRunOutput,
   NodeConfig,
   ResolvedNodeSettings,
+  RunState,
   TemplateContext,
   WorkflowConfig,
 } from "../types.ts";
@@ -634,6 +635,236 @@ Deno.test("FR-E86 runLoop iterates body nodes until the exit value", async () =>
     // its last iteration ($0.02 of the $0.04 actually spent). Locked here so
     // any change to loop cost aggregation is a deliberate one.
     assertEquals(state.total_cost_usd, 0.02);
+  } finally {
+    await Deno.remove(tmpDir, { recursive: true });
+  }
+});
+
+// --- FR-E100: session continuation across loop iterations ---
+
+const LOOP_SETTINGS: ResolvedNodeSettings = {
+  max_continuations: 0,
+  timeout_seconds: 30,
+  on_error: "fail",
+  max_retries: 1,
+  retry_delay_seconds: 1,
+};
+
+function sessionLoopConfig(
+  bodyExtra: Partial<NodeConfig>,
+  defaults: WorkflowConfig["defaults"] = { runtime: "opencode" },
+): WorkflowConfig {
+  return {
+    name: "loop-session",
+    version: "1",
+    defaults,
+    nodes: {
+      write: {
+        type: "agent",
+        label: "Write",
+        prompt: "write",
+        settings: LOOP_SETTINGS,
+      } as NodeConfig,
+      "impl-loop": {
+        type: "loop",
+        label: "Impl Loop",
+        inputs: ["write"],
+        condition_node: "verify",
+        condition_field: "verdict",
+        exit_value: "PASS",
+        max_iterations: 3,
+        nodes: {
+          verify: {
+            type: "agent",
+            label: "Verify",
+            prompt: "verify the work",
+            system_prompt: "You verify.",
+            settings: LOOP_SETTINGS,
+            ...bodyExtra,
+          } as NodeConfig,
+        },
+      } as NodeConfig,
+    },
+  };
+}
+
+function loopCtxFactory(tmpDir: string): LoopRunOptions["buildCtx"] {
+  return (nodeId, iteration) => {
+    const nodeDir = `${tmpDir}/${nodeId}-${iteration}`;
+    Deno.mkdirSync(nodeDir, { recursive: true });
+    return {
+      node_dir: nodeDir,
+      run_dir: tmpDir,
+      run_id: "run-loop",
+      workDir: ".",
+      args: {},
+      env: {},
+      input: {},
+    };
+  };
+}
+
+Deno.test("FR-E100 loop body node — continues the previous iteration's session when opted in", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  try {
+    const config = sessionLoopConfig({ session: "continue" });
+    const state = createRunState(
+      "run-loop",
+      "cfg.yaml",
+      ["write", "impl-loop", "verify"],
+      {},
+      {},
+    );
+    const adapter = createFakeRuntime(async (call) => {
+      const verdict = call.index === 1 ? "FAIL" : "PASS";
+      await call.write(
+        `${tmpDir}/verify-${call.index}/report.md`,
+        `---\nverdict: ${verdict}\n---\n`,
+      );
+      return call.reply({ result: verdict, sessionId: `ses-${call.index}` });
+    });
+
+    const result = await runLoop({
+      loopNodeId: "impl-loop",
+      config,
+      state,
+      runtimeAdapter: adapter,
+      buildCtx: loopCtxFactory(tmpDir),
+    });
+
+    assertEquals(result.success, true);
+    assertEquals(result.iterations, 2);
+    assertEquals(adapter.calls.length, 2);
+    // Iteration 1 opens a session and delivers the system prompt.
+    assertEquals(adapter.calls[0].resumeSessionId, undefined);
+    assertEquals(adapter.calls[0].systemPrompt, "You verify.");
+    // Iteration 2 re-enters it with the resume shape.
+    assertEquals(adapter.calls[1].resumeSessionId, "ses-1");
+    assertEquals(adapter.calls[1].systemPrompt, undefined);
+    assertEquals(adapter.calls[1].taskPrompt, "verify the work");
+    // The live state carries the latest session after each attempt.
+    assertEquals(state.nodes.verify.session_id, "ses-2");
+  } finally {
+    await Deno.remove(tmpDir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E100 loop body node — fresh by default", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  try {
+    const config = sessionLoopConfig({});
+    const state = createRunState(
+      "run-loop",
+      "cfg.yaml",
+      ["write", "impl-loop", "verify"],
+      {},
+      {},
+    );
+    const adapter = createFakeRuntime(async (call) => {
+      const verdict = call.index === 1 ? "FAIL" : "PASS";
+      await call.write(
+        `${tmpDir}/verify-${call.index}/report.md`,
+        `---\nverdict: ${verdict}\n---\n`,
+      );
+      return call.reply({ result: verdict, sessionId: `ses-${call.index}` });
+    });
+
+    const result = await runLoop({
+      loopNodeId: "impl-loop",
+      config,
+      state,
+      runtimeAdapter: adapter,
+      buildCtx: loopCtxFactory(tmpDir),
+    });
+
+    assertEquals(result.success, true);
+    assertEquals(adapter.calls.length, 2);
+    assertEquals(adapter.calls[1].resumeSessionId, undefined);
+    assertEquals(adapter.calls[1].systemPrompt, "You verify.");
+  } finally {
+    await Deno.remove(tmpDir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E100 loop body node — fails clearly when the session to continue is missing", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  try {
+    const config = sessionLoopConfig({ session: "write" });
+    const state = createRunState(
+      "run-loop",
+      "cfg.yaml",
+      ["write", "impl-loop", "verify"],
+      {},
+      {},
+    );
+    // `write` never recorded a session (it stands pending here).
+    const adapter = createFakeRuntime((call) => call.reply());
+
+    const result = await runLoop({
+      loopNodeId: "impl-loop",
+      config,
+      state,
+      runtimeAdapter: adapter,
+      buildCtx: loopCtxFactory(tmpDir),
+    });
+
+    assertEquals(result.success, false);
+    assertEquals(result.error_category, "config_error");
+    assertEquals(
+      result.error,
+      "Body node 'verify' failed on iteration 1: Node 'verify' asks to continue the session of 'write' (session: write), but 'write' has no completed attempt that recorded one",
+    );
+    assertEquals(state.nodes.verify.status, "failed");
+    assertEquals(state.nodes.verify.error_category, "config_error");
+    // No runtime turn was spent: the node failed before invoking anything.
+    assertEquals(adapter.calls.length, 0);
+  } finally {
+    await Deno.remove(tmpDir, { recursive: true });
+  }
+});
+
+Deno.test("FR-E100 loop body node — a replayed failed attempt is not continued", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  try {
+    const run = async (prior: Partial<RunState["nodes"][string]>) => {
+      const config = sessionLoopConfig({ session: "continue" });
+      const state = createRunState(
+        "run-loop",
+        "cfg.yaml",
+        ["write", "impl-loop", "verify"],
+        {},
+        {},
+      );
+      state.nodes.verify = { ...state.nodes.verify, ...prior };
+      const adapter = createFakeRuntime(async (call) => {
+        await call.write(
+          `${tmpDir}/verify-${call.index}/report.md`,
+          `---\nverdict: PASS\n---\n`,
+        );
+        return call.reply({ result: "PASS", sessionId: "ses-new" });
+      });
+      const result = await runLoop({
+        loopNodeId: "impl-loop",
+        config,
+        state,
+        runtimeAdapter: adapter,
+        buildCtx: loopCtxFactory(tmpDir),
+      });
+      assertEquals(result.success, true);
+      return adapter.calls[0].resumeSessionId;
+    };
+
+    // `--resume` after the attempt failed: the failed session stays closed.
+    assertEquals(
+      await run({ status: "failed", session_id: "ses-old", error: "boom" }),
+      undefined,
+    );
+    // `--resume` after a crash between iterations: the completed attempt's
+    // session is still the one to continue.
+    assertEquals(
+      await run({ status: "completed", session_id: "ses-old" }),
+      "ses-old",
+    );
   } finally {
     await Deno.remove(tmpDir, { recursive: true });
   }
