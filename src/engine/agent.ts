@@ -125,7 +125,7 @@ export interface AgentRunOptions {
   runtimeArgs?: ExtraArgsMap;
   /** Permission mode for this agent (maps to --permission-mode CLI flag). */
   permissionMode?: string;
-  /** Claude model override (e.g. "claude-sonnet-4-6"). Omit = CLI default. */
+  /** Model override in the id the runtime front declares (e.g. "sonnet"). Omit = front default. */
   model?: string;
   /** Resolved reasoning-effort dial (FR-E42). Forwarded to the runtime adapter
    * on initial AND continuation invocations; the library itself filters

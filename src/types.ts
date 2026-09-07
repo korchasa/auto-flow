@@ -148,7 +148,7 @@ export interface WorkflowDefaults extends NodeSettings {
   /** Permission mode for all agent nodes (maps to --permission-mode CLI flag).
    * Overridable per-node via NodeConfig.permission_mode. */
   permission_mode?: PermissionMode;
-  /** Default Claude model for all agent nodes (e.g. "claude-sonnet-4-6"). */
+  /** Default model for all agent nodes, in the id the runtime front declares (e.g. "sonnet"). */
   model?: string;
   /** Default reasoning effort for all agent nodes (FR-E42).
    * Values: minimal | low | medium | high. Maps to Claude's `--effort`,
@@ -222,7 +222,7 @@ export interface NodeConfig {
   /** Templateable system context passed via --append-system-prompt.
    * Supports `{{...}}` interpolation and `{{file()}}` for inlining agent definitions. */
   system_prompt?: string;
-  /** Claude model override for this node (e.g. "claude-opus-4-6"). */
+  /** Model override for this node, in the id the runtime front declares (e.g. "opus"). */
   model?: string;
   /** Reasoning-effort override for this node (FR-E42). Cascade:
    * node → enclosing loop → defaults. See {@link WorkflowDefaults.effort}. */

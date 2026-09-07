@@ -116,10 +116,10 @@ redefined role as the node's answer, are specified in
   **Config schema:**
   ```yaml
   defaults:
-    model: "claude-sonnet-4-6"  # default for all nodes
+    model: "sonnet"  # default for all nodes; ids are those the ACP front declares
   nodes:
     architect:
-      model: "claude-opus-4-6"    # override for complex stages
+      model: "opus"    # override for complex stages
   ```
 
   **Engine behavior:**
@@ -247,7 +247,7 @@ redefined role as the node's answer, are specified in
   ```yaml
   defaults:
     runtime: claude
-    model: claude-opus-4-6
+    model: opus
     fallback:
       runtime: codex              # mandatory; must differ from primary
       model: gpt-5-codex          # optional; falls back to adapter default
