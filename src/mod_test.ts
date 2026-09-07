@@ -6,7 +6,13 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { applyJsonPointerOp, runMcpServer } from "./mod.ts";
+import {
+  applyJsonPointerOp,
+  CURRENT_CONFIG_SCHEMA_VERSION,
+  migrateWorkflow,
+  MIGRATION_STEPS,
+  runMcpServer,
+} from "./mod.ts";
 
 Deno.test("FR-E73 mod reexports runMcpServer as a function", () => {
   assertEquals(typeof runMcpServer, "function");
@@ -14,4 +20,10 @@ Deno.test("FR-E73 mod reexports runMcpServer as a function", () => {
 
 Deno.test("FR-E73 mod reexports applyJsonPointerOp as a function", () => {
   assertEquals(typeof applyJsonPointerOp, "function");
+});
+
+Deno.test("FR-E101 mod reexports the config migration API for embedders", () => {
+  assertEquals(typeof migrateWorkflow, "function");
+  assertEquals(typeof CURRENT_CONFIG_SCHEMA_VERSION, "number");
+  assertEquals(Array.isArray(MIGRATION_STEPS), true);
 });

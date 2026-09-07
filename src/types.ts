@@ -104,6 +104,9 @@ export interface WorkflowConfig {
   name: string;
   /** Config schema version; only "1" is currently supported. */
   version: "1";
+  /** Migrated config schema version (FR-E101). Stamped by `migrateWorkflow()`
+   * on every load; absent in the raw YAML means "oldest known version". */
+  schemaVersion?: number;
   /** Global defaults applied to all nodes unless overridden at node level. */
   defaults?: WorkflowDefaults;
   /** Global environment variables accessible via `{{env.<key>}}` in templates. */

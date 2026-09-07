@@ -190,6 +190,7 @@ export class Engine {
         this.options.config_path,
         undefined,
         (m) => this.output.warn(m),
+        (m) => this.output.status("config", m),
       );
       const levels = buildLevels(this.config);
       const labels: Record<string, string> = {};
@@ -266,6 +267,7 @@ export class Engine {
       configPath,
       this.workDir === "." ? undefined : this.workDir,
       (m) => this.output.warn(m),
+      (m) => this.output.status("config", m),
     );
     // Merge env overrides
     const env = { ...this.config.env, ...this.options.env_overrides };

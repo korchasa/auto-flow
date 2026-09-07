@@ -13,6 +13,7 @@ import {
   resolveRuntimeConfig,
 } from "@korchasa/ai-ide-cli/runtime";
 import { validateTemplateVars } from "./template.ts";
+import { migrateWorkflow, MIGRATION_STEPS } from "./migrate.ts";
 import { globsOverlap } from "../isolation/glob.ts";
 import {
   REASONING_EFFORT_VALUES,
@@ -102,18 +103,25 @@ export function extractWorktreeDisabled(yaml: string): boolean {
  * @param workflowDir — workDir-relative directory containing the workflow.yaml,
  *   used for resolving {{flow_file()}} references. Defaults to "" (workDir root).
  * @param warnSink — optional callback for non-fatal warnings (ACP tool-filter
- *   downgrade etc.). Defaults to no-op. */
+ *   downgrade etc.). Defaults to no-op.
+ * @param logSink — optional informational audit-line sink (FR-E101 config
+ *   migration lines). Defaults to no-op. Separate from `warnSink` so migration
+ *   lines surface on the status channel instead of being labelled WARN. */
 export function parseConfig(
   yaml: string,
   workDir?: string,
   workflowDir?: string,
   warnSink?: ConfigWarnSink,
+  logSink?: ConfigWarnSink,
 ): WorkflowConfig {
   const raw = parseYaml(yaml);
   if (!raw || typeof raw !== "object") {
     throw new Error("Workflow config must be a YAML object");
   }
   const config = raw as Record<string, unknown>;
+  // FR-E101: normalise old shapes BEFORE validation so legacy configs never
+  // surface as opaque schema errors deep in execution.
+  migrateWorkflow(config, MIGRATION_STEPS, logSink);
   validateSchema(config);
   return mergeDefaults(
     config as unknown as WorkflowConfig,
@@ -132,15 +140,18 @@ export function workflowConfigPath(workflowDir: string): string {
 /** Load and parse workflow config from a file path.
  * @param workDir — base directory for resolving {{file()}} references.
  *   `{{flow_file()}}` references resolve against `workDir/dirname(path)`.
- * @param warnSink — optional non-fatal warning callback (see {@link parseConfig}). */
+ * @param warnSink — optional non-fatal warning callback (see {@link parseConfig}).
+ * @param logSink — optional informational audit-line sink (FR-E101), forwarded
+ *   to {@link parseConfig}. */
 export async function loadConfig(
   path: string,
   workDir?: string,
   warnSink?: ConfigWarnSink,
+  logSink?: ConfigWarnSink,
 ): Promise<WorkflowConfig> {
   const yaml = await Deno.readTextFile(path);
   const wfDir = workflowDirFromConfigPath(path, workDir);
-  return parseConfig(yaml, workDir, wfDir, warnSink);
+  return parseConfig(yaml, workDir, wfDir, warnSink, logSink);
 }
 
 /** Compute the workDir-relative workflow directory from a (possibly
@@ -173,6 +184,19 @@ function validateSchema(config: Record<string, unknown>): void {
   if (config.version !== "1") {
     throw new Error(
       `Unsupported workflow config version: ${config.version}. Expected "1"`,
+    );
+  }
+  // FR-E101: migration stamps this before validation; a missing or invalid
+  // value here means the config bypassed migrateWorkflow (defense in depth).
+  if (
+    typeof config.schemaVersion !== "number" ||
+    !Number.isInteger(config.schemaVersion) ||
+    config.schemaVersion < 1
+  ) {
+    throw new Error(
+      `Config 'schemaVersion' must be a positive integer, got ${
+        JSON.stringify(config.schemaVersion)
+      }`,
     );
   }
   if (

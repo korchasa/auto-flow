@@ -18,7 +18,8 @@ FR-IDs are stable — never renumber them on move.
   forwarding and condition-field validation.
 - [03-config-and-validation.md](requirements-engine/03-config-and-validation.md)
   — Configuration schema, drift detection, dry-run, prompt-path validation,
-  `prepare_command`, scope-based modification detection, frontmatter fields.
+  `prepare_command`, scope-based modification detection, frontmatter fields,
+  config migration layer (FR-E101).
 - [04-runtime-and-hooks.md](requirements-engine/04-runtime-and-hooks.md) —
   Agent log storage, HITL, failure hook, stale-path cleanup, `{{file()}}`
   template, permission mode, tool filtering, CLI auto-update prevention.
@@ -153,3 +154,4 @@ FR-IDs are stable — never renumber them on move.
 - FR-E97 (Input-Driven Node Scheduling)                → 10-fork-join
 - FR-E98 (ACP-Unsupported Invoke Options)              → 11-acp-transport-contract
 - FR-E100 (Session Continuation Across Attempts)       → 13-session-continuation
+- FR-E101 (Config Migration Layer `migrateWorkflow`)   → 03-config-and-validation

@@ -9,9 +9,21 @@ Workflow YAML → validated, defaults-merged `WorkflowConfig`, plus the
   `file()`, `flow_file()`, `bash()`. Single-pass; unresolved vars throw.
 - `validate.ts` — node output rules (`artifact`, `frontmatter_field`,
   `custom_script`, `git_*`).
+- `migrate.ts` — FR-E101 `migrateWorkflow`: ordered `MIGRATION_STEPS`
+  chain run by `parseConfig` after the YAML parse and before
+  `validateSchema`; stamps `schemaVersion`, logs each applied step through
+  the load-time sink, fails fast on a config newer than the engine.
 
 ## Key decisions
 
+- **Migration steps must not touch `defaults.worktree_disabled`.**
+  `extractWorktreeDisabled()` pre-parses that key from the raw YAML before
+  `parseConfig` runs (FR-E24), so a step that renamed or moved it would be
+  read by the engine on the un-migrated shape and silently ignored.
+- **`version` vs `schemaVersion` are two gates.** `version: "1"` is the
+  config language generation — an old binary must refuse anything else.
+  `schemaVersion` is the revision within that generation and migrates
+  forward silently; a value newer than the engine fails at load.
 - **Unknown keys are rejected, never ignored** — nodes (`NODE_CONFIG_KEYS`),
   `settings`, `budget`, `defaults.hitl`. A mistyped `validat:` silently
   disabled every output check of a node before this was enforced.

@@ -160,3 +160,38 @@
     regression-locked; config accepts all three parameterless rules; runtime
     checks clean/dirty worktree, ignored files, default/non-default branch,
     and pushed/unpushed branch states).
+
+
+
+### 3.101 FR-E101: Config Migration Layer (`migrateWorkflow`)
+
+- **Description:** The engine normalizes parsed workflow configs through a
+  versioned migration chain BEFORE validation. `workflow.yaml` MAY declare
+  `schemaVersion: <int>`; an absent field means "oldest known version", so
+  unversioned legacy configs migrate too. On every `loadConfig`,
+  `migrateWorkflow(parsed)` applies the ordered registry of migration steps
+  `v<N> → v<N+1>` until the config reaches the engine's current schema
+  version, then stamps the resolved `schemaVersion` onto the parsed config.
+  Each applied step is logged to run output (`config: migrated schema
+  v<N> → v<N+1>`), making schema evolution explicit and auditable. A config
+  stamped with a version NEWER than the engine supports fails fast at load
+  with a clear error — silent forward-incompatibility is forbidden. Because
+  migration runs before validation, old shapes are normalized into the
+  current schema and never surface as opaque errors deep in execution.
+
+  **Stored run state is out of this chain.** The originating issue's
+  resume-path clause predates the journal architecture: no `state.json`
+  exists (FR-E69). Journal records already carry per-record `schema_version`
+  under the FR-E69 replay contract, so stored run state needs no config
+  migration chain; journal schema evolution belongs to the replay contract,
+  not to `migrateWorkflow`.
+- **Motivation:** The FR-E52 incident proved schema drift silently breaks old
+  `workflow.yaml` files and run-resume assumptions — mismatches surface as
+  opaque errors deep in execution. Schema evolution must be explicit,
+  versioned, and logged.
+- **Dep:** FR-E4, FR-E7, FR-E69.
+- **Acceptance criteria:**
+  - **Tests:** `config_test.ts` (FR-E101; regression-locked; no-op at
+    current version, single bump, multi-step chain, absent
+    `schemaVersion` default, newer-version fail-fast).
+  - [ ] Applied migrations visible in run output at default verbosity.
