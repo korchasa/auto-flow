@@ -52,7 +52,32 @@
     array (empty = valid). Pure function, no I/O. Co-located with `resolve()`
     to maintain single source of truth for valid template variables
   - `config.ts` — YAML parsing, schema validation, defaults merge,
-    `run_on` normalization. `extractWorktreeDisabled()`: lightweight pre-parse
+    `run_on` normalization.
+    **Config migration layer (FR-E101):** new module `src/config/migrate.ts`
+    (one-concern-per-file, cf. `template.ts`/`validate.ts`):
+    `CURRENT_CONFIG_SCHEMA_VERSION = 1`;
+    `MigrationStep = { from: number; to: number; apply: (raw: Record<string,
+    unknown>) => void }`; `MIGRATION_STEPS: MigrationStep[] = []` (skeleton
+    no-op chain; first real step deferred per FR-E101).
+    `migrateWorkflow(raw, steps = MIGRATION_STEPS, log?)`: resolves start
+    version (absent `schemaVersion` → oldest known = `CURRENT −
+    steps.length`, contiguity asserted), applies ordered steps, throws on
+    `schemaVersion > CURRENT` (fail-fast at load — house style), stamps the
+    resolved version on the parsed config, emits
+    `config: migrated schema v<N> → v<N+1>` per applied step via `log`.
+    `parseConfig`/`loadConfig` gain optional `logSink?: ConfigWarnSink`
+    (positional, no-op default — MCP `get_workflow` and existing call sites
+    unchanged); engine wires `(m) => this.output.status("config", m)` at the
+    fresh-run and dry-run load sites — prefix-free default-verbosity channel
+    (`ConfigWarnSink` would mislabel the informational audit line `WARN: `).
+    `validateSchema` adds `schemaVersion` to allowed keys + positive-int
+    check (stamp always present post-migration). The `version: "1"`
+    document-format gate (FR-E4/E7) is a different concern and stays
+    untouched; journal `schema_version` (FR-E69 replay contract) stays
+    outside this chain. Migration steps MUST NOT touch
+    `defaults.worktree_disabled` — `extractWorktreeDisabled()` pre-parses
+    the raw YAML before `parseConfig`.
+    `extractWorktreeDisabled()`: lightweight pre-parse
     extracting only `defaults.worktree_disabled` for two-phase loading (FR-E24). `validateNode()`: if `run_on` present, must be
     one of `"always"|"success"|"failure"`; error:
     `Node '<id>' has invalid run_on value '<val>'. Must be one of: always, success, failure, every_attempt`.
