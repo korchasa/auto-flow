@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.12.3](https://github.com/korchasa/flowai-workflow/compare/v0.12.2...v0.12.3) (2026-09-07)
+
+### Bug Fixes
+
+* **sdlc:** name models by the ids the claude ACP front declares ([0fee16f](https://github.com/korchasa/flowai-workflow/commit/0fee16f50a7a7eabf55b4e8e02f67ecfcde4152c))
 ## [0.12.2](https://github.com/korchasa/flowai-workflow/compare/v0.12.1...v0.12.2) (2026-09-07)
 
 ### Bug Fixes
