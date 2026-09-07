@@ -94,6 +94,16 @@ from nothing. Index: [requirements-engine.md](../requirements-engine.md).
   - [x] SDS and README describe the field, the resume shape and
     `branch_sessions`. Evidence: `documents/design-engine/09-session-continuation.md:1`,
     `README.md` (`## Configuration`, `session` bullet).
-  - [ ] The dogfood `github-inbox` and `github-inbox-opencode` loops opt the
-    Developer node in (`build: session: continue`), and one live run of each
-    shows iteration 2 resuming iteration 1's session in `stream.log`.
+  - [x] The dogfood `github-inbox` and `github-inbox-opencode` loops opt the
+    Developer node in (`build: session: continue`). Evidence:
+    `.flowai-workflow/github-inbox/workflow.yaml` (`build:` node),
+    `.flowai-workflow/github-inbox-opencode/workflow.yaml` (`build:` node).
+  - [x] A live `github-inbox` (claude) run shows iteration 2 resuming
+    iteration 1's session. Evidence: run `20260907T032306` (2026-09-07):
+    the journal records `session_id 019da1fc-…` for `build` iteration 1,
+    the run log prints `build session: continuing build` at iteration 2
+    start, and `build/stream.log` replays iteration 1's turns 2 s later
+    (a fresh session could not have produced them).
+  - [ ] A live `github-inbox-opencode` run shows the same. Not exercised
+    yet: run `20260907T032722` (2026-09-07) recorded `build`'s session
+    (`ses_…`) but QA passed on iteration 1, so no resume happened.
