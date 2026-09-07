@@ -20,8 +20,11 @@ export const CURRENT_CONFIG_SCHEMA_VERSION = 1;
 
 /** One ordered migration step: normalises a v`from` config in place to v`to`. */
 export interface MigrationStep {
+  /** Schema version the step reads. */
   from: number;
+  /** Schema version the step produces — always `from + 1`. */
   to: number;
+  /** Normalise the raw parsed config in place from v`from` to v`to`. */
   apply: (raw: Record<string, unknown>) => void;
 }
 

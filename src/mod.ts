@@ -56,6 +56,13 @@ export {
   parseConfig,
 } from "./config/config.ts";
 export type { ConfigWarnSink } from "./config/config.ts";
+// FR-E101: embedders that load a config themselves must run the same chain.
+export {
+  CURRENT_CONFIG_SCHEMA_VERSION,
+  migrateWorkflow,
+  MIGRATION_STEPS,
+} from "./config/migrate.ts";
+export type { MigrationLogSink, MigrationStep } from "./config/migrate.ts";
 export { buildLevels, buildLoopBodyOrder } from "./engine/dag.ts";
 export type { ExecutionLevels } from "./engine/dag.ts";
 export {
