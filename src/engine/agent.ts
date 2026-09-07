@@ -785,7 +785,7 @@ async function prepareSystemPromptDelivery(
     ctx: TemplateContext;
     cwd?: string;
   },
-): Promise<{ systemPrompt?: string; systemPromptFile?: string }> {
+): Promise<{ systemPrompt?: string }> {
   const { nodeId, runtime, systemPromptTemplate, ctx, cwd } = opts;
   if (!systemPromptTemplate) return {};
 
@@ -794,7 +794,11 @@ async function prepareSystemPromptDelivery(
     return { systemPrompt };
   }
 
-  const childPath = interpolate("{{node_dir}}/system-prompt.md", ctx, cwd);
+  // FR-E9: the interpolated prompt is persisted for observers. It is NOT
+  // handed over as `systemPromptFile` — the ACP wire, the engine's only
+  // transport, rejects that option (ai-ide-cli FR-L39) — so the front gets
+  // the same text inline like every other runtime.
+
   const workDir = cwd ?? ctx.workDir;
   const fsNodeDir = workPath(workDir, ctx.node_dir);
   const fsPath = `${fsNodeDir}/system-prompt.md`;
@@ -810,7 +814,7 @@ async function prepareSystemPromptDelivery(
     );
   }
 
-  return { systemPromptFile: childPath };
+  return { systemPrompt };
 }
 
 /**

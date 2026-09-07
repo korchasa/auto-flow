@@ -115,7 +115,7 @@ Deno.test("AgentRunOptions — loop context available", () => {
 
 function fakeAdapter(
   seen: Record<string, unknown>[],
-  id: "claude" | "opencode" = "claude",
+  id: "claude" | "opencode" | "codex" = "claude",
 ): RuntimeAdapter {
   return {
     id,
@@ -177,9 +177,58 @@ Deno.test("runAgent writes interpolated system prompt artifact", async () => {
 
   const artifactPath = `${dir}/runs/test-node/system-prompt.md`;
   assertEquals(await Deno.readTextFile(artifactPath), "System for 42");
-  assertEquals(seen[0].systemPrompt, undefined);
-  assertEquals(seen[0].systemPromptFile, "runs/test-node/system-prompt.md");
+  // The artifact is for observers; the runtime gets the prompt inline, because
+  // the ACP wire (the engine's only transport) carries no `systemPromptFile`.
+  assertEquals(seen[0].systemPrompt, "System for 42");
+  assertEquals(seen[0].systemPromptFile, undefined);
 });
+
+// Mirrors `ACP_UNSUPPORTED_INVOKE_OPTIONS` in @korchasa/ai-ide-cli
+// `runtime/acp/mapping.ts` (FR-L39). The package does not export that list,
+// so it is restated here; a drift shows up as a live-run failure, not here.
+const ACP_REJECTED_INVOKE_OPTIONS = [
+  "agent",
+  "systemPromptFile",
+  "extraArgs",
+  "strictMcpConfig",
+  "streamStallTimeoutSeconds",
+  "streamLogPath",
+  "verbosity",
+  "onOutput",
+];
+
+for (const runtime of ["claude", "opencode", "codex"] as const) {
+  Deno.test(`runAgent hands the ACP front no rejected option (${runtime})`, async () => {
+    const dir = await Deno.makeTempDir();
+    const seen: Record<string, unknown>[] = [];
+    const adapter = fakeAdapter(seen, runtime);
+    const ctx: TemplateContext = {
+      ...makeCtx(),
+      node_dir: "runs/test-node",
+      workDir: dir,
+      args: { issue: "42" },
+    };
+
+    await runAgent({
+      node: {
+        type: "agent",
+        label: "Test",
+        prompt: "Do issue {{args.issue}}",
+        system_prompt: "System for {{args.issue}}",
+      },
+      ctx,
+      settings: makeSettings(),
+      runtime,
+      runtimeAdapter: adapter,
+      cwd: dir,
+    });
+
+    const leaked = ACP_REJECTED_INVOKE_OPTIONS.filter((k) =>
+      seen[0][k] !== undefined && seen[0][k] !== null
+    );
+    assertEquals(leaked, []);
+  });
+}
 
 Deno.test('FR-E77 runAgent pins transport: "acp" on adapter.invoke', async () => {
   const dir = await Deno.makeTempDir();

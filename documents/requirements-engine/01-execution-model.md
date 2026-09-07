@@ -81,9 +81,13 @@
     composition, `{{node_dir}}` / `{{input.<id>}}` resolution).
   - [x] Claude system prompt interpolation is persisted as a per-node
     runtime artifact at `<node-dir>/system-prompt.md` before the fresh
-    invocation, while resume invocations do not rewrite or resend it.
+    invocation, while resume invocations do not rewrite or resend it. The
+    artifact is for observers only: the runtime receives the same text
+    inline as `systemPrompt`, never as `systemPromptFile`, which the ACP
+    transport rejects (ai-ide-cli FR-L39).
     Evidence: `agent.ts::prepareSystemPromptDelivery`,
-    `agent_test.ts::runAgent writes interpolated system prompt artifact`.
+    `agent_test.ts::runAgent writes interpolated system prompt artifact`,
+    `agent_test.ts::runAgent hands the ACP front no rejected option`.
 
 
 
