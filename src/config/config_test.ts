@@ -6,6 +6,7 @@ import {
   resolveSession,
 } from "./config.ts";
 import type { NodeConfig } from "../types.ts";
+import { CURRENT_CONFIG_SCHEMA_VERSION, migrateWorkflow } from "./migrate.ts";
 
 const MINIMAL_AGENT = `
 name: test-workflow
@@ -2659,4 +2660,106 @@ Deno.test("FR-E100 resolveSession — node overrides defaults", () => {
     resolveSession({ ...node, session: "write" }, { session: "continue" }),
     "write",
   );
+});
+
+// ---- FR-E101: config schema migration chain (src/config/migrate.ts) ----
+
+Deno.test("FR-E101 migrateWorkflow — no-op at current version", () => {
+  const raw: Record<string, unknown> = {
+    name: "w",
+    schemaVersion: CURRENT_CONFIG_SCHEMA_VERSION,
+  };
+  const logs: string[] = [];
+  migrateWorkflow(raw, [], (m) => logs.push(m));
+  assertEquals(raw.schemaVersion, CURRENT_CONFIG_SCHEMA_VERSION);
+  assertEquals(logs, []);
+});
+
+Deno.test("FR-E101 migrateWorkflow — single bump applies step, mutates, logs", () => {
+  const raw: Record<string, unknown> = {
+    name: "w",
+    schemaVersion: 0,
+    old_flag: true,
+  };
+  const logs: string[] = [];
+  migrateWorkflow(raw, [{
+    from: 0,
+    to: 1,
+    apply: (r) => {
+      r.new_flag = r.old_flag;
+      delete r.old_flag;
+    },
+  }], (m) => logs.push(m));
+  assertEquals(raw.new_flag, true);
+  assertEquals("old_flag" in raw, false);
+  assertEquals(raw.schemaVersion, 1);
+  assertEquals(logs, ["config: migrated schema v0 → v1"]);
+});
+
+Deno.test("FR-E101 migrateWorkflow — multi-step chain applies in registry order", () => {
+  const raw: Record<string, unknown> = {};
+  const order: string[] = [];
+  const logs: string[] = [];
+  migrateWorkflow(
+    raw,
+    [
+      { from: -1, to: 0, apply: () => order.push("step-1") },
+      { from: 0, to: 1, apply: () => order.push("step-2") },
+    ],
+    (m) => logs.push(m),
+  );
+  assertEquals(order, ["step-1", "step-2"]);
+  assertEquals(raw.schemaVersion, 1);
+  assertEquals(logs, [
+    "config: migrated schema v-1 → v0",
+    "config: migrated schema v0 → v1",
+  ]);
+});
+
+Deno.test("FR-E101 migrateWorkflow — absent schemaVersion means oldest known", () => {
+  const raw: Record<string, unknown> = { name: "legacy" };
+  const applied: number[] = [];
+  migrateWorkflow(raw, [{
+    from: 0,
+    to: 1,
+    apply: () => applied.push(1),
+  }]);
+  assertEquals(applied, [1]);
+  assertEquals(raw.schemaVersion, 1);
+
+  const unversioned: Record<string, unknown> = { name: "unversioned" };
+  migrateWorkflow(unversioned);
+  assertEquals(
+    unversioned.schemaVersion,
+    CURRENT_CONFIG_SCHEMA_VERSION,
+  );
+});
+
+Deno.test("FR-E101 migrateWorkflow — newer schemaVersion fails fast at load", () => {
+  assertThrows(
+    () =>
+      migrateWorkflow(
+        { schemaVersion: CURRENT_CONFIG_SCHEMA_VERSION + 98 },
+        [],
+      ),
+    Error,
+    `newer than the supported version ${CURRENT_CONFIG_SCHEMA_VERSION}`,
+  );
+});
+
+Deno.test("FR-E101 migrateWorkflow — non-contiguous step registry throws", () => {
+  assertThrows(
+    () =>
+      migrateWorkflow({}, [
+        { from: 0, to: 1, apply: () => {} },
+        { from: 5, to: 6, apply: () => {} },
+      ]),
+    Error,
+    "contiguous",
+  );
+});
+
+Deno.test("FR-E101 parseConfig — stamps migrated schemaVersion on loaded config", () => {
+  const config = parseConfig(MINIMAL_AGENT);
+  assertEquals(config.schemaVersion, CURRENT_CONFIG_SCHEMA_VERSION);
 });
