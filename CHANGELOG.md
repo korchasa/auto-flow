@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.12.1](https://github.com/korchasa/flowai-workflow/compare/v0.12.0...v0.12.1) (2026-09-07)
+
+### Bug Fixes
+
+* **engine:** send the claude system prompt inline, not as systemPromptFile ([3f46e90](https://github.com/korchasa/flowai-workflow/commit/3f46e900fbee9b37be21b33383604dfd3aa9c9a8)), references [#244](https://github.com/korchasa/flowai-workflow/issues/244)
 ## [0.12.0](https://github.com/korchasa/flowai-workflow/compare/v0.11.0...v0.12.0) (2026-09-06)
 
 ### Features
