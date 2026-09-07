@@ -31,6 +31,7 @@ import { defaultRegistry } from "@korchasa/ai-ide-cli/process-registry";
 import { getHitlInboxPath, workPath } from "../state/state.ts";
 import { buildHitlMcpServers, createHitlObserver } from "./hitl-injection.ts";
 import type { OutputManager } from "../output.ts";
+import { resolve } from "@std/path";
 
 /** Structured question extracted from a runtime-native HITL request. */
 export interface HitlQuestion extends HumanInputRequest {}
@@ -242,7 +243,9 @@ export async function runHitlLoop(
       timeoutSeconds: settings.timeout_seconds,
       maxRetries: settings.max_retries,
       retryDelaySeconds: settings.retry_delay_seconds,
-      cwd: cwdOpt,
+      // The ACP front validates `cwd` as absolute; scripts above keep the
+      // repo-relative form.
+      cwd: cwdOpt === undefined ? undefined : resolve(cwdOpt),
       processRegistry: opts.processRegistry ?? defaultRegistry,
     });
 

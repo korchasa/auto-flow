@@ -1,4 +1,5 @@
 import { assertEquals, assertRejects } from "@std/assert";
+import { resolve } from "@std/path";
 import { type AgentRunOptions, runAgent } from "./agent.ts";
 import { OutputManager } from "../output.ts";
 import type {
@@ -229,6 +230,34 @@ for (const runtime of ["claude", "opencode", "codex"] as const) {
     assertEquals(leaked, []);
   });
 }
+
+Deno.test("runAgent hands the runtime an absolute cwd for a relative workDir", async () => {
+  // The engine's workDir is repo-relative by design (template paths are
+  // resolved against it), but the ACP front validates `cwd` as absolute.
+  const rel = await Deno.makeTempDir({ dir: ".", prefix: "wd-" });
+  try {
+    const seen: Record<string, unknown>[] = [];
+    const adapter = fakeAdapter(seen);
+    const ctx: TemplateContext = {
+      ...makeCtx(),
+      node_dir: "runs/test-node",
+      workDir: rel,
+    };
+
+    await runAgent({
+      node: { type: "agent", label: "Test", prompt: "Do it" },
+      ctx,
+      settings: makeSettings(),
+      runtime: "claude",
+      runtimeAdapter: adapter,
+      cwd: rel,
+    });
+
+    assertEquals(seen[0].cwd, resolve(rel));
+  } finally {
+    await Deno.remove(rel, { recursive: true });
+  }
+});
 
 Deno.test('FR-E77 runAgent pins transport: "acp" on adapter.invoke', async () => {
   const dir = await Deno.makeTempDir();

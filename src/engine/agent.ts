@@ -28,6 +28,7 @@ import type {
   RuntimeInvokeResult,
 } from "@korchasa/ai-ide-cli/runtime/types";
 import { interpolate } from "../config/template.ts";
+import { resolve } from "@std/path";
 import { getRuntimeAdapter } from "@korchasa/ai-ide-cli/runtime";
 import { defaultRegistry } from "@korchasa/ai-ide-cli/process-registry";
 import { isHitlConfigured } from "../hitl/hitl.ts";
@@ -373,6 +374,11 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     beforeSnapshot = await snapshotModifiedFiles(cwd);
   }
 
+  // The engine works in a repo-relative workDir (template paths resolve
+  // against it), but the ACP front validates `cwd` as an absolute path —
+  // claude's `session/new` rejects a relative one outright.
+  const runtimeCwd = cwd === undefined ? undefined : resolve(cwd);
+
   // Initial invocation. FR-E100: a resumed session already holds its system
   // prompt from its first turn, and the ACP resume shape carries none — so a
   // continued attempt delivers the task prompt only.
@@ -457,7 +463,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
     // it to `stream.log`. `streamLogPath` is intentionally NOT forwarded (the
     // library drops it under ACP and would report a spurious FR-E79 WARN).
     onEvent,
-    cwd,
+    cwd: runtimeCwd,
     processRegistry: processRegistry ?? defaultRegistry,
     // FR-E80: shared budget signal — undefined when no cap is configured.
     signal: budgetController?.signal,
@@ -677,7 +683,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
         // FR-E18/E20: same engine-owned writer as the initial invoke —
         // events append to one handle across all continuations.
         onEvent,
-        cwd,
+        cwd: runtimeCwd,
         processRegistry: processRegistry ?? defaultRegistry,
         // FR-E80: same controller as the initial invocation — cumulative
         // budget across all attempts.
