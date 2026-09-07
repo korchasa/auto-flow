@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.12.2](https://github.com/korchasa/flowai-workflow/compare/v0.12.1...v0.12.2) (2026-09-07)
+
+### Bug Fixes
+
+* **engine:** hand the ACP front an absolute cwd ([50315e8](https://github.com/korchasa/flowai-workflow/commit/50315e8623ef814ad6c5ee337770ae6db4922dbc))
 ## [0.12.1](https://github.com/korchasa/flowai-workflow/compare/v0.12.0...v0.12.1) (2026-09-07)
 
 ### Bug Fixes
